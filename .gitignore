@@ -1,0 +1,14 @@
+.DS_Store
+syntax:glob
+.svn
+*.pyc
+*.egg-info
+*.egg
+build
+dist
+docs/_build
+*.xml
+html_coverage
+.hgignore
+.idea
+*.iml
