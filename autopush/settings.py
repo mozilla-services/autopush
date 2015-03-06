@@ -12,6 +12,7 @@ class AutopushSettings(object):
         self.hostname = socket.gethostname()
         self.min_ping_interval = 20
         self.max_data = 4096
+        self.clients = {}
 
     def update(self, **kwargs):
         for key, val in kwargs:

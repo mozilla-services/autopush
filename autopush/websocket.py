@@ -7,12 +7,6 @@ from autobahn.twisted.websocket import WebSocketServerProtocol
 from twisted.internet.threads import deferToThread
 from twisted.internet.defer import inlineCallbacks, returnValue
 
-import autopush.globs as globs
-from autopush.globs import (
-    MIN_PING_INTERVAL,
-    fernet
-)
-
 
 class SimplePushServerProtocol(WebSocketServerProtocol):
     def onConnect(self, request):
@@ -69,8 +63,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         print("WebSocket connection closed: {0}".format(reason))
 
     def cleanUp(self):
-        if self.uaid and globs.clients.get(self.uaid) == self:
-            del globs.clients[self.uaid]
+        if self.uaid and self.settings.clients.get(self.uaid) == self:
+            del self.settings.clients[self.uaid]
 
     #############################################################
     #                Message Processing Methods
@@ -95,11 +89,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.uaid = uaid
         msg = {"messageType": "hello", "uaid": uaid, "status": 200}
         self.sendMessage(json.dumps(msg).encode('utf8'), False)
-        globs.clients[self.uaid] = self
+        self.settings.clients[self.uaid] = self
 
     def process_ping(self):
         now = time.time()
-        if now - self.last_ping < MIN_PING_INTERVAL:
+        if now - self.last_ping < self.settings.min_ping_interval:
             return self.sendClose()
         self.last_ping = now
         return self.sendMessage("{}", False)
@@ -115,7 +109,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             returnValue(self.bad_message("register"))
 
         token = yield deferToThread(
-            fernet.encrypt, (self.uaid + ":" + chid).encode('utf8'))
+            self.settings.fernet.encrypt,
+            (self.uaid + ":" + chid).encode('utf8'))
         msg = {"messageType": "register",
                "channelID": chid,
                "pushEndpoint": "http://localhost:8081/push/%s" % token,
@@ -174,7 +169,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
 class RouterHandler(cyclone.web.RequestHandler):
     def put(self, uaid):
-        client = globs.clients.get(uaid)
+        client = self.settings.clients.get(uaid)
         if not client:
             self.set_status(404)
             return self.write("Client not connected.")
