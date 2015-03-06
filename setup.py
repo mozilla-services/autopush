@@ -42,10 +42,12 @@ setup(name="AutoPush",
           "cyclone>=1.1",
           "pyramid>=1.5.4",
           "boto>=2.36",
+          "requests>=2.5.3",
       ],
       entry_points="""
       [console_scripts]
-      autopush = autopush.main:main
+      autopush = autopush.main:connection_main
+      autoendpoint = autopush.main:endpoint_main
       """,
       **extra_options
       )

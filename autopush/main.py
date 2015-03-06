@@ -2,12 +2,17 @@
 import sys
 import argparse
 
+import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerFactory
+from pyramid.config import Configurator
 from twisted.python import log
 from twisted.internet import reactor
+from wsgiref.simple_server import make_server
 
-from autopush.server import SimplePushServerProtocol, site
+from autopush.websocket import SimplePushServerProtocol, RouterHandler
 from autopush.settings import AutopushSettings
+from autopush.endpoint import endpoint
+
 
 def _parse(sysargs=None):
     if sysargs is None:
@@ -16,6 +21,8 @@ def _parse(sysargs=None):
     parser = argparse.ArgumentParser(description='Runs a Loads broker.')
     parser.add_argument('-p', '--port', help='HTTP Port', type=int,
                         default=8080)
+    parser.add_argument('-r', '--router', help="HTTP Router Port", type=int,
+                        default=8081)
     parser.add_argument('--debug', help='Debug Info.', action='store_true',
                         default=True)
     parser.add_argument('--influx-password', help='InfluxDB password',
@@ -29,21 +36,54 @@ def _parse(sysargs=None):
     return args, parser
 
 
-def main(sysargs=None):
+def _parse_endpoint(sysargs=None):
+    if sysargs is None:
+        sysargs = sys.argv[1:]
+
+    parser = argparse.ArgumentParser(description='Runs a Loads broker.')
+    parser.add_argument('-p', '--port', help='HTTP Endpoint Port', type=int,
+                        default=8000)
+    parser.add_argument('--debug', help='Debug Info.', action='store_true',
+                        default=True)
+    args = parser.parse_args(sysargs)
+    return args, parser
+
+
+def connection_main(sysargs=None):
+    args, parser = _parse(sysargs)
     settings = AutopushSettings()
 
-    log.startLogging(sys.stdout)
+    if args.debug:
+        log.startLogging(sys.stdout)
 
-    factory = WebSocketServerFactory("ws://localhost:8080/", debug=False)
+    r = RouterHandler
+    r.settings = settings
+
+    site = cyclone.web.Application([
+        (r"/push/([^\/]+)", r)
+    ])
+
+    factory = WebSocketServerFactory("ws://localhost:%s/" % args.port,
+                                     debug=False)
     factory.protocol = SimplePushServerProtocol
     factory.protocol.settings = settings
+    settings.router_port = args.router
 
-    reactor.listenTCP(8080, factory)
-    reactor.listenTCP(8081, site)
+    reactor.listenTCP(args.port, factory)
+    reactor.listenTCP(args.router, site)
     try:
         reactor.run()
     except KeyboardInterrupt:
         log.debug('Bye')
 
-if __name__ == '__main__':
-    main()
+
+def endpoint_main(sysargs=None):
+    args, parser = _parse_endpoint(sysargs)
+    settings = AutopushSettings()
+
+    config = Configurator()
+    config.add_route('push', '/push/{token}')
+    config.add_view(endpoint, route_name='push')
+    app = config.make_wsgi_app()
+    server = make_server(settings.hostname, args.port, app)
+    server.serve_forever()

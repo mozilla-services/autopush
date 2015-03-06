@@ -1,44 +1,62 @@
+import json
+
 from cryptography.fernet import InvalidToken
-from pyramid.config import Configurator
 from pyramid.response import Response
+
+NOT_DELIVERED = 0
+INVALID_UAID = 1
+DELIVERED = 2
 
 
 def endpoint(request):
-    fernet = request.registry.fernet
+    settings = request.registry.settings
+    requests = request.registry.requests
+    fernet = settings.fernet
+    token = request.matchdict["token"]
+    version = request.GET.get("version") or request.POST.get("version")
+    data = request.GET.get("data") or request.POST.get("data")
     try:
-        data = fernet.decrypt(token.encode('utf8'))
+        token_data = fernet.decrypt(token.encode('utf8'))
     except InvalidToken:
-        self.set_status(401)
-        return self.write("Invalid")
+        return Response("Invalid", status=401)
 
-    uaid, chid = data.decode('utf8').split(":")
-    if uaid not in globs.clients:
-        self.set_status(401)
-        return self.write("Invalid")
+    uaid, chid = token_data.split(":")
 
-    version = self.get_argument('version', default=None)
-    data = self.get_argument('data', default=None)
+    storage, router = settings.storage, settings.router
 
-    if version is None or version == []:
-        vs = urlparse.parse_qs(self.request.body,
-                               keep_blank_values=True)
-        version = vs.get("version")
-        data = vs.get("data")
+    result = attempt_delivery(requests, router, uaid, chid, version, data)
+    if result == DELIVERED:
+        return Response("Success")
+    elif result == INVALID_UAID:
+        return Response("Invalid", status=401)
 
-    if version is None or uaid not in globs.clients:
-        # Still None? Ditch it.
-        self.set_status(401)
-        return self.write("Invalid")
+    # Uaid not found, or not delivered
+    # TODO: Maybe do another check and see if they've connected since the
+    #       last one
+    storage.save_notification(uaid=uaid, chid=chid, version=version)
+    return Response("Success")
 
-    if isinstance(version, list):
-        version = version[0]
 
-    if data and len(data) > globs.MAX_DATA_PAYLOAD:
-        self.set_status(401)
-        return self.write("Data too large")
+def attempt_delivery(requests, router, uaid, chid, version, data):
+    # Lookup the uaid
+    item = router.get_uaid(uaid)
+    if not item:
+        return Response("Invalid", status=404)
 
-    if version == "":
-        version = str(int(time.time()))
+    # If uaid has never connected, its invalid
+    node_id = item.get("node_id")
+    if not node_id:
+        return INVALID_UAID
 
-    globs.clients[uaid].send_notifications([(chid, version, data)])
-    return ""
+    payload = json.dumps([{"channelID": chid,
+                           "version": version,
+                           "data": data}])
+    result = requests.PUT(node_id + "/" + uaid, data=payload)
+    if result.status_code == 200:
+        return DELIVERED
+    elif result.status_code == 404:
+        # Nuke this entry from router, as they're not there anymore
+        # TODO: Be interested if this fails, cause they might be on a node
+        #       now
+        router.clear_node(item)
+    return NOT_DELIVERED
