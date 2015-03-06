@@ -1,4 +1,6 @@
 import json
+import time
+import urlparse
 
 from cryptography.fernet import InvalidToken
 from pyramid.response import Response
@@ -9,26 +11,37 @@ DELIVERED = 2
 
 
 def endpoint(request):
-    settings = request.registry.settings
-    requests = request.registry.requests
-    fernet = settings.fernet
+    app_settings = request.registry.app_settings
+    requests = app_settings.requests
+    fernet = app_settings.fernet
     token = request.matchdict["token"]
+    request.content_type = "application/x-www-form-urlencoded"
+
+    # Find where version/data is hanging out
     version = request.GET.get("version") or request.POST.get("version")
     data = request.GET.get("data") or request.POST.get("data")
+    if version is None:
+        return Response("No version", status=401)
+
+    if isinstance(version, list):
+        version = version[0]
+
     try:
         token_data = fernet.decrypt(token.encode('utf8'))
     except InvalidToken:
-        return Response("Invalid", status=401)
+        return Response("Invalid Token", status=401)
 
     uaid, chid = token_data.split(":")
+    if not version:
+        version = int(time.time())
 
-    storage, router = settings.storage, settings.router
+    storage, router = app_settings.storage, app_settings.router
 
     result = attempt_delivery(requests, router, uaid, chid, version, data)
     if result == DELIVERED:
         return Response("Success")
     elif result == INVALID_UAID:
-        return Response("Invalid", status=401)
+        return Response("Invalid UAID", status=401)
 
     # Uaid not found, or not delivered
     # TODO: Maybe do another check and see if they've connected since the
@@ -49,9 +62,9 @@ def attempt_delivery(requests, router, uaid, chid, version, data):
         return INVALID_UAID
 
     payload = json.dumps([{"channelID": chid,
-                           "version": version,
+                           "version": int(version),
                            "data": data}])
-    result = requests.PUT(node_id + "/" + uaid, data=payload)
+    result = requests.put(node_id + "/" + uaid, data=payload)
     if result.status_code == 200:
         return DELIVERED
     elif result.status_code == 404:

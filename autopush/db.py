@@ -1,8 +1,11 @@
+from boto.dynamodb2.exceptions import (
+    ConditionalCheckFailedException,
+    ItemNotFound,
+)
 from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
-from boto.dynamodb2.table import Table
 from boto.dynamodb2.layer1 import DynamoDBConnection
+from boto.dynamodb2.table import Table
 from boto.dynamodb2.types import NUMBER
-from boto.dynamodb2.exceptions import ItemNotFound, ConditionalCheckFailedException
 
 
 def create_router_table():
@@ -78,6 +81,10 @@ class Storage(object):
         except ConditionalCheckFailedException:
             return False
 
+    def delete_notification(self, uaid, chid, version):
+        return self.table.delete_item(uaid=uaid, chid=chid,
+                                      expected={'version__eq': version})
+
 
 class Router(object):
     def __init__(self, table):
@@ -87,6 +94,28 @@ class Router(object):
         try:
             return self.table.get_item(uaid=uaid)
         except ItemNotFound:
+            return False
+
+    def register_user(self, uaid, node_id, connected_at):
+        """Attempt to register this user if it doesn't already exist or
+        this is the latest connection"""
+        conn = self.table.connection
+        try:
+            conn.put_item(
+                "router",
+                item={
+                    "uaid": {'S': uaid},
+                    "node_id": {'S': node_id},
+                    "connected_at": {'N': str(connected_at)}
+                },
+                condition_expression=
+                "attribute_not_exists(node_id) or (connected_at < :conn)",
+                expression_attribute_values={
+                    ":conn": {'N': str(connected_at)}
+                }
+            )
+            return True
+        except ConditionalCheckFailedException:
             return False
 
     def clear_node(self, item):

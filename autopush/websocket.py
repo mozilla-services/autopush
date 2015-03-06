@@ -8,12 +8,17 @@ from twisted.internet.threads import deferToThread
 from twisted.internet.defer import inlineCallbacks, returnValue
 
 
+def more_time():
+    return int(time.time() * 1000)
+
+
 class SimplePushServerProtocol(WebSocketServerProtocol):
     def onConnect(self, request):
         self.uaid = None
         self.last_ping = 0
         self.accept_notification = True
         self.check_storage = False
+        self.connected_at = more_time()
 
         # Reflects updates sent that haven't been ack'd
         self.updates_sent = {}
@@ -46,11 +51,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         cmd = data["messageType"]
         if cmd == "register":
-            self.process_register(data)
+            return self.process_register(data)
         elif cmd == "unregister":
-            self.process_unregister(data)
+            return self.process_unregister(data)
         elif cmd == "ack":
-            self.process_ack(data)
+            return self.process_ack(data)
         else:
             self.sendClose()
 
@@ -69,6 +74,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     #############################################################
     #                Message Processing Methods
     #############################################################
+    @inlineCallbacks
     def process_hello(self, data):
         # This must be a helo, or we kick the client
         cmd = data.get("messageType")
@@ -87,9 +93,43 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             uaid = str(uuid.uuid4())
 
         self.uaid = uaid
+
+        # User exists?
+        router = self.settings.router
+        url = "http://%s:%s/push" % (self.settings.hostname,
+                                     self.settings.router_port)
+
+        # Attempt to register the user for this session
+        result = yield router.register_user(uaid, url, self.connected_at)
+
+        if not result:
+            # Registration failed
+            msg = {"messageType": "hello", "reason": "already_connected",
+                   "status": 500}
+            self.sendMessage(json.dumps(msg).encode('utf8'), False)
+            returnValue()
+
         msg = {"messageType": "hello", "uaid": uaid, "status": 200}
-        self.sendMessage(json.dumps(msg).encode('utf8'), False)
         self.settings.clients[self.uaid] = self
+        self.sendMessage(json.dumps(msg).encode('utf8'), False)
+        self.process_notifications()
+
+    @inlineCallbacks
+    def process_notifications(self):
+        print "CHECKING NOTIFICATION STORAGE"
+        # Prevent notification acceptance while we check storage
+        self.accept_notification = False
+
+        notifs = yield self.settings.storage.fetch_notifications(self.uaid)
+        if not notifs:
+            # Nothing to deliver, we're ok for notifications
+            self.accept_notification = True
+            returnValue()
+
+        updates = [{"channelID": s.get("chid"), "version": s.get("version")}
+                   for s in notifs]
+        msg = {"messageType": "notification", "updates": updates}
+        self.sendMessage(json.dumps(msg).encode('utf8'), False)
 
     def process_ping(self):
         now = time.time()
@@ -111,11 +151,15 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         token = yield deferToThread(
             self.settings.fernet.encrypt,
             (self.uaid + ":" + chid).encode('utf8'))
+        host = self.settings.hostname
+        port = self.settings.endpoint_port
         msg = {"messageType": "register",
                "channelID": chid,
-               "pushEndpoint": "http://localhost:8081/push/%s" % token,
+               "pushEndpoint": "http://%s:%s/push/%s" % (host, port, token),
                "status": 200
                }
+        # TODO: Someone could abuse registration and not receive to make
+        #       us buffer lots and lots of data
         self.sendMessage(json.dumps(msg).encode('utf8'), False)
 
     def process_unregister(self, data):
@@ -142,7 +186,20 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             if chid in self.updates_sent and \
                self.updates_sent[chid] == version:
                 del self.updates_sent[chid]
-        self.accept_notification = True
+
+            # Attempt to delete this notification from storage
+            storage = self.settings.storage
+
+            # TODO: Check result here, and do something if this delete fails
+            # like maybe do a new storage check
+            storage.delete_notification(self.uaid, chid, version)
+
+        # If they're all ack'd, we will send notifications again
+        if not self.updates_sent:
+            self.accept_notification = True
+
+            # See if we missed any notifications while waiting for acks
+            self.process_notifications()
 
     def bad_message(self, typ):
         msg = {"messageType": typ, "status": 401}
@@ -181,7 +238,3 @@ class RouterHandler(cyclone.web.RequestHandler):
         updates = json.loads(self.request.body)
         client.send_notifications(updates)
         return self.write("Client accepted for delivery")
-
-site = cyclone.web.Application([
-    (r"/push/([^\/]+)", RouterHandler)
-])

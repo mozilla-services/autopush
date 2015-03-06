@@ -36,7 +36,7 @@ class AutopushSettings(object):
         self.router = Router(self.router_table)
 
     def update(self, **kwargs):
-        for key, val in kwargs:
+        for key, val in kwargs.items():
             if key == "crypto_key":
                 self.fernet = Fernet(val)
             else:
