@@ -59,7 +59,8 @@ class Storage(object):
         self.table = table
 
     def fetch_notifications(self, uaid):
-        notifs = self.table.query_2(uaid__eq=uaid, chid__gt=" ")
+        notifs = self.table.query_2(consistent=True, uaid__eq=uaid,
+                                    chid__gt=" ")
         return list(notifs)
 
     def save_notification(self, uaid, chid, version):
@@ -72,7 +73,8 @@ class Storage(object):
                     "chid": {'S': chid},
                     "version": {'N': str(version)}
                 },
-                condition_expression="version < :ver",
+                condition_expression=
+                "attribute_not_exists(version) or version < :ver",
                 expression_attribute_values={
                     ":ver": {'N': str(version)}
                 }
@@ -92,7 +94,7 @@ class Router(object):
 
     def get_uaid(self, uaid):
         try:
-            return self.table.get_item(uaid=uaid)
+            return self.table.get_item(consistent=True, uaid=uaid)
         except ItemNotFound:
             return False
 

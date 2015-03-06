@@ -107,7 +107,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             msg = {"messageType": "hello", "reason": "already_connected",
                    "status": 500}
             self.sendMessage(json.dumps(msg).encode('utf8'), False)
-            returnValue()
+            returnValue(None)
 
         msg = {"messageType": "hello", "uaid": uaid, "status": 200}
         self.settings.clients[self.uaid] = self
@@ -116,7 +116,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     @inlineCallbacks
     def process_notifications(self):
-        print "CHECKING NOTIFICATION STORAGE"
         # Prevent notification acceptance while we check storage
         self.accept_notification = False
 
@@ -124,12 +123,13 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if not notifs:
             # Nothing to deliver, we're ok for notifications
             self.accept_notification = True
-            returnValue()
+            returnValue(None)
 
-        updates = [{"channelID": s.get("chid"), "version": s.get("version")}
+        updates = [{"channelID": s.get("chid"),
+                    "version": int(s.get("version"))}
                    for s in notifs]
-        msg = {"messageType": "notification", "updates": updates}
-        self.sendMessage(json.dumps(msg).encode('utf8'), False)
+        msg = json.dumps({"messageType": "notification", "updates": updates})
+        self.sendMessage(msg.encode('utf8'), False)
 
     def process_ping(self):
         now = time.time()
