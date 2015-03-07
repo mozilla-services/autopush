@@ -21,12 +21,13 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.accept_notification = True
         self.check_storage = False
         self.connected_at = more_time()
-        self.check_notifications = False
+
+        self._check_notifications = False
 
         # Hanger for common actions we defer
-        self.notification_fetch = None
-        self.hello = None
-        self.register = None
+        self._notification_fetch = None
+        self._hello = None
+        self._register = None
 
         # Reflects updates sent that haven't been ack'd
         self.updates_sent = {}
@@ -48,14 +49,14 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # We're registering the user, any other action is not allowed
         # Cancel the registration and drop them
-        if self.hello:
-            self.hello.cancel()
+        if self._hello:
+            self._hello.cancel()
             self.sendClose()
             return
 
         # A registration call can't occur two at a time
-        if self.register:
-            self.register.cancel()
+        if self._register:
+            self._register.cancel()
             self.sendClose()
 
         # Without a UAID, hello must be next
@@ -120,7 +121,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         d = deferToThread(router.register_user, uaid, url, self.connected_at)
         d.addCallback(self.finish_hello)
         d.addErrback(self.err_hello)
-        self.register = d
+        self._register = d
         return d
 
     def err_hello(self, failure):
@@ -129,7 +130,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.sendClose()
 
     def finish_hello(self, result):
-        self.register = None
+        self._register = None
         if not result:
             # Registration failed
             msg = {"messageType": "hello", "reason": "already_connected",
@@ -144,31 +145,30 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def process_notifications(self):
         # Are we already running?
-        if self.notification_fetch:
+        if self._notification_fetch:
             return
 
         # Prevent notification acceptance while we check storage
         self.accept_notification = False
-        self.check_notifications = False
+        self._check_notifications = False
 
         # Prevent repeat calls
         d = deferToThread(self.settings.storage.fetch_notifications, self.uaid)
-        d.addCallback(self.finish_notifications)
-        d.addErrback(self.error_notifications)
-        self.notification_fetch = d
+        d.addBoth(self.finish_notifications)
+        self._notification_fetch = d
 
     def error_notifications(self, fail):
         # Ignore errors, re-run if we should
         self.accept_notification = True
-        self.notification_fetch = None
-        if self.check_notifications:
-            self.check_notifications = False
+        self._notification_fetch = None
+        if self._check_notifications:
+            self._check_notifications = False
             reactor.callLater(1, self.process_notifications)
 
     def finish_notifications(self, notifs):
         # We want to allow notifications again
         self.accept_notification = True
-        self.notification_fetch = None
+        self._notification_fetch = None
 
         updates = []
         # Track outgoing, screen out things we've seen
@@ -185,8 +185,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.sendMessage(msg.encode('utf8'), False)
 
         # Were we told to check notifications again?
-        if self.check_notifications:
-            self.check_notifications = False
+        if self._check_notifications:
+            self._check_notifications = False
             reactor.callLater(1, self.process_notifications)
 
     def process_ping(self):
@@ -266,23 +266,22 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             defers.append(d)
         if defers:
             dl = DeferredList(defers)
-            dl.addCallback(self.check_notifications)
-            dl.addErrback(self.check_notifications)
+            dl.addBoth(self.check_missed_notifications)
 
-    def check_notifications(self, results):
+    def check_missed_notifications(self, results):
         # If they're all ack'd, we will send notifications again
         if not self.updates_sent:
             self.accept_notification = True
 
             # See if we are already checking for notifications, cancel that
             # and start again
-            if self.notification_fetch:
-                self.notification_fetch.cancel()
-                self.notification_fetch = None
-                self.check_notifications = True
+            if self._notification_fetch:
+                self._notification_fetch.cancel()
+                self._notification_fetch = None
+                self._check_notifications = True
 
             # Should we check again?
-            if self.check_notifications:
+            if self._check_notifications:
                 self.process_notifications()
 
     def bad_message(self, typ):
@@ -317,7 +316,7 @@ class RouterHandler(cyclone.web.RequestHandler):
 
         if not client.accept_notification:
             # Let the client know to check notifications again
-            client.check_notifications = True
+            client._check_notifications = True
             self.set_status(503)
             return self.write("Client busy.")
 
