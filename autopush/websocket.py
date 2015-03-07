@@ -6,8 +6,6 @@ import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
 from twisted.internet import reactor
 from twisted.internet.defer import (
-    inlineCallbacks,
-    returnValue,
     DeferredList,
     CancelledError
 )
