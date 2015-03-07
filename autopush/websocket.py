@@ -6,7 +6,13 @@ import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
 from twisted.internet.threads import deferToThread
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, returnValue, DeferredList
+from twisted.internet.defer import (
+    inlineCallbacks,
+    returnValue,
+    DeferredList,
+    CancelledError
+)
+
 from twisted.python import log
 
 
@@ -146,7 +152,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def process_notifications(self):
         # Are we already running?
         if self._notification_fetch:
-            return
+            # Cancel the prior, last one wins
+            self._notification_fetch.cancel()
 
         # Prevent notification acceptance while we check storage
         self.accept_notification = False
@@ -154,8 +161,14 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # Prevent repeat calls
         d = deferToThread(self.settings.storage.fetch_notifications, self.uaid)
-        d.addBoth(self.finish_notifications)
+        d.addErrback(self.cancel_notifications)
+        d.addErrback(self.error_notifications)
+        d.addCallback(self.finish_notifications)
         self._notification_fetch = d
+
+    def cancel_notifications(self, fail):
+        fail.trap(CancelledError)
+        # Don't do anything else, we got cancelled
 
     def error_notifications(self, fail):
         # Ignore errors, re-run if we should
