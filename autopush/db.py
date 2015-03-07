@@ -83,9 +83,12 @@ class Storage(object):
         except ConditionalCheckFailedException:
             return False
 
-    def delete_notification(self, uaid, chid, version):
-        return self.table.delete_item(uaid=uaid, chid=chid,
-                                      expected={'version__eq': version})
+    def delete_notification(self, uaid, chid, version=None):
+        if version:
+            return self.table.delete_item(uaid=uaid, chid=chid,
+                                          expected={"version__eq": version})
+        else:
+            return self.table.delete_item(uaid=uaid, chid=chid)
 
 
 class Router(object):

@@ -26,7 +26,7 @@ def _parse(sysargs=None):
     parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
                         type=int, default=8082)
     parser.add_argument('--debug', help='Debug Info.', action='store_true',
-                        default=True)
+                        default=False)
     parser.add_argument('--crypto_key', help="Crypto key for tokens", type=str,
                         default="i_CYcNKa2YXrF_7V1Y-2MFfoEl7b6KX55y_9uvOKfJQ=")
     parser.add_argument('--influx-password', help='InfluxDB password',
