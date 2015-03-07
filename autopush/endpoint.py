@@ -1,6 +1,5 @@
 import json
 import time
-import urlparse
 
 from cryptography.fernet import InvalidToken
 from pyramid.response import Response

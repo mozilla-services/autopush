@@ -1,10 +1,9 @@
 import json
-import uuid
 import time
+import uuid
 
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
-from twisted.internet.threads import deferToThread
 from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks,
@@ -12,7 +11,7 @@ from twisted.internet.defer import (
     DeferredList,
     CancelledError
 )
-
+from twisted.internet.threads import deferToThread
 from twisted.python import log
 
 
@@ -52,18 +51,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         except:
             self.sendClose()
             return
-
-        # We're registering the user, any other action is not allowed
-        # Cancel the registration and drop them
-        if self._hello:
-            self._hello.cancel()
-            self.sendClose()
-            return
-
-        # A registration call can't occur two at a time
-        if self._register:
-            self._register.cancel()
-            self.sendClose()
 
         # Without a UAID, hello must be next
         if not self.uaid:
@@ -124,6 +111,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                                      self.settings.router_port)
 
         # Attempt to register the user for this session
+        self.transport.pauseProducing()
         d = deferToThread(router.register_user, uaid, url, self.connected_at)
         d.addCallback(self.finish_hello)
         d.addErrback(self.err_hello)
@@ -131,11 +119,13 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return d
 
     def err_hello(self, failure):
+        self.transport.resumeProducing()
         msg = {"messageType": "hello", "reason": "error", "status": 500}
         self.sendMessage(json.dumps(msg).encode('utf8'), False)
         self.sendClose()
 
     def finish_hello(self, result):
+        self.transport.resumeProducing()
         self._register = None
         if not result:
             # Registration failed
@@ -209,19 +199,28 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.last_ping = now
         return self.sendMessage("{}", False)
 
-    @inlineCallbacks
     def process_register(self, data):
         if "channelID" not in data:
-            returnValue(self.bad_message("register"))
+            return self.bad_message("register")
         chid = data["channelID"]
         try:
             uuid.UUID(chid)
         except ValueError:
-            returnValue(self.bad_message("register"))
+            return self.bad_message("register")
 
-        token = yield deferToThread(
+        self.transport.pauseProducing()
+
+        d = deferToThread(
             self.settings.fernet.encrypt,
             (self.uaid + ":" + chid).encode('utf8'))
+        d.addCallbacks(self.finish_register, self.error_register,
+                       callbackArgs=(chid,))
+
+    def error_register(self, fail):
+        self.transport.resumeProducing()
+
+    def finish_register(self, token, chid):
+        self.transport.resumeProducing()
         host = self.settings.hostname
         port = self.settings.endpoint_port
         msg = {"messageType": "register",
@@ -254,6 +253,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if not updates or not isinstance(updates, list):
             return self.bad_message("ack")
 
+        self.transport.pauseProducing()
         defers = []
         for update in updates:
             chid = update.get("channelID")
@@ -285,6 +285,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # If they're all ack'd, we will send notifications again
         if not self.updates_sent:
             self.accept_notification = True
+            self.transport.resumeProducing()
 
             # See if we are already checking for notifications, cancel that
             # and start again
