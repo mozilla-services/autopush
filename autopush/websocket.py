@@ -278,9 +278,12 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if defers:
             dl = DeferredList(defers)
             dl.addBoth(self.check_missed_notifications)
+        else:
+            self.transport.resumeProducing()
 
     def check_missed_notifications(self, results):
         # If they're all ack'd, we will send notifications again
+        self.transport.resumeProducing()
         if not self.updates_sent:
             self.accept_notification = True
             self.transport.resumeProducing()
