@@ -29,7 +29,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # Hanger for common actions we defer
         self._notification_fetch = None
-        self._hello = None
         self._register = None
 
         # Reflects updates sent that haven't been ack'd
@@ -80,6 +79,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def cleanUp(self):
         if self.uaid and self.settings.clients.get(self.uaid) == self:
             del self.settings.clients[self.uaid]
+            for defer in [self._notification_fetch, self._register]:
+                if defer:
+                    defer.cancel()
 
     #############################################################
     #                Message Processing Methods
