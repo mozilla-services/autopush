@@ -74,6 +74,7 @@ def connection_main(sysargs=None):
                                      debug=args.debug)
     factory.protocol = SimplePushServerProtocol
     factory.protocol.settings = settings
+    settings.ws_port = args.port
     settings.router_port = args.router_port
     settings.endpoint_port = args.endpoint_port
 

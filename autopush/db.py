@@ -1,6 +1,7 @@
 from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
     ItemNotFound,
+    ProvisionedThroughputExceededException,
 )
 from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection

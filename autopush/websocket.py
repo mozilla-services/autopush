@@ -38,6 +38,20 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     #############################################################
     #                    Connection Methods
     #############################################################
+    def processHandshake(self):
+        """Disable host port checking on nonstandard ports since some
+        clients are buggy and don't provide it"""
+        port = self.settings.ws_port
+        hide = port != 80 and port != 443
+        old_port = self.factory.externalPort
+        try:
+            if hide:
+                self.factory.externalPort = None
+            return WebSocketServerProtocol.processHandshake(self)
+        finally:
+            if hide:
+                self.factory.externalPort = old_port
+
     def onMessage(self, payload, isBinary):
         if isBinary:
             print("Binary message received: {0} bytes".format(len(payload)))
