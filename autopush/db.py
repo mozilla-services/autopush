@@ -85,11 +85,15 @@ class Storage(object):
             return False
 
     def delete_notification(self, uaid, chid, version=None):
-        if version:
-            return self.table.delete_item(uaid=uaid, chid=chid,
-                                          expected={"version__eq": version})
-        else:
-            return self.table.delete_item(uaid=uaid, chid=chid)
+        try:
+            if version:
+                self.table.delete_item(uaid=uaid, chid=chid,
+                                       expected={"version__eq": version})
+            else:
+                self.table.delete_item(uaid=uaid, chid=chid)
+            return True
+        except ProvisionedThroughputExceededException:
+            return False
 
 
 class Router(object):

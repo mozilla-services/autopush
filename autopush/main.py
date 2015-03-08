@@ -7,7 +7,7 @@ from autobahn.twisted.websocket import WebSocketServerFactory
 from pyramid.config import Configurator
 from twisted.python import log
 from twisted.internet import reactor
-from wsgiref.simple_server import make_server
+from waitress import serve
 
 from autopush.websocket import SimplePushServerProtocol, RouterHandler
 from autopush.settings import AutopushSettings
@@ -60,8 +60,7 @@ def connection_main(sysargs=None):
     settings = AutopushSettings()
     settings.update(crypto_key=args.crypto_key)
 
-    if args.debug:
-        log.startLogging(sys.stdout)
+    log.startLogging(sys.stdout)
 
     r = RouterHandler
     r.settings = settings
@@ -80,6 +79,7 @@ def connection_main(sysargs=None):
 
     reactor.listenTCP(args.port, factory)
     reactor.listenTCP(args.router_port, site)
+    reactor.suggestThreadPoolSize(50)
     try:
         reactor.run()
     except KeyboardInterrupt:
@@ -97,5 +97,4 @@ def endpoint_main(sysargs=None):
     config.add_view(endpoint, route_name='push')
     app = config.make_wsgi_app()
     print "Serving on %s:%s" % (settings.hostname, args.port)
-    server = make_server(settings.hostname, args.port, app)
-    server.serve_forever()
+    serve(app, host=settings.hostname, port=args.port, threads=50)

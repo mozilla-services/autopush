@@ -43,6 +43,7 @@ setup(name="AutoPush",
           "pyramid>=1.5.4",
           "boto>=2.36",
           "requests>=2.5.3",
+          "waitress>=0.8.9"
       ],
       entry_points="""
       [console_scripts]

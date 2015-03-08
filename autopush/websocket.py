@@ -33,6 +33,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # Reflects updates sent that haven't been ack'd
         self.updates_sent = {}
+
+        # Track notifications we don't need to delete separately
+        self.direct_updates = {}
         self.channels = set()
 
     #############################################################
@@ -43,14 +46,15 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         clients are buggy and don't provide it"""
         port = self.settings.ws_port
         hide = port != 80 and port != 443
+        if not hide:
+            return WebSocketServerProtocol.processHandshake(self)
+
         old_port = self.factory.externalPort
         try:
-            if hide:
-                self.factory.externalPort = None
+            self.factory.externalPort = None
             return WebSocketServerProtocol.processHandshake(self)
         finally:
-            if hide:
-                self.factory.externalPort = old_port
+            self.factory.externalPort = old_port
 
     def onMessage(self, payload, isBinary):
         if isBinary:
@@ -97,6 +101,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                 if defer:
                     defer.cancel()
 
+    def sendJSON(self, body):
+        self.sendMessage(json.dumps(body).encode('utf8'), False)
+
     #############################################################
     #                Message Processing Methods
     #############################################################
@@ -135,7 +142,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def err_hello(self, failure):
         self.transport.resumeProducing()
         msg = {"messageType": "hello", "reason": "error", "status": 500}
-        self.sendMessage(json.dumps(msg).encode('utf8'), False)
+        self.sendJSON(msg)
         self.sendClose()
 
     def finish_hello(self, result):
@@ -150,7 +157,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}
         self.settings.clients[self.uaid] = self
-        self.sendMessage(json.dumps(msg).encode('utf8'), False)
+        self.sendJSON(msg)
         self.process_notifications()
 
     def process_notifications(self):
@@ -159,8 +166,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             # Cancel the prior, last one wins
             self._notification_fetch.cancel()
 
-        # Prevent notification acceptance while we check storage
-        self.accept_notification = False
         self._check_notifications = False
 
         # Prevent repeat calls
@@ -171,35 +176,36 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self._notification_fetch = d
 
     def cancel_notifications(self, fail):
-        fail.trap(CancelledError)
         # Don't do anything else, we got cancelled
+        fail.trap(CancelledError)
 
     def error_notifications(self, fail):
         # Ignore errors, re-run if we should
-        self.accept_notification = True
         self._notification_fetch = None
         if self._check_notifications:
             self._check_notifications = False
             reactor.callLater(1, self.process_notifications)
 
     def finish_notifications(self, notifs):
-        # We want to allow notifications again
-        self.accept_notification = True
         self._notification_fetch = None
 
         updates = []
-        # Track outgoing, screen out things we've seen
+        notifs = notifs or []
+        # Track outgoing, screen out things we've seen that weren't
+        # ack'd yet
         for s in notifs:
-            chid = s.get('chid')
-            version = int(s.get('version'))
+            chid = s['chid']
+            version = int(s['version'])
             if self.updates_sent.get(chid, 0) >= version:
                 continue
             self.updates_sent[chid] = version
             updates.append({"channelID": chid, "version": version})
         if updates:
-            msg = json.dumps({"messageType": "notification",
-                              "updates": updates})
-            self.sendMessage(msg.encode('utf8'), False)
+            # If we need to send notifications, we now expect a response
+            # before any more notification processing
+            self.accept_notification = False
+            msg = {"messageType": "notification", "updates": updates}
+            self.sendJSON(msg)
 
         # Were we told to check notifications again?
         if self._check_notifications:
@@ -244,7 +250,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                }
         # TODO: Someone could abuse registration and not receive to make
         #       us buffer lots and lots of data
-        self.sendMessage(json.dumps(msg).encode('utf8'), False)
+        self.sendJSON(msg)
 
     def process_unregister(self, data):
         if "channelID" not in data:
@@ -260,14 +266,13 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                           self.uaid, chid)
         d.addErrback(log.err)
         data["status"] = 200
-        self.sendMessage(json.dumps(data).encode("utf8"), False)
+        self.sendJSON(data)
 
     def process_ack(self, data):
         updates = data.get("updates")
         if not updates or not isinstance(updates, list):
             return self.bad_message("ack")
 
-        self.transport.pauseProducing()
         defers = []
         for update in updates:
             chid = update.get("channelID")
@@ -275,11 +280,21 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             if not chid or not version:
                 continue
 
-            if chid in self.updates_sent and \
-               self.updates_sent[chid] == version:
+            skip = False
+            # We always need to delete direct updates
+            if self.direct_updates.get(chid) == version:
+                del self.direct_updates[chid]
+                skip = True
+
+            # If this is the same as a version we sent, delete
+            # as well
+            if self.updates_sent.get(chid) == version:
                 del self.updates_sent[chid]
             else:
                 # An ack for something we aren't tracking?
+                continue
+
+            if skip:
                 continue
 
             # Attempt to delete this notification from storage
@@ -289,21 +304,51 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             # like maybe do a new storage check
             d = deferToThread(storage.delete_notification,
                               self.uaid, chid, version)
+            d.addCallback(self.check_ack, self.uaid, chid, version)
             d.addErrback(log.err)
             defers.append(d)
+
+        # If that was the last ack we were expecting, we're clear now
+        if not self.updates_sent:
+            self.accept_notification = True
+
+        if defers:
+            self.transport.pauseProducing()
+            dl = DeferredList(defers)
+            dl.addBoth(self.check_missed_notifications)
+
+    def check_ack(self, result, uaid, chid, version):
+        if result:
+            return None
+
+        # Retry the operation and return its new deferred
+        d = deferToThread(self.settings.storage.delete_notification, uaid,
+                          chid, version)
+        d.addCallback(self.check_ack, uaid, chid, version)
+        d.addErrback(log.err)
+        return d
+
+    def check_missed_notifications(self, results):
+        # Check that they all ack's succeeded against storage
+        defers = []
+        for success, value in results:
+            if not success:
+                # Skip unknown errors
+                continue
+            if value:
+                defers.append(value)
+
+        # Any failures to retry?
         if defers:
             dl = DeferredList(defers)
             dl.addBoth(self.check_missed_notifications)
-        else:
-            self.transport.resumeProducing()
+            return
 
-    def check_missed_notifications(self, results):
-        # If they're all ack'd, we will send notifications again
+        # Resume consuming ack's
         self.transport.resumeProducing()
-        if not self.updates_sent:
-            self.accept_notification = True
-            self.transport.resumeProducing()
 
+        # If they're all ack'd, we will send notifications again
+        if not self.updates_sent:
             # See if we are already checking for notifications, cancel that
             # and start again
             if self._notification_fetch:
@@ -330,11 +375,13 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                 # Already sent a newer version for this channel, so don't
                 # update our versioning
                 continue
+
             # Otherwise we can record we sent this version
+            self.direct_updates[channel_id] = version
             self.updates_sent[channel_id] = version
             toSend.append(update)
         msg = {"messageType": "notification", "updates": toSend}
-        self.sendMessage(json.dumps(msg).encode('utf8'), False)
+        self.sendJSON(msg)
         self.accept_notification = False
 
 

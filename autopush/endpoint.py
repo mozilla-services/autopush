@@ -1,6 +1,7 @@
 import json
 import time
 
+from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from cryptography.fernet import InvalidToken
 from pyramid.response import Response
 
@@ -36,7 +37,11 @@ def endpoint(request):
 
     storage, router = app_settings.storage, app_settings.router
 
-    result = attempt_delivery(requests, router, uaid, chid, version, data)
+    try:
+        result = attempt_delivery(requests, router, uaid, chid, version, data)
+    except ProvisionedThroughputExceededException:
+        return Response("Server too busy.", status=503)
+
     if result == DELIVERED:
         return Response("Success")
     elif result == INVALID_UAID:
@@ -45,7 +50,11 @@ def endpoint(request):
     # Uaid not found, or not delivered
     # TODO: Maybe do another check and see if they've connected since the
     #       last one
-    storage.save_notification(uaid=uaid, chid=chid, version=version)
+    try:
+        storage.save_notification(uaid=uaid, chid=chid, version=version)
+    except ProvisionedThroughputExceededException:
+        return Response("Server too busy.", status=503)
+
     return Response("Success")
 
 
