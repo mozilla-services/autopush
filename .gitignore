@@ -12,3 +12,8 @@ html_coverage
 .hgignore
 .idea
 *.iml
+site-packages/*
+lib-python/*
+bin/*
+include/*
+lib_pypy/*
