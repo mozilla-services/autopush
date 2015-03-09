@@ -18,6 +18,7 @@ all:	build
 $(BIN)/pypy:
 	wget https://bitbucket.org/pypy/pypy/downloads/pypy-2.5.0-linux64.tar.bz2
 	tar xjvf pypy-2.5.0-linux64.tar.bz2
+	rm pypy-2.5.0-linux64/README.rst
 	mv pypy-2.5.0-linux64/* .
 	rm -rf pypy-2.5.0-linux64*
 
@@ -40,6 +41,7 @@ clean-env:
 clean:	clean-env
 
 build: $(BIN)/pip
+	$(INSTALL) -r requirements.txt
 	$(PYTHON) setup.py develop
 
 test: $(BIN)/nosetests
