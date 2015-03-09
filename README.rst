@@ -54,8 +54,20 @@ Push Characteristics
   clients will frequently not require using Storage at all. Read's to the
   Router table are still needed for every notification, whether Storage is
   hit or not.
+- Provisioned Read Throughput on for the Storage table is an important factor
+  in maximum notification throughput, as many slow clients may require frequent
+  Storage checks.
 - If a connected client hasn't ACK'd notifications, all new notifications
   will have their data dropped and go to storage. This is to avoid excessive
   memory costs for Push servers, since holding large connection counts is
   already RAM intensive.
-
+- If a client is reconnecting, their Router record will be old. Router records
+  have the node_id cleared optimistically by Endpoints when the Endpoint
+  discovers it cannot deliver the notification to the Push node on file. If
+  the conditional delete fails, it implies that the client has during this
+  period managed to connect somewhere again. It's entirely possible that the
+  client has reconnected and checked storage before the Endpoint stored the
+  Notification, as a result the Endpoint must read the Router table again, and
+  attempt to tell the node_id for that client to check storage. Further action
+  isn't required, since any more reconnects in this period will have seen the
+  stored notification.
