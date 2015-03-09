@@ -141,7 +141,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def err_hello(self, failure):
         self.transport.resumeProducing()
-        msg = {"messageType": "hello", "reason": "error", "status": 500}
+        msg = {"messageType": "hello", "reason": "error", "status": 503}
         self.sendJSON(msg)
         self.sendClose()
 
@@ -238,6 +238,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def error_register(self, fail):
         self.transport.resumeProducing()
+        msg = {"messageType": "register", "status": 500}
+        self.sendJSON(msg)
 
     def finish_register(self, token, chid):
         self.transport.resumeProducing()
@@ -248,8 +250,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                "pushEndpoint": "http://%s:%s/push/%s" % (host, port, token),
                "status": 200
                }
-        # TODO: Someone could abuse registration and not receive to make
-        #       us buffer lots and lots of data
         self.sendJSON(msg)
 
     def process_unregister(self, data):
@@ -264,9 +264,15 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Delete any record from storage, we don't wait for this
         d = deferToThread(self.settings.storage.delete_notification,
                           self.uaid, chid)
-        d.addErrback(log.err)
+        d.addErrback(self.force_delete, chid)
         data["status"] = 200
         self.sendJSON(data)
+
+    def force_delete(self, failure, chid):
+        """Forces another delete call through until it works"""
+        d = deferToThread(self.settings.storage.delete_notification,
+                          self.uaid, chid)
+        d.addErrback(self.force_delete, chid)
 
     def process_ack(self, data):
         updates = data.get("updates")
