@@ -29,12 +29,6 @@ def _parse(sysargs=None):
                         default=False)
     parser.add_argument('--crypto_key', help="Crypto key for tokens", type=str,
                         default="i_CYcNKa2YXrF_7V1Y-2MFfoEl7b6KX55y_9uvOKfJQ=")
-    parser.add_argument('--influx-password', help='InfluxDB password',
-                        type=str, default='root')
-    parser.add_argument('--influx-secure', help='Use TLS for InfluxDB',
-                        action='store_true', default=False)
-    parser.add_argument('--initial-db', help="JSON file to initialize the db.",
-                        type=str, default='pushgo.json')
 
     args = parser.parse_args(sysargs)
     return args, parser
@@ -73,6 +67,8 @@ def connection_main(sysargs=None):
                                      debug=args.debug)
     factory.protocol = SimplePushServerProtocol
     factory.protocol.settings = settings
+    factory.setProtocolOptions(allowHixie76=True)
+
     settings.ws_port = args.port
     settings.router_port = args.router_port
     settings.endpoint_port = args.endpoint_port
