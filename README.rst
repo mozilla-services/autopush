@@ -36,11 +36,11 @@ Push Characteristics
   this case.
 - (Edge Case) Multiple notifications can be sent at once, if a notification
   comes in during a Storage check, but before it has completed.
-- (Edge Case, UNRESOLVED) It's possible due to timing, that if the Endpoint
-  gets a 503, the Push server could query Storage for 'missed notifications'
-  before the Endpoint has written it.
-  Possible Solution: Have the Endpoint use a new Push server call to flag
-  a notification check *after* its Storage call has completed.
+- (Edge Case) It's possible due to timing, that if the Endpoint gets a 503,
+  the Push server could query Storage for 'missed notifications' before the
+  Endpoint has written it. To address this, when an Endpoint gets a 503, it
+  should store the message first, then inform the Push server to check for
+  Stored notifications.
 - If a connected client is able to accept a notification, then the Endpoint
   will deliver the message to the client completely bypassing Storage. This
   Notification will be referred to as a Direct Notification vs. a Stored
