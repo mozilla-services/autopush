@@ -128,7 +128,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # User exists?
         router = self.settings.router
-        url = "http://%s:%s/push" % (self.settings.hostname,
+        url = "http://%s:%s" % (self.settings.hostname,
                                      self.settings.router_port)
 
         # Attempt to register the user for this session
@@ -355,12 +355,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # If they're all ack'd, we will send notifications again
         if not self.updates_sent:
-            # See if we are already checking for notifications, cancel that
-            # and start again
-            if self._notification_fetch:
-                self._notification_fetch.cancel()
-                self._notification_fetch = None
-                self._check_notifications = True
+            self.accept_notification = True
 
             # Should we check again?
             if self._check_notifications:
@@ -399,11 +394,28 @@ class RouterHandler(cyclone.web.RequestHandler):
             return self.write("Client not connected.")
 
         if not client.accept_notification:
-            # Let the client know to check notifications again
-            client._check_notifications = True
             self.set_status(503)
             return self.write("Client busy.")
 
         updates = json.loads(self.request.body)
         client.send_notifications(updates)
         return self.write("Client accepted for delivery")
+
+
+class NotificationHandler(cyclone.web.RequestHandler):
+    def put(self, uaid):
+        client = self.settings.clients.get(uaid)
+        if not client:
+            self.set_status(404)
+            return self.write("Client not connected.")
+
+        if not client.accept_notification:
+            # Client already busy waiting for stuff, flag for check
+            self._check_notifications = True
+            self.set_status(202)
+            return self.write("Flagged for Notification check")
+
+        # Client is online and idle, start a notification check
+        client.process_notifications()
+        self.set_status(200)
+        self.write("Notification check started")

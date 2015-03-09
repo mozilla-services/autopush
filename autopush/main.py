@@ -4,14 +4,22 @@ import argparse
 
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerFactory
+from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from pyramid.config import Configurator
 from twisted.python import log
 from twisted.internet import reactor
 from waitress import serve
 
-from autopush.websocket import SimplePushServerProtocol, RouterHandler
+from autopush.websocket import (
+    SimplePushServerProtocol,
+    RouterHandler,
+    NotificationHandler
+)
 from autopush.settings import AutopushSettings
-from autopush.endpoint import endpoint
+from autopush.endpoint import (
+    endpoint,
+    provision_exceeded,
+)
 
 
 def _parse(sysargs=None):
@@ -58,9 +66,12 @@ def connection_main(sysargs=None):
 
     r = RouterHandler
     r.settings = settings
+    n = NotificationHandler
+    n.settings = settings
 
     site = cyclone.web.Application([
-        (r"/push/([^\/]+)", r)
+        (r"/push/([^\/]+)", r),
+        (r"/notif/([^\/]+)", n)
     ])
 
     factory = WebSocketServerFactory("ws://localhost:%s/" % args.port,
@@ -91,6 +102,8 @@ def endpoint_main(sysargs=None):
     config.registry.app_settings = settings
     config.add_route('push', '/push/{token}')
     config.add_view(endpoint, route_name='push')
+    config.add_view(provision_exceeded,
+                    context=ProvisionedThroughputExceededException)
     app = config.make_wsgi_app()
     print "Serving on %s:%s" % (settings.hostname, args.port)
     serve(app, host=settings.hostname, port=args.port, threads=50)
