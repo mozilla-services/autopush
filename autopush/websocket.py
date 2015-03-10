@@ -17,8 +17,16 @@ def ms_time():
     return int(time.time() * 1000)
 
 
+def periodic_reporter(settings):
+    settings.metrics.gauge("update.client.connections",
+                           len(settings.clients))
+    reactor.callLater(1, periodic_reporter, settings)
+
+
 class SimplePushServerProtocol(WebSocketServerProtocol):
     def onConnect(self, request):
+        self.metrics = self.settings.metrics
+        self.metrics.increment("client.socket.connect")
         self.uaid = None
         self.last_ping = 0
         self.accept_notification = True
@@ -97,6 +105,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.cleanUp()
 
     def cleanUp(self):
+        self.metrics.increment("client.socket.disconnect")
+        elapsed = (ms_time() - self.connected_at) / 1000.0
+        self.metrics.timing("client.socket.lifespan", duration=elapsed)
         if self.uaid and self.settings.clients.get(self.uaid) == self:
             del self.settings.clients[self.uaid]
             for defer in [self._notification_fetch, self._register]:
@@ -160,6 +171,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}
         self.settings.clients[self.uaid] = self
         self.sendJSON(msg)
+        self.metrics.increment("updates.client.hello")
         self.process_notifications()
 
     def process_notifications(self):
@@ -217,8 +229,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def process_ping(self):
         now = time.time()
         if now - self.last_ping < self.settings.min_ping_interval:
+            self.metrics.increment("updates.client.too_many_pings")
             return self.sendClose()
         self.last_ping = now
+        self.metrics.increment("updates.client.ping")
         return self.sendMessage("{}", False)
 
     def process_register(self, data):
@@ -252,6 +266,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                "status": 200
                }
         self.sendJSON(msg)
+        self.metrics.increment("updates.client.register")
 
     def process_unregister(self, data):
         if "channelID" not in data:
@@ -261,6 +276,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             uuid.UUID(chid)
         except ValueError:
             return self.bad_message("unregister")
+
+        self.metrics.increment("updates.client.unregister")
 
         # Delete any record from storage, we don't wait for this
         d = deferToThread(self.settings.storage.delete_notification,
@@ -280,6 +297,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if not updates or not isinstance(updates, list):
             return self.bad_message("ack")
 
+        self.metrics.increment("updates.client.ack")
         defers = []
         for update in updates:
             chid = update.get("channelID")

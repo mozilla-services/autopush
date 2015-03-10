@@ -13,7 +13,8 @@ from waitress import serve
 from autopush.websocket import (
     SimplePushServerProtocol,
     RouterHandler,
-    NotificationHandler
+    NotificationHandler,
+    periodic_reporter
 )
 from autopush.settings import AutopushSettings
 from autopush.endpoint import (
@@ -117,6 +118,7 @@ def connection_main(sysargs=None):
     reactor.listenTCP(args.port, factory)
     reactor.listenTCP(args.router_port, site)
     reactor.suggestThreadPoolSize(50)
+    reactor.callLater(1, periodic_reporter, settings)
     try:
         reactor.run()
     except KeyboardInterrupt:
