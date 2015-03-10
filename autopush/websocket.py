@@ -407,34 +407,42 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
 class RouterHandler(cyclone.web.RequestHandler):
     def put(self, uaid):
-        client = self.settings.clients.get(uaid)
+        settings = self.settings
+        client = settings.clients.get(uaid)
         if not client:
             self.set_status(404)
+            settings.metrics.increment("updates.router.disconnected")
             return self.write("Client not connected.")
 
         if not client.accept_notification:
             self.set_status(503)
+            settings.metrics.increment("updates.router.busy")
             return self.write("Client busy.")
 
         updates = json.loads(self.request.body)
         client.send_notifications(updates)
+        settings.metrics.increment("updates.router.received")
         return self.write("Client accepted for delivery")
 
 
 class NotificationHandler(cyclone.web.RequestHandler):
     def put(self, uaid):
         client = self.settings.clients.get(uaid)
+        settings = self.settings
         if not client:
             self.set_status(404)
+            settings.metrics.increment("updates.notification.disconnected")
             return self.write("Client not connected.")
 
         if not client.accept_notification:
             # Client already busy waiting for stuff, flag for check
             self._check_notifications = True
             self.set_status(202)
+            settings.metrics.increment("updates.notification.flagged")
             return self.write("Flagged for Notification check")
 
         # Client is online and idle, start a notification check
         client.process_notifications()
+        settings.metrics.increment("updates.notification.checking")
         self.set_status(200)
         self.write("Notification check started")
