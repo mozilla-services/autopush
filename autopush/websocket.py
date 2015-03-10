@@ -13,7 +13,7 @@ from twisted.internet.threads import deferToThread
 from twisted.python import log
 
 
-def more_time():
+def ms_time():
     return int(time.time() * 1000)
 
 
@@ -23,7 +23,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.last_ping = 0
         self.accept_notification = True
         self.check_storage = False
-        self.connected_at = more_time()
+        self.connected_at = ms_time()
 
         self._check_notifications = False
 
@@ -44,7 +44,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def processHandshake(self):
         """Disable host port checking on nonstandard ports since some
         clients are buggy and don't provide it"""
-        port = self.settings.ws_port
+        port = self.settings.port
         hide = port != 80 and port != 443
         if not hide:
             return WebSocketServerProtocol.processHandshake(self)
@@ -90,6 +90,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.sendClose()
 
     def onClose(self, wasClean, code, reason):
+        # TODO: Any notifications directly delivered but not ack'd need
+        # to be punted to an endpoint router
         uaid = getattr(self, "uaid", None)
         if uaid:
             self.cleanUp()
@@ -128,8 +130,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # User exists?
         router = self.settings.router
-        url = "http://%s:%s" % (self.settings.hostname,
-                                     self.settings.router_port)
+        url = "http://%s:%s" % (self.settings.router_hostname,
+                                self.settings.router_port)
 
         # Attempt to register the user for this session
         self.transport.pauseProducing()
@@ -243,11 +245,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def finish_register(self, token, chid):
         self.transport.resumeProducing()
-        host = self.settings.hostname
-        port = self.settings.endpoint_port
+        url = self.settings.endpoint_url
         msg = {"messageType": "register",
                "channelID": chid,
-               "pushEndpoint": "http://%s:%s/push/%s" % (host, port, token),
+               "pushEndpoint": "%s/push/%s" % (url, token),
                "status": 200
                }
         self.sendJSON(msg)
