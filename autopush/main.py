@@ -7,7 +7,8 @@ from autobahn.twisted.websocket import WebSocketServerFactory
 from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from pyramid.config import Configurator
 from twisted.python import log
-from twisted.internet import reactor
+from twisted.internet import reactor, task
+from txstatsd.client import StatsDClientProtocol
 from waitress import serve
 
 from autopush.websocket import (
@@ -118,10 +119,15 @@ def connection_main(sysargs=None):
     factory.protocol.settings = settings
     factory.setProtocolOptions(allowHixie76=True)
 
+    protocol = StatsDClientProtocol(settings.metrics_client)
+
     reactor.listenTCP(args.port, factory)
     reactor.listenTCP(args.router_port, site)
+    reactor.listenUDP(0, protocol)
     reactor.suggestThreadPoolSize(50)
-    reactor.callLater(1, periodic_reporter, settings)
+
+    l = task.LoopingCall(periodic_reporter, settings)
+    l.start(1.0)
     try:
         reactor.run()
     except KeyboardInterrupt:

@@ -20,7 +20,6 @@ def ms_time():
 def periodic_reporter(settings):
     settings.metrics.gauge("update.client.connections",
                            len(settings.clients))
-    reactor.callLater(1, periodic_reporter, settings)
 
 
 class SimplePushServerProtocol(WebSocketServerProtocol):
