@@ -41,7 +41,7 @@ class AutopushSettings(object):
         # Metrics setup
         client = TwistedStatsDClient(statsd_host, statsd_port)
         self.metrics_client = client
-        self.metrics = Metrics(connection=client, namespace="")
+        self.metrics = Metrics(connection=client, namespace="pushgo")
 
         key = crypto_key or Fernet.generate_key()
         self.fernet = Fernet(key)
