@@ -1,7 +1,8 @@
 """autopush daemon script"""
-import configargparse
 import sys
+import threading
 
+import configargparse
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerFactory
 from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
@@ -145,5 +146,17 @@ def endpoint_main(sysargs=None):
     config.add_view(provision_exceeded,
                     context=ProvisionedThroughputExceededException)
     app = config.make_wsgi_app()
-    print "Serving on %s:%s" % (settings.hostname, args.port)
-    serve(app, host=settings.hostname, port=args.port, threads=50)
+    protocol = StatsDClientProtocol(settings.metrics_client)
+    reactor.listenUDP(0, protocol)
+
+    # Fork a thread to run the app on, since reactor wants the big
+    # spotlight
+    def server():
+        print "Serving on %s:%s" % (settings.hostname, args.port)
+        serve(app, host=settings.hostname, port=args.port, threads=50)
+    t = threading.Thread(target=server)
+    t.start()
+    try:
+        reactor.run()
+    except:
+        t.join()

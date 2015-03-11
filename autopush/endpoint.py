@@ -10,7 +10,9 @@ def provision_exceeded(request):
 
 
 def endpoint(request):
+    start_time = time.time()
     app_settings = request.registry.app_settings
+    metrics = app_settings.metrics
     requests = app_settings.requests
     fernet = app_settings.fernet
     token = request.matchdict["token"]
@@ -21,6 +23,10 @@ def endpoint(request):
     data = request.GET.get("data") or request.POST.get("data")
     if version is None:
         return Response("No version", status=401)
+
+    if data and len(data) > app_settings.max_data:
+        metrics.increment("updates.appserver.toolong")
+        return Response("Data too large", status=401)
 
     if isinstance(version, list):
         version = version[0]
@@ -55,6 +61,9 @@ def endpoint(request):
 
         if result.status_code == 200:
             # Success, return!
+            metrics.increment("router.broadcast.hit")
+            time_diff = time.time() - start_time
+            metrics.timing("updates.handled", duration=time_diff)
             return Response("Success")
         elif result.status_code == 404:
             # Conditionally delete the node_id
@@ -86,4 +95,5 @@ def endpoint(request):
             # No check on response here, because if they jumped since we
             # got this they'll definitely get the stored notification
 
+    metrics.increment("router.broadcast.miss")
     return Response("Success")
