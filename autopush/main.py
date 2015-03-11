@@ -1,6 +1,6 @@
 """autopush daemon script"""
+import configargparse
 import sys
-import argparse
 
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerFactory
@@ -25,34 +25,37 @@ from autopush.endpoint import (
 
 def add_shared_args(parser):
     parser.add_argument('--debug', help='Debug Info.', action='store_true',
-                        default=False)
+                        default=False, env_var="DEBUG")
     parser.add_argument('--crypto_key', help="Crypto key for tokens", type=str,
-                        default="i_CYcNKa2YXrF_7V1Y-2MFfoEl7b6KX55y_9uvOKfJQ=")
+                        default="i_CYcNKa2YXrF_7V1Y-2MFfoEl7b6KX55y_9uvOKfJQ=",
+                        env_var="CRYPTO_KEY")
     parser.add_argument('--hostname', help="Hostname to announce under",
-                        type=str, default=None)
+                        type=str, default=None, env_var="HOSTNAME")
     parser.add_argument('--statsd_host', help="Statsd Host", type=str,
-                        default="localhost")
+                        default="localhost", env_var="STATSD_HOST")
     parser.add_argument('--statsd_port', help="Statsd Port", type=int,
-                        default=8125)
+                        default=8125, env_var="STATSD_PORT")
 
 
 def _parse_connection(sysargs=None):
     if sysargs is None:
         sysargs = sys.argv[1:]
 
-    parser = argparse.ArgumentParser(description='Runs a Connection Node.')
+    parser = configargparse.ArgumentParser(
+        description='Runs a Connection Node.')
     parser.add_argument('-p', '--port', help='Websocket Port', type=int,
-                        default=8080)
+                        default=8080, env_var="PORT")
     parser.add_argument('--router_hostname',
                         help="HTTP Rotuer Hostname to use for internal "
-                        "router connects", type=str, default=None)
+                        "router connects", type=str, default=None,
+                        env_var="ROUTER_HOSTNAME")
     parser.add_argument('-r', '--router_port',
                         help="HTTP Router Port for internal router connects",
-                        type=int, default=8081)
+                        type=int, default=8081, env_var="ROUTER_PORT")
     parser.add_argument('--endpoint_hostname', help="HTTP Endpoint Hostname",
-                        type=str, default=None)
+                        type=str, default=None, env_var="ENDPOINT_HOSTNAME")
     parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
-                        type=int, default=8082)
+                        type=int, default=8082, env_var="ENDPOINT_PORT")
 
     add_shared_args(parser)
     args = parser.parse_args(sysargs)
@@ -63,9 +66,9 @@ def _parse_endpoint(sysargs=None):
     if sysargs is None:
         sysargs = sys.argv[1:]
 
-    parser = argparse.ArgumentParser(description='Runs an Endpoint Node.')
+    parser = configargparse.ArgumentParser(description='Runs an Endpoint Node.')
     parser.add_argument('-p', '--port', help='Public HTTP Endpoint Port',
-                        type=int, default=8082)
+                        type=int, default=8082, env_var="PORT")
 
     add_shared_args(parser)
     args = parser.parse_args(sysargs)

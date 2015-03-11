@@ -1,3 +1,4 @@
+SHELL := /bin/sh
 APPNAME = autopush
 DEPS =
 HERE = $(shell pwd)
@@ -8,16 +9,18 @@ TESTS = $(APPNAME)/tests
 PYTHON = $(HERE)/bin/pypy
 INSTALL = $(HERE)/bin/pip install
 
-BUILD_DIRS = bin build deps include lib lib64 lib_pypy lib-python
+BUILD_DIRS = bin build deps include lib lib64 lib_pypy lib-python site-packages
 
 
 .PHONY: all build test clean clean-env
 
 all:	build
 
-$(BIN)/pypy:
+$(HERE)/pypy-2.5.0-linux64.tar.bz2:
 	wget https://bitbucket.org/pypy/pypy/downloads/pypy-2.5.0-linux64.tar.bz2
-	tar xjvf pypy-2.5.0-linux64.tar.bz2
+
+$(BIN)/pypy: $(HERE)/pypy-2.5.0-linux64.tar.bz2
+	tar xjvf $(HERE)/pypy-2.5.0-linux64.tar.bz2
 	rm pypy-2.5.0-linux64/README.rst
 	rm pypy-2.5.0-linux64/LICENSE
 	mv pypy-2.5.0-linux64/* .
