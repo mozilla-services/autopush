@@ -1,0 +1,10 @@
+[StatAccumInput]
+
+[StatsdInput]
+address = ":8125"
+
+[RstEncoder]
+
+[LogOutput]
+message_matcher = "TRUE"
+encoder = "RstEncoder"
