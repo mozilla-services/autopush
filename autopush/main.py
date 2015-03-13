@@ -153,7 +153,8 @@ def endpoint_main(sysargs=None):
     # spotlight
     def server():
         print "Serving on %s:%s" % (settings.hostname, args.port)
-        serve(app, host=settings.hostname, port=args.port, threads=50)
+        serve(app, host=settings.hostname, port=args.port, threads=50,
+              backlog=200)
     t = threading.Thread(target=server)
     t.start()
     try:
