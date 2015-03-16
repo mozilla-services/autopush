@@ -40,10 +40,8 @@ setup(name="AutoPush",
           "autobahn>=0.10.1",
           "cryptography>=0.7.2",
           "cyclone>=1.1",
-          "pyramid>=1.5.4",
           "boto>=2.36",
           "requests>=2.5.3",
-          "waitress>=0.8.9",
           "txstatsd>=1.0.0"
       ],
       entry_points="""

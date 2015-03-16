@@ -1,16 +1,12 @@
 """autopush daemon script"""
 import sys
-import threading
 
 import configargparse
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerFactory
-from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
-from pyramid.config import Configurator
 from twisted.python import log
 from twisted.internet import reactor, task
 from txstatsd.client import StatsDClientProtocol
-from waitress import serve
 
 from autopush.websocket import (
     SimplePushServerProtocol,
@@ -19,10 +15,7 @@ from autopush.websocket import (
     periodic_reporter
 )
 from autopush.settings import AutopushSettings
-from autopush.endpoint import (
-    endpoint,
-    provision_exceeded,
-)
+from autopush.endpoint import EndpointHandler
 
 
 def add_shared_args(parser):
@@ -139,25 +132,19 @@ def endpoint_main(sysargs=None):
     args, parser = _parse_endpoint(sysargs)
     settings = make_settings(args)
 
-    config = Configurator()
-    config.registry.app_settings = settings
-    config.add_route('push', '/push/{token}')
-    config.add_view(endpoint, route_name='push')
-    config.add_view(provision_exceeded,
-                    context=ProvisionedThroughputExceededException)
-    app = config.make_wsgi_app()
+    log.startLogging(sys.stdout)
+
+    # Endpoint HTTP router
+    endpoint = EndpointHandler
+    endpoint.settings = settings
+    site = cyclone.web.Application([
+        (r"/push/([^\/]+)", endpoint)
+    ], default_host=settings.hostname, debug=args.debug
+    )
+
     protocol = StatsDClientProtocol(settings.metrics_client)
     reactor.listenUDP(0, protocol)
+    reactor.listenTCP(args.port, site)
+    reactor.suggestThreadPoolSize(50)
 
-    # Fork a thread to run the app on, since reactor wants the big
-    # spotlight
-    def server():
-        print "Serving on %s:%s" % (settings.hostname, args.port)
-        serve(app, host=settings.hostname, port=args.port, threads=50,
-              backlog=200)
-    t = threading.Thread(target=server)
-    t.start()
-    try:
-        reactor.run()
-    except:
-        t.join()
+    reactor.run()
