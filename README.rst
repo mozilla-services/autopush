@@ -20,6 +20,26 @@ PyPy downloads can be found here: http://pypy.org/download.html#default-with-a-j
 Once you have downloaded, decompressed, and renamed this to ``pypy``, you can
 run the Makefile with ``make``, which will setup the application.
 
+Running
+=======
+
+There are two programs that will have scripts setup after installing (In the
+``pypy/bin/`` directory):
+
+- ``autopush``
+- ``autoendpoint``
+
+You will need to have a ``~/.boto`` file or ``AWS`` environment keys setup
+before either of these will run properly. By default they will create a router
+and storage DynamoDB table named ``storage`` and ``router`` with provisioned
+throughputs of ``1``.
+
+You can then test that this works by using the `simplepush tester <https://github.com/mozilla-services/simplepush_test>`_, like so:
+
+.. code-block:: bash
+
+    ~/simplepush_test/ $ PUSH_SERVER=ws://localhost:8080/ ./bin/nosetests
+
 Push Architecture
 =================
 
