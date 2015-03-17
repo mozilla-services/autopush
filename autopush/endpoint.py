@@ -93,9 +93,12 @@ class EndpointHandler(cyclone.web.RequestHandler):
         # Determine if they're connected at the moment
         node_id = result.get("node_id")
 
-        # Attempt a delivery if they are connected
+        # Indicator if we got a node_id, but the node won't handle
+        # delivery at this moment later.
         self.client_check = False
+
         if node_id:
+            # Attempt a delivery if they are connected
             payload = json.dumps([{"channelID": self.chid,
                                    "version": int(self.version),
                                    "data": self.data}])
@@ -155,7 +158,11 @@ class EndpointHandler(cyclone.web.RequestHandler):
             d.addCallback(self._process_notif, node_id)
             d.addErrback(self._error_response)
         else:
-            self._finish_missed_store()
+            # Saved the notification, check for if the client is somewhere
+            # now
+            d = deferToThread(self.settings.router.get_uaid, self.uaid)
+            d.addCallback(self._process_jumped_client)
+            d.addErrback(self._error_response)
 
     def _process_notif(self, result, node_id=None):
         """Process the result of a requests.PUT to a Connection Node's
