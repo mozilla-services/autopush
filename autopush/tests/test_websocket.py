@@ -1,4 +1,5 @@
 import json
+import uuid
 
 import twisted.internet.base
 from mock import Mock
@@ -19,7 +20,6 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto = SimplePushServerProtocol()
 
         settings = AutopushSettings(
-            crypto_key="i_CYcNKa2YXrF_7V1Y-2MFfoEl7b6KX55y_9uvOKfJQ=",
             hostname="localhost",
             statsd_host=None,
         )
@@ -67,7 +67,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
         def check_result(msg):
-            assert "messageType" in msg
+            self.assert_("messageType" in msg)
         return self._check_response(check_result)
 
     @mock_dynamodb2
@@ -75,16 +75,21 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
+        d = Deferred()
+        d.addCallback(lambda x: True)
+
         def check_second_hello(msg):
             self.assert_("messageType" in msg)
             self.assertEqual(msg["status"], 401)
+            d.callback(True)
 
         def check_first_hello(msg):
-            assert "messageType" in msg
+            self.assert_("messageType" in msg)
             # Send another hello
             self._send_message(dict(messageType="hello", channelIDs=[]))
-            return self._check_response(check_second_hello)
-        return self._check_response(check_first_hello)
+            self._check_response(check_second_hello)
+        self._check_response(check_first_hello)
+        return d
 
     @mock_dynamodb2
     def test_not_hello(self):
@@ -92,8 +97,31 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="wooooo"))
 
         def check_result(result):
-            assert result is True
+            self.assertEqual(result, True)
         d = Deferred()
         d.addCallback(check_result)
         self._wait_for_close(d)
+        return d
+
+    @mock_dynamodb2
+    def test_register(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        d = Deferred()
+        d.addCallback(lambda x: True)
+
+        def check_register_result(msg):
+            self.assertEqual(msg["status"], 200)
+            self.assertEqual(msg["messageType"], "register")
+            self.assert_("pushEndpoint" in msg)
+            d.callback(True)
+
+        def check_hello_result(msg):
+            self.assert_("messageType" in msg)
+            self._send_message(dict(messageType="register",
+                                    channelID=str(uuid.uuid4())))
+            self._check_response(check_register_result)
+
+        self._check_response(check_hello_result)
         return d
