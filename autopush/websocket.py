@@ -87,7 +87,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.sendClose()
 
         cmd = data["messageType"]
-        if cmd == "register":
+        if cmd == "hello":
+            return self.process_hello(data)
+        elif cmd == "register":
             return self.process_register(data)
         elif cmd == "unregister":
             return self.process_unregister(data)
@@ -123,6 +125,13 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # This must be a helo, or we kick the client
         cmd = data.get("messageType")
         if cmd != "hello":
+            self.sendClose()
+            return
+
+        if self.uaid:
+            self.sendJSON(
+                {"messageType": "hello", "reason": "duplicate hello",
+                 "status": 401})
             self.sendClose()
             return
 
