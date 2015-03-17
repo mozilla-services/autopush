@@ -14,8 +14,9 @@ from autopush.websocket import SimplePushServerProtocol
 
 
 class WebsocketTestCase(unittest.TestCase):
-    @mock_dynamodb2
     def setUp(self):
+        self.mock_dynamodb2 = mock_dynamodb2()
+        self.mock_dynamodb2.start()
         twisted.internet.base.DelayedCall.debug = True
         self.proto = SimplePushServerProtocol()
 
@@ -28,6 +29,9 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.sendClose = self.close_mock = Mock()
         self.proto.transport = self.transport_mock = Mock()
         settings.metrics = Mock(spec=Metrics)
+
+    def tearDown(self):
+        self.mock_dynamodb2.stop()
 
     def _connect(self):
         self.proto.onConnect(None)
@@ -72,7 +76,6 @@ class WebsocketTestCase(unittest.TestCase):
         self.assertEqual(name, "gauge")
         self.assertEqual(args, ("update.client.connections", 0))
 
-    @mock_dynamodb2
     def test_hello(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -81,7 +84,6 @@ class WebsocketTestCase(unittest.TestCase):
             self.assert_("messageType" in msg)
         return self._check_response(check_result)
 
-    @mock_dynamodb2
     def test_hello_dupe(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -90,12 +92,11 @@ class WebsocketTestCase(unittest.TestCase):
         d.addCallback(lambda x: True)
 
         def check_second_hello(msg):
-            self.assert_("messageType" in msg)
             self.assertEqual(msg["status"], 401)
             d.callback(True)
 
         def check_first_hello(msg):
-            self.assert_("messageType" in msg)
+            self.assertEqual(msg["status"], 200)
             # Send another hello
             self._send_message(dict(messageType="hello", channelIDs=[]))
             self._check_response(check_second_hello)
@@ -103,7 +104,6 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    @mock_dynamodb2
     def test_not_hello(self):
         self._connect()
         self._send_message(dict(messageType="wooooo"))
@@ -115,7 +115,6 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_close(d)
         return d
 
-    @mock_dynamodb2
     def test_register(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -139,7 +138,6 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    @mock_dynamodb2
     def test_unregister(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -164,7 +162,6 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    @mock_dynamodb2
     def test_notification(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -200,7 +197,6 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    @mock_dynamodb2
     def test_ack(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
