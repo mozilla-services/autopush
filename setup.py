@@ -42,7 +42,8 @@ setup(name="AutoPush",
           "cyclone>=1.1",
           "boto>=2.36",
           "requests>=2.5.3",
-          "txstatsd>=1.0.0"
+          "txstatsd>=1.0.0",
+          "configargparse>=0.9.3",
       ],
       entry_points="""
       [console_scripts]
