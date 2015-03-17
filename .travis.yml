@@ -1,0 +1,7 @@
+language: python
+python:
+  - "pypy"
+install:
+  - python setup.py develop
+  - pip install coverage nose mock moto
+script: nosetests

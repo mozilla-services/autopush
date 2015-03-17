@@ -65,7 +65,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def onMessage(self, payload, isBinary):
         if isBinary:
-            print("Binary message received: {0} bytes".format(len(payload)))
+            self.sendClose()
             return
 
         try:

@@ -4,7 +4,7 @@ DEPS =
 HERE = $(shell pwd)
 BIN = $(HERE)/pypy/bin
 VIRTUALENV = virtualenv
-NOSE = bin/nosetests -s --with-xunit
+NOSE = $(BIN)/nosetests -s
 TESTS = $(APPNAME)/tests
 PYTHON = $(BIN)/pypy
 INSTALL = $(BIN)/pip install
@@ -39,5 +39,4 @@ build: $(BIN)/pip
 	$(PYTHON) setup.py develop
 
 test: $(BIN)/nosetests
-	$(NOSE) --with-coverage --cover-package=ofcode --cover-erase \
-	--cover-inclusive $(APPNAME)
+	$(NOSE)

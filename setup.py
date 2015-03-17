@@ -13,7 +13,7 @@ with io.open(os.path.join(here, 'CHANGELOG.rst'), encoding='utf8') as f:
 
 extra_options = {
     "packages": find_packages(),
-    }
+}
 
 
 setup(name="AutoPush",
@@ -34,7 +34,7 @@ setup(name="AutoPush",
       test_suite="nose.collector",
       include_package_data=True,
       zip_safe=False,
-      tests_require=['nose', 'coverage'],
+      tests_require=['nose', 'coverage', 'mock>=1.0.1', 'moto>=0.4.1'],
       install_requires=[
           "twisted>=15.0",
           "autobahn>=0.10.1",
