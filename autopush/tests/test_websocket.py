@@ -61,6 +61,17 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_message(d)
         return d
 
+    def test_reporter(self):
+        from autopush.websocket import periodic_reporter
+        periodic_reporter(self.proto.settings)
+
+        # Verify metric increase of nothing
+        calls = self.proto.settings.metrics.method_calls
+        self.assertEqual(len(calls), 1)
+        name, args, _ = calls[0]
+        self.assertEqual(name, "gauge")
+        self.assertEqual(args, ("update.client.connections", 0))
+
     @mock_dynamodb2
     def test_hello(self):
         self._connect()
