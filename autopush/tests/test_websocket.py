@@ -13,6 +13,7 @@ from autopush.websocket import SimplePushServerProtocol
 
 
 class WebsocketTestCase(unittest.TestCase):
+    @mock_dynamodb2
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
         self.proto = SimplePushServerProtocol()
