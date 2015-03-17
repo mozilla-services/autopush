@@ -2,6 +2,9 @@
 AutoPush
 ========
 
+.. image:: https://travis-ci.org/mozilla-services/autopush.svg?branch=master
+    :target: https://travis-ci.org/mozilla-services/autopush
+
 *A simple prototype SimplePush style service utilizing AWS extensively.*
 
 Ok, that's not entirely accurate. This is a mostly production-ready Push
