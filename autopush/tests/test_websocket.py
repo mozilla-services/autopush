@@ -88,7 +88,8 @@ class WebsocketTestCase(unittest.TestCase):
             # Send another hello
             self._send_message(dict(messageType="hello", channelIDs=[]))
             self._check_response(check_second_hello)
-        self._check_response(check_first_hello)
+        f = self._check_response(check_first_hello)
+        f.addErrback(lambda x: d.errback(x))
         return d
 
     @mock_dynamodb2
@@ -123,5 +124,97 @@ class WebsocketTestCase(unittest.TestCase):
                                     channelID=str(uuid.uuid4())))
             self._check_response(check_register_result)
 
-        self._check_response(check_hello_result)
+        f = self._check_response(check_hello_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
+
+    @mock_dynamodb2
+    def test_unregister(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        d = Deferred()
+        d.addCallback(lambda x: True)
+        chid = str(uuid.uuid4())
+
+        def check_unregister_result(msg):
+            self.assertEqual(msg["status"], 200)
+            self.assertEqual(msg["channelID"], chid)
+            d.callback(True)
+
+        def check_hello_result(msg):
+            self.assertEqual(msg["messageType"], "hello")
+            self.assertEqual(msg["status"], 200)
+            self._send_message(dict(messageType="unregister",
+                                    channelID=chid))
+            self._check_response(check_unregister_result)
+
+        f = self._check_response(check_hello_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
+
+    @mock_dynamodb2
+    def test_notification(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        d = Deferred()
+        d.addCallback(lambda x: True)
+        chid = str(uuid.uuid4())
+
+        def check_hello_result(msg):
+            self.assertEqual(msg["status"], 200)
+            # Send outself a notification
+            payload = [{"channelID": chid, "version": 10}]
+            self.proto.send_notifications(payload)
+
+            # Check the call result
+            args = self.send_mock.call_args
+            self.assert_(args is not None)
+            self.send_mock.reset_mock()
+
+            msg = json.loads(args[0][0])
+            self.assertEqual(msg["messageType"], "notification")
+            self.assert_("updates" in msg)
+            self.assert_(len(msg["updates"]), 1)
+            update = msg["updates"][0]
+            self.assertEqual(update["channelID"], chid)
+            self.assertEqual(update["version"], 10)
+
+            # Verify outgoing queue in sent directly
+            self.assertEqual(len(self.proto.direct_updates), 1)
+            d.callback(True)
+
+        f = self._check_response(check_hello_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
+
+    @mock_dynamodb2
+    def test_ack(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        d = Deferred()
+        d.addCallback(lambda x: True)
+        chid = str(uuid.uuid4())
+
+        # stick a notification to ack in
+        self.proto.direct_updates[chid] = 12
+        self.proto.updates_sent[chid] = 12
+
+        def check_hello_result(msg):
+            self.assertEqual(msg["status"], 200)
+
+            # Send our ack
+            self._send_message(dict(messageType="ack",
+                                    updates=[{"channelID": chid,
+                                              "version": 12}]))
+
+            # Verify it was cleared out
+            self.assertEqual(len(self.proto.updates_sent), 0)
+            self.assertEqual(len(self.proto.direct_updates), 0)
+            d.callback(True)
+
+        f = self._check_response(check_hello_result)
+        f.addErrback(lambda x: d.errback(x))
         return d
