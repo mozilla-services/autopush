@@ -352,6 +352,30 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
+    def test_register_bad_crypto(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+
+        def throw_error(*args, **kwargs):
+            raise Exception("Crypto explosion")
+
+        self.proto.settings.fernet = Mock(
+            **{"encrypt.side_effect": throw_error})
+        self._send_message(dict(messageType="register",
+                                channelID=str(uuid.uuid4())))
+
+        d = Deferred()
+        d.addCallback(lambda x: True)
+
+        def check_register_result(msg):
+            eq_(msg["status"], 500)
+            eq_(msg["messageType"], "register")
+            d.callback(True)
+
+        f = self._check_response(check_register_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
+
     def test_unregister(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -373,6 +397,41 @@ class WebsocketTestCase(unittest.TestCase):
             self._check_response(check_unregister_result)
 
         f = self._check_response(check_hello_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_unregister_without_chid(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self._send_message(dict(messageType="unregister"))
+
+        d = Deferred()
+        d.addCallback(lambda x: True)
+
+        def check_unregister_result(msg):
+            eq_(msg["status"], 401)
+            eq_(msg["messageType"], "unregister")
+            d.callback(True)
+
+        f = self._check_response(check_unregister_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_unregister_bad_chid(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self._send_message(dict(messageType="unregister",
+                                channelID="}{$@!asdf"))
+
+        d = Deferred()
+        d.addCallback(lambda x: True)
+
+        def check_unregister_result(msg):
+            eq_(msg["status"], 401)
+            eq_(msg["messageType"], "unregister")
+            d.callback(True)
+
+        f = self._check_response(check_unregister_result)
         f.addErrback(lambda x: d.errback(x))
         return d
 
@@ -411,12 +470,94 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
+    def test_notification_retains_no_dash(self):
+        self._connect()
+
+        uaid = str(uuid.uuid4()).replace('-', '')
+        chid = str(uuid.uuid4()).replace('-', '')
+
+        storage = self.proto.settings.storage
+        storage.save_notification(uaid, chid, 10)
+        self._send_message(dict(messageType="hello", channelIDs=[], uaid=uaid))
+
+        d = Deferred()
+
+        def check_notif_result(msg):
+            eq_(msg["messageType"], "notification")
+            updates = msg["updates"]
+            eq_(len(updates), 1)
+            eq_(updates[0]["channelID"], chid)
+            eq_(updates[0]["version"], 10)
+            d.callback(True)
+
+        def check_hello_result(msg):
+            eq_(msg["status"], 200)
+
+            # Now wait for the notification
+            nd = self._check_response(check_notif_result)
+            nd.addErrback(lambda x: d.errback(x))
+
+        f = self._check_response(check_hello_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_notification_dont_deliver_after_ack(self):
+        self._connect()
+
+        uaid = str(uuid.uuid4())
+        chid = str(uuid.uuid4())
+
+        storage = self.proto.settings.storage
+        storage.save_notification(uaid, chid, 10)
+
+        self._send_message(dict(messageType="hello", channelIDs=[], uaid=uaid))
+
+        d = Deferred()
+
+        def wait_for_clear():
+            if not self.proto.accept_notification:
+                reactor.callLater(0.1, wait_for_clear)
+                return
+
+            # Accepting again
+            eq_(self.proto.updates_sent, {})
+
+            # Check that storage is clear
+            notifs = storage.fetch_notifications(uaid)
+            eq_(len(notifs), 0)
+            d.callback(True)
+
+        def check_notif_result(msg):
+            eq_(msg["messageType"], "notification")
+            updates = msg["updates"]
+            eq_(len(updates), 1)
+            eq_(updates[0]["channelID"], chid)
+            eq_(updates[0]["version"], 10)
+            eq_(self.proto.accept_notification, False)
+            # Send our ack
+            self._send_message(dict(messageType="ack",
+                                    updates=[{"channelID": chid,
+                                              "version": 10}]))
+
+            # Wait for updates to be cleared and notifications accepted again
+            reactor.callLater(0.1, wait_for_clear)
+
+        def check_hello_result(msg):
+            eq_(msg["status"], 200)
+
+            # Now wait for the notification
+            nd = self._check_response(check_notif_result)
+            nd.addErrback(lambda x: d.errback(x))
+
+        f = self._check_response(check_hello_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
+
     def test_ack(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
         d = Deferred()
-        d.addCallback(lambda x: True)
         chid = str(uuid.uuid4())
 
         # stick a notification to ack in
