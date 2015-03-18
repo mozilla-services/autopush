@@ -195,6 +195,32 @@ class WebsocketTestCase(unittest.TestCase):
             assert msg["uaid"] != uaid
         return self._check_response(check_result)
 
+    def test_hello_failure(self):
+        self._connect()
+        # Fail out the register_user call
+        router = self.proto.settings.router
+        router.table.connection.put_item = Mock(side_effect=KeyError)
+
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        def check_result(msg):
+            eq_(msg["status"], 503)
+            eq_(msg["reason"], "error")
+        return self._check_response(check_result)
+
+    def test_hello_check_fail(self):
+        self._connect()
+
+        # Fail out the register_user call
+        self.proto.settings.router.register_user = Mock(return_value=False)
+
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        def check_result(msg):
+            eq_(msg["status"], 500)
+            eq_(msg["reason"], "already_connected")
+        return self._check_response(check_result)
+
     def test_hello_dupe(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
