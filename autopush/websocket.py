@@ -397,9 +397,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.direct_updates[channel_id] = version
             self.updates_sent[channel_id] = version
             toSend.append(update)
-        msg = {"messageType": "notification", "updates": toSend}
-        self.sendJSON(msg)
-        self.accept_notification = False
+
+        if toSend:
+            msg = {"messageType": "notification", "updates": toSend}
+            self.sendJSON(msg)
+            self.accept_notification = False
 
 
 class RouterHandler(cyclone.web.RequestHandler):
@@ -433,7 +435,7 @@ class NotificationHandler(cyclone.web.RequestHandler):
 
         if not client.accept_notification:
             # Client already busy waiting for stuff, flag for check
-            self._check_notifications = True
+            client._check_notifications = True
             self.set_status(202)
             settings.metrics.increment("updates.notification.flagged")
             return self.write("Flagged for Notification check")
@@ -441,5 +443,4 @@ class NotificationHandler(cyclone.web.RequestHandler):
         # Client is online and idle, start a notification check
         client.process_notifications()
         settings.metrics.increment("updates.notification.checking")
-        self.set_status(200)
         self.write("Notification check started")
