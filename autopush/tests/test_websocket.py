@@ -2,6 +2,9 @@ import json
 import uuid
 
 import twisted.internet.base
+from boto.dynamodb2.exceptions import (
+    ProvisionedThroughputExceededException,
+)
 from mock import Mock
 from moto import mock_dynamodb2
 from nose.tools import eq_
@@ -41,13 +44,13 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.onMessage(json.dumps(msg).encode('utf8'), False)
 
     def _wait_for_message(self, d):
-        args = self.send_mock.call_args
-        if args:
-            self.send_mock.reset_mock()
-            d.callback(args)
+        args = self.send_mock.call_args_list
+        if len(args) < 1:
+            reactor.callLater(0.1, self._wait_for_message, d)
             return
 
-        reactor.callLater(0.1, self._wait_for_message, d)
+        args = self.send_mock.call_args_list.pop(0)
+        return d.callback(args)
 
     def _wait_for_close(self, d):
         if self.close_mock.call_args is not None:
@@ -307,6 +310,48 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
+    def test_register_no_chid(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        d = Deferred()
+        d.addCallback(lambda x: True)
+
+        def check_register_result(msg):
+            eq_(msg["status"], 401)
+            eq_(msg["messageType"], "register")
+            d.callback(True)
+
+        def check_hello_result(msg):
+            assert "messageType" in msg
+            self._send_message(dict(messageType="register"))
+            self._check_response(check_register_result)
+
+        f = self._check_response(check_hello_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_register_bad_chid(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        d = Deferred()
+        d.addCallback(lambda x: True)
+
+        def check_register_result(msg):
+            eq_(msg["status"], 401)
+            eq_(msg["messageType"], "register")
+            d.callback(True)
+
+        def check_hello_result(msg):
+            assert "messageType" in msg
+            self._send_message(dict(messageType="register", channelID="oof"))
+            self._check_response(check_register_result)
+
+        f = self._check_response(check_hello_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
+
     def test_unregister(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -393,4 +438,142 @@ class WebsocketTestCase(unittest.TestCase):
 
         f = self._check_response(check_hello_result)
         f.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_process_notifications(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.process_notifications()
+
+        # Run it again to trigger the cancel
+        self.proto.process_notifications()
+
+        # Tag on our own to follow up
+        d = Deferred()
+
+        def wait(result):
+            eq_(self.proto._notification_fetch, None)
+            d.callback(True)
+        self.proto._notification_fetch.addCallback(wait)
+        self.proto._notification_fetch.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_process_notification_error(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+
+        def throw_error(*args, **kwargs):
+            raise ProvisionedThroughputExceededException()
+
+        self.proto.settings.storage = Mock(
+            **{"fetch_notifications.side_effect": throw_error})
+        self.proto.process_notifications()
+        self.proto._check_notifications = True
+
+        # Now replace process_notifications so it won't be
+        # run again
+        self.proto.process_notifications = Mock()
+        d = Deferred()
+
+        def wait_for_process():
+            calls = self.proto.process_notifications.mock_calls
+            if len(calls) > 0:
+                d.callback(True)
+            else:
+                reactor.callLater(0.1, wait_for_process)
+
+        def check_error(result):
+            eq_(self.proto._check_notifications, False)
+
+            # Now schedule the checker to wait for the next
+            # process_notifications call
+            reactor.callLater(0.1, wait_for_process)
+
+        self.proto._notification_fetch.addBoth(check_error)
+        return d
+
+    def test_notification_results(self):
+        # Populate the database for ourself
+        uaid = str(uuid.uuid4())
+        chid = str(uuid.uuid4())
+        storage = self.proto.settings.storage
+        storage.save_notification(uaid, chid, 12)
+
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                uaid=uaid))
+
+        d = Deferred()
+
+        def check_notifs(msg):
+            eq_(msg["messageType"], "notification")
+            eq_(len(msg["updates"]), 1)
+            update = msg["updates"][0]
+            eq_(update["version"], 12)
+            eq_(update["channelID"], chid)
+            d.callback(True)
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            eq_(msg["messageType"], "hello")
+
+            # Now wait for the notification results
+            nd = self._check_response(check_notifs)
+            nd.addErrback(lambda x: d.errback(x))
+
+        cd = self._check_response(check_result)
+        cd.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_notification_dont_deliver(self):
+        # Populate the database for ourself
+        uaid = str(uuid.uuid4())
+        chid = str(uuid.uuid4())
+        storage = self.proto.settings.storage
+        storage.save_notification(uaid, chid, 12)
+
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                uaid=uaid))
+
+        d = Deferred()
+
+        def check_mock_call():
+            calls = self.proto.process_notifications.mock_calls
+            if len(calls) < 1:
+                reactor.callLater(0.1, check_mock_call)
+                return
+
+            eq_(len(calls), 1)
+            d.callback(True)
+
+        def check_call(result):
+            send_calls = self.send_mock.mock_calls
+            # There should be one, for the hello response
+            # No notifications should've been delivered after
+            # this notifiation check
+            eq_(len(send_calls), 1)
+
+            # Now we wait for the mock call to run
+            reactor.callLater(0.1, check_mock_call)
+
+        # Run immediately after hello was processed
+        def after_hello(result):
+            # Setup updates_sent to avoid a notification send
+            self.proto.updates_sent[chid] = 14
+
+            # Notification check has started, indicate to check
+            # notifications again
+            self.proto._check_notifications = True
+
+            # Now replace process_notifications so it won't be
+            # run again
+            self.proto.process_notifications = Mock()
+
+            # Chain our check for the call
+            self.proto._notification_fetch.addBoth(check_call)
+            self.proto._notification_fetch.addErrback(lambda x: d.errback(x))
+
+        self.proto._register.addCallback(after_hello)
+        self.proto._register.addErrback(lambda x: d.errback(x))
         return d
