@@ -581,6 +581,85 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
+    def test_ack_fails_first_time(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+
+        class FailFirst(object):
+            def __init__(self):
+                self.tries = 0
+
+            def __call__(self, *args, **kwargs):
+                if self.tries == 0:
+                    self.tries += 1
+                    return False
+                else:
+                    return True
+
+        self.proto.settings.storage = Mock(
+            **{"delete_notification.side_effect": FailFirst()})
+
+        chid = str(uuid.uuid4())
+
+        # stick a notification to ack in
+        self.proto.updates_sent[chid] = 12
+
+        # Send our ack
+        self._send_message(dict(messageType="ack",
+                                updates=[{"channelID": chid,
+                                          "version": 12}]))
+
+        # Ask for a notification check again
+        self.proto.process_notifications = Mock()
+        self.proto._check_notifications = True
+
+        d = Deferred()
+
+        def wait_for_delete():
+            calls = self.transport_mock.mock_calls
+            if len(calls) < 2:
+                reactor.callLater(0.1, wait_for_delete)
+                return
+
+            eq_(self.proto.updates_sent, {})
+            process_calls = self.proto.process_notifications.mock_calls
+            eq_(len(process_calls), 1)
+            d.callback(True)
+
+        reactor.callLater(0.1, wait_for_delete)
+        return d
+
+    def test_ack_missing_updates(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.sendJSON = Mock()
+
+        self._send_message(dict(messageType="ack"))
+
+        calls = self.proto.sendJSON.call_args_list
+        eq_(len(calls), 0)
+
+    def test_ack_missing_chid_version(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+
+        self._send_message(dict(messageType="ack",
+                                updates=[{"something": 2}]))
+
+        calls = self.send_mock.call_args_list
+        eq_(len(calls), 0)
+
+    def test_ack_untracked(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+
+        self._send_message(dict(messageType="ack",
+                                updates=[{"channelID": str(uuid.uuid4()),
+                                          "version": 10}]))
+
+        calls = self.send_mock.call_args_list
+        eq_(len(calls), 0)
+
     def test_process_notifications(self):
         self._connect()
         self.proto.uaid = str(uuid.uuid4())

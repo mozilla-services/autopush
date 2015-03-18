@@ -307,7 +307,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def process_ack(self, data):
         updates = data.get("updates")
         if not updates or not isinstance(updates, list):
-            return self.bad_message("ack")
+            return
 
         self.metrics.increment("updates.client.ack")
         defers = []
@@ -366,21 +366,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return d
 
     def check_missed_notifications(self, results):
-        # Check that they all ack's succeeded against storage
-        defers = []
-        for success, value in results:
-            if not success:
-                # Skip unknown errors
-                continue
-            if value:
-                defers.append(value)
-
-        # Any failures to retry?
-        if defers:
-            dl = DeferredList(defers)
-            dl.addBoth(self.check_missed_notifications)
-            return
-
         # Resume consuming ack's
         self.transport.resumeProducing()
 
@@ -394,7 +379,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def bad_message(self, typ):
         msg = {"messageType": typ, "status": 401}
-        self.sendMessage(json.dumps(msg).encode('utf8'), False)
+        self.sendJSON(msg)
 
     ####################################
     # Utility function for external use
