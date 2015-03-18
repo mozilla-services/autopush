@@ -8,6 +8,7 @@ NOSE = $(BIN)/nosetests -s
 TESTS = $(APPNAME)/tests
 PYTHON = $(BIN)/pypy
 INSTALL = $(BIN)/pip install
+PATH := $(BIN):$(PATH)
 
 BUILD_DIRS = bin build deps include lib lib64 lib_pypy lib-python site-packages
 
@@ -22,8 +23,7 @@ $(BIN)/pip: $(BIN)/pypy
 	rm get-pip.py
 
 $(BIN)/nosetests:
-	$(INSTALL) nose
-	$(INSTALL) coverage
+	$(INSTALL) -r test-requirements.txt
 
 $(BIN)/paster: lib $(BIN)/pip
 	$(INSTALL) -r requirements.txt
