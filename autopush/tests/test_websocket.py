@@ -129,6 +129,18 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_close(d)
         return d
 
+    def test_unknown_messagetype(self):
+        self._connect()
+        self.proto.uaid = "asdf"
+        self._send_message(dict(messageType="wassup"))
+
+        def check_result(result):
+            eq_(result, True)
+        d = Deferred()
+        d.addCallback(check_result)
+        self._wait_for_close(d)
+        return d
+
     def test_hello(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
