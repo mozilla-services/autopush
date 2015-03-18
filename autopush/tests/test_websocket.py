@@ -162,6 +162,39 @@ class WebsocketTestCase(unittest.TestCase):
             eq_(msg["status"], 200)
         return self._check_response(check_result)
 
+    def test_hello_with_uaid(self):
+        self._connect()
+        uaid = str(uuid.uuid4())
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                uaid=uaid))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            eq_(msg["uaid"], uaid)
+        return self._check_response(check_result)
+
+    def test_hello_with_uaid_no_hypen(self):
+        self._connect()
+        uaid = str(uuid.uuid4()).replace('-', '')
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                uaid=uaid))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            eq_(msg["uaid"], uaid)
+        return self._check_response(check_result)
+
+    def test_hello_with_bad_uaid(self):
+        self._connect()
+        uaid = "ajsidlfjlsdjflasjjailsdf"
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                uaid=uaid))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            assert msg["uaid"] != uaid
+        return self._check_response(check_result)
+
     def test_hello_dupe(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
