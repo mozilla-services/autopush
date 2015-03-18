@@ -151,8 +151,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
         d.addErrback(self._handle_overload).addErrback(self._error_response)
 
     def _process_save(self, result, node_id=None):
-        # If we need to tell a client to check...
         if self.client_check:
+            # If we already know where the client was connected...
             d = deferToThread(self.settings.requests.put,
                               node_id + "/notif/" + self.uaid)
             d.addCallback(self._process_notif, node_id)

@@ -23,6 +23,9 @@ def periodic_reporter(settings):
 
 
 class SimplePushServerProtocol(WebSocketServerProtocol):
+    # Testing purposes
+    parent_class = WebSocketServerProtocol
+
     def onConnect(self, request):
         self.metrics = self.settings.metrics
         self.metrics.increment("client.socket.connect")
@@ -54,12 +57,12 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         port = self.settings.port
         hide = port != 80 and port != 443
         if not hide:
-            return WebSocketServerProtocol.processHandshake(self)
+            return self.parent_class.processHandshake(self)
 
         old_port = self.factory.externalPort
         try:
             self.factory.externalPort = None
-            return WebSocketServerProtocol.processHandshake(self)
+            return self.parent_class.processHandshake(self)
         finally:
             self.factory.externalPort = old_port
 

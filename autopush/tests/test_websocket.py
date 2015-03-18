@@ -4,6 +4,7 @@ import uuid
 import twisted.internet.base
 from mock import Mock
 from moto import mock_dynamodb2
+from nose.tools import eq_
 from txstatsd.metrics.metrics import Metrics
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
@@ -71,17 +72,57 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Verify metric increase of nothing
         calls = self.proto.settings.metrics.method_calls
-        self.assertEqual(len(calls), 1)
+        eq_(len(calls), 1)
         name, args, _ = calls[0]
-        self.assertEqual(name, "gauge")
-        self.assertEqual(args, ("update.client.connections", 0))
+        eq_(name, "gauge")
+        eq_(args, ("update.client.connections", 0))
+
+    def test_handeshake_sub(self):
+        self.proto.settings.port = 8080
+        self.proto.factory = Mock(externalPort=80)
+
+        def check_subbed(s):
+            eq_(self.proto.factory.externalPort, None)
+            return False
+
+        self.proto.parent_class = Mock(**{"processHandshake.side_effect":
+                                          check_subbed})
+        self.proto.processHandshake()
+        eq_(self.proto.factory.externalPort, 80)
+
+    def test_handshake_nosub(self):
+        self.proto.settings.port = 80
+        self.proto.factory = Mock(externalPort=80)
+
+        def check_subbed(s):
+            eq_(self.proto.factory.externalPort, 80)
+            return False
+
+        self.proto.parent_class = Mock(**{"processHandshake.side_effect":
+                                          check_subbed})
+        self.proto.processHandshake()
+        eq_(self.proto.factory.externalPort, 80)
+
+    def test_binary_msg(self):
+        self.proto.onMessage(b"asdfasdf", True)
+        d = Deferred()
+        d.addCallback(lambda x: True)
+        self._wait_for_close(d)
+        return d
+
+    def test_bad_json(self):
+        self.proto.onMessage("}{{bad_json!!", False)
+        d = Deferred()
+        d.addCallback(lambda x: True)
+        self._wait_for_close(d)
+        return d
 
     def test_hello(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
         def check_result(msg):
-            self.assert_("messageType" in msg)
+            eq_(msg["status"], 200)
         return self._check_response(check_result)
 
     def test_hello_dupe(self):
@@ -92,11 +133,11 @@ class WebsocketTestCase(unittest.TestCase):
         d.addCallback(lambda x: True)
 
         def check_second_hello(msg):
-            self.assertEqual(msg["status"], 401)
+            eq_(msg["status"], 401)
             d.callback(True)
 
         def check_first_hello(msg):
-            self.assertEqual(msg["status"], 200)
+            eq_(msg["status"], 200)
             # Send another hello
             self._send_message(dict(messageType="hello", channelIDs=[]))
             self._check_response(check_second_hello)
@@ -109,11 +150,43 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="wooooo"))
 
         def check_result(result):
-            self.assertEqual(result, True)
+            eq_(result, True)
         d = Deferred()
         d.addCallback(check_result)
         self._wait_for_close(d)
         return d
+
+    def test_ping(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        d = Deferred()
+
+        def check_ping_result(msg):
+            eq_(msg, {})
+            d.callback(True)
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            self._send_message({})
+            g = self._check_response(check_ping_result)
+            g.addErrback(lambda x: d.errback(x))
+
+        f = self._check_response(check_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_ping_too_many(self):
+        d = self.test_ping()
+
+        closed = Deferred()
+
+        def ping_again(result):
+            self._send_message({})
+            self._wait_for_close(closed)
+
+        d.addCallback(ping_again)
+        return closed
 
     def test_register(self):
         self._connect()
@@ -123,13 +196,13 @@ class WebsocketTestCase(unittest.TestCase):
         d.addCallback(lambda x: True)
 
         def check_register_result(msg):
-            self.assertEqual(msg["status"], 200)
-            self.assertEqual(msg["messageType"], "register")
-            self.assert_("pushEndpoint" in msg)
+            eq_(msg["status"], 200)
+            eq_(msg["messageType"], "register")
+            assert "pushEndpoint" in msg
             d.callback(True)
 
         def check_hello_result(msg):
-            self.assert_("messageType" in msg)
+            assert "messageType" in msg
             self._send_message(dict(messageType="register",
                                     channelID=str(uuid.uuid4())))
             self._check_response(check_register_result)
@@ -147,13 +220,13 @@ class WebsocketTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
 
         def check_unregister_result(msg):
-            self.assertEqual(msg["status"], 200)
-            self.assertEqual(msg["channelID"], chid)
+            eq_(msg["status"], 200)
+            eq_(msg["channelID"], chid)
             d.callback(True)
 
         def check_hello_result(msg):
-            self.assertEqual(msg["messageType"], "hello")
-            self.assertEqual(msg["status"], 200)
+            eq_(msg["messageType"], "hello")
+            eq_(msg["status"], 200)
             self._send_message(dict(messageType="unregister",
                                     channelID=chid))
             self._check_response(check_unregister_result)
@@ -171,26 +244,26 @@ class WebsocketTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
 
         def check_hello_result(msg):
-            self.assertEqual(msg["status"], 200)
+            eq_(msg["status"], 200)
             # Send outself a notification
             payload = [{"channelID": chid, "version": 10}]
             self.proto.send_notifications(payload)
 
             # Check the call result
             args = self.send_mock.call_args
-            self.assert_(args is not None)
+            assert args is not None
             self.send_mock.reset_mock()
 
             msg = json.loads(args[0][0])
-            self.assertEqual(msg["messageType"], "notification")
-            self.assert_("updates" in msg)
-            self.assert_(len(msg["updates"]), 1)
+            eq_(msg["messageType"], "notification")
+            assert "updates" in msg
+            eq_(len(msg["updates"]), 1)
             update = msg["updates"][0]
-            self.assertEqual(update["channelID"], chid)
-            self.assertEqual(update["version"], 10)
+            eq_(update["channelID"], chid)
+            eq_(update["version"], 10)
 
             # Verify outgoing queue in sent directly
-            self.assertEqual(len(self.proto.direct_updates), 1)
+            eq_(len(self.proto.direct_updates), 1)
             d.callback(True)
 
         f = self._check_response(check_hello_result)
@@ -210,7 +283,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.updates_sent[chid] = 12
 
         def check_hello_result(msg):
-            self.assertEqual(msg["status"], 200)
+            eq_(msg["status"], 200)
 
             # Send our ack
             self._send_message(dict(messageType="ack",
@@ -218,8 +291,8 @@ class WebsocketTestCase(unittest.TestCase):
                                               "version": 12}]))
 
             # Verify it was cleared out
-            self.assertEqual(len(self.proto.updates_sent), 0)
-            self.assertEqual(len(self.proto.direct_updates), 0)
+            eq_(len(self.proto.updates_sent), 0)
+            eq_(len(self.proto.direct_updates), 0)
             d.callback(True)
 
         f = self._check_response(check_hello_result)
