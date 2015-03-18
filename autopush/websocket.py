@@ -88,6 +88,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Message needs a type
         if "messageType" not in data:
             self.sendClose()
+            return
 
         cmd = data["messageType"]
         if cmd == "hello":
