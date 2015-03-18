@@ -141,6 +141,19 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_close(d)
         return d
 
+    def test_close_with_cleanup(self):
+        self._connect()
+        self.proto.uaid = "asdf"
+        self.proto.settings.clients["asdf"] = self.proto
+
+        # Stick a mock on
+        self.proto._notification_fetch = Mock()
+        self.proto.onClose(True, None, None)
+        eq_(len(self.proto.settings.clients), 0)
+        eq_(len(list(self.proto._notification_fetch.mock_calls)), 1)
+        name, _, _ = self.proto._notification_fetch.mock_calls[0]
+        eq_(name, "cancel")
+
     def test_hello(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
