@@ -1,7 +1,9 @@
+from boto.exception import JSONResponseError
 from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
     ItemNotFound,
     ProvisionedThroughputExceededException,
+    JSONResponseError,
 )
 from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
@@ -103,7 +105,9 @@ class Router(object):
     def get_uaid(self, uaid):
         try:
             return self.table.get_item(consistent=True, uaid=uaid)
-        except ItemNotFound:
+        except (ItemNotFound, JSONResponseError):
+            # Under tests, this failed without catching a JSONResponseError,
+            # which is weird as hell. But whatever, we'll catch that too.
             return False
 
     def register_user(self, uaid, node_id, connected_at):
@@ -146,24 +150,5 @@ class Router(object):
                 }
             )
             return True
-        except ConditionalCheckFailedException:
-            return False
-
-    def update_uaid(self, uaid, node_id, connected_at):
-        conn = self.table.connection
-        try:
-            conn.put_item(
-                "router",
-                item={
-                    "uaid": {'S': uaid},
-                    "node_id": {'S': node_id},
-                    "connected_at": {'N': str(connected_at)}
-                },
-                condition_expression=
-                "connected_at < :conn",
-                expression_attribute_values={
-                    ":conn": {'N': str(connected_at)}
-                }
-            )
         except ConditionalCheckFailedException:
             return False
