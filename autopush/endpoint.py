@@ -61,6 +61,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
         self.uaid, self.chid = uaid, chid
 
+        ## TODO: if proprietary handler present, pass to proprietary
+
         d = deferToThread(self.settings.router.get_uaid, uaid)
         d.addCallback(self._process_uaid)
         d.addErrback(self._handle_overload).addErrback(self._error_response)

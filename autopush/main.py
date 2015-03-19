@@ -14,6 +14,8 @@ from autopush.websocket import (
     NotificationHandler,
     periodic_reporter
 )
+
+from autopush.pinger.pinger import Pinger
 from autopush.settings import AutopushSettings
 from autopush.endpoint import EndpointHandler
 
@@ -30,6 +32,37 @@ def add_shared_args(parser):
                         default="localhost", env_var="STATSD_HOST")
     parser.add_argument('--statsd_port', help="Statsd Port", type=int,
                         default=8125, env_var="STATSD_PORT")
+
+
+def add_pinger_args(parser):
+    #== GCM
+    parser.add_argument('--pinger', help='type of proprietary ping',
+                        env_var='PINGER')
+    label = "Proprietary Ping: Google Cloud Messaging:"
+    parser.add_argument('--gcm_ttl',
+                        help="%s Time to Live" % label,
+                        type=int, default=60, env_var="GCM_TTL")
+    parser.add_argument('--gcm_dryrun',
+                        help="%s Dry run (no message sent)" % label,
+                        type=bool, default=False, env_var="GCM_DRYRUN")
+    parser.add_argument('--gcm_collapsekey',
+                        help="%s string to collapse messages" % label,
+                        type=str, default="simpleplush",
+                        env_var="GCM_COLLAPSEKEY")
+    parser.add_argument('--gcm_apikey',
+                        help="%s API Key" % label,
+                        type=str, env_var="GCM_APIKEY")
+    #== Apple iOS
+    label = "Proprietary Ping: Apple Push Notification System:"
+    parser.add_argument('--apns_sandbox',
+                        help="%s Use Dev Sandbox",
+                        type=bool, default=True, env_var="APNS_SANDBOX")
+    parser.add_argument('--apns_cert_file',
+                        help="%s Certificate PEM file" % label,
+                        type=str, env_var="APNS_CERT_FILE")
+    parser.add_argument('--apns_key_file',
+                        help="%s Key PEM file",
+                        type=str, env_var="APNS_KEY_FILE")
 
 
 def _parse_connection(sysargs=None):
@@ -52,6 +85,7 @@ def _parse_connection(sysargs=None):
     parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
                         type=int, default=8082, env_var="ENDPOINT_PORT")
 
+    add_pinger_args(parser)
     add_shared_args(parser)
     args = parser.parse_args(sysargs)
     return args, parser
@@ -66,6 +100,7 @@ def _parse_endpoint(sysargs=None):
                         type=int, default=8082, env_var="PORT")
 
     add_shared_args(parser)
+    add_pinger_args(parser)
     args = parser.parse_args(sysargs)
     return args, parser
 
@@ -76,6 +111,13 @@ def make_settings(args, **kwargs):
         hostname=args.hostname,
         statsd_host=args.statsd_host,
         statsd_port=args.statsd_port,
+        pingConf={"apns": {"sandbox": args.apns_sandbox,
+                           "cert_file": args.apns_cert_file,
+                           "key_file": args.apns_key_file},
+                  "gcm": {"ttl": args.gcm_ttl,
+                          "dryrun": args.gcm_dryrun,
+                          "collapsekey": args.gcm_collapsekey,
+                          "apikey": args.gcm_apikey}},
         **kwargs
     )
 
@@ -111,6 +153,8 @@ def connection_main(sysargs=None):
     )
     factory.protocol = SimplePushServerProtocol
     factory.protocol.settings = settings
+    if settings.get("pinger") is not None:
+        factory.protocol.settings.pinger = Pinger(settings)
     factory.setProtocolOptions(allowHixie76=True)
 
     protocol = StatsDClientProtocol(settings.metrics_client)
@@ -141,6 +185,10 @@ def endpoint_main(sysargs=None):
         (r"/push/([^\/]+)", endpoint)
     ], default_host=settings.hostname, debug=args.debug
     )
+
+    # No reason that the endpoint couldn't handle both...
+    if settings.get("pinger") is not None:
+        endpoint.pinger = Pinger(settings)
 
     protocol = StatsDClientProtocol(settings.metrics_client)
     reactor.listenUDP(0, protocol)

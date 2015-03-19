@@ -167,3 +167,50 @@ class Router(object):
             )
         except ConditionalCheckFailedException:
             return False
+
+    ## Proprietary Ping storage info
+    ## Tempted to put this in own class.
+
+    tableName = "storage"
+    ping_label = "proprietary_ping"
+    modf_label = "modified"
+
+    def register_connect(self, uaid, pingType, connect):
+        """ Register a type of proprietary ping data"""
+        # Always overwrite.
+        try:
+            self.table.connection.update_item(
+                self.tableName,
+                key={"uaid": {'S': uaid}, "chid": {'S': ' '}},
+                update_expression="SET #ping=:ping",
+                expression_attribute_names={
+                    "#ping": self.ping_label,
+                },
+                expression_attribute_values={
+                    ":ping": connect,
+                },
+                item={
+                    "uaid": {'S': uaid},
+                    "type": {'S': pingType},
+                    "connect": {'S': connect}
+                },
+            )
+        except ProvisionedThroughputExceededException:
+            return False
+        return True
+
+    def get_connection(self, uaid):
+        try:
+            return self.table.get_item(consistent=True,
+                                       uaid=uaid,
+                                       chid=' ')
+        except ItemNotFound:
+            return False
+        except ProvisionedThroughputExceededException:
+            return False
+
+    def unregister_connect(self, uaid):
+        try:
+            self.table.delete_item(uaid=uaid)
+        except ProvisionedThroughputExceededException:
+            return False

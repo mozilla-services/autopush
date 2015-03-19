@@ -12,6 +12,8 @@ from autopush.db import (
     Router
 )
 
+from autopush.pinger.pinger import Pinger
+
 
 class AutopushSettings(object):
     options = ["crypto_key", "hostname", "min_ping_interval",
@@ -26,7 +28,8 @@ class AutopushSettings(object):
                  endpoint_hostname=None,
                  endpoint_port=None,
                  statsd_host="localhost",
-                 statsd_port=8125):
+                 statsd_port=8125,
+                 pingConf=None):
 
         # Setup the requests lib session
         sess = requests.Session()
@@ -73,6 +76,8 @@ class AutopushSettings(object):
         self.storage_table = get_storage_table()
         self.storage = Storage(self.storage_table)
         self.router = Router(self.router_table)
+        if pingConf is not None:
+            self.pinger = Pinger(self.storage, pingConf)
 
     def update(self, **kwargs):
         for key, val in kwargs.items():
