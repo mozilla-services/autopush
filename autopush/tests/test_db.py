@@ -23,6 +23,29 @@ class StorageTestCase(unittest.TestCase):
     def tearDown(self):
         self.mock_dynamodb2.stop()
 
+    def test_storage_table_created(self):
+        # Check that the table doesn't exist
+        db = DynamoDBConnection()
+        dblist = db.list_tables()["TableNames"]
+        assert "storage" not in dblist
+
+        # Create the storage table
+        create_storage_table()
+
+        dblist = db.list_tables()["TableNames"]
+        assert "storage" in dblist
+
+        get_storage_table()
+
+
+class RouterTestCase(unittest.TestCase):
+    def setUp(self):
+        self.mock_dynamodb2 = mock_dynamodb2()
+        self.mock_dynamodb2.start()
+
+    def tearDown(self):
+        self.mock_dynamodb2.stop()
+
     def test_router_table_created(self):
         # Check that the table doesn't exist
         db = DynamoDBConnection()
