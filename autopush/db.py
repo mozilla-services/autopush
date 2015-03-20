@@ -8,6 +8,7 @@ from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table
 from boto.dynamodb2.types import NUMBER
 
+import json
 
 def create_router_table():
     return Table.create("router",
@@ -95,6 +96,52 @@ class Storage(object):
         except ProvisionedThroughputExceededException:
             return False
 
+    ## Proprietary Ping storage info
+    ## Tempted to put this in own class.
+
+    tableName = "storage"
+    ping_label = "proprietary_ping"
+    type_label = "ping_type"
+    modf_label = "modified"
+
+    def register_connect(self, uaid, connect):
+        """ Register a type of proprietary ping data"""
+        # Always overwrite.
+        if connect.get("type") is None:
+            raise Exception("Invalid connection info")
+            return False
+        try:
+            import pdb;pdb.set_trace()
+            self.table.connection.update_item(
+                self.tableName,
+                key={"uaid": {'S': uaid}, "chid": {'S': ' '}},
+                attribute_updates={
+                    self.ping_label: {"Action": "PUT",
+                                      "Value": {'S': json.dumps(connect)}},
+                },
+            )
+        except ProvisionedThroughputExceededException:
+            return False
+        return True
+
+    def get_connection(self, uaid):
+        try:
+            record = self.table.get_item(consistent=True,
+                                         uaid=uaid,
+                                         chid=' ')
+        except ItemNotFound:
+            return False
+        except ProvisionedThroughputExceededException:
+            return False
+        import pdb;pdb.set_trace();
+        return json.loads(record.get(self.ping_label))
+
+    def unregister_connect(self, uaid):
+        try:
+            self.table.delete_item(uaid=uaid)
+        except ProvisionedThroughputExceededException:
+            return False
+
 
 class Router(object):
     def __init__(self, table):
@@ -168,49 +215,3 @@ class Router(object):
         except ConditionalCheckFailedException:
             return False
 
-    ## Proprietary Ping storage info
-    ## Tempted to put this in own class.
-
-    tableName = "storage"
-    ping_label = "proprietary_ping"
-    modf_label = "modified"
-
-    def register_connect(self, uaid, pingType, connect):
-        """ Register a type of proprietary ping data"""
-        # Always overwrite.
-        try:
-            self.table.connection.update_item(
-                self.tableName,
-                key={"uaid": {'S': uaid}, "chid": {'S': ' '}},
-                update_expression="SET #ping=:ping",
-                expression_attribute_names={
-                    "#ping": self.ping_label,
-                },
-                expression_attribute_values={
-                    ":ping": connect,
-                },
-                item={
-                    "uaid": {'S': uaid},
-                    "type": {'S': pingType},
-                    "connect": {'S': connect}
-                },
-            )
-        except ProvisionedThroughputExceededException:
-            return False
-        return True
-
-    def get_connection(self, uaid):
-        try:
-            return self.table.get_item(consistent=True,
-                                       uaid=uaid,
-                                       chid=' ')
-        except ItemNotFound:
-            return False
-        except ProvisionedThroughputExceededException:
-            return False
-
-    def unregister_connect(self, uaid):
-        try:
-            self.table.delete_item(uaid=uaid)
-        except ProvisionedThroughputExceededException:
-            return False

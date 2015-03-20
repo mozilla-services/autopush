@@ -10,24 +10,32 @@ from apns import APNs, Payload
 
 
 # https://github.com/djacobs/PyAPNs
-class APNSPinger:
+class APNSPinger(object):
     apns = None
 
     def __init__(self, config):
-        self.apns = APNs(use_sandbox=config.get("apns",{}).get("sandbox"),
-                         cert_file=config.get("apns",{}).get("cert_file"),
-                         key_file=config.get("apns",{}).get("key_file"))
+        self.apns = APNs(use_sandbox=config.get("apns", {}).get("sandbox"),
+                         cert_file=config.get("apns", {}).get("cert_file"),
+                         key_file=config.get("apns", {}).get("key_file"))
+        self.default_title = config.get("apns",
+                                        {}).get("default_title", "SimplePush")
+        self.default_body = config.get("apns",
+                                       {}).get("default_body", "New Alert")
 
-    def ping(self, uaid, version, data):
+    def ping(self, uaid, version, data, connectInfo):
         if self.storage is None:
             raise self.PingerUndefEx("No storage defined for Pinger")
         try:
-            connectInfo = self.storage.get_connection(uaid)
-            if connectInfo is False:
+            if connectInfo is False or connectInfo is None:
                 return False
-            cdata = json.loads(connectInfo.get("connect").get("s"))
-            payload = Payload(alert=cdata["title"] | "SimplePush",
-                              body=cdata["body"] | "New alert",
+            if connectInfo.get("type").lower() != "apns":
+                return False
+            token = connectInfo.get("token")
+            if token is None:
+                return False
+            payload = Payload(alert=connectInfo.get("title",
+                                                    self.default_title),
+                              body=connectInfo.get("body", self.default_body),
                               contentavailable=1,
                               custom={"version": version,
                                       "data": data})
@@ -36,7 +44,7 @@ class APNSPinger:
             #   func({status:, identifier}){Retry logic})
             # apns_enhanced.gateway_server.send_notification(token,
             #   payload, identifier)
-            self.apns.gateway_server.send_notification(cdata["token"], payload)
+            self.apns.gateway_server.send_notification(token, payload)
             return True
         except:
             e = sys.exc_info()[0]

@@ -8,7 +8,7 @@ import gcmclient as gcm
 from twisted.python import log
 
 
-class GCMPinger:
+class GCMPinger(object):
     gcm = None
     # Set these in init
     ttl = 60
@@ -25,17 +25,19 @@ class GCMPinger:
         self.gcm = gcm.GCM(config.get("gcm",
                                       {}).get("apikey"))
 
-    def ping(self, uaid, version, data):
+    def ping(self, uaid, version, data, connectInfo):
         if self.storage is None:
             raise self.PingerUndefEx("No storage defined for Pinger")
         try:
-            connectInfo = self.storage.get_connection(uaid)
-            if connectInfo is False:
+            if connectInfo is False or connectInfo is None:
                 return False
-            cdata = json.loads(connectInfo.get("connect").get("s"))
+            if connectInfo.get("type").lower() != "gcm":
+                return False
+            if connectInfo.get("token") is None:
+                return False
 
             payload = gcm.JSONMessage(
-                registration_ids=[cdata.get("RegID").get("s")],
+                registration_ids=[connectInfo.get("token")],
                 collapse_key=self.collapseKey,
                 time_to_live=self.ttl,
                 dry_run=self.dryRun,

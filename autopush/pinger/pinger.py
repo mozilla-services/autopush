@@ -24,7 +24,7 @@ class PingerUndefEx(Exception):
     pass
 
 
-class Pinger:
+class Pinger(object):
     storage = None
 
     def __init__(self, storage, settings):
@@ -36,8 +36,12 @@ class Pinger:
         ## Store the connect string to the database
         if self.storage is None:
             raise self.PingerUndefEx("No storage defined for Pinger")
-        if self.storage.register_connect(uaid, connect) is False:
-            raise self.PingerFailEx("Could not store registration info")
+        try:
+            if self.storage.register_connect(uaid, connect) is False:
+                raise self.PingerFailEx("Could not store registration info")
+        except Exception, e:
+            log.Printf("Registration storage failure: %s", e)
+            return False
         return True
 
     def ping(self, uaid, version, data):
@@ -47,12 +51,11 @@ class Pinger:
             connectInfo = self.storage.get_connection(uaid)
             if connectInfo is False:
                 return False
-            cdata = json.loads(connectInfo.get("connect").get("s"))
-            ptype = cdata.get("type").tolower().strip
+            ptype = connectInfo.get("type").tolower().strip
             if ptype == "gcm" and self.gcm is not None:
-                return self.gcm.ping(uaid, version, data)
+                return self.gcm.ping(uaid, version, data, connectInfo)
             if ptype == "apns" and self.apns is not None:
-                return self.apns.ping(uaid, version, data)
+                return self.apns.ping(uaid, version, data, connectInfo)
             return False
         except Exception, e:
             log.Printf("Untrapped exception %s", e)

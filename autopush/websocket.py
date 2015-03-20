@@ -158,7 +158,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         ## TODO: add proprietary storage
         connect = data.get("connect")
-        if connect is not None & self.settings.pinger is not None:
+        if connect is not None and self.settings.pinger is not None:
             self.transport.pauseProducing()
             d = deferToThread(self.settings.pinger.register, uaid, connect)
             d.addCallback(self._check_router, True)
@@ -184,6 +184,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return d
 
     def err_hello(self, failure):
+        import pdb;pdb.set_trace();
         self.transport.resumeProducing()
         self.returnError("hello", "error", 503)
 

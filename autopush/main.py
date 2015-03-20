@@ -17,7 +17,7 @@ from autopush.websocket import (
 
 from autopush.pinger.pinger import Pinger
 from autopush.settings import AutopushSettings
-from autopush.endpoint import EndpointHandler
+from autopush.endpoint import (EndpointHandler, RegistrationHandler)
 
 
 def add_shared_args(parser):
@@ -36,8 +36,9 @@ def add_shared_args(parser):
 
 def add_pinger_args(parser):
     #== GCM
-    parser.add_argument('--pinger', help='type of proprietary ping',
-                        env_var='PINGER')
+    parser.add_argument('--pinger', help='enable Proprietary Ping',
+                        action='store_true',
+                        default=False, env_var='PINGER')
     label = "Proprietary Ping: Google Cloud Messaging:"
     parser.add_argument('--gcm_ttl',
                         help="%s Time to Live" % label,
@@ -139,11 +140,14 @@ def connection_main(sysargs=None):
     r.settings = settings
     n = NotificationHandler
     n.settings = settings
+    reg = RegistrationHandler
+    reg.settings = settings
 
     # Internal HTTP notification router
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", r),
-        (r"/notif/([^\/]+)", n)
+        (r"/notif/([^\/]+)", n),
+        (r"/register/(^\/]+)", reg),
     ], default_host=settings.router_hostname)
 
     # Public websocket server
@@ -153,8 +157,7 @@ def connection_main(sysargs=None):
     )
     factory.protocol = SimplePushServerProtocol
     factory.protocol.settings = settings
-    if settings.get("pinger") is not None:
-        factory.protocol.settings.pinger = Pinger(settings)
+    factory.protocol.settings.pinger = settings.pinger
     factory.setProtocolOptions(allowHixie76=True)
 
     protocol = StatsDClientProtocol(settings.metrics_client)
@@ -181,14 +184,16 @@ def endpoint_main(sysargs=None):
     # Endpoint HTTP router
     endpoint = EndpointHandler
     endpoint.settings = settings
+    register = RegistrationHandler
+    register.settings = settings
     site = cyclone.web.Application([
-        (r"/push/([^\/]+)", endpoint)
+        (r"/push/([^\/]+)", endpoint),
+        (r"/register/([^\/]+)", register),
     ], default_host=settings.hostname, debug=args.debug
     )
 
     # No reason that the endpoint couldn't handle both...
-    if settings.get("pinger") is not None:
-        endpoint.pinger = Pinger(settings)
+    endpoint.pinger = settings.pinger
 
     protocol = StatsDClientProtocol(settings.metrics_client)
     reactor.listenUDP(0, protocol)

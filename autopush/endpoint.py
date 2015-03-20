@@ -1,6 +1,7 @@
 import json
 import time
 import urlparse
+import uuid
 
 from cryptography.fernet import InvalidToken
 from boto.dynamodb2.exceptions import (
@@ -60,8 +61,6 @@ class EndpointHandler(cyclone.web.RequestHandler):
             self.version = int(time.time())
 
         self.uaid, self.chid = uaid, chid
-
-        ## TODO: if proprietary handler present, pass to proprietary
 
         d = deferToThread(self.settings.router.get_uaid, uaid)
         d.addCallback(self._process_uaid)
@@ -198,3 +197,106 @@ class EndpointHandler(cyclone.web.RequestHandler):
         self.metrics.increment("router.broadcast.miss")
         self.write("Success")
         self.finish()
+
+
+class RegistrationHandler(cyclone.web.RequestHandler):
+
+    # connection info gauntlet
+    def validateConnect(connectInfo):
+        if connectInfo is None:
+            return False
+        if len(connectInfo) == 0:
+            return False
+        try:
+            info = json.loads(connectInfo)
+            if info["type"] is None:
+                return False
+        except:
+            return False
+        return True
+
+    @cyclone.web.asynchronous
+    def put(self, uaid):
+        self.metrics = self.settings.metrics
+        self.start_time = time.time()
+
+        self.add_header("Content-Type", "application/json")
+
+        if uaid is None:
+            uaid = str(uuid.uuid4())
+        else:
+            try:
+                uuid.UUID(uaid)
+            except ValueError:
+                self.set_status(401)
+                self.write("Invalid ID specified")
+                return self.finish()
+
+        # Can we make this generic?
+        type = connect = None
+        if len(self.request.body) > 0:
+            body_args = urlparse.parse_qs(self.request.body,
+                                          keep_blank_values=True)
+            type = body_args.get("type")
+            rtoken = body_args.get("token")
+            connect = body_args.get("connect")
+        else:
+            type = self.request.arguments.get("type")
+            rtoken = self.request.arguments.get("token")
+            connect = body_args.get("connect")
+
+        if type is not None:
+            type = type[0]
+        if rtoken is not None:
+            rtoken = rtoken[0]
+        if connect is not None:
+            connect = connect[0]
+
+        if type is None:
+            self.set_status(400, "No type specified")
+            return self.finish()
+
+        if rtoken is None:
+            self.set_status(400, "No token specified")
+            return self.finish()
+
+        # If you're using the REST function, you are creating a connection.
+        if not self.validateConnect(connect):
+            self.set_status(400, "Invalid connection information specified")
+            return self.finish()
+
+        self.ping_token = rtoken
+        self.ping_type = type
+        self.connect = connect
+
+        d = deferToThread(self.pinger.register, uaid, connect)
+        d.addCallback(self._registered)
+        d.addErrback(self._handle_overload).addErrback(self._error_response)
+
+    # success
+    def _registered(self, result):
+        if not result:
+            self.set_status(500, "Registration failure")
+            return self.finish()
+
+        self.set_status(200)
+        self.write(json.dumps({"uaid": self.uaid}))
+        return self.finish()
+
+    # error
+    def _handle_overload(self, failure):
+        failure.trap(ProvisionedThroughputExceededException)
+        err = "Server busy, try again later"
+        self.set_status(503, err)
+        self.write(json.dumps({"error": err}))
+        self.finish()
+
+    def _error_response(self, failure):
+        log.err(failure)
+        err = "Error processing request"
+        self.set_status(500, err)
+        self.write(json.dumps({"error": err}))
+        self.finish()
+
+
+
