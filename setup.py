@@ -44,6 +44,7 @@ setup(name="AutoPush",
           "requests>=2.5.3",
           "txstatsd>=1.0.0",
           "configargparse>=0.9.3",
+          "pyopenssl>=0.14",
       ],
       entry_points="""
       [console_scripts]
