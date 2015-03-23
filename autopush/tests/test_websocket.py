@@ -1,5 +1,4 @@
 import json
-import sys
 import uuid
 
 import twisted.internet.base
@@ -9,7 +8,6 @@ from boto.dynamodb2.exceptions import (
 from cyclone.web import Application
 from mock import Mock, patch
 from moto import mock_dynamodb2
-from nose import SkipTest
 from nose.tools import eq_
 from txstatsd.metrics.metrics import Metrics
 from twisted.internet import reactor
@@ -448,9 +446,6 @@ class WebsocketTestCase(unittest.TestCase):
         return d
 
     def test_unregister_fail(self):
-        if sys.platform != "darwin":
-            raise SkipTest("Needed for darwin coverage")
-
         patcher = patch('autopush.websocket.log', spec=True)
         mock_log = patcher.start()
         self._connect()
