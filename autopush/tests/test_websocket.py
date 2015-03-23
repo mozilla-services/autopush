@@ -6,7 +6,7 @@ from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
 from cyclone.web import Application
-from mock import Mock
+from mock import Mock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_
 from txstatsd.metrics.metrics import Metrics
@@ -438,6 +438,38 @@ class WebsocketTestCase(unittest.TestCase):
 
         f = self._check_response(check_unregister_result)
         f.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_unregister_fail(self):
+        patcher = patch('autopush.websocket.log', spec=True)
+        mock_log = patcher.start()
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        chid = str(uuid.uuid4())
+
+        d = Deferred()
+        d.addBoth(lambda x: patcher.stop())
+
+        # Replace storage delete with call to fail
+        times = []
+        def raise_exception(*args, **kwargs):
+            if not times:
+                times.append(True)
+                raise Exception("Connection problem?")
+            return True
+        self.proto.settings.storage.delete_notification = Mock(
+            side_effect=raise_exception)
+        self._send_message(dict(messageType="unregister",
+                                channelID=chid))
+
+        def wait_for_times():
+            if times:
+                eq_(len(mock_log.mock_calls), 1)
+                d.callback(True)
+                return
+            reactor.callLater(0.1, wait_for_times)
+
+        reactor.callLater(0.1, wait_for_times)
         return d
 
     def test_notification(self):
