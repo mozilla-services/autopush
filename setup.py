@@ -44,6 +44,8 @@ setup(name="AutoPush",
           "requests>=2.5.3",
           "txstatsd>=1.0.0",
           "configargparse>=0.9.3",
+          "apns>=2.0.1",
+          "gcm-client>=0.1.4",
       ],
       entry_points="""
       [console_scripts]

@@ -8,12 +8,7 @@ AutoPush
 .. image:: https://coveralls.io/repos/mozilla-services/autopush/badge.svg
   :target: https://coveralls.io/r/mozilla-services/autopush
 
-*A simple prototype SimplePush style service utilizing AWS extensively.*
-
-Ok, that's not entirely accurate. This is a mostly production-ready Push
-system utilizing DynamoDB extensively. It was created to test out some
-architecture changes and get a better understanding of underlying concurrency
-issues related to moving notifications around.
+Mozilla Push server and Push Endpoint utilizing PyPy, twisted, and DynamoDB.
 
 Installing
 ==========

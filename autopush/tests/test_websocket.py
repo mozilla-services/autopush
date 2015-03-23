@@ -5,6 +5,7 @@ import twisted.internet.base
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
+from cyclone.web import Application
 from mock import Mock
 from moto import mock_dynamodb2
 from nose.tools import eq_
@@ -14,7 +15,11 @@ from twisted.internet.defer import Deferred
 from twisted.trial import unittest
 
 from autopush.settings import AutopushSettings
-from autopush.websocket import SimplePushServerProtocol
+from autopush.websocket import (
+    SimplePushServerProtocol,
+    RouterHandler,
+    NotificationHandler,
+)
 
 
 class WebsocketTestCase(unittest.TestCase):
@@ -437,38 +442,43 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_notification(self):
         self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
-
-        d = Deferred()
-        d.addCallback(lambda x: True)
+        self.proto.uaid = str(uuid.uuid4())
         chid = str(uuid.uuid4())
 
-        def check_hello_result(msg):
-            eq_(msg["status"], 200)
-            # Send outself a notification
-            payload = [{"channelID": chid, "version": 10}]
-            self.proto.send_notifications(payload)
+        # Send ourself a notification
+        payload = [{"channelID": chid, "version": 10}]
+        self.proto.send_notifications(payload)
 
-            # Check the call result
-            args = self.send_mock.call_args
-            assert args is not None
-            self.send_mock.reset_mock()
+        # Check the call result
+        args = self.send_mock.call_args
+        assert args is not None
+        self.send_mock.reset_mock()
 
-            msg = json.loads(args[0][0])
-            eq_(msg["messageType"], "notification")
-            assert "updates" in msg
-            eq_(len(msg["updates"]), 1)
-            update = msg["updates"][0]
-            eq_(update["channelID"], chid)
-            eq_(update["version"], 10)
+        msg = json.loads(args[0][0])
+        eq_(msg["messageType"], "notification")
+        assert "updates" in msg
+        eq_(len(msg["updates"]), 1)
+        update = msg["updates"][0]
+        eq_(update["channelID"], chid)
+        eq_(update["version"], 10)
 
-            # Verify outgoing queue in sent directly
-            eq_(len(self.proto.direct_updates), 1)
-            d.callback(True)
+        # Verify outgoing queue in sent directly
+        eq_(len(self.proto.direct_updates), 1)
 
-        f = self._check_response(check_hello_result)
-        f.addErrback(lambda x: d.errback(x))
-        return d
+    def test_notification_avoid_newer_delivery(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+
+        chid = str(uuid.uuid4())
+        self.proto.updates_sent[chid] = 14
+
+        # Send ourself a notification
+        payload = [{"channelID": chid, "version": 10}]
+        self.proto.send_notifications(payload)
+
+        # Check the call result
+        args = self.send_mock.call_args
+        assert args is None
 
     def test_notification_retains_no_dash(self):
         self._connect()
@@ -580,6 +590,85 @@ class WebsocketTestCase(unittest.TestCase):
         f = self._check_response(check_hello_result)
         f.addErrback(lambda x: d.errback(x))
         return d
+
+    def test_ack_fails_first_time(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+
+        class FailFirst(object):
+            def __init__(self):
+                self.tries = 0
+
+            def __call__(self, *args, **kwargs):
+                if self.tries == 0:
+                    self.tries += 1
+                    return False
+                else:
+                    return True
+
+        self.proto.settings.storage = Mock(
+            **{"delete_notification.side_effect": FailFirst()})
+
+        chid = str(uuid.uuid4())
+
+        # stick a notification to ack in
+        self.proto.updates_sent[chid] = 12
+
+        # Send our ack
+        self._send_message(dict(messageType="ack",
+                                updates=[{"channelID": chid,
+                                          "version": 12}]))
+
+        # Ask for a notification check again
+        self.proto.process_notifications = Mock()
+        self.proto._check_notifications = True
+
+        d = Deferred()
+
+        def wait_for_delete():
+            calls = self.transport_mock.mock_calls
+            if len(calls) < 2:
+                reactor.callLater(0.1, wait_for_delete)
+                return
+
+            eq_(self.proto.updates_sent, {})
+            process_calls = self.proto.process_notifications.mock_calls
+            eq_(len(process_calls), 1)
+            d.callback(True)
+
+        reactor.callLater(0.1, wait_for_delete)
+        return d
+
+    def test_ack_missing_updates(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.sendJSON = Mock()
+
+        self._send_message(dict(messageType="ack"))
+
+        calls = self.proto.sendJSON.call_args_list
+        eq_(len(calls), 0)
+
+    def test_ack_missing_chid_version(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+
+        self._send_message(dict(messageType="ack",
+                                updates=[{"something": 2}]))
+
+        calls = self.send_mock.call_args_list
+        eq_(len(calls), 0)
+
+    def test_ack_untracked(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+
+        self._send_message(dict(messageType="ack",
+                                updates=[{"channelID": str(uuid.uuid4()),
+                                          "version": 10}]))
+
+        calls = self.send_mock.call_args_list
+        eq_(len(calls), 0)
 
     def test_process_notifications(self):
         self._connect()
@@ -718,3 +807,99 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto._register.addCallback(after_hello)
         self.proto._register.addErrback(lambda x: d.errback(x))
         return d
+
+
+class RouterHandlerTestCase(unittest.TestCase):
+    def setUp(self):
+        self.mock_dynamodb2 = mock_dynamodb2()
+        self.mock_dynamodb2.start()
+        twisted.internet.base.DelayedCall.debug = True
+
+        self.settings = AutopushSettings(
+            hostname="localhost",
+            statsd_host=None,
+        )
+        self.settings.metrics = Mock(spec=Metrics)
+        h = RouterHandler
+        h.settings = self.settings
+        self.mock_request = Mock()
+        self.handler = h(Application(), self.mock_request)
+        self.handler.set_status = self.status_mock = Mock()
+        self.handler.write = self.write_mock = Mock()
+
+    def tearDown(self):
+        self.mock_dynamodb2.stop()
+
+    def test_client_connected(self):
+        uaid = str(uuid.uuid4())
+        self.mock_request.body = "{}"
+        self.settings.clients[uaid] = client_mock = Mock()
+        self.handler.put(uaid)
+        eq_(len(self.write_mock.mock_calls), 1)
+        eq_(len(client_mock.mock_calls), 1)
+
+    def test_client_not_connected(self):
+        uaid = str(uuid.uuid4())
+        self.mock_request.body = "{}"
+        self.handler.put(uaid)
+        eq_(len(self.write_mock.mock_calls), 1)
+        eq_(len(self.status_mock.mock_calls), 1)
+        eq_(self.status_mock.call_args, ((404,),))
+
+    def test_client_connected_but_busy(self):
+        uaid = str(uuid.uuid4())
+        self.mock_request.body = "{}"
+        self.settings.clients[uaid] = client_mock = Mock()
+        client_mock.accept_notification = False
+        self.handler.put(uaid)
+        eq_(len(self.write_mock.mock_calls), 1)
+        eq_(len(self.status_mock.mock_calls), 1)
+        eq_(self.status_mock.call_args, ((503,),))
+
+
+class NotificationHandlerTestCase(unittest.TestCase):
+    def setUp(self):
+        self.mock_dynamodb2 = mock_dynamodb2()
+        self.mock_dynamodb2.start()
+        twisted.internet.base.DelayedCall.debug = True
+
+        self.settings = AutopushSettings(
+            hostname="localhost",
+            statsd_host=None,
+        )
+        self.settings.metrics = Mock(spec=Metrics)
+        h = NotificationHandler
+        h.settings = self.settings
+        self.mock_request = Mock()
+        self.handler = h(Application(), self.mock_request)
+        self.handler.set_status = self.status_mock = Mock()
+        self.handler.write = self.write_mock = Mock()
+
+    def tearDown(self):
+        self.mock_dynamodb2.stop()
+
+    def test_connected_and_free(self):
+        uaid = str(uuid.uuid4())
+        self.mock_request.body = "{}"
+        self.settings.clients[uaid] = client_mock = Mock()
+        self.handler.put(uaid)
+        eq_(len(self.write_mock.mock_calls), 1)
+        eq_(len(client_mock.mock_calls), 1)
+
+    def test_connected_and_busy(self):
+        uaid = str(uuid.uuid4())
+        self.mock_request.body = "{}"
+        self.settings.clients[uaid] = client_mock = Mock()
+        client_mock.accept_notification = False
+        client_mock._check_notifications = False
+        self.handler.put(uaid)
+        eq_(len(self.write_mock.mock_calls), 1)
+        eq_(client_mock._check_notifications, True)
+        eq_(self.status_mock.call_args, ((202,),))
+
+    def test_not_connected(self):
+        uaid = str(uuid.uuid4())
+        self.mock_request.body = "{}"
+        self.handler.put(uaid)
+        eq_(len(self.write_mock.mock_calls), 1)
+        eq_(self.status_mock.call_args, ((404,),))
