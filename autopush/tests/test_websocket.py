@@ -457,6 +457,7 @@ class WebsocketTestCase(unittest.TestCase):
                 times.append(True)
                 raise Exception("Connection problem?")
             return True
+        delete = self.proto.settings.storage.delete_notification
         self.proto.settings.storage.delete_notification = Mock(
             side_effect=raise_exception)
         self._send_message(dict(messageType="unregister",
@@ -464,6 +465,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         def wait_for_times():
             if times:
+                self.proto.settings.storage.delete_notification = delete
                 eq_(len(mock_log.mock_calls), 1)
                 d.callback(True)
                 return
