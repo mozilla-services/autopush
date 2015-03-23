@@ -429,7 +429,6 @@ class WebsocketTestCase(unittest.TestCase):
                                 channelID="}{$@!asdf"))
 
         d = Deferred()
-        d.addCallback(lambda x: True)
 
         def check_unregister_result(msg):
             eq_(msg["status"], 401)
@@ -451,21 +450,20 @@ class WebsocketTestCase(unittest.TestCase):
         d.addBoth(lambda x: patcher.stop())
 
         # Replace storage delete with call to fail
-        times = []
+        table = self.proto.settings.storage.table
+        delete = table.delete_item
+
         def raise_exception(*args, **kwargs):
-            if not times:
-                times.append(True)
-                raise Exception("Connection problem?")
-            return True
-        delete = self.proto.settings.storage.delete_notification
-        self.proto.settings.storage.delete_notification = Mock(
-            side_effect=raise_exception)
+            # Stick the original back
+            table.delete_item = delete
+            raise Exception("Connection problem?")
+
+        table.delete_item = Mock(side_effect=raise_exception)
         self._send_message(dict(messageType="unregister",
                                 channelID=chid))
 
         def wait_for_times():
-            if times:
-                self.proto.settings.storage.delete_notification = delete
+            if len(mock_log.mock_calls) > 0:
                 eq_(len(mock_log.mock_calls), 1)
                 d.callback(True)
                 return
