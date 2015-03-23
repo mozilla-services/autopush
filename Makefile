@@ -13,7 +13,7 @@ PATH := $(BIN):$(PATH)
 BUILD_DIRS = bin build deps include lib lib64 lib_pypy lib-python site-packages
 
 
-.PHONY: all build test clean clean-env
+.PHONY: all build test lint clean clean-env
 
 all:	build
 
@@ -22,8 +22,11 @@ $(BIN)/pip: $(BIN)/pypy
 	$(PYTHON) get-pip.py
 	rm get-pip.py
 
-$(BIN)/nosetests:
+$(BIN)/nosetests: $(BIN)/pip
 	$(INSTALL) -r test-requirements.txt
+
+$(BIN)/flake8: $(BIN)/pip
+	$(INSTALL) flake8
 
 $(BIN)/paster: lib $(BIN)/pip
 	$(INSTALL) -r requirements.txt
@@ -40,3 +43,6 @@ build: $(BIN)/pip
 
 test: $(BIN)/nosetests
 	$(NOSE)
+
+lint: $(BIN)/flake8
+	$(BIN)/flake8 autopush
