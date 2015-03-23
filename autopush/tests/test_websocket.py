@@ -1,4 +1,5 @@
 import json
+import sys
 import uuid
 
 import twisted.internet.base
@@ -8,6 +9,7 @@ from boto.dynamodb2.exceptions import (
 from cyclone.web import Application
 from mock import Mock, patch
 from moto import mock_dynamodb2
+from nose import SkipTest
 from nose.tools import eq_
 from txstatsd.metrics.metrics import Metrics
 from twisted.internet import reactor
@@ -22,10 +24,19 @@ from autopush.websocket import (
 )
 
 
+mock_dynamodb2 = mock_dynamodb2()
+
+
+def setUp():
+    mock_dynamodb2.start()
+
+
+def tearDown():
+    mock_dynamodb2.stop()
+
+
 class WebsocketTestCase(unittest.TestCase):
     def setUp(self):
-        self.mock_dynamodb2 = mock_dynamodb2()
-        self.mock_dynamodb2.start()
         twisted.internet.base.DelayedCall.debug = True
         self.proto = SimplePushServerProtocol()
 
@@ -38,9 +49,6 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.sendClose = self.close_mock = Mock()
         self.proto.transport = self.transport_mock = Mock()
         settings.metrics = Mock(spec=Metrics)
-
-    def tearDown(self):
-        self.mock_dynamodb2.stop()
 
     def _connect(self):
         self.proto.onConnect(None)
@@ -440,6 +448,9 @@ class WebsocketTestCase(unittest.TestCase):
         return d
 
     def test_unregister_fail(self):
+        if sys.platform != "darwin":
+            raise SkipTest("Needed for darwin coverage")
+
         patcher = patch('autopush.websocket.log', spec=True)
         mock_log = patcher.start()
         self._connect()
@@ -843,8 +854,6 @@ class WebsocketTestCase(unittest.TestCase):
 
 class RouterHandlerTestCase(unittest.TestCase):
     def setUp(self):
-        self.mock_dynamodb2 = mock_dynamodb2()
-        self.mock_dynamodb2.start()
         twisted.internet.base.DelayedCall.debug = True
 
         self.settings = AutopushSettings(
@@ -858,9 +867,6 @@ class RouterHandlerTestCase(unittest.TestCase):
         self.handler = h(Application(), self.mock_request)
         self.handler.set_status = self.status_mock = Mock()
         self.handler.write = self.write_mock = Mock()
-
-    def tearDown(self):
-        self.mock_dynamodb2.stop()
 
     def test_client_connected(self):
         uaid = str(uuid.uuid4())
@@ -891,8 +897,6 @@ class RouterHandlerTestCase(unittest.TestCase):
 
 class NotificationHandlerTestCase(unittest.TestCase):
     def setUp(self):
-        self.mock_dynamodb2 = mock_dynamodb2()
-        self.mock_dynamodb2.start()
         twisted.internet.base.DelayedCall.debug = True
 
         self.settings = AutopushSettings(
@@ -906,9 +910,6 @@ class NotificationHandlerTestCase(unittest.TestCase):
         self.handler = h(Application(), self.mock_request)
         self.handler.set_status = self.status_mock = Mock()
         self.handler.write = self.write_mock = Mock()
-
-    def tearDown(self):
-        self.mock_dynamodb2.stop()
 
     def test_connected_and_free(self):
         uaid = str(uuid.uuid4())
