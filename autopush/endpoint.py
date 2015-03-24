@@ -12,14 +12,10 @@ from twisted.python import log
 
 
 class EndpointHandler(cyclone.web.RequestHandler):
-    @cyclone.web.asynchronous
-    def put(self, token):
+    def initialize(self):
         self.metrics = self.settings.metrics
-        self.start_time = time.time()
-        fernet = self.settings.fernet
 
-        self.blah = "application/x-www-form-urlencoded"
-
+    def _load_params(self):
         # If there's a request body, parse it out
         version = data = None
         if len(self.request.body) > 0:
@@ -33,35 +29,38 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
         # These come out as lists, unlist them
         if version is not None:
-            version = version[0]
+            try:
+                version = int(version[0])
+            except ValueError:
+                version = None
         if data is not None:
             data = data[0]
 
-        # Blank version is ok, None means not even blank though
-        if version is None:
-            self.set_status(401)
-            self.write("No version present")
-            return self.finish()
+        if version is None or version < 1:
+            version = int(time.time())
 
-        if data and len(data) > self.settings.max_data:
+        self.version = version
+        self.data = data
+
+    @cyclone.web.asynchronous
+    def put(self, token):
+        self.start_time = time.time()
+        fernet = self.settings.fernet
+
+        self._load_params()
+        if self.data and len(self.data) > self.settings.max_data:
             self.set_status(401)
             self.write("Data too large")
             return self.finish()
-
-        self.version, self.data = version, data
 
         d = deferToThread(fernet.decrypt, token.encode('utf8'))
         d.addCallback(self._process_token)
         d.addErrback(self._bad_token).addErrback(self._error_response)
 
     def _process_token(self, result):
-        uaid, chid = result.split(":")
-        if not self.version:
-            self.version = int(time.time())
+        self.uaid, self.chid = result.split(":")
 
-        self.uaid, self.chid = uaid, chid
-
-        d = deferToThread(self.settings.router.get_uaid, uaid)
+        d = deferToThread(self.settings.router.get_uaid, self.uaid)
         d.addCallback(self._process_uaid)
         d.addErrback(self._handle_overload).addErrback(self._error_response)
 
@@ -100,7 +99,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
         if node_id:
             # Attempt a delivery if they are connected
             payload = json.dumps([{"channelID": self.chid,
-                                   "version": int(self.version),
+                                   "version": self.version,
                                    "data": self.data}])
             d = deferToThread(
                 self.settings.requests.put,
@@ -113,6 +112,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
             self._save_notification()
 
     def _process_routing(self, result, item):
+        node_id = item.get("node_id")
         if result.status_code == 200:
             # Success, return!
             self.metrics.increment("router.broadcast.hit")
@@ -121,18 +121,18 @@ class EndpointHandler(cyclone.web.RequestHandler):
             self.write("Success")
             return self.finish()
         elif result.status_code == 404:
-            node_id = item.get("node_id")
             # Conditionally delete the node_id
             d = deferToThread(self.settings.router.clear_node, item)
-            d.addCallback(self._process_node_delete, node_id)
-            d.addErrback(self._handle_overload).addErrback(self._error_response)
+            d.addCallback(self._process_node_delete)
+            d.addErrback(self._handle_overload)
+            d.addErrback(self._error_response)
             return
 
         # Client was busy, remember to tell it to check
         self.client_check = result.status_code == 503
-        self._save_notification()
+        self._save_notification(node_id)
 
-    def _process_node_delete(self, result, node_id):
+    def _process_node_delete(self, result):
         if not result:
             # Client hopped, punt this request so app-server can
             # try again and get luckier
@@ -141,7 +141,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
             self.finish()
         else:
             # Delete was ok, proceed to save the notification
-            self._save_notification(node_id)
+            self._save_notification()
 
     def _save_notification(self, node_id=None):
         """Save the notification"""
@@ -162,6 +162,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
             # now
             d = deferToThread(self.settings.router.get_uaid, self.uaid)
             d.addCallback(self._process_jumped_client)
+            d.addErrback(self._handle_overload)
             d.addErrback(self._error_response)
 
     def _process_notif(self, result, node_id=None):
@@ -185,6 +186,9 @@ class EndpointHandler(cyclone.web.RequestHandler):
             return self.finish()
 
         node_id = result.get("node_id")
+        if not node_id:
+            return self._finish_missed_store()
+
         d = deferToThread(self.settings.requests.put,
                           node_id + "/notif/" + self.uaid)
         # No check on response here, because if they jumped since we
