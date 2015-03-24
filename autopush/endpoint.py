@@ -125,7 +125,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
             # Conditionally delete the node_id
             d = deferToThread(self.settings.router.clear_node, item)
             d.addCallback(self._process_node_delete, node_id)
-            d.addErrback(self._handle_overload).addErrback(self._error_response)
+            d.addErrback(self._handle_overload)
+            d.addErrback(self._error_response)
             return
 
         # Client was busy, remember to tell it to check
