@@ -1,20 +1,19 @@
-import json
 import functools
+import json
 
-from cyclone.web import Application
-import twisted.internet.base
-from twisted.internet.defer import Deferred
-from txstatsd.metrics.metrics import Metrics
-from cryptography.fernet import Fernet, InvalidToken
 import requests
+import twisted.internet.base
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
-
+from cryptography.fernet import Fernet, InvalidToken
+from cyclone.web import Application
 from mock import Mock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_
+from twisted.internet.defer import Deferred
 from twisted.trial import unittest
+from txstatsd.metrics.metrics import Metrics
 
 import autopush.endpoint as endpoint
 from autopush.db import Router, Storage
