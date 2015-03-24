@@ -4,7 +4,6 @@ import uuid
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
-    ItemNotFound,
     ProvisionedThroughputExceededException,
 )
 from mock import Mock
@@ -14,8 +13,6 @@ from nose.tools import eq_
 from autopush.db import (
     create_router_table,
     create_storage_table,
-    router_table,
-    storage_table,
     get_router_table,
     get_storage_table,
     Storage,
