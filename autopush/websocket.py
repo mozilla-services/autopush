@@ -310,12 +310,16 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Delete any record from storage, we don't wait for this
         d = deferToThread(self.settings.storage.delete_notification,
                           self.uaid, chid)
-        d.addErrback(self.force_delete, chid)
+        d.addBoth(self.force_delete, chid)
         data["status"] = 200
         self.sendJSON(data)
 
-    def force_delete(self, failure, chid):
+    def force_delete(self, result, chid):
         """Forces another delete call through until it works"""
+        if result not in [True, False]:
+            # This is an exception, log it
+            log.err(result)
+
         d = deferToThread(self.settings.storage.delete_notification,
                           self.uaid, chid)
         d.addErrback(self.force_delete, chid)

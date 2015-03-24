@@ -6,6 +6,7 @@ configargparse==0.9.3
 enum34==1.0.4
 greenlet==0.4.5
 pyasn1==0.1.7
+pyopenssl==0.14
 readline==6.2.4.1
 requests==2.5.3
 six==1.9.0

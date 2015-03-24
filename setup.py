@@ -46,6 +46,8 @@ setup(name="AutoPush",
           "configargparse>=0.9.3",
           "apns>=2.0.1",
           "gcm-client>=0.1.4",
+          "pyopenssl>=0.14",
+          "service-identity>=14.0.0",
       ],
       entry_points="""
       [console_scripts]

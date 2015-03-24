@@ -3,7 +3,6 @@ from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
     ItemNotFound,
     ProvisionedThroughputExceededException,
-    JSONResponseError,
 )
 from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
@@ -70,6 +69,7 @@ class Storage(object):
     def save_notification(self, uaid, chid, version):
         conn = self.table.connection
         try:
+            cond = "attribute_not_exists(version) or version < :ver"
             conn.put_item(
                 "storage",
                 item={
@@ -77,8 +77,7 @@ class Storage(object):
                     "chid": {'S': chid},
                     "version": {'N': str(version)}
                 },
-                condition_expression=
-                "attribute_not_exists(version) or version < :ver",
+                condition_expression=cond,
                 expression_attribute_values={
                     ":ver": {'N': str(version)}
                 }
@@ -162,6 +161,7 @@ class Router(object):
         this is the latest connection"""
         conn = self.table.connection
         try:
+            cond = "attribute_not_exists(node_id) or (connected_at < :conn)"
             conn.put_item(
                 "router",
                 item={
@@ -169,8 +169,7 @@ class Router(object):
                     "node_id": {'S': node_id},
                     "connected_at": {'N': str(connected_at)}
                 },
-                condition_expression=
-                "attribute_not_exists(node_id) or (connected_at < :conn)",
+                condition_expression=cond,
                 expression_attribute_values={
                     ":conn": {'N': str(connected_at)}
                 }
@@ -183,14 +182,14 @@ class Router(object):
         """Given a router item, remove the node_id from it."""
         conn = self.table.connection
         try:
+            cond = "(node_id = :node) and (connected_at = :conn)"
             conn.put_item(
                 "router",
                 item={
                     "uaid": {'S': item["uaid"]},
                     "connected_at": {'N': str(item["connected_at"])}
                 },
-                condition_expression=
-                "(node_id = :node) and (connected_at = :conn)",
+                condition_expression=cond,
                 expression_attribute_values={
                     ":node": {'S': item["node_id"]},
                     ":conn": {'N': str(item["connected_at"])}
