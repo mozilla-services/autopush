@@ -64,7 +64,9 @@ def _parse_endpoint(sysargs=None):
     parser = configargparse.ArgumentParser(description='Runs an Endpoint Node.')
     parser.add_argument('-p', '--port', help='Public HTTP Endpoint Port',
                         type=int, default=8082, env_var="PORT")
-
+    parser.add_argument('--cors', help='Allow CORS PUTs for update.',
+                        action='store_true', default=False,
+                        env_var='ALLOW_CORS')
     add_shared_args(parser)
     args = parser.parse_args(sysargs)
     return args, parser
@@ -76,6 +78,7 @@ def make_settings(args, **kwargs):
         hostname=args.hostname,
         statsd_host=args.statsd_host,
         statsd_port=args.statsd_port,
+        enable_cors=args.cors,
         **kwargs
     )
 

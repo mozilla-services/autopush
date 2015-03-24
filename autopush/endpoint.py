@@ -2,16 +2,42 @@ import json
 import time
 import urlparse
 
-from cryptography.fernet import InvalidToken
+import cyclone.web
+
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
-import cyclone.web
+from cryptography.fernet import InvalidToken
 from twisted.internet.threads import deferToThread
 from twisted.python import log
 
 
 class EndpointHandler(cyclone.web.RequestHandler):
+
+    def addCors(self):
+        if self.settings.cors:
+            self.set_header("Access-Control-Request-Method", "*")
+
+    @cyclone.web.asynchronous
+    def options(self, token):
+        self.addCors()
+        self.set_status(200)
+        self.write("")
+        self.finish()
+
+    @cyclone.web.asynchronous
+    def head(self, token):
+        self.addCors()
+        self.set_status(200)
+        self.write("")
+        self.finish()
+
+    @cyclone.web.asynchronous
+    def default(self, token):
+        self.addCors()
+        self.set_status(521)
+        self.finish()
+
     @cyclone.web.asynchronous
     def put(self, token):
         self.metrics = self.settings.metrics
@@ -19,6 +45,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
         fernet = self.settings.fernet
 
         self.blah = "application/x-www-form-urlencoded"
+        self.addCors()
 
         # If there's a request body, parse it out
         version = data = None
@@ -195,4 +222,14 @@ class EndpointHandler(cyclone.web.RequestHandler):
     def _finish_missed_store(self, result=None):
         self.metrics.increment("router.broadcast.miss")
         self.write("Success")
+        self.finish()
+
+    def write_error(self, code, exception=None):
+        """ Write the error (otherwise unhandled exception) """
+        reason = "No reason"
+        if exception is not None and exception.reason is not None:
+            reason = exception.reason
+        error = "%d: %s" % (code, reason)
+        self.set_status(code)
+        log.err("Endpoint write_error: %s" % error)
         self.finish()

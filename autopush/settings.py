@@ -26,7 +26,8 @@ class AutopushSettings(object):
                  endpoint_hostname=None,
                  endpoint_port=None,
                  statsd_host="localhost",
-                 statsd_port=8125):
+                 statsd_port=8125,
+                 enable_cors=False):
 
         # Setup the requests lib session
         sess = requests.Session()
@@ -74,9 +75,19 @@ class AutopushSettings(object):
         self.storage = Storage(self.storage_table)
         self.router = Router(self.router_table)
 
+        #CORS
+        self.cors = enable_cors
+
     def update(self, **kwargs):
         for key, val in kwargs.items():
             if key == "crypto_key":
                 self.fernet = Fernet(val)
             else:
                 setattr(self, key, val)
+
+    def get(self, key):
+        """ cyclone/web.py is calling self.settings.get("debug") where
+        self == EndpointHandler. this is causing an unhandled exception.
+        """
+        import pdb; pdb.set_trace()
+        return self.__dict__[key]
