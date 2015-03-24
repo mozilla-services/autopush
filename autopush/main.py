@@ -1,4 +1,5 @@
 """autopush daemon script"""
+import os
 import sys
 
 import configargparse
