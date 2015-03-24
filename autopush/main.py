@@ -3,9 +3,9 @@ import sys
 
 import configargparse
 import cyclone.web
-from autobahn.twisted.websocket import WebSocketServerFactory
+from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
 from twisted.python import log
-from twisted.internet import reactor, task
+from twisted.internet import reactor, task, ssl
 from txstatsd.client import StatsDClientProtocol
 
 from autopush.websocket import (
@@ -30,6 +30,10 @@ def add_shared_args(parser):
                         default="localhost", env_var="STATSD_HOST")
     parser.add_argument('--statsd_port', help="Statsd Port", type=int,
                         default=8125, env_var="STATSD_PORT")
+    parser.add_argument('--ssl_key', help="SSL Key path", type=str,
+                        default="", env_var="SSL_KEY")
+    parser.add_argument('--ssl_cert', help="SSL Cert path", type=str,
+                        default="", env_var="SSL_CERT")
 
 
 def _parse_connection(sysargs=None):
@@ -108,18 +112,26 @@ def connection_main(sysargs=None):
     ], default_host=settings.router_hostname)
 
     # Public websocket server
+    proto = "wss" if args.ssl_key else "ws"
     factory = WebSocketServerFactory(
-        "ws://%s:%s/" % (args.hostname, args.port),
-        debug=args.debug
+        "%s://%s:%s/" % (proto, args.hostname, args.port),
+        debug=args.debug,
+        debugCodePaths=args.debug,
     )
     factory.protocol = SimplePushServerProtocol
     factory.protocol.settings = settings
-    factory.setProtocolOptions(allowHixie76=True)
 
     protocol = StatsDClientProtocol(settings.metrics_client)
 
-    reactor.listenTCP(args.port, factory)
-    reactor.listenTCP(args.router_port, site)
+    if args.ssl_key:
+        contextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
+                                                          args.ssl_cert)
+        listenWS(factory, contextFactory)
+        reactor.listenSSL(args.router_port, site, contextFactory)
+    else:
+        reactor.listenTCP(args.port, factory)
+        reactor.listenTCP(args.router_port, site)
+
     reactor.listenUDP(0, protocol)
     reactor.suggestThreadPoolSize(50)
 
@@ -146,8 +158,14 @@ def endpoint_main(sysargs=None):
     )
 
     protocol = StatsDClientProtocol(settings.metrics_client)
-    reactor.listenUDP(0, protocol)
-    reactor.listenTCP(args.port, site)
-    reactor.suggestThreadPoolSize(50)
 
+    if args.ssl_key:
+        contextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
+                                                          args.ssl_cert)
+        listenWS(site, contextFactory)
+    else:
+        reactor.listenTCP(args.port, site)
+
+    reactor.listenUDP(0, protocol)
+    reactor.suggestThreadPoolSize(50)
     reactor.run()

@@ -303,7 +303,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if result not in [True, False]:
             # This is an exception, log it
             log.err(result)
-            result.trap(Exception)
 
         d = deferToThread(self.settings.storage.delete_notification,
                           self.uaid, chid)
