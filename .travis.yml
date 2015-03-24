@@ -4,7 +4,7 @@ python:
   - "pypy"
 install:
   - python setup.py develop
-  - pip install coverage nose mock moto python-coveralls
-script: nosetests
+  - pip install coverage nose mock moto python-coveralls tox
+script: tox
 after_success:
   - coveralls
