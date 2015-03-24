@@ -1,5 +1,4 @@
 """autopush daemon script"""
-import os
 import sys
 
 import configargparse
@@ -66,7 +65,8 @@ def _parse_endpoint(sysargs=None):
     if sysargs is None:
         sysargs = sys.argv[1:]
 
-    parser = configargparse.ArgumentParser(description='Runs an Endpoint Node.')
+    parser = configargparse.ArgumentParser(
+        description='Runs an Endpoint Node.')
     parser.add_argument('-p', '--port', help='Public HTTP Endpoint Port',
                         type=int, default=8082, env_var="PORT")
 
