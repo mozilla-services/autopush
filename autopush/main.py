@@ -1,4 +1,5 @@
 """autopush daemon script"""
+import os
 import sys
 
 import configargparse
@@ -86,7 +87,6 @@ def make_settings(args, **kwargs):
         hostname=args.hostname,
         statsd_host=args.statsd_host,
         statsd_port=args.statsd_port,
-        enable_cors=args.cors,
         **kwargs
     )
 
@@ -166,7 +166,7 @@ def connection_main(sysargs=None):
 
 def endpoint_main(sysargs=None):
     args, parser = _parse_endpoint(sysargs)
-    settings = make_settings(args)
+    settings = make_settings(args, enable_cors=args.cors)
 
     log.startLogging(sys.stdout)
 
