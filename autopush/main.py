@@ -73,7 +73,9 @@ def _parse_endpoint(sysargs=None):
         description='Runs an Endpoint Node.')
     parser.add_argument('-p', '--port', help='Public HTTP Endpoint Port',
                         type=int, default=8082, env_var="PORT")
-
+    parser.add_argument('--cors', help='Allow CORS PUTs for update.',
+                        action='store_true', default=False,
+                        env_var='ALLOW_CORS')
     add_shared_args(parser)
     args = parser.parse_args(sysargs)
     return args, parser
@@ -164,7 +166,7 @@ def connection_main(sysargs=None):
 
 def endpoint_main(sysargs=None):
     args, parser = _parse_endpoint(sysargs)
-    settings = make_settings(args)
+    settings = make_settings(args, enable_cors=args.cors)
 
     log.startLogging(sys.stdout)
 
@@ -172,7 +174,7 @@ def endpoint_main(sysargs=None):
 
     # Endpoint HTTP router
     endpoint = EndpointHandler
-    endpoint.settings = settings
+    endpoint.ap_settings = settings
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", endpoint)
     ], default_host=settings.hostname, debug=args.debug

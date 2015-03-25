@@ -26,7 +26,8 @@ class AutopushSettings(object):
                  endpoint_hostname=None,
                  endpoint_port=None,
                  statsd_host="localhost",
-                 statsd_port=8125):
+                 statsd_port=8125,
+                 enable_cors=False):
 
         # Setup the requests lib session
         sess = requests.Session()
@@ -73,6 +74,9 @@ class AutopushSettings(object):
         self.storage_table = get_storage_table()
         self.storage = Storage(self.storage_table)
         self.router = Router(self.router_table)
+
+        # CORS
+        self.cors = enable_cors
 
     def update(self, **kwargs):
         for key, val in kwargs.items():
