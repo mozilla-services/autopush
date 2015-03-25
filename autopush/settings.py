@@ -13,6 +13,12 @@ from autopush.db import (
 )
 
 
+class MetricSink(object):
+    """Exists to swallow metrics when metrics are not active"""
+    def increment(*args, **kwargs):
+        pass
+
+
 class AutopushSettings(object):
     options = ["crypto_key", "hostname", "min_ping_interval",
                "max_data"]
@@ -43,6 +49,8 @@ class AutopushSettings(object):
             client = TwistedStatsDClient(statsd_host, statsd_port)
             self.metrics_client = client
             self.metrics = Metrics(connection=client, namespace="pushgo")
+        else:
+            self.metrics = MetricSink()
 
         key = crypto_key or Fernet.generate_key()
         self.fernet = Fernet(key)
@@ -71,8 +79,8 @@ class AutopushSettings(object):
         # Database objects
         self.router_table = get_router_table()
         self.storage_table = get_storage_table()
-        self.storage = Storage(self.storage_table)
-        self.router = Router(self.router_table)
+        self.storage = Storage(self.storage_table, self.metrics)
+        self.router = Router(self.router_table, self.metrics)
 
     def update(self, **kwargs):
         for key, val in kwargs.items():
