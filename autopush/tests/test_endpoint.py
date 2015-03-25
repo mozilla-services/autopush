@@ -38,7 +38,7 @@ def patch_logger(test):
 
 class EndpointTestCase(unittest.TestCase):
     def initialize(self):
-        self.metrics = self.settings.metrics
+        self.metrics = self.ap_settings.metrics
 
     def setUp(self):
         self.timeout = 0.5
@@ -47,7 +47,7 @@ class EndpointTestCase(unittest.TestCase):
         self.mock_dynamodb2.start()
         twisted.internet.base.DelayedCall.debug = True
 
-        settings = endpoint.EndpointHandler.settings = AutopushSettings(
+        settings = endpoint.EndpointHandler.ap_settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
@@ -126,7 +126,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(self.endpoint.data, 'bai')
 
     def test_put_data_too_large(self):
-        self.endpoint.settings.max_data = 3
+        self.endpoint.ap_settings.max_data = 3
         self.endpoint.request.body = b'version=1&data=1234'
 
         def handle_finish(result):
@@ -458,26 +458,26 @@ class EndpointTestCase(unittest.TestCase):
     def test_cors(self):
         acrm = "Access-Control-Request-Method"
         endpoint = self.endpoint
-        endpoint.settings.cors = False
+        endpoint.ap_settings.cors = False
         endpoint._addCors()
         assert endpoint._headers.get(acrm) != "*"
 
         endpoint.clear_header(acrm)
-        endpoint.settings.cors = True
+        endpoint.ap_settings.cors = True
         endpoint._addCors()
         eq_(endpoint._headers[acrm], "*")
 
     def test_cors_head(self):
         acrm = "Access-Control-Request-Method"
         endpoint = self.endpoint
-        endpoint.settings.cors = True
+        endpoint.ap_settings.cors = True
         endpoint.head(None)
         eq_(endpoint._headers[acrm], "*")
 
     def test_cors_options(self):
         acrm = "Access-Control-Request-Method"
         endpoint = self.endpoint
-        endpoint.settings.cors = True
+        endpoint.ap_settings.cors = True
         endpoint.options(None)
         eq_(endpoint._headers[acrm], "*")
 

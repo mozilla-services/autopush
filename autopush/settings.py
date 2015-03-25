@@ -84,9 +84,3 @@ class AutopushSettings(object):
                 self.fernet = Fernet(val)
             else:
                 setattr(self, key, val)
-
-    def get(self, key):
-        """ cyclone/web.py is calling self.settings.get("debug") where
-        self == EndpointHandler. this is causing an unhandled exception.
-        """
-        return self.__dict__[key]

@@ -174,7 +174,7 @@ def endpoint_main(sysargs=None):
 
     # Endpoint HTTP router
     endpoint = EndpointHandler
-    endpoint.settings = settings
+    endpoint.ap_settings = settings
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", endpoint)
     ], default_host=settings.hostname, debug=args.debug
