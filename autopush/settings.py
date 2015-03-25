@@ -75,7 +75,7 @@ class AutopushSettings(object):
         self.storage = Storage(self.storage_table)
         self.router = Router(self.router_table)
 
-        #CORS
+        # CORS
         self.cors = enable_cors
 
     def update(self, **kwargs):
