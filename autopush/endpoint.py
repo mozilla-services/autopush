@@ -43,19 +43,11 @@ class EndpointHandler(cyclone.web.RequestHandler):
         self.version = version
         self.data = data
 
-    @cyclone.web.asynchronous
     def options(self, token):
         self._addCors()
-        self.set_status(200)
-        self.write("")
-        self.finish()
 
-    @cyclone.web.asynchronous
     def head(self, token):
         self._addCors()
-        self.set_status(200)
-        self.write("")
-        self.finish()
 
     @cyclone.web.asynchronous
     def put(self, token):
@@ -223,11 +215,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
     def write_error(self, code, exception=None):
         """ Write the error (otherwise unhandled exception when dealing with
-        unknown protocol specifications.) """
-        reason = "No reason"
-        if exception is not None and exception.reason is not None:
-            reason = exception.reason
-        error = "%d: %s" % (code, reason)
+        unknown method specifications.) """
         self.set_status(code)
-        log.err("Endpoint write_error: %s" % error)
+        if exception is not None:
+            log.err(exception)
         self.finish()

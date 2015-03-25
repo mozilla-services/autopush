@@ -89,5 +89,4 @@ class AutopushSettings(object):
         """ cyclone/web.py is calling self.settings.get("debug") where
         self == EndpointHandler. this is causing an unhandled exception.
         """
-        import pdb; pdb.set_trace()
         return self.__dict__[key]

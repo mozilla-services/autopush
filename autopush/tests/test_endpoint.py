@@ -481,6 +481,19 @@ class EndpointTestCase(unittest.TestCase):
         endpoint.options(None)
         eq_(endpoint._headers[acrm], "*")
 
+    @patch_logger
+    def test_write_error(self, log_mock):
+        """ Write error is triggered by sending the app a request
+        with an invalid method (e.g. "put" instead of "PUT").
+        This is not code that is triggered within normal flow, but
+        by the cyclone wrapper. """
+        class testX(Exception):
+            pass
+
+        self.endpoint.write_error(999, testX)
+        self.status_mock.assert_called_with(999)
+        self.assertTrue(log_mock.err.called)
+
     def _assert_jumped_client(self):
         def handle_finish(result):
             self.requests_mock.put.assert_called_with(
