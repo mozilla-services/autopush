@@ -3,19 +3,22 @@ import sys
 
 import configargparse
 import cyclone.web
+import raven
+import twisted.python
 from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
+from functools import partial
 from twisted.python import log
 from twisted.internet import reactor, task, ssl
 from txstatsd.client import StatsDClientProtocol
 
+from autopush.endpoint import EndpointHandler
+from autopush.settings import AutopushSettings
 from autopush.websocket import (
     SimplePushServerProtocol,
     RouterHandler,
     NotificationHandler,
     periodic_reporter
 )
-from autopush.settings import AutopushSettings
-from autopush.endpoint import EndpointHandler
 
 
 def add_shared_args(parser):
@@ -65,7 +68,8 @@ def _parse_endpoint(sysargs=None):
     if sysargs is None:
         sysargs = sys.argv[1:]
 
-    parser = configargparse.ArgumentParser(description='Runs an Endpoint Node.')
+    parser = configargparse.ArgumentParser(
+        description='Runs an Endpoint Node.')
     parser.add_argument('-p', '--port', help='Public HTTP Endpoint Port',
                         type=int, default=8082, env_var="PORT")
     parser.add_argument('--cors', help='Allow CORS PUTs for update.',
@@ -87,6 +91,22 @@ def make_settings(args, **kwargs):
     )
 
 
+def logToSentry(client, event):
+    if not event.get('isError') or 'failure' not in event:
+        return
+
+    f = event['failure']
+    client.captureException((f.type, f.value, f.getTracebackObject()))
+
+
+def unified_setup():
+    if 'SENTRY_DSN' in os.environ:
+        # Setup the Sentry client
+        client = raven.Client(release=raven.fetch_package_version())
+        logger = partial(logToSentry, client)
+        twisted.python.log.addObserver(logger)
+
+
 def connection_main(sysargs=None):
     args, parser = _parse_connection(sysargs)
     settings = make_settings(
@@ -99,6 +119,7 @@ def connection_main(sysargs=None):
     )
 
     log.startLogging(sys.stdout)
+    unified_setup()
 
     r = RouterHandler
     r.settings = settings
@@ -149,6 +170,8 @@ def endpoint_main(sysargs=None):
 
     log.startLogging(sys.stdout)
 
+    unified_setup()
+
     # Endpoint HTTP router
     endpoint = EndpointHandler
     endpoint.settings = settings
@@ -162,7 +185,7 @@ def endpoint_main(sysargs=None):
     if args.ssl_key:
         contextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
                                                           args.ssl_cert)
-        listenWS(site, contextFactory)
+        reactor.listenSSL(args.port, site, contextFactory)
     else:
         reactor.listenTCP(args.port, site)
 
