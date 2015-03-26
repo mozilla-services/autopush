@@ -28,6 +28,23 @@ class StorageTestCase(unittest.TestCase):
     def tearDown(self):
         self.mock_dynamodb2.stop()
 
+    def test_custom_tablename(self):
+        db = DynamoDBConnection()
+        db_name = "storage_%s" % uuid.uuid4()
+        dblist = db.list_tables()["TableNames"]
+        assert db_name not in dblist
+
+        create_storage_table(db_name)
+        dblist = db.list_tables()["TableNames"]
+        assert db_name in dblist
+
+    def test_provisioning(self):
+        db_name = "storage_%s" % uuid.uuid4()
+
+        s = create_storage_table(db_name, 8, 11)
+        assert s.throughput["read"] is 8
+        assert s.throughput["write"] is 11
+
     def test_storage_table_created(self):
         # Check that the table doesn't exist
         db = DynamoDBConnection()
@@ -76,6 +93,23 @@ class RouterTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.mock_dynamodb2.stop()
+
+    def test_custom_tablename(self):
+        db = DynamoDBConnection()
+        db_name = "router_%s" % uuid.uuid4()
+        dblist = db.list_tables()["TableNames"]
+        assert db_name not in dblist
+
+        create_router_table(db_name)
+        dblist = db.list_tables()["TableNames"]
+        assert db_name in dblist
+
+    def test_provisioning(self):
+        db_name = "router_%s" % uuid.uuid4()
+
+        r = create_router_table(db_name, 3, 17)
+        assert r.throughput["read"] is 3
+        assert r.throughput["write"] is 17
 
     def test_router_table_created(self):
         # Check that the table doesn't exist

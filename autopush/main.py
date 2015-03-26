@@ -38,6 +38,24 @@ def add_shared_args(parser):
                         default="", env_var="SSL_KEY")
     parser.add_argument('--ssl_cert', help="SSL Cert path", type=str,
                         default="", env_var="SSL_CERT")
+    parser.add_argument('--router_tablename', help="DynamoDB Router Tablename",
+                        type=str, default="router", env_var="ROUTER_TABLENAME")
+    parser.add_argument('--storage_tablename',
+                        help="DynamoDB Storage Tablename", type=str,
+                        default="storage", env_var="STORAGE_TABLENAME")
+    parser.add_argument('--storage_read_throughput',
+                        help="DynamoDB storage read throughput",
+                        type=int, default=5, env_var="STORAGE_READ_THROUGHPUT")
+    parser.add_argument('--storage_write_throughput',
+                        help="DynamoDB storage write throughput",
+                        type=int, default=5,
+                        env_var="STORAGE_WRITE_THROUGHPUT")
+    parser.add_argument('--router_read_throughput',
+                        help="DynamoDB router read throughput",
+                        type=int, default=5, env_var="ROUTER_READ_THROUGHPUT")
+    parser.add_argument('--router_write_throughput',
+                        help="DynamoDB router write throughput",
+                        type=int, default=5, env_var="ROUTER_WRITE_THROUGHPUT")
 
 
 def _parse_connection(sysargs=None):
@@ -87,6 +105,12 @@ def make_settings(args, **kwargs):
         hostname=args.hostname,
         statsd_host=args.statsd_host,
         statsd_port=args.statsd_port,
+        router_tablename=args.router_tablename,
+        storage_tablename=args.storage_tablename,
+        storage_read_throughput=args.storage_read_throughput,
+        storage_write_throughput=args.storage_write_throughput,
+        router_read_throughput=args.router_read_throughput,
+        router_write_throughput=args.router_write_throughput,
         **kwargs
     )
 
