@@ -1,23 +1,26 @@
 """autopush daemon script"""
+import os
 import sys
 
 import configargparse
 import cyclone.web
+import raven
+import twisted.python
 from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
+from functools import partial
 from twisted.python import log
 from twisted.internet import reactor, task, ssl
 from txstatsd.client import StatsDClientProtocol
 
+from autopush.endpoint import (EndpointHandler, RegistrationHandler)
+from autopush.pinger.pinger import Pinger
+from autopush.settings import AutopushSettings
 from autopush.websocket import (
     SimplePushServerProtocol,
     RouterHandler,
     NotificationHandler,
     periodic_reporter
 )
-
-from autopush.pinger.pinger import Pinger
-from autopush.settings import AutopushSettings
-from autopush.endpoint import (EndpointHandler, RegistrationHandler)
 
 
 def add_shared_args(parser):
@@ -36,6 +39,24 @@ def add_shared_args(parser):
                         default="", env_var="SSL_KEY")
     parser.add_argument('--ssl_cert', help="SSL Cert path", type=str,
                         default="", env_var="SSL_CERT")
+    parser.add_argument('--router_tablename', help="DynamoDB Router Tablename",
+                        type=str, default="router", env_var="ROUTER_TABLENAME")
+    parser.add_argument('--storage_tablename',
+                        help="DynamoDB Storage Tablename", type=str,
+                        default="storage", env_var="STORAGE_TABLENAME")
+    parser.add_argument('--storage_read_throughput',
+                        help="DynamoDB storage read throughput",
+                        type=int, default=5, env_var="STORAGE_READ_THROUGHPUT")
+    parser.add_argument('--storage_write_throughput',
+                        help="DynamoDB storage write throughput",
+                        type=int, default=5,
+                        env_var="STORAGE_WRITE_THROUGHPUT")
+    parser.add_argument('--router_read_throughput',
+                        help="DynamoDB router read throughput",
+                        type=int, default=5, env_var="ROUTER_READ_THROUGHPUT")
+    parser.add_argument('--router_write_throughput',
+                        help="DynamoDB router write throughput",
+                        type=int, default=5, env_var="ROUTER_WRITE_THROUGHPUT")
 
 
 def add_pinger_args(parser):
@@ -75,7 +96,12 @@ def _parse_connection(sysargs=None):
         sysargs = sys.argv[1:]
 
     parser = configargparse.ArgumentParser(
-        description='Runs a Connection Node.')
+        description='Runs a Connection Node.',
+        default_config_files=['/etc/autopush_connection.ini',
+                              '~/.autopush_connection.ini',
+                              '.autopush_connection.ini'])
+    parser.add_argument('--config', help='Configuration file path',
+                        is_config_file=True)
     parser.add_argument('-p', '--port', help='Websocket Port', type=int,
                         default=8080, env_var="PORT")
     parser.add_argument('--router_hostname',
@@ -101,10 +127,17 @@ def _parse_endpoint(sysargs=None):
         sysargs = sys.argv[1:]
 
     parser = configargparse.ArgumentParser(
-        description='Runs an Endpoint Node.')
+        description='Runs an Endpoint Node.',
+        default_config_files=['/etc/autopush_endpoint.ini',
+                              '~/.autopush_endpoint.ini',
+                              '.autopush_endpoint.ini'])
+    parser.add_argument('--config', help='Configuration file path',
+                        is_config_file=True)
     parser.add_argument('-p', '--port', help='Public HTTP Endpoint Port',
                         type=int, default=8082, env_var="PORT")
-
+    parser.add_argument('--cors', help='Allow CORS PUTs for update.',
+                        action='store_true', default=False,
+                        env_var='ALLOW_CORS')
     add_shared_args(parser)
     add_pinger_args(parser)
     args = parser.parse_args(sysargs)
@@ -124,8 +157,30 @@ def make_settings(args, **kwargs):
                           "dryrun": args.gcm_dryrun,
                           "collapsekey": args.gcm_collapsekey,
                           "apikey": args.gcm_apikey}},
+        router_tablename=args.router_tablename,
+        storage_tablename=args.storage_tablename,
+        storage_read_throughput=args.storage_read_throughput,
+        storage_write_throughput=args.storage_write_throughput,
+        router_read_throughput=args.router_read_throughput,
+        router_write_throughput=args.router_write_throughput,
         **kwargs
     )
+
+
+def logToSentry(client, event):
+    if not event.get('isError') or 'failure' not in event:
+        return
+
+    f = event['failure']
+    client.captureException((f.type, f.value, f.getTracebackObject()))
+
+
+def unified_setup():
+    if 'SENTRY_DSN' in os.environ:
+        # Setup the Sentry client
+        client = raven.Client(release=raven.fetch_package_version())
+        logger = partial(logToSentry, client)
+        twisted.python.log.addObserver(logger)
 
 
 def connection_main(sysargs=None):
@@ -140,6 +195,7 @@ def connection_main(sysargs=None):
     )
 
     log.startLogging(sys.stdout)
+    unified_setup()
 
     r = RouterHandler
     r.settings = settings
@@ -166,6 +222,13 @@ def connection_main(sysargs=None):
     factory.protocol = SimplePushServerProtocol
     factory.protocol.settings = settings
     factory.protocol.settings.pinger = settings.pinger
+    factory.setProtocolOptions(
+        webStatus=False,
+        maxFramePayloadSize=2048,
+        maxMessagePayloadSize=2048,
+        openHandshakeTimeout=5,
+        failByDrop=False,
+    )
 
     protocol = StatsDClientProtocol(settings.metrics_client)
 
@@ -191,13 +254,16 @@ def connection_main(sysargs=None):
 
 def endpoint_main(sysargs=None):
     args, parser = _parse_endpoint(sysargs)
-    settings = make_settings(args)
+    settings = make_settings(args, enable_cors=args.cors)
 
     log.startLogging(sys.stdout)
+
+    unified_setup()
 
     # Endpoint HTTP router
     endpoint = EndpointHandler
     endpoint.settings = settings
+    endpoint.ap_settings = settings
     register = RegistrationHandler
     register.settings = settings
     site = cyclone.web.Application([
@@ -214,7 +280,7 @@ def endpoint_main(sysargs=None):
     if args.ssl_key:
         contextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
                                                           args.ssl_cert)
-        listenWS(site, contextFactory)
+        reactor.listenSSL(args.port, site, contextFactory)
     else:
         reactor.listenTCP(args.port, site)
 

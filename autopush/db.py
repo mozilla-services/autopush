@@ -11,10 +11,12 @@ from boto.dynamodb2.types import NUMBER
 
 import json
 
-def create_router_table():
-    return Table.create("router",
+def create_router_table(tablename="router", read_throughput=5,
+                        write_throughput=5):
+    return Table.create(tablename,
                         schema=[HashKey("uaid")],
-                        throughput=dict(read=5, write=5),
+                        throughput=dict(read=read_throughput,
+                                        write=write_throughput),
                         global_indexes=[
                             GlobalKeysOnlyIndex(
                                 'AccessIndex',
@@ -24,37 +26,43 @@ def create_router_table():
                         )
 
 
-def create_storage_table():
-    return Table.create("storage",
+def create_storage_table(tablename="storage", read_throughput=5,
+                         write_throughput=5):
+    return Table.create(tablename,
                         schema=[HashKey("uaid"), RangeKey("chid")],
-                        throughput=dict(read=5, write=5),
+                        throughput=dict(read=read_throughput,
+                                        write=write_throughput),
                         )
 
 
-def router_table():
-    return Table("router")
+def router_table(tablename="router"):
+    return Table(tablename)
 
 
-def storage_table():
-    return Table("storage")
+def storage_table(tablename="storage"):
+    return Table(tablename)
 
 
-def get_router_table():
+def get_router_table(tablename="router", read_throughput=5,
+                     write_throughput=5):
     db = DynamoDBConnection()
     dblist = db.list_tables()["TableNames"]
-    if "router" not in dblist:
-        return create_router_table()
+    if tablename not in dblist:
+        return create_router_table(tablename, read_throughput,
+                                   write_throughput)
     else:
-        return router_table()
+        return router_table(tablename)
 
 
-def get_storage_table():
+def get_storage_table(tablename="storage", read_throughput=5,
+                      write_throughput=5):
     db = DynamoDBConnection()
     dblist = db.list_tables()["TableNames"]
-    if "storage" not in dblist:
-        return create_storage_table()
+    if tablename not in dblist:
+        return create_storage_table(tablename, read_throughput,
+                                    write_throughput)
     else:
-        return storage_table()
+        return storage_table(tablename)
 
 
 class Storage(object):

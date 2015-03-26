@@ -3,11 +3,12 @@ import time
 import urlparse
 import uuid
 
-from cryptography.fernet import InvalidToken
+import cyclone.web
+
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
-import cyclone.web
+from cryptography.fernet import InvalidToken
 from twisted.internet.threads import deferToThread
 from twisted.python import log
 
@@ -21,7 +22,7 @@ def MakeEndPoint(fernet, endpoint_url, uaid, chid):
 
 class EndpointHandler(cyclone.web.RequestHandler):
     def initialize(self):
-        self.metrics = self.settings.metrics
+        self.metrics = self.ap_settings.metrics
 
     def _load_params(self):
         # If there's a request body, parse it out
@@ -50,13 +51,20 @@ class EndpointHandler(cyclone.web.RequestHandler):
         self.version = version
         self.data = data
 
+    def options(self, token):
+        self._addCors()
+
+    def head(self, token):
+        self._addCors()
+
     @cyclone.web.asynchronous
     def put(self, token):
         self.start_time = time.time()
-        fernet = self.settings.fernet
+        fernet = self.ap_settings.fernet
 
         self._load_params()
-        if self.data and len(self.data) > self.settings.max_data:
+        self._addCors()
+        if self.data and len(self.data) > self.ap_settings.max_data:
             self.set_status(401)
             self.write("Data too large")
             return self.finish()
@@ -65,10 +73,14 @@ class EndpointHandler(cyclone.web.RequestHandler):
         d.addCallback(self._process_token)
         d.addErrback(self._bad_token).addErrback(self._error_response)
 
+    def _addCors(self):
+        if self.ap_settings.cors:
+            self.set_header("Access-Control-Request-Method", "*")
+
     def _process_token(self, result):
         self.uaid, self.chid = result.split(":")
 
-        d = deferToThread(self.settings.router.get_uaid, self.uaid)
+        d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
         d.addCallback(self._process_uaid)
         d.addErrback(self._handle_overload).addErrback(self._error_response)
 
@@ -110,7 +122,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
                                    "version": self.version,
                                    "data": self.data}])
             d = deferToThread(
-                self.settings.requests.put,
+                self.ap_settings.requests.put,
                 node_id + "/push/" + self.uaid,
                 data=payload
             )
@@ -130,7 +142,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
             return self.finish()
         elif result.status_code == 404:
             # Conditionally delete the node_id
-            d = deferToThread(self.settings.router.clear_node, item)
+            d = deferToThread(self.ap_settings.router.clear_node, item)
             d.addCallback(self._process_node_delete)
             d.addErrback(self._handle_overload)
             d.addErrback(self._error_response)
@@ -153,7 +165,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
     def _save_notification(self, node_id=None):
         """Save the notification"""
-        d = deferToThread(self.settings.storage.save_notification,
+        d = deferToThread(self.ap_settings.storage.save_notification,
                           uaid=self.uaid, chid=self.chid, version=self.version)
         d.addCallback(self._process_save, node_id)
         d.addErrback(self._handle_overload).addErrback(self._error_response)
@@ -161,14 +173,14 @@ class EndpointHandler(cyclone.web.RequestHandler):
     def _process_save(self, result, node_id=None):
         if self.client_check:
             # If we already know where the client was connected...
-            d = deferToThread(self.settings.requests.put,
+            d = deferToThread(self.ap_settings.requests.put,
                               node_id + "/notif/" + self.uaid)
             d.addCallback(self._process_notif, node_id)
             d.addErrback(self._error_response)
         else:
             # Saved the notification, check for if the client is somewhere
             # now
-            d = deferToThread(self.settings.router.get_uaid, self.uaid)
+            d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
             d.addCallback(self._process_jumped_client)
             d.addErrback(self._handle_overload)
             d.addErrback(self._error_response)
@@ -182,7 +194,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
             return
 
         # Client jumped, if they reconnected somewhere, try one more time
-        d = deferToThread(self.settings.router.get_uaid, self.uaid)
+        d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
         d.addCallback(self._process_jumped_client)
         d.addErrback(self._handle_overload).addErrback(self._error_response)
 
@@ -197,7 +209,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
         if not node_id:
             return self._finish_missed_store()
 
-        d = deferToThread(self.settings.requests.put,
+        d = deferToThread(self.ap_settings.requests.put,
                           node_id + "/notif/" + self.uaid)
         # No check on response here, because if they jumped since we
         # got this they'll definitely get the stored notification
@@ -207,6 +219,14 @@ class EndpointHandler(cyclone.web.RequestHandler):
     def _finish_missed_store(self, result=None):
         self.metrics.increment("router.broadcast.miss")
         self.write("Success")
+        self.finish()
+
+    def write_error(self, code, exception=None):
+        """ Write the error (otherwise unhandled exception when dealing with
+        unknown method specifications.) """
+        self.set_status(code)
+        if exception is not None:
+            log.err(exception)
         self.finish()
 
 
@@ -319,6 +339,5 @@ class RegistrationHandler(cyclone.web.RequestHandler):
         self.set_status(500, err)
         self.write(json.dumps({"error": err}))
         self.finish()
-
 
 

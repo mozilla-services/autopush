@@ -27,9 +27,16 @@ class AutopushSettings(object):
                  router_port=None,
                  endpoint_hostname=None,
                  endpoint_port=None,
+                 router_tablename="router",
+                 router_read_throughput=5,
+                 router_write_throughput=5,
+                 storage_tablename="storage",
+                 storage_read_throughput=5,
+                 storage_write_throughput=5,
                  statsd_host="localhost",
                  statsd_port=8125,
-                 pingConf=None):
+                 pingConf=None,
+                 enable_cors=False):
 
         # Setup the requests lib session
         sess = requests.Session()
@@ -72,12 +79,19 @@ class AutopushSettings(object):
                                                   endpoint_port)
 
         # Database objects
-        self.router_table = get_router_table()
-        self.storage_table = get_storage_table()
+        self.router_table = get_router_table(router_tablename,
+                                             router_read_throughput,
+                                             router_write_throughput)
+        self.storage_table = get_storage_table(storage_tablename,
+                                               storage_read_throughput,
+                                               storage_write_throughput)
         self.storage = Storage(self.storage_table)
         self.router = Router(self.router_table)
         if pingConf is not None:
             self.pinger = Pinger(self.storage, pingConf)
+
+        # CORS
+        self.cors = enable_cors
 
     def update(self, **kwargs):
         for key, val in kwargs.items():

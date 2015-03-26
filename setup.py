@@ -48,6 +48,7 @@ setup(name="AutoPush",
           "gcm-client>=0.1.4",
           "pyopenssl>=0.14",
           "service-identity>=14.0.0",
+          "raven>=0.5.2",
       ],
       entry_points="""
       [console_scripts]

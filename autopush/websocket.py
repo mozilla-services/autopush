@@ -427,7 +427,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
 class RouterHandler(cyclone.web.RequestHandler):
     def put(self, uaid):
-        settings = self.settings
+        settings = self.ap_settings
         client = settings.clients.get(uaid)
         if not client:
             self.set_status(404)
@@ -447,8 +447,8 @@ class RouterHandler(cyclone.web.RequestHandler):
 
 class NotificationHandler(cyclone.web.RequestHandler):
     def put(self, uaid):
-        client = self.settings.clients.get(uaid)
-        settings = self.settings
+        client = self.ap_settings.clients.get(uaid)
+        settings = self.ap_settings
         if not client:
             self.set_status(404)
             settings.metrics.increment("updates.notification.disconnected")
