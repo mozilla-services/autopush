@@ -65,13 +65,18 @@ def get_storage_table(tablename="storage", read_throughput=5,
 
 
 class Storage(object):
-    def __init__(self, table):
+    def __init__(self, table, metrics):
         self.table = table
+        self.metrics = metrics
 
     def fetch_notifications(self, uaid):
-        notifs = self.table.query_2(consistent=True, uaid__eq=uaid,
-                                    chid__gt=" ")
-        return list(notifs)
+        try:
+            notifs = self.table.query_2(consistent=True, uaid__eq=uaid,
+                                        chid__gt=" ")
+            return list(notifs)
+        except ProvisionedThroughputExceededException:
+            self.metrics.increment("error.provisioned.fetch_notifications")
+            raise
 
     def save_notification(self, uaid, chid, version):
         conn = self.table.connection
@@ -92,6 +97,9 @@ class Storage(object):
             return True
         except ConditionalCheckFailedException:
             return False
+        except ProvisionedThroughputExceededException:
+            self.metrics.increment("error.provisioned.save_notification")
+            raise
 
     def delete_notification(self, uaid, chid, version=None):
         try:
@@ -102,16 +110,21 @@ class Storage(object):
                 self.table.delete_item(uaid=uaid, chid=chid)
             return True
         except ProvisionedThroughputExceededException:
+            self.metrics.increment("error.provisioned.delete_notification")
             return False
 
 
 class Router(object):
-    def __init__(self, table):
+    def __init__(self, table, metrics):
         self.table = table
+        self.metrics = metrics
 
     def get_uaid(self, uaid):
         try:
             return self.table.get_item(consistent=True, uaid=uaid)
+        except ProvisionedThroughputExceededException:
+            self.metrics.increment("error.provisioned.get_uaid")
+            raise
         except (ItemNotFound, JSONResponseError):
             # Under tests, this failed without catching a JSONResponseError,
             # which is weird as hell. But whatever, we'll catch that too.
@@ -138,6 +151,9 @@ class Router(object):
             return True
         except ConditionalCheckFailedException:
             return False
+        except ProvisionedThroughputExceededException:
+            self.metrics.increment("error.provisioned.register_user")
+            raise
 
     def clear_node(self, item):
         """Given a router item, remove the node_id from it."""
@@ -159,3 +175,6 @@ class Router(object):
             return True
         except ConditionalCheckFailedException:
             return False
+        except ProvisionedThroughputExceededException:
+            self.metrics.increment("error.provisioned.clear_node")
+            raise
