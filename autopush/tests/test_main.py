@@ -60,7 +60,7 @@ class ConnectionMainTestCase(unittest.TestCase):
             mock.stop()
 
     def test_basic(self):
-            connection_main([])
+        connection_main([])
 
 
 class EndpointMainTestCase(unittest.TestCase):
@@ -81,4 +81,4 @@ class EndpointMainTestCase(unittest.TestCase):
             mock.stop()
 
     def test_basic(self):
-            endpoint_main([])
+        endpoint_main([])

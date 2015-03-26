@@ -5,6 +5,7 @@ from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
     ProvisionedThroughputExceededException,
 )
+from boto.dynamodb2.layer1 import DynamoDBConnection
 from mock import Mock
 from moto import mock_dynamodb2
 from nose.tools import eq_
@@ -12,6 +13,8 @@ from nose.tools import eq_
 from autopush.db import (
     get_router_table,
     get_storage_table,
+    create_router_table,
+    create_storage_table,
     Storage,
     Router,
 )
@@ -37,6 +40,23 @@ class StorageTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.real_table.connection = self.real_connection
+
+    def test_custom_tablename(self):
+        db = DynamoDBConnection()
+        db_name = "storage_%s" % uuid.uuid4()
+        dblist = db.list_tables()["TableNames"]
+        assert db_name not in dblist
+
+        create_storage_table(db_name)
+        dblist = db.list_tables()["TableNames"]
+        assert db_name in dblist
+
+    def test_provisioning(self):
+        db_name = "storage_%s" % uuid.uuid4()
+
+        s = create_storage_table(db_name, 8, 11)
+        assert s.throughput["read"] is 8
+        assert s.throughput["write"] is 11
 
     def test_dont_save_older(self):
         s = get_storage_table()
@@ -97,6 +117,23 @@ class RouterTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.real_table.connection = self.real_connection
+
+    def test_custom_tablename(self):
+        db = DynamoDBConnection()
+        db_name = "router_%s" % uuid.uuid4()
+        dblist = db.list_tables()["TableNames"]
+        assert db_name not in dblist
+
+        create_router_table(db_name)
+        dblist = db.list_tables()["TableNames"]
+        assert db_name in dblist
+
+    def test_provisioning(self):
+        db_name = "router_%s" % uuid.uuid4()
+
+        r = create_router_table(db_name, 3, 17)
+        assert r.throughput["read"] is 3
+        assert r.throughput["write"] is 17
 
     def test_no_uaid_found(self):
         uaid = str(uuid.uuid4())

@@ -37,6 +37,9 @@ def patch_logger(test):
 
 
 class EndpointTestCase(unittest.TestCase):
+    def initialize(self):
+        self.metrics = self.ap_settings.metrics
+
     def setUp(self):
         self.timeout = 0.5
 
@@ -44,7 +47,7 @@ class EndpointTestCase(unittest.TestCase):
         self.mock_dynamodb2.start()
         twisted.internet.base.DelayedCall.debug = True
 
-        settings = endpoint.EndpointHandler.settings = AutopushSettings(
+        settings = endpoint.EndpointHandler.ap_settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
@@ -123,7 +126,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(self.endpoint.data, 'bai')
 
     def test_put_data_too_large(self):
-        self.endpoint.settings.max_data = 3
+        self.endpoint.ap_settings.max_data = 3
         self.endpoint.request.body = b'version=1&data=1234'
 
         def handle_finish(result):
@@ -451,6 +454,45 @@ class EndpointTestCase(unittest.TestCase):
         self.requests_mock.configure_mock(**{
             'put.side_effect': IOError})
         return self._assert_jumped_client()
+
+    def test_cors(self):
+        acrm = "Access-Control-Request-Method"
+        endpoint = self.endpoint
+        endpoint.ap_settings.cors = False
+        endpoint._addCors()
+        assert endpoint._headers.get(acrm) != "*"
+
+        endpoint.clear_header(acrm)
+        endpoint.ap_settings.cors = True
+        endpoint._addCors()
+        eq_(endpoint._headers[acrm], "*")
+
+    def test_cors_head(self):
+        acrm = "Access-Control-Request-Method"
+        endpoint = self.endpoint
+        endpoint.ap_settings.cors = True
+        endpoint.head(None)
+        eq_(endpoint._headers[acrm], "*")
+
+    def test_cors_options(self):
+        acrm = "Access-Control-Request-Method"
+        endpoint = self.endpoint
+        endpoint.ap_settings.cors = True
+        endpoint.options(None)
+        eq_(endpoint._headers[acrm], "*")
+
+    @patch_logger
+    def test_write_error(self, log_mock):
+        """ Write error is triggered by sending the app a request
+        with an invalid method (e.g. "put" instead of "PUT").
+        This is not code that is triggered within normal flow, but
+        by the cyclone wrapper. """
+        class testX(Exception):
+            pass
+
+        self.endpoint.write_error(999, testX)
+        self.status_mock.assert_called_with(999)
+        self.assertTrue(log_mock.err.called)
 
     def _assert_jumped_client(self):
         def handle_finish(result):

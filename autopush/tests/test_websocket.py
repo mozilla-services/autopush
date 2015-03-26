@@ -851,13 +851,13 @@ class RouterHandlerTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
 
-        self.settings = AutopushSettings(
+        self.ap_settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
-        self.settings.metrics = Mock(spec=Metrics)
+        self.ap_settings.metrics = Mock(spec=Metrics)
         h = RouterHandler
-        h.settings = self.settings
+        h.ap_settings = self.ap_settings
         self.mock_request = Mock()
         self.handler = h(Application(), self.mock_request)
         self.handler.set_status = self.status_mock = Mock()
@@ -866,7 +866,7 @@ class RouterHandlerTestCase(unittest.TestCase):
     def test_client_connected(self):
         uaid = str(uuid.uuid4())
         self.mock_request.body = "{}"
-        self.settings.clients[uaid] = client_mock = Mock()
+        self.ap_settings.clients[uaid] = client_mock = Mock()
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
         eq_(len(client_mock.mock_calls), 1)
@@ -882,7 +882,7 @@ class RouterHandlerTestCase(unittest.TestCase):
     def test_client_connected_but_busy(self):
         uaid = str(uuid.uuid4())
         self.mock_request.body = "{}"
-        self.settings.clients[uaid] = client_mock = Mock()
+        self.ap_settings.clients[uaid] = client_mock = Mock()
         client_mock.accept_notification = False
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
@@ -894,13 +894,13 @@ class NotificationHandlerTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
 
-        self.settings = AutopushSettings(
+        self.ap_settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
-        self.settings.metrics = Mock(spec=Metrics)
+        self.ap_settings.metrics = Mock(spec=Metrics)
         h = NotificationHandler
-        h.settings = self.settings
+        h.ap_settings = self.ap_settings
         self.mock_request = Mock()
         self.handler = h(Application(), self.mock_request)
         self.handler.set_status = self.status_mock = Mock()
@@ -909,7 +909,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
     def test_connected_and_free(self):
         uaid = str(uuid.uuid4())
         self.mock_request.body = "{}"
-        self.settings.clients[uaid] = client_mock = Mock()
+        self.ap_settings.clients[uaid] = client_mock = Mock()
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
         eq_(len(client_mock.mock_calls), 1)
@@ -917,7 +917,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
     def test_connected_and_busy(self):
         uaid = str(uuid.uuid4())
         self.mock_request.body = "{}"
-        self.settings.clients[uaid] = client_mock = Mock()
+        self.ap_settings.clients[uaid] = client_mock = Mock()
         client_mock.accept_notification = False
         client_mock._check_notifications = False
         self.handler.put(uaid)
