@@ -2,6 +2,8 @@ import json
 import time
 import uuid
 
+from autopush.endpoint import MakeEndPoint
+
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
 from twisted.internet import reactor
@@ -20,6 +22,7 @@ def ms_time():
 def periodic_reporter(settings):
     settings.metrics.gauge("update.client.connections",
                            len(settings.clients))
+
 
 
 class SimplePushServerProtocol(WebSocketServerProtocol):
@@ -184,7 +187,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return d
 
     def err_hello(self, failure):
-        import pdb;pdb.set_trace();
         self.transport.resumeProducing()
         self.returnError("hello", "error", 503)
 
@@ -271,12 +273,12 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             uuid.UUID(chid)
         except ValueError:
             return self.bad_message("register")
-
         self.transport.pauseProducing()
 
         d = deferToThread(
-            self.settings.fernet.encrypt,
-            (self.uaid + ":" + chid).encode('utf8'))
+            MakeEndPoint,
+            self.settings.fernet,
+            self.uaid, chid, self.settings.endpoint_url)
         d.addCallbacks(self.finish_register, self.error_register,
                        callbackArgs=(chid,))
 
@@ -285,12 +287,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         msg = {"messageType": "register", "status": 500}
         self.sendJSON(msg)
 
-    def finish_register(self, token, chid):
+    def finish_register(self, endpoint, chid):
         self.transport.resumeProducing()
-        url = self.settings.endpoint_url
         msg = {"messageType": "register",
                "channelID": chid,
-               "pushEndpoint": "%s/push/%s" % (url, token),
+               "pushEndpoint": endpoint,
                "status": 200
                }
         self.sendJSON(msg)

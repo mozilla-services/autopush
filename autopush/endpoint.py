@@ -12,6 +12,13 @@ from twisted.internet.threads import deferToThread
 from twisted.python import log
 
 
+def MakeEndPoint(fernet, endpoint_url, uaid, chid):
+    """ Create an endpoint (used both by websocket handler and
+    the /register endpoint """
+    token = fernet.encrypt((uaid + ":" + chid).encode('utf8'))
+    return endpoint_url + "/push/" + token
+
+
 class EndpointHandler(cyclone.web.RequestHandler):
     def initialize(self):
         self.metrics = self.settings.metrics
@@ -220,6 +227,10 @@ class RegistrationHandler(cyclone.web.RequestHandler):
         return True
 
     @cyclone.web.asynchronous
+    def get(self):
+        return self.get(None)
+
+    @cyclone.web.asynchronous
     def put(self, uaid):
         import pdb;pdb.set_trace()
         log.err("### here ### %s " % self.request.body);
@@ -234,9 +245,8 @@ class RegistrationHandler(cyclone.web.RequestHandler):
             try:
                 uuid.UUID(uaid)
             except ValueError:
-                self.set_status(401)
-                self.write("Invalid ID specified")
-                return self.finish()
+                log.err("Invalid UAID [%s], swapping for valid one" % uaid)
+                uaid = str(uuid.uuid4())
 
         # Can we make this generic?
         type = connect = None
@@ -265,23 +275,37 @@ class RegistrationHandler(cyclone.web.RequestHandler):
 
         self.ping_type = type
         self.connect = connect
+        self.transport.pauseProducing()
 
         d = deferToThread(self.pinger.register, uaid, connect)
         d.addCallback(self._registered)
         d.addErrback(self._handle_overload).addErrback(self._error_response)
 
-    # success
     def _registered(self, result):
         if not result:
             self.set_status(500, "Registration failure")
             return self.finish()
+        self.chid = str(uuid.uuid4())
+        d = deferToThread(MakeEndPoint,
+                          self.settings.fernet,
+                          self.uaid,
+                          self.chid,
+                          self.settings.endpoint_url)
+        d.addCallbacks(self._return_channel,
+                       self._error_response)
 
+    def _return_channel(self, endpoint):
+        self.transport.resumeProducing()
+        msg = {"useragentid": self.uaid,
+               "channelid": self.chid,
+               "endpoint": endpoint}
         self.set_status(200)
-        self.write(json.dumps({"uaid": self.uaid}))
+        self.write(json.dumps(msg))
         return self.finish()
 
     # error
     def _handle_overload(self, failure):
+        self.transport.resumeProducing()
         failure.trap(ProvisionedThroughputExceededException)
         err = "Server busy, try again later"
         self.set_status(503, err)
@@ -289,6 +313,7 @@ class RegistrationHandler(cyclone.web.RequestHandler):
         self.finish()
 
     def _error_response(self, failure):
+        self.transport.resumeProducing()
         log.err(failure)
         err = "Error processing request"
         self.set_status(500, err)

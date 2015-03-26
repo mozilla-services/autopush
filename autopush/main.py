@@ -152,7 +152,8 @@ def connection_main(sysargs=None):
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", r),
         (r"/notif/([^\/]+)", n),
-        (r"/register/(^\/]+)", reg),
+        (r"/register/([^\/]+)", reg),
+        (r"/register/", reg),
     ], default_host=settings.router_hostname)
 
     # Public websocket server
