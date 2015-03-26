@@ -87,6 +87,7 @@ class AutopushSettings(object):
                                                storage_write_throughput)
         self.storage = Storage(self.storage_table)
         self.router = Router(self.router_table)
+        self.pinger = None
         if pingConf is not None:
             self.pinger = Pinger(self.storage, pingConf)
 

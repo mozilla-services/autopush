@@ -525,3 +525,72 @@ class EndpointTestCase(unittest.TestCase):
     def _assert_miss_response(self):
         self.metrics_mock.increment.assert_called_with('router.broadcast.miss')
         self.write_mock.assert_called_with('Success')
+
+
+class RegistrationTestCase(unittest.TestCase):
+    def initialize(self):
+        self.metrics = self.ap_settings.metrics
+
+    def setUp(self):
+        self.mock_dynamodb2 = mock_dynamodb2()
+        self.mock_dynamodb2.start()
+        twisted.internet.base.DelayedCall.debug = True
+        settings = endpoint.RegistrationHandler.ap_settings =\
+            AutopushSettings(
+                hostname="localhost",
+                statsd_host=None,
+            )
+        self.fernet_mock = settings.fernet = Mock(spec=Fernet)
+        self.metrics_mock = settings.metrics = Mock(spec=Metrics)
+        self.requests_mock = settings.requests = Mock(spec=requests.Session)
+        self.router_mock = settings.router = Mock(spec=Router)
+        self.storage_mock = settings.storage = Mock(spec=Storage)
+
+        self.request_mock = Mock(body=b'', arguments={})
+        self.endpoint = endpoint.EndpointHandler(Application(),
+                                                 self.request_mock)
+
+        self.status_mock = self.endpoint.set_status = Mock()
+        self.write_mock = self.endpoint.write = Mock()
+
+        d = self.finish_deferred = Deferred()
+        self.endpoint.finish = lambda: d.callback(True)
+
+    def tearDown(self):
+        self.mock_dynamodb2.stop()
+
+    # Tests:
+    # get /register/ returns new uaid, chid, endpoint
+    # get /register/uaid returns uaid, new chid, endpoint
+    # put /register/uaid chid=chid returns uaid, chid, new endpoint
+
+    @patch('uuid.uuid4', return_value="12345678123412341234567812345678")
+    def test_load_params_arguments(self, u=None):
+        args = self.endpoint.request.arguments
+        args['channelid'] = ['']
+        args['type'] = ['demo']
+        args['connect'] = ['{"id":"12345678"}']
+        self.assertTrue(self.endpoint._load_params())
+        eq_(self.endpoint.chid, '12345678123412341234567812345678')
+        eq_(self.endpoint.type, 'demo')
+        eq_(self.endpoint.conn, '{"id":"12345678"}')
+
+    @patch('uuid.uuid4', return_value="12345678123412341234567812345678")
+    def test_load_params_body(self, u=None):
+        self.endpoint.request.body = b'type=demo&connect{"id":"12345678"}'
+        self.assertTrue(self.endpoint._load_params())
+
+        eq_(self.endpoint.version, 1234)
+        eq_(self.endpoint.data, 'Hello, world!')
+
+    def test_load_params_invalid_body(self):
+        pass
+
+    def test_load_params_invalid_version(self):
+        pass
+
+    @patch('time.time', return_value=1257894000)
+    def test_load_params_prefer_body(self, t):
+        pass
+
+

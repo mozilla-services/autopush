@@ -16,6 +16,7 @@ from twisted.python import log
 def MakeEndPoint(fernet, endpoint_url, uaid, chid):
     """ Create an endpoint (used both by websocket handler and
     the /register endpoint """
+    import pdb;pdb.set_trace()
     token = fernet.encrypt((uaid + ":" + chid).encode('utf8'))
     return endpoint_url + "/push/" + token
 
@@ -232,28 +233,82 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
 class RegistrationHandler(cyclone.web.RequestHandler):
 
-    # connection info gauntlet
-    def validateConnect(self, connectInfo):
-        if connectInfo is None:
+    def _handle_overload(self, failure):
+        failure.trap(ProvisionedThroughputExceededException)
+        self.set_status(503)
+        self.write("Server busy, try later")
+        self.finish()
+
+    def _error_response(self, failure):
+        log.err(failure)
+        self.set_status(500)
+        self.write("Error processing request")
+        self.finish()
+
+    def _load_params(self):
+        tags = {'chid': 'channelid',
+                'type': 'type',
+                'conn': 'connect',
+                }
+        chid = type = conn = None
+        if len(self.request.body) > 0:
+            body = urlparse.parse_qs(self.request.body, keep_blank_values=True)
+            chid = body.get(tags['chid'], [])[0]
+            type = body.get(tags['type'], [])[0]
+            conn = body.get(tags['conn'], [])[0]
+        if chid is None:
+            chid = self.request.arguments.get(tags['chid'])
+        if type is None:
+            type = self.request.arguments.get(tags['type'])
+        if conn is None:
+            type = self.request.arguments.get(tags['conn'])
+
+        if type is None or conn is None:
+            log.msg("Missing args: type %s, conn %s" % (type, conn))
             return False
-        if len(connectInfo) == 0:
-            return False
+
+        if chid is None:
+            chid = uuid.uuid4()
+
+        self.chid = chid
+        self.type = type
+        self.conn = conn
+
+    def initialize(self):
+        self.metrics = self.ap_settings.metrics
+
+    def options(self, token):
+        self._addCors()
+
+    def head(self, token):
+        self._addCors()
+
+    def _addCors(self):
+        if self.ap_settings.cors:
+            self.set_header("Access-Control-Request-Method", "*")
+
+    def _error(self, code, msg):
+        self.set_status(code, msg)
+        self.finish()
+        return
+
+    @cyclone.web.asynchronous
+    def get(self, uaid=None, chid=None):
+        if uaid is None:
+            return self._error(400, "invalid UAID")
         try:
-            info = json.loads(connectInfo)
-            if info["type"] is None:
-                return False
-        except:
-            return False
-        return True
+            uuid.UUID(uaid)
+        except Exception, e:
+            log.msg("Improper UAID value specified %s" % e )
+            return self._error(400, "invalid UAID")
+        self.uaid = uaid
+
+        self.chid = str(uuid.uuid4())
+        self._registered(True)
 
     @cyclone.web.asynchronous
-    def get(self):
-        return self.get(None)
-
-    @cyclone.web.asynchronous
-    def put(self, uaid):
+    def put(self, uaid=None):
         import pdb;pdb.set_trace()
-        log.err("### here ### %s " % self.request.body);
         self.metrics = self.settings.metrics
         self.start_time = time.time()
 
@@ -265,39 +320,17 @@ class RegistrationHandler(cyclone.web.RequestHandler):
             try:
                 uuid.UUID(uaid)
             except ValueError:
-                log.err("Invalid UAID [%s], swapping for valid one" % uaid)
+                log.msg("Invalid UAID [%s], swapping for valid one" % uaid)
                 uaid = str(uuid.uuid4())
 
-        # Can we make this generic?
-        type = connect = None
-        if len(self.request.body) > 0:
-            body_args = urlparse.parse_qs(self.request.body,
-                                          keep_blank_values=True)
-            type = body_args.get("type")
-            connect = body_args.get("connect")
-        else:
-            type = self.request.arguments.get("type")
-            connect = self.request.arguments.get("connect")
-
-        if type is not None:
-            type = type[0]
-        if connect is not None:
-            connect = connect[0]
-
-        if type is None:
-            self.set_status(400, "No type specified")
-            return self.finish()
-
-        # If you're using the REST function, you are creating a connection.
-        if not self.validateConnect(connect):
-            self.set_status(400, "Invalid connection information specified")
-            return self.finish()
-
-        self.ping_type = type
-        self.connect = connect
-        self.transport.pauseProducing()
-
-        d = deferToThread(self.pinger.register, uaid, connect)
+        self.uaid = uaid
+        if not self._load_params():
+            log.msg("Invalid parameters")
+            self.set_status(400, "Invalid arguments")
+            self.finish()
+            return
+        d = deferToThread(self.pinger.register,
+                          self.uaid, self.type, self.connect)
         d.addCallback(self._registered)
         d.addErrback(self._handle_overload).addErrback(self._error_response)
 
@@ -305,39 +338,20 @@ class RegistrationHandler(cyclone.web.RequestHandler):
         if not result:
             self.set_status(500, "Registration failure")
             return self.finish()
-        self.chid = str(uuid.uuid4())
         d = deferToThread(MakeEndPoint,
-                          self.settings.fernet,
+                          self.ap_settings.fernet,
                           self.uaid,
                           self.chid,
-                          self.settings.endpoint_url)
+                          self.ap_settings.endpoint_url)
         d.addCallbacks(self._return_channel,
                        self._error_response)
 
     def _return_channel(self, endpoint):
-        self.transport.resumeProducing()
         msg = {"useragentid": self.uaid,
                "channelid": self.chid,
                "endpoint": endpoint}
         self.set_status(200)
         self.write(json.dumps(msg))
         return self.finish()
-
-    # error
-    def _handle_overload(self, failure):
-        self.transport.resumeProducing()
-        failure.trap(ProvisionedThroughputExceededException)
-        err = "Server busy, try again later"
-        self.set_status(503, err)
-        self.write(json.dumps({"error": err}))
-        self.finish()
-
-    def _error_response(self, failure):
-        self.transport.resumeProducing()
-        log.err(failure)
-        err = "Error processing request"
-        self.set_status(500, err)
-        self.write(json.dumps({"error": err}))
-        self.finish()
 
 

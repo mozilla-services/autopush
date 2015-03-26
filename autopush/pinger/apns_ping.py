@@ -2,7 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import json
 import sys
 
 from twisted.python import log
@@ -14,13 +13,12 @@ class APNSPinger(object):
     apns = None
 
     def __init__(self, config):
-        self.apns = APNs(use_sandbox=config.get("apns", {}).get("sandbox"),
-                         cert_file=config.get("apns", {}).get("cert_file"),
-                         key_file=config.get("apns", {}).get("key_file"))
-        self.default_title = config.get("apns",
-                                        {}).get("default_title", "SimplePush")
-        self.default_body = config.get("apns",
-                                       {}).get("default_body", "New Alert")
+        self.apns = APNs(use_sandbox=config.get("sandbox"),
+                         cert_file=config.get("cert_file"),
+                         key_file=config.get("key_file"))
+        self.default_title = config.get("default_title", "SimplePush")
+        self.default_body = config.get("default_body", "New Alert")
+        log.msg("Starting APNS pinger...")
 
     def ping(self, uaid, version, data, connectInfo):
         if self.storage is None:

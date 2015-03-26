@@ -57,6 +57,12 @@ def add_shared_args(parser):
     parser.add_argument('--router_write_throughput',
                         help="DynamoDB router write throughput",
                         type=int, default=5, env_var="ROUTER_WRITE_THROUGHPUT")
+    parser.add_argument('--log_level', type=int, default=40,
+                        env_var="LOG_LEVEL")
+    parser.add_argument('--endpoint_hostname', help="HTTP Endpoint Hostname",
+                        type=str, default=None, env_var="ENDPOINT_HOSTNAME")
+    parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
+                        type=int, default=8082, env_var="ENDPOINT_PORT")
 
 
 def add_pinger_args(parser):
@@ -105,16 +111,12 @@ def _parse_connection(sysargs=None):
     parser.add_argument('-p', '--port', help='Websocket Port', type=int,
                         default=8080, env_var="PORT")
     parser.add_argument('--router_hostname',
-                        help="HTTP Rotuer Hostname to use for internal "
+                        help="HTTP Router Hostname to use for internal "
                         "router connects", type=str, default=None,
                         env_var="ROUTER_HOSTNAME")
     parser.add_argument('-r', '--router_port',
                         help="HTTP Router Port for internal router connects",
                         type=int, default=8081, env_var="ROUTER_PORT")
-    parser.add_argument('--endpoint_hostname', help="HTTP Endpoint Hostname",
-                        type=str, default=None, env_var="ENDPOINT_HOSTNAME")
-    parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
-                        type=int, default=8082, env_var="ENDPOINT_PORT")
 
     add_pinger_args(parser)
     add_shared_args(parser)
@@ -145,18 +147,29 @@ def _parse_endpoint(sysargs=None):
 
 
 def make_settings(args, **kwargs):
+    pingConf = None
+    if args.pinger:
+        pingConf = {}
+        # if you have the critical elements for each pinger, create it
+        if args.apns_cert_file is not None and args.apns_key_file is not None:
+            pingConf["apns"] = {"sandbox": args.apns_sandbox,
+                                "cert_file": args.apns_cert_file,
+                                "key_file": args.apns_key_file}
+        if args.gcm_apikey is not None:
+            pingConf["gcm"] = {"ttl": args.gcm_ttl,
+                               "dryrun": args.gcm_dryrun,
+                               "collapsekey": args.gcm_collapsekey,
+                               "apikey": args.gcm_apikey}
+        # If you have no settings, you have no pinger.
+        if pingConf is {}:
+            pingConf = None
+
     return AutopushSettings(
         crypto_key=args.crypto_key,
         hostname=args.hostname,
         statsd_host=args.statsd_host,
         statsd_port=args.statsd_port,
-        pingConf={"apns": {"sandbox": args.apns_sandbox,
-                           "cert_file": args.apns_cert_file,
-                           "key_file": args.apns_key_file},
-                  "gcm": {"ttl": args.gcm_ttl,
-                          "dryrun": args.gcm_dryrun,
-                          "collapsekey": args.gcm_collapsekey,
-                          "apikey": args.gcm_apikey}},
+        pingConf=pingConf,
         router_tablename=args.router_tablename,
         storage_tablename=args.storage_tablename,
         storage_read_throughput=args.storage_read_throughput,
@@ -201,15 +214,11 @@ def connection_main(sysargs=None):
     r.settings = settings
     n = NotificationHandler
     n.settings = settings
-    reg = RegistrationHandler
-    reg.settings = settings
 
     # Internal HTTP notification router
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", r),
         (r"/notif/([^\/]+)", n),
-        (r"/register/([^\/]+)", reg),
-        (r"/register/", reg),
     ], default_host=settings.router_hostname)
 
     # Public websocket server
@@ -221,7 +230,6 @@ def connection_main(sysargs=None):
     )
     factory.protocol = SimplePushServerProtocol
     factory.protocol.settings = settings
-    factory.protocol.settings.pinger = settings.pinger
     factory.setProtocolOptions(
         webStatus=False,
         maxFramePayloadSize=2048,
@@ -254,9 +262,13 @@ def connection_main(sysargs=None):
 
 def endpoint_main(sysargs=None):
     args, parser = _parse_endpoint(sysargs)
-    settings = make_settings(args, enable_cors=args.cors)
-
     log.startLogging(sys.stdout)
+    settings = make_settings(
+        args,
+        endpoint_hostname=args.endpoint_hostname,
+        endpoint_port=args.endpoint_port,
+        enable_cors=args.cors
+    )
 
     unified_setup()
 
@@ -265,9 +277,12 @@ def endpoint_main(sysargs=None):
     endpoint.settings = settings
     endpoint.ap_settings = settings
     register = RegistrationHandler
-    register.settings = settings
+    register.ap_settings = settings
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", endpoint),
+        # PUT /register/uaid => connect info
+        (r"/register/([^\/]+)", register),
+        # GET /register/uaid => chid + endpoint
         (r"/register/([^\/]+)", register),
     ], default_host=settings.hostname, debug=args.debug
     )

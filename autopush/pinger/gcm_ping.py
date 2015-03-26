@@ -2,8 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import json
-
 import gcmclient as gcm
 from twisted.python import log
 
@@ -16,14 +14,11 @@ class GCMPinger(object):
     collapseKey = "simplepush"
 
     def __init__(self, config):
-        self.ttl = config.get("gcm",
-                              {}).get("ttl", 60)
-        self.dryRun = config.get("gcm",
-                                 {}).get("dryrun", False)
-        self.collapseKey = config.get("gcm",
-                                      {}).get("collapseKey", "simplepush")
-        self.gcm = gcm.GCM(config.get("gcm",
-                                      {}).get("apikey"))
+        self.ttl = config.get("ttl", 60)
+        self.dryRun = config.get("dryrun", False)
+        self.collapseKey = config.get("collapseKey", "simplepush")
+        self.gcm = gcm.GCM(config.get("apikey"))
+        log.msg("Starting GCM pinger...")
 
     def ping(self, uaid, version, data, connectInfo):
         if self.storage is None:

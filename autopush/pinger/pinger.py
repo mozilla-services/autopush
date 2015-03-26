@@ -2,8 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import json
-
 from apns_ping import APNSPinger
 from gcm_ping import GCMPinger
 
@@ -29,8 +27,12 @@ class Pinger(object):
 
     def __init__(self, storage, settings):
         self.storage = storage
-        self.gcm = GCMPinger(settings)
-        self.apns = APNSPinger(settings)
+        self.gcm = None
+        self.apns = None
+        if settings.get('gcm'):
+            self.gcm = GCMPinger(settings.get('gcm'))
+        if settings.get('apns'):
+            self.apns = APNSPinger(settings.get('apns'))
 
     def register(self, uaid, connect):
         ## Store the connect string to the database
