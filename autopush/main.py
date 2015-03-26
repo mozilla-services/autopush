@@ -141,6 +141,13 @@ def connection_main(sysargs=None):
     )
     factory.protocol = SimplePushServerProtocol
     factory.protocol.settings = settings
+    factory.setProtocolOptions(
+        webStatus=False,
+        maxFramePayloadSize=2048,
+        maxMessagePayloadSize=2048,
+        openHandshakeTimeout=5,
+        failByDrop=False,
+    )
 
     protocol = StatsDClientProtocol(settings.metrics_client)
 
