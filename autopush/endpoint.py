@@ -16,7 +16,6 @@ from twisted.python import log
 def MakeEndPoint(fernet, endpoint_url, uaid, chid):
     """ Create an endpoint (used both by websocket handler and
     the /register endpoint """
-    import pdb;pdb.set_trace()
     token = fernet.encrypt((uaid + ":" + chid).encode('utf8'))
     return endpoint_url + "/push/" + token
 
@@ -110,24 +109,47 @@ class EndpointHandler(cyclone.web.RequestHandler):
             self.write("Invalid")
             return self.finish()
 
+        # Is there a proprietary ping associated with this uaid?
+        pping = result.get("proprietary_ping")
+        if pping is not None:
+            d = deferToThread(
+                self.pinger.ping,
+                self.uaid,
+                self.version,
+                self.data,
+                pping)
+            d.addCallback(self._process_pping, result)
+            d.addErrback(self._error_response)
+            return
+        self._process_route(result)
+
+    def _process_pping(self, result, routeinfo):
+        if not result:
+            log.msg("proprietary ping failed, falling back to routing")
+            return self._process_route(routeinfo)
+        # Ping handoff succeeded, no further action required
+        self.metrics.increment("router.pping.hit")
+        self.write("Success")
+        self.finish()
+
+    def _process_route(self, routeinfo):
         # Determine if they're connected at the moment
-        node_id = result.get("node_id")
 
         # Indicator if we got a node_id, but the node won't handle
         # delivery at this moment later.
         self.client_check = False
 
-        if node_id:
+        if routeinfo.get("node_id"):
             # Attempt a delivery if they are connected
             payload = json.dumps([{"channelID": self.chid,
                                    "version": self.version,
                                    "data": self.data}])
             d = deferToThread(
                 self.ap_settings.requests.put,
-                node_id + "/push/" + self.uaid,
+                routeinfo.get("node_id") + "/push/" + self.uaid,
                 data=payload
             )
-            d.addCallback(self._process_routing, result)
+            d.addCallback(self._process_routing, routeinfo)
             d.addErrback(self._error_response)
         else:
             self._save_notification()
@@ -247,32 +269,28 @@ class RegistrationHandler(cyclone.web.RequestHandler):
 
     def _load_params(self):
         tags = {'chid': 'channelid',
-                'type': 'type',
                 'conn': 'connect',
                 }
-        chid = type = conn = None
+        chid = conn = None
         if len(self.request.body) > 0:
             body = urlparse.parse_qs(self.request.body, keep_blank_values=True)
-            chid = body.get(tags['chid'], [])[0]
-            type = body.get(tags['type'], [])[0]
-            conn = body.get(tags['conn'], [])[0]
+            chid = body.get(tags['chid'], [None])[0]
+            conn = body.get(tags['conn'], [None])[0]
         if chid is None:
             chid = self.request.arguments.get(tags['chid'])
-        if type is None:
-            type = self.request.arguments.get(tags['type'])
         if conn is None:
-            type = self.request.arguments.get(tags['conn'])
+            conn = self.request.arguments.get(tags['conn'])
 
-        if type is None or conn is None:
-            log.msg("Missing args: type %s, conn %s" % (type, conn))
+        if conn is None:
+            log.msg("Missing conn %s" % (conn))
             return False
 
         if chid is None:
-            chid = uuid.uuid4()
+            chid = str(uuid.uuid4())
 
         self.chid = chid
-        self.type = type
         self.conn = conn
+        return True
 
     def initialize(self):
         self.metrics = self.ap_settings.metrics
@@ -308,8 +326,7 @@ class RegistrationHandler(cyclone.web.RequestHandler):
 
     @cyclone.web.asynchronous
     def put(self, uaid=None):
-        import pdb;pdb.set_trace()
-        self.metrics = self.settings.metrics
+        self.metrics = self.ap_settings.metrics
         self.start_time = time.time()
 
         self.add_header("Content-Type", "application/json")
@@ -329,8 +346,7 @@ class RegistrationHandler(cyclone.web.RequestHandler):
             self.set_status(400, "Invalid arguments")
             self.finish()
             return
-        d = deferToThread(self.pinger.register,
-                          self.uaid, self.type, self.connect)
+        d = deferToThread(self.pinger.register, self.uaid, self.conn)
         d.addCallback(self._registered)
         d.addErrback(self._handle_overload).addErrback(self._error_response)
 
@@ -340,9 +356,9 @@ class RegistrationHandler(cyclone.web.RequestHandler):
             return self.finish()
         d = deferToThread(MakeEndPoint,
                           self.ap_settings.fernet,
+                          self.ap_settings.endpoint_url,
                           self.uaid,
-                          self.chid,
-                          self.ap_settings.endpoint_url)
+                          self.chid)
         d.addCallbacks(self._return_channel,
                        self._error_response)
 

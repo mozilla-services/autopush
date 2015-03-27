@@ -2,6 +2,7 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import json
 from apns_ping import APNSPinger
 from gcm_ping import GCMPinger
 
@@ -42,25 +43,22 @@ class Pinger(object):
             if self.storage.register_connect(uaid, connect) is False:
                 raise self.PingerFailEx("Could not store registration info")
         except Exception, e:
-            log.Printf("Registration storage failure: %s", e)
+            log.err(e)
             return False
         return True
 
-    def ping(self, uaid, version, data):
-        if self.storage is None:
-            raise self.PingerUndefEx("No storage defined for Pinger")
+    def ping(self, uaid, version, data, connect):
         try:
-            connectInfo = self.storage.get_connection(uaid)
-            if connectInfo is False:
-                return False
-            ptype = connectInfo.get("type").tolower().strip
+            connectInfo = json.loads(connect)
+            ptype = connectInfo.get("type").lower().strip()
             if ptype == "gcm" and self.gcm is not None:
                 return self.gcm.ping(uaid, version, data, connectInfo)
             if ptype == "apns" and self.apns is not None:
                 return self.apns.ping(uaid, version, data, connectInfo)
+            log.msg("Unknown connection type specified: ptype")
             return False
         except Exception, e:
-            log.Printf("Untrapped exception %s", e)
+            log.err(e)
             return False
 
     def unregister(self, uaid):

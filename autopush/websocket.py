@@ -278,7 +278,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         d = deferToThread(
             MakeEndPoint,
             self.settings.fernet,
-            self.uaid, chid, self.settings.endpoint_url)
+            self.settings.endpoint_url,
+            self.uaid,
+            chid)
         d.addCallbacks(self.finish_register, self.error_register,
                        callbackArgs=(chid,))
 

@@ -289,6 +289,7 @@ def endpoint_main(sysargs=None):
 
     # No reason that the endpoint couldn't handle both...
     endpoint.pinger = settings.pinger
+    register.pinger = settings.pinger
 
     protocol = StatsDClientProtocol(settings.metrics_client)
 

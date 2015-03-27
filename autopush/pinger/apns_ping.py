@@ -2,8 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import sys
-
 from twisted.python import log
 from apns import APNs, Payload
 
@@ -21,8 +19,6 @@ class APNSPinger(object):
         log.msg("Starting APNS pinger...")
 
     def ping(self, uaid, version, data, connectInfo):
-        if self.storage is None:
-            raise self.PingerUndefEx("No storage defined for Pinger")
         try:
             if connectInfo is False or connectInfo is None:
                 return False
@@ -44,7 +40,6 @@ class APNSPinger(object):
             #   payload, identifier)
             self.apns.gateway_server.send_notification(token, payload)
             return True
-        except:
-            e = sys.exc_info()[0]
-            log.err("!! Ping exception: %s\n", e)
+        except Exception, e:
+            log.err(e)
             return False

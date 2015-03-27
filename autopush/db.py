@@ -11,6 +11,7 @@ from boto.dynamodb2.types import NUMBER
 
 import json
 
+
 def create_router_table(tablename="router", read_throughput=5,
                         write_throughput=5):
     return Table.create(tablename,
@@ -108,25 +109,25 @@ class Storage(object):
     ## Proprietary Ping storage info
     ## Tempted to put this in own class.
 
-    tableName = "storage"
+    tableName = "router"
     ping_label = "proprietary_ping"
     type_label = "ping_type"
     modf_label = "modified"
 
     def register_connect(self, uaid, connect):
+        cinfo = json.loads(connect)
         """ Register a type of proprietary ping data"""
         # Always overwrite.
-        if connect.get("type") is None:
+        if cinfo.get("type") is None:
             raise Exception("Invalid connection info")
             return False
         try:
-            import pdb;pdb.set_trace()
             self.table.connection.update_item(
                 self.tableName,
-                key={"uaid": {'S': uaid}, "chid": {'S': ' '}},
+                key={"uaid": {'S': uaid}},
                 attribute_updates={
                     self.ping_label: {"Action": "PUT",
-                                      "Value": {'S': json.dumps(connect)}},
+                                      "Value": {'S': connect}},
                 },
             )
         except ProvisionedThroughputExceededException:
@@ -136,18 +137,22 @@ class Storage(object):
     def get_connection(self, uaid):
         try:
             record = self.table.get_item(consistent=True,
-                                         uaid=uaid,
-                                         chid=' ')
+                                         uaid=uaid)
         except ItemNotFound:
             return False
         except ProvisionedThroughputExceededException:
             return False
-        import pdb;pdb.set_trace();
         return json.loads(record.get(self.ping_label))
 
     def unregister_connect(self, uaid):
         try:
-            self.table.delete_item(uaid=uaid)
+            self.table.connection.update_item(
+                self.tableName,
+                key={"uaid": {'S': uaid}},
+                attribute_updates={
+                    self.ping_label: {"Action": "DELETE"},
+                },
+            )
         except ProvisionedThroughputExceededException:
             return False
 

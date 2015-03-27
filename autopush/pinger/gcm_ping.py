@@ -3,6 +3,7 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import gcmclient as gcm
+
 from twisted.python import log
 
 
@@ -21,14 +22,15 @@ class GCMPinger(object):
         log.msg("Starting GCM pinger...")
 
     def ping(self, uaid, version, data, connectInfo):
-        if self.storage is None:
-            raise self.PingerUndefEx("No storage defined for Pinger")
         try:
             if connectInfo is False or connectInfo is None:
+                log.msg("no connect info")
                 return False
             if connectInfo.get("type").lower() != "gcm":
+                log.msg("connect info isn't gcm")
                 return False
             if connectInfo.get("token") is None:
+                log.msg("connect info missing 'token'")
                 return False
 
             payload = gcm.JSONMessage(
@@ -39,7 +41,7 @@ class GCMPinger(object):
                 data={"Msg": data,
                       "Version": version}
             )
-            reply = gcm.send(payload)
+            reply = self.gcm.send(payload)
             # handle reply content
             ## acks:
             # for reg_id, msg_id in reply.success.items():
@@ -47,6 +49,9 @@ class GCMPinger(object):
             # for old_id, new_id in reply.canonical.items():
             ## naks:
             # for reg_id, err_code in reply.failed.items():
+            if reply.failed.items().length > 0 :
+                log.message("Messages failed to be delivered.")
+                return False
             ## uninstall:
             # for reg_id in reply.not_registered:
             ## retries:
@@ -54,10 +59,10 @@ class GCMPinger(object):
             # retry = reply.retry()
             # after delay, send gcm.send(retry)
             return True
-        except gcm.GCMAuthenticationError:
-            raise self.BadPingerEx("GCM API Key is invalid")
+        except gcm.GCMAuthenticationError, e:
+            log.err(e)
         except ValueError, e:
-            log.Error("GCM returned error %s" % e.args[0])
+            log.err("GCM returned error %s" % e.args[0])
         except Exception, e:
-            log.Error("Unhandled exception caught %s" % e)
+            log.err("Unhandled exception caught %s" % e)
         return False
