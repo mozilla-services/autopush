@@ -255,12 +255,6 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
 class RegistrationHandler(cyclone.web.RequestHandler):
 
-    def _handle_overload(self, failure):
-        failure.trap(ProvisionedThroughputExceededException)
-        self.set_status(503)
-        self.write("Server busy, try later")
-        self.finish()
-
     def _error_response(self, failure):
         log.err(failure)
         self.set_status(500)
@@ -277,15 +271,15 @@ class RegistrationHandler(cyclone.web.RequestHandler):
             chid = body.get(tags['chid'], [None])[0]
             conn = body.get(tags['conn'], [None])[0]
         if chid is None:
-            chid = self.request.arguments.get(tags['chid'])
+            chid = self.request.arguments.get(tags['chid'], [None])[0]
         if conn is None:
-            conn = self.request.arguments.get(tags['conn'])
+            conn = self.request.arguments.get(tags['conn'], [None])[0]
 
         if conn is None:
             log.msg("Missing conn %s" % (conn))
             return False
 
-        if chid is None:
+        if chid is None or len(chid) == 0:
             chid = str(uuid.uuid4())
 
         self.chid = chid
@@ -311,7 +305,7 @@ class RegistrationHandler(cyclone.web.RequestHandler):
         return
 
     @cyclone.web.asynchronous
-    def get(self, uaid=None, chid=None):
+    def get(self, uaid=None):
         if uaid is None:
             return self._error(400, "invalid UAID")
         try:
@@ -348,7 +342,7 @@ class RegistrationHandler(cyclone.web.RequestHandler):
             return
         d = deferToThread(self.pinger.register, self.uaid, self.conn)
         d.addCallback(self._registered)
-        d.addErrback(self._handle_overload).addErrback(self._error_response)
+        d.addErrback(self._error_response)
 
     def _registered(self, result):
         if not result:
@@ -369,5 +363,3 @@ class RegistrationHandler(cyclone.web.RequestHandler):
         self.set_status(200)
         self.write(json.dumps(msg))
         return self.finish()
-
-

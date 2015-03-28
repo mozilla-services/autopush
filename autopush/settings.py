@@ -70,7 +70,8 @@ class AutopushSettings(object):
         self.router_hostname = router_hostname or default_hostname
         self.router_port = router_port
 
-        if endpoint_port == 80:
+        #default the port to 80
+        if endpoint_port is None or endpoint_port == 80:
             self.endpoint_url = "http://" + self.endpoint_hostname
         elif endpoint_port == 443:
             self.endpoint_url = "https://" + self.endpoint_hostname

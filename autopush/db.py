@@ -115,22 +115,24 @@ class Storage(object):
     modf_label = "modified"
 
     def register_connect(self, uaid, connect):
-        cinfo = json.loads(connect)
-        """ Register a type of proprietary ping data"""
-        # Always overwrite.
-        if cinfo.get("type") is None:
-            raise Exception("Invalid connection info")
-            return False
         try:
+            cinfo = json.loads(connect)
+            """ Register a type of proprietary ping data"""
+            # Always overwrite.
+            if cinfo.get("type") is None:
+                return False
             self.table.connection.update_item(
                 self.tableName,
                 key={"uaid": {'S': uaid}},
                 attribute_updates={
                     self.ping_label: {"Action": "PUT",
                                       "Value": {'S': connect}},
-                },
+                }
             )
         except ProvisionedThroughputExceededException:
+            return False
+        except ValueError,e :
+            #Invalid, most likely.
             return False
         return True
 
@@ -155,6 +157,7 @@ class Storage(object):
             )
         except ProvisionedThroughputExceededException:
             return False
+        return True
 
 
 class Router(object):
