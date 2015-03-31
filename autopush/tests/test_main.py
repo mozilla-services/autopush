@@ -48,7 +48,7 @@ class ConnectionMainTestCase(unittest.TestCase):
             "autopush.main.log",
             "autopush.main.task",
             "autopush.main.reactor",
-            "autopush.settings.TwistedStatsDClient",
+            "autopush.settings.TwistedMetrics",
         ]
         self.mocks = {}
         for name in patchers:
@@ -69,7 +69,7 @@ class EndpointMainTestCase(unittest.TestCase):
             "autopush.main.log",
             "autopush.main.task",
             "autopush.main.reactor",
-            "autopush.settings.TwistedStatsDClient",
+            "autopush.settings.TwistedMetrics",
         ]
         self.mocks = {}
         for name in patchers:

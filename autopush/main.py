@@ -10,7 +10,6 @@ from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
 from functools import partial
 from twisted.python import log
 from twisted.internet import reactor, task, ssl
-from txstatsd.client import StatsDClientProtocol
 
 from autopush.endpoint import EndpointHandler
 from autopush.settings import AutopushSettings
@@ -25,9 +24,18 @@ from autopush.websocket import (
 def add_shared_args(parser):
     parser.add_argument('--debug', help='Debug Info.', action='store_true',
                         default=False, env_var="DEBUG")
+    parser.add_argument('--config', is_config_file=True,
+                        help="Config file path")
     parser.add_argument('--crypto_key', help="Crypto key for tokens", type=str,
                         default="i_CYcNKa2YXrF_7V1Y-2MFfoEl7b6KX55y_9uvOKfJQ=",
                         env_var="CRYPTO_KEY")
+    parser.add_argument('--datadog_api_key', help="DataDog API Key", type=str,
+                        default="", env_var="DATADOG_API_KEY")
+    parser.add_argument('--datadog_app_key', help="DataDog App Key", type=str,
+                        default="", env_var="DATADOG_APP_KEY")
+    parser.add_argument('--datadog_flush_interval',
+                        help="DataDog Flush Interval", type=int,
+                        default=10, env_var="DATADOG_FLUSH_INTERVAL")
     parser.add_argument('--hostname', help="Hostname to announce under",
                         type=str, default=None, env_var="HOSTNAME")
     parser.add_argument('--statsd_host', help="Statsd Host", type=str,
@@ -63,6 +71,7 @@ def _parse_connection(sysargs=None):
         sysargs = sys.argv[1:]
 
     parser = configargparse.ArgumentParser(
+        default_config_files=['/etc/autopush_settings.ini'],
         description='Runs a Connection Node.')
     parser.add_argument('-p', '--port', help='Websocket Port', type=int,
                         default=8080, env_var="PORT")
@@ -88,6 +97,7 @@ def _parse_endpoint(sysargs=None):
         sysargs = sys.argv[1:]
 
     parser = configargparse.ArgumentParser(
+        default_config_files=['/etc/autoendpoint_settings.ini'],
         description='Runs an Endpoint Node.')
     parser.add_argument('-p', '--port', help='Public HTTP Endpoint Port',
                         type=int, default=8082, env_var="PORT")
@@ -102,6 +112,9 @@ def _parse_endpoint(sysargs=None):
 def make_settings(args, **kwargs):
     return AutopushSettings(
         crypto_key=args.crypto_key,
+        datadog_api_key=args.datadog_api_key,
+        datadog_app_key=args.datadog_app_key,
+        datadog_flush_interval=args.datadog_flush_interval,
         hostname=args.hostname,
         statsd_host=args.statsd_host,
         statsd_port=args.statsd_port,
@@ -173,7 +186,7 @@ def connection_main(sysargs=None):
         failByDrop=False,
     )
 
-    protocol = StatsDClientProtocol(settings.metrics_client)
+    settings.metrics.start()
 
     if args.ssl_key:
         contextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
@@ -184,7 +197,6 @@ def connection_main(sysargs=None):
         reactor.listenTCP(args.port, factory)
         reactor.listenTCP(args.router_port, site)
 
-    reactor.listenUDP(0, protocol)
     reactor.suggestThreadPoolSize(50)
 
     l = task.LoopingCall(periodic_reporter, settings)
@@ -211,7 +223,7 @@ def endpoint_main(sysargs=None):
     ], default_host=settings.hostname, debug=args.debug
     )
 
-    protocol = StatsDClientProtocol(settings.metrics_client)
+    settings.metrics.start()
 
     if args.ssl_key:
         contextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
@@ -220,6 +232,5 @@ def endpoint_main(sysargs=None):
     else:
         reactor.listenTCP(args.port, site)
 
-    reactor.listenUDP(0, protocol)
     reactor.suggestThreadPoolSize(50)
     reactor.run()
