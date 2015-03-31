@@ -713,11 +713,17 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.uaid = str(uuid.uuid4())
         self.proto.process_notifications()
 
+        # Grab a reference to it
+        notif_d = self.proto._notification_fetch
+
         # Run it again to trigger the cancel
         self.proto.process_notifications()
 
         # Tag on our own to follow up
         d = Deferred()
+
+        # Ensure we catch error outs from either call
+        notif_d.addErrback(lambda x: d.errback(x))
 
         def wait(result):
             eq_(self.proto._notification_fetch, None)
