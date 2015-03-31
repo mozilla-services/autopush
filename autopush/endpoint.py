@@ -134,24 +134,25 @@ class EndpointHandler(cyclone.web.RequestHandler):
         self.write("Success")
         self.finish()
 
-    def _process_route(self, routeinfo):
+    def _process_route(self, result):
         # Determine if they're connected at the moment
+        node_id = result.get("node_id")
 
         # Indicator if we got a node_id, but the node won't handle
         # delivery at this moment later.
         self.client_check = False
 
-        if routeinfo.get("node_id"):
+        if node_id:
             # Attempt a delivery if they are connected
             payload = json.dumps([{"channelID": self.chid,
                                    "version": self.version,
                                    "data": self.data}])
             d = deferToThread(
                 self.ap_settings.requests.put,
-                routeinfo.get("node_id") + "/push/" + self.uaid,
+                node_id + "/push/" + self.uaid,
                 data=payload
             )
-            d.addCallback(self._process_routing, routeinfo)
+            d.addCallback(self._process_routing, result)
             d.addErrback(self._error_response)
         else:
             self._save_notification()

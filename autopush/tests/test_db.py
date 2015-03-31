@@ -4,7 +4,6 @@ import uuid
 from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
     ProvisionedThroughputExceededException,
-    ItemNotFound,
 )
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from mock import Mock
@@ -107,78 +106,6 @@ class StorageTestCase(unittest.TestCase):
 
         storage.table.connection.delete_item.side_effect = raise_error
         results = storage.delete_notification("asdf", "asdf")
-        eq_(results, False)
-
-    def test_register_connect(self):
-        storage = Storage(get_storage_table())
-        storage.table.connection = Mock()
-
-        # try bad connect data:
-        result = storage.register_connect("uaid", 'invalid')
-        eq_(result, False)
-
-        # try bad connect data:
-        result = storage.register_connect("uaid", '{"notype":"test"}')
-        eq_(result, False)
-
-        # try minimal correct data
-        result = storage.register_connect("uaid", '{"type":"test"}')
-        eq_(result, True)
-
-    def test_register_connect_over(self):
-        storage = Storage(get_storage_table())
-        storage.table.connection = Mock()
-
-        def raise_error(*args, **kwargs):
-            raise ProvisionedThroughputExceededException(None, None)
-
-        storage.table.connection.update_item.side_effect = raise_error
-        results = storage.register_connect("uaid", '{"type":"test"}')
-        eq_(results, False)
-
-    def test_unregister_connect(self):
-        storage = Storage(get_storage_table())
-        storage.table.connection = Mock()
-        result = storage.unregister_connect("uaid")
-        self.assertTrue(result)
-
-    def test_unregister_connect_over(self):
-        storage = Storage(get_storage_table())
-        storage.table.connection = Mock()
-
-        def raise_error(*args, **kwargs):
-            raise ProvisionedThroughputExceededException(None, None)
-
-        storage.table.connection.update_item.side_effect = raise_error
-        results = storage.unregister_connect("uaid")
-        eq_(results, False)
-
-    def test_get_connection(self):
-        s = get_storage_table()
-        storage = Storage(s)
-        storage.table = Mock()
-        storage.table.get_item.return_value = \
-            {"proprietary_ping": '{"type":"test"}'}
-
-        result = storage.get_connection('uaid')
-        eq_(result, {'type': 'test'})
-
-        def raise_error(*args, **kwargs):
-            raise ItemNotFound(None, None)
-
-        storage.table.get_item.side_effect = raise_error
-        result = storage.get_connection('uaid')
-        eq_(result, False)
-
-    def test_get_connection_over(self):
-        storage = Storage(get_storage_table())
-        storage.table.connection = Mock()
-
-        def raise_error(*args, **kwargs):
-            raise ProvisionedThroughputExceededException(None, None)
-
-        storage.table.connection.get_item.side_effect = raise_error
-        results = storage.get_connection("uaid")
         eq_(results, False)
 
 

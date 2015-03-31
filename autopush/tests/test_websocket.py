@@ -709,6 +709,7 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(len(calls), 0)
 
     def test_process_notifications(self):
+        twisted.internet.base.DelayedCall.debug = True
         self._connect()
         self.proto.uaid = str(uuid.uuid4())
         self.proto.process_notifications()

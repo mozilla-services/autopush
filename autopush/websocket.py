@@ -194,7 +194,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self._register = None
         if not result:
             # Registration failed
-            self.returnError("hello", "already_connected", 500, False)
+            msg = {"messageType": "hello", "reason": "already_connected",
+                   "status": 500}
+            self.sendMessage(json.dumps(msg).encode('utf8'), False)
             return
 
         msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}

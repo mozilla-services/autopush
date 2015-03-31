@@ -423,6 +423,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.uaid, self.endpoint.chid = '123', '456'
         self.endpoint.version, self.endpoint.data = 789, None
 
+        # skip pping handler in _process_uaid.
         self.endpoint._process_route({'node_id': 'https://example.com'})
         return self.finish_deferred
 
