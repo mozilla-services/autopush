@@ -19,3 +19,7 @@ include/*
 lib_pypy/*
 *.swp
 *.ini
+pypy/
+src/
+.tox/
+.eggs/

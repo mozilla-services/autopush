@@ -1,33 +1,46 @@
 import unittest
 import uuid
 
-from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
     ProvisionedThroughputExceededException,
     ItemNotFound,
 )
+from boto.dynamodb2.layer1 import DynamoDBConnection
 from mock import Mock
 from moto import mock_dynamodb2
 from nose.tools import eq_
 
 from autopush.db import (
-    create_router_table,
-    create_storage_table,
     get_router_table,
     get_storage_table,
+    create_router_table,
+    create_storage_table,
     Storage,
     Router,
 )
+from autopush.settings import MetricSink
+
+
+mock_db2 = mock_dynamodb2()
+
+
+def setUp():
+    mock_db2.start()
+
+
+def tearDown():
+    mock_db2.stop()
 
 
 class StorageTestCase(unittest.TestCase):
     def setUp(self):
-        self.mock_dynamodb2 = mock_dynamodb2()
-        self.mock_dynamodb2.start()
+        table = get_storage_table()
+        self.real_table = table
+        self.real_connection = table.connection
 
     def tearDown(self):
-        self.mock_dynamodb2.stop()
+        self.real_table.connection = self.real_connection
 
     def test_custom_tablename(self):
         db = DynamoDBConnection()
@@ -46,23 +59,9 @@ class StorageTestCase(unittest.TestCase):
         assert s.throughput["read"] is 8
         assert s.throughput["write"] is 11
 
-    def test_storage_table_created(self):
-        # Check that the table doesn't exist
-        db = DynamoDBConnection()
-        dblist = db.list_tables()["TableNames"]
-        assert "storage" not in dblist
-
-        # Create the storage table
-        create_storage_table()
-
-        dblist = db.list_tables()["TableNames"]
-        assert "storage" in dblist
-
-        get_storage_table()
-
     def test_dont_save_older(self):
         s = get_storage_table()
-        storage = Storage(s)
+        storage = Storage(s, MetricSink())
         # Unfortunately moto can't run condition expressions, so
         # we gotta fake it
         storage.table.connection = Mock()
@@ -74,9 +73,33 @@ class StorageTestCase(unittest.TestCase):
         result = storage.save_notification("fdas",  "asdf", 8)
         eq_(result, False)
 
+    def test_fetch_over_provisioned(self):
+        s = get_storage_table()
+        storage = Storage(s, MetricSink())
+        storage.table.connection = Mock()
+
+        def raise_error(*args, **kwargs):
+            raise ProvisionedThroughputExceededException(None, None)
+
+        storage.table.connection.put_item.side_effect = raise_error
+        with self.assertRaises(ProvisionedThroughputExceededException):
+            storage.save_notification("asdf", "asdf", 12)
+
+    def test_save_over_provisioned(self):
+        s = get_storage_table()
+        storage = Storage(s, MetricSink())
+        storage.table = Mock()
+
+        def raise_error(*args, **kwargs):
+            raise ProvisionedThroughputExceededException(None, None)
+
+        storage.table.query_2.side_effect = raise_error
+        with self.assertRaises(ProvisionedThroughputExceededException):
+            storage.fetch_notifications("asdf")
+
     def test_delete_over_provisioned(self):
         s = get_storage_table()
-        storage = Storage(s)
+        storage = Storage(s, MetricSink())
         storage.table.connection = Mock()
 
         def raise_error(*args, **kwargs):
@@ -161,11 +184,12 @@ class StorageTestCase(unittest.TestCase):
 
 class RouterTestCase(unittest.TestCase):
     def setUp(self):
-        self.mock_dynamodb2 = mock_dynamodb2()
-        self.mock_dynamodb2.start()
+        table = get_router_table()
+        self.real_table = table
+        self.real_connection = table.connection
 
     def tearDown(self):
-        self.mock_dynamodb2.stop()
+        self.real_table.connection = self.real_connection
 
     def test_custom_tablename(self):
         db = DynamoDBConnection()
@@ -184,30 +208,54 @@ class RouterTestCase(unittest.TestCase):
         assert r.throughput["read"] is 3
         assert r.throughput["write"] is 17
 
-    def test_router_table_created(self):
-        # Check that the table doesn't exist
-        db = DynamoDBConnection()
-        dblist = db.list_tables()["TableNames"]
-        assert "router" not in dblist
-
-        # Create the router table
-        create_router_table()
-
-        dblist = db.list_tables()["TableNames"]
-        assert "router" in dblist
-        get_router_table()
-
     def test_no_uaid_found(self):
         uaid = str(uuid.uuid4())
         r = get_router_table()
-        router = Router(r)
+        router = Router(r, MetricSink())
         result = router.get_uaid(uaid)
         eq_(result, False)
+
+    def test_uaid_provision_failed(self):
+        r = get_router_table()
+        router = Router(r, MetricSink())
+        router.table = Mock()
+
+        def raise_error(*args, **kwargs):
+            raise ProvisionedThroughputExceededException(None, None)
+
+        router.table.get_item.side_effect = raise_error
+        with self.assertRaises(ProvisionedThroughputExceededException):
+            router.get_uaid("asdf")
+
+    def test_register_user_provision_failed(self):
+        r = get_router_table()
+        router = Router(r, MetricSink())
+        router.table.connection = Mock()
+
+        def raise_error(*args, **kwargs):
+            raise ProvisionedThroughputExceededException(None, None)
+
+        router.table.connection.put_item.side_effect = raise_error
+        with self.assertRaises(ProvisionedThroughputExceededException):
+            router.register_user("asdf", "asdf", 12)
+
+    def test_clear_node_provision_failed(self):
+        r = get_router_table()
+        router = Router(r, MetricSink())
+        router.table.connection = Mock()
+
+        def raise_error(*args, **kwargs):
+            raise ProvisionedThroughputExceededException(None, None)
+
+        router.table.connection.put_item.side_effect = raise_error
+        with self.assertRaises(ProvisionedThroughputExceededException):
+            router.clear_node(dict(uaid="asdf", connected_at="1234",
+                                   node_id="asdf"))
 
     def test_save_uaid(self):
         uaid = str(uuid.uuid4())
         r = get_router_table()
-        router = Router(r)
+        router = Router(r, MetricSink())
         result = router.register_user(uaid, "me", 1234)
         eq_(result, True)
         result = router.get_uaid(uaid)
@@ -216,7 +264,7 @@ class RouterTestCase(unittest.TestCase):
 
     def test_save_fail(self):
         r = get_router_table()
-        router = Router(r)
+        router = Router(r, MetricSink())
 
         def raise_condition(*args, **kwargs):
             raise ConditionalCheckFailedException(None, None)
@@ -228,7 +276,7 @@ class RouterTestCase(unittest.TestCase):
 
     def test_node_clear(self):
         r = get_router_table()
-        router = Router(r)
+        router = Router(r, MetricSink())
 
         # Register a node user
         router.register_user("asdf", "asdf", 1234)
@@ -246,7 +294,7 @@ class RouterTestCase(unittest.TestCase):
 
     def test_node_clear_fail(self):
         r = get_router_table()
-        router = Router(r)
+        router = Router(r, MetricSink())
 
         def raise_condition(*args, **kwargs):
             raise ConditionalCheckFailedException(None, None)

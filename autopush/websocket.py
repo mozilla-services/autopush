@@ -223,11 +223,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         fail.trap(CancelledError)
 
     def error_notifications(self, fail):
-        # Ignore errors, re-run if we should
+        # Ignore errors, but we must re-run this if it failed
         self._notification_fetch = None
-        if self._check_notifications:
-            self._check_notifications = False
-            reactor.callLater(1, self.process_notifications)
+        self._check_notifications = False
+        reactor.callLater(1, self.process_notifications)
 
     def finish_notifications(self, notifs):
         self._notification_fetch = None
