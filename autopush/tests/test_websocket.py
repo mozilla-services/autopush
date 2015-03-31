@@ -737,7 +737,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.uaid = str(uuid.uuid4())
 
         def throw_error(*args, **kwargs):
-            raise ProvisionedThroughputExceededException()
+            raise ProvisionedThroughputExceededException(None, None)
 
         self.proto.settings.storage = Mock(
             **{"fetch_notifications.side_effect": throw_error})
@@ -752,6 +752,7 @@ class WebsocketTestCase(unittest.TestCase):
         def wait_for_process():
             calls = self.proto.process_notifications.mock_calls
             if len(calls) > 0:
+                self.flushLoggedErrors()
                 d.callback(True)
             else:
                 reactor.callLater(0.1, wait_for_process)

@@ -207,6 +207,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def error_notifications(self, fail):
         # Ignore errors, but we must re-run this if it failed
+        log.err(fail)
         self._notification_fetch = None
         self._check_notifications = False
         reactor.callLater(1, self.process_notifications)
