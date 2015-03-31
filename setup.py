@@ -46,6 +46,7 @@ setup(name="AutoPush",
           "configargparse>=0.9.3",
           "pyopenssl>=0.14",
           "raven>=0.5.2",
+          "datadog>=0.2.0",
       ],
       entry_points="""
       [console_scripts]
