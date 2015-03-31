@@ -712,6 +712,12 @@ class WebsocketTestCase(unittest.TestCase):
         twisted.internet.base.DelayedCall.debug = True
         self._connect()
         self.proto.uaid = str(uuid.uuid4())
+
+        # Swap out fetch_notifications
+        self.proto.settings.storage.fetch_notifications = Mock(
+            return_value=[]
+        )
+
         self.proto.process_notifications()
 
         # Grab a reference to it
