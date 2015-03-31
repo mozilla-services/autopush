@@ -129,6 +129,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
             return self._process_route(routeinfo)
         # Ping handoff succeeded, no further action required
         self.metrics.increment("router.pping.hit")
+        # Since we're handing off, return 202
+        self.set_status(202)
         self.write("Success")
         self.finish()
 
@@ -162,6 +164,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
             self.write("Success")
+            #since we're handing off, return 202
+            self.set_status(202)
             return self.finish()
         elif result.status_code == 404:
             # Conditionally delete the node_id
