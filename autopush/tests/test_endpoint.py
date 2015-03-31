@@ -802,5 +802,3 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         self.reg.put(dummy_uaid)
         return self.finish_deferred
-
-

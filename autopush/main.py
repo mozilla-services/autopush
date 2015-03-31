@@ -13,7 +13,6 @@ from twisted.internet import reactor, task, ssl
 from txstatsd.client import StatsDClientProtocol
 
 from autopush.endpoint import (EndpointHandler, RegistrationHandler)
-from autopush.pinger.pinger import Pinger
 from autopush.settings import AutopushSettings
 from autopush.websocket import (
     SimplePushServerProtocol,

@@ -131,8 +131,8 @@ class Storage(object):
             )
         except ProvisionedThroughputExceededException:
             return False
-        except ValueError,e :
-            #Invalid, most likely.
+        except ValueError:
+            #Invalid connect JSON specified, most likely.
             return False
         return True
 

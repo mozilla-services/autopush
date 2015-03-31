@@ -311,7 +311,7 @@ class RegistrationHandler(cyclone.web.RequestHandler):
         try:
             uuid.UUID(uaid)
         except Exception, e:
-            log.msg("Improper UAID value specified %s" % e )
+            log.msg("Improper UAID value specified %s" % e)
             return self._error(400, "invalid UAID")
         self.uaid = uaid
 

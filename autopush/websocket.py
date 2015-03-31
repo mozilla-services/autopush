@@ -24,7 +24,6 @@ def periodic_reporter(settings):
                            len(settings.clients))
 
 
-
 class SimplePushServerProtocol(WebSocketServerProtocol):
     # Testing purposes
     parent_class = WebSocketServerProtocol
@@ -411,7 +410,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         for update in updates:
             channel_id, version = update["channelID"], update["version"]
             if channel_id in self.updates_sent and \
-               self.updates_sent[channel_id] > version:
+                self.updates_sent[channel_id] > version:
                 # Already sent a newer version for this channel, so don't
                 # update our versioning
                 continue
