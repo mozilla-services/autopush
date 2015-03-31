@@ -49,6 +49,7 @@ setup(name="AutoPush",
           "pyopenssl>=0.14",
           "service-identity>=14.0.0",
           "raven>=0.5.2",
+          "datadog>=0.2.0",
       ],
       entry_points="""
       [console_scripts]

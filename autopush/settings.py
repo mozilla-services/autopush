@@ -2,8 +2,6 @@ import socket
 
 import requests
 from cryptography.fernet import Fernet
-from txstatsd.client import TwistedStatsDClient
-from txstatsd.metrics.metrics import Metrics
 
 from autopush.db import (
     get_router_table,
@@ -11,6 +9,7 @@ from autopush.db import (
     Storage,
     Router
 )
+from autopush.metrics import DatadogMetrics, TwistedMetrics
 
 from autopush.pinger.pinger import Pinger
 
@@ -27,6 +26,9 @@ class AutopushSettings(object):
 
     def __init__(self,
                  crypto_key=None,
+                 datadog_api_key=None,
+                 datadog_app_key=None,
+                 datadog_flush_interval=None,
                  hostname=None,
                  port=None,
                  router_hostname=None,
@@ -55,10 +57,14 @@ class AutopushSettings(object):
         self.requests = sess
 
         # Metrics setup
-        if statsd_host:
-            client = TwistedStatsDClient(statsd_host, statsd_port)
-            self.metrics_client = client
-            self.metrics = Metrics(connection=client, namespace="pushgo")
+        if datadog_api_key:
+            self.metrics = DatadogMetrics(
+                api_key=datadog_api_key,
+                app_key=datadog_app_key,
+                flush_interval=datadog_flush_interval
+            )
+        elif statsd_host:
+            self.metrics = TwistedMetrics(statsd_host, statsd_port)
         else:
             self.metrics = MetricSink()
 
