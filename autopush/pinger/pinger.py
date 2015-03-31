@@ -8,15 +8,7 @@ from gcm_ping import GCMPinger
 
 from twisted.python import log
 
-__all__ = ["BadPingerEx", "PingerFailEx", "PingerUndefEx", "Pinger"]
-
-
-class BadPingerEx(Exception):
-    pass
-
-
-class PingerFailEx(Exception):
-    pass
+__all__ = ["PingerUndefEx", "Pinger"]
 
 
 class PingerUndefEx(Exception):
@@ -27,6 +19,8 @@ class Pinger(object):
     storage = None
 
     def __init__(self, storage, settings):
+        if storage is None:
+            raise PingerUndefEx("No storage defined for Pinger")
         self.storage = storage
         self.gcm = None
         self.apns = None
@@ -38,10 +32,12 @@ class Pinger(object):
     def register(self, uaid, connect):
         ## Store the connect string to the database
         if self.storage is None:
-            raise self.PingerUndefEx("No storage defined for Pinger")
+            raise PingerUndefEx("No storage defined for Pinger")
+        if connect is None or connect is False:
+            return False
         try:
             if self.storage.register_connect(uaid, connect) is False:
-                raise self.PingerFailEx("Could not store registration info")
+                return False
         except Exception, e:
             log.err(e)
             return False
@@ -49,6 +45,8 @@ class Pinger(object):
 
     def ping(self, uaid, version, data, connect):
         try:
+            if connect is None or connect is False:
+                return False
             connectInfo = json.loads(connect)
             ptype = connectInfo.get("type").lower().strip()
             if ptype == "gcm" and self.gcm is not None:
@@ -63,8 +61,8 @@ class Pinger(object):
 
     def unregister(self, uaid):
         if self.storage is None:
-            raise self.PingerUndefEx("No storage defined for Pinger")
+            raise PingerUndefEx("No storage defined for Pinger")
 
         if self.storage.unregister(uaid) is False:
-            raise self.PingerFailEx("Could not clear registration info")
+            return False
         return True

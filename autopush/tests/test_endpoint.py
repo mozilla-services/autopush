@@ -621,7 +621,7 @@ class RegistrationTestCase(unittest.TestCase):
 
     def test_load_params_invalid_body(self):
         self.reg.request.body = b'connect={"type":"test"}'
-        self.assertFalse(self.reg._load_params())
+        self.assertTrue(not self.reg._load_params())
 
     @patch('uuid.uuid4', return_value=dummy_chid)
     def test_load_params_prefer_body(self, t):
@@ -633,7 +633,7 @@ class RegistrationTestCase(unittest.TestCase):
     @patch('uuid.uuid4', return_value=dummy_chid)
     def test_load_params_no_conn(self, t):
         self.reg.request.body = b'noconnect={"type":"test"}'
-        self.assertFalse(self.reg._load_params())
+        self.assertTrue(not self.reg._load_params())
 
     def test_cors(self):
         acrm = "Access-Control-Request-Method"

@@ -23,9 +23,6 @@ class GCMPinger(object):
 
     def ping(self, uaid, version, data, connectInfo):
         try:
-            if connectInfo is False or connectInfo is None:
-                log.msg("no connect info")
-                return False
             if connectInfo.get("type").lower() != "gcm":
                 log.msg("connect info isn't gcm")
                 return False
@@ -33,7 +30,7 @@ class GCMPinger(object):
                 log.msg("connect info missing 'token'")
                 return False
 
-            payload = gcm.JSONMessage(
+            payload = self.gcm.JSONMessage(
                 registration_ids=[connectInfo.get("token")],
                 collapse_key=self.collapseKey,
                 time_to_live=self.ttl,
@@ -49,8 +46,8 @@ class GCMPinger(object):
             # for old_id, new_id in reply.canonical.items():
             ## naks:
             # for reg_id, err_code in reply.failed.items():
-            if reply.failed.items().length > 0 :
-                log.message("Messages failed to be delivered.")
+            if reply.failed.items().length > 0:
+                log.msg("Messages failed to be delivered.")
                 return False
             ## uninstall:
             # for reg_id in reply.not_registered:
