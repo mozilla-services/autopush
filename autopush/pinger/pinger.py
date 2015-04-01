@@ -30,7 +30,7 @@ class Pinger(object):
             self.apns = APNSPinger(settings.get('apns'))
 
     def register(self, uaid, connect):
-        ## Store the connect string to the database
+        # Store the connect string to the database
         if self.storage is None:
             raise PingerUndefEx("No storage defined for Pinger")
         if connect is None or connect is False:
@@ -62,7 +62,6 @@ class Pinger(object):
     def unregister(self, uaid):
         if self.storage is None:
             raise PingerUndefEx("No storage defined for Pinger")
-
         if self.storage.unregister(uaid) is False:
             return False
         return True

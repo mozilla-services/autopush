@@ -165,7 +165,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
             self.write("Success")
-            #since we're handing off, return 202
+            # since we're handing off, return 202
             self.set_status(202)
             return self.finish()
         elif result.status_code == 404:

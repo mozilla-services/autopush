@@ -203,7 +203,7 @@ class EndpointTestCase(unittest.TestCase):
         })
 
         def handle_finish(result):
-            #message is presumed routed through the relay
+            # message is presumed routed through the relay
             self.assertTrue(result)
 
         self.finish_deferred.addCallback(handle_finish)

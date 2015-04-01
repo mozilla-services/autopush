@@ -37,7 +37,6 @@ class PingerTestCase(TestCase):
                     }
         storage = Mock()
         tping = Pinger(storage, settings)
-        #Register
         self.assertFalse(tping.register('uaid', None))
         tping.storage = None
         self.assertRaises(PingerUndefEx, tping.register, 'uaid', 'connect')
@@ -90,12 +89,12 @@ class PingerTestCase(TestCase):
         self.f_gcm.send.return_value.failed.items = Mock()
         self.f_gcm.send.return_value.failed.items.return_value = zfr
 
-        #no connect
+        # no connect
         self.assertFalse(tping.ping("uaid", 123, 'abcd', None))
         self.assertFalse(tping.ping("uaid", 123, 'abcd', '{"type":"foo"}'))
         self.assertFalse(tping.ping("uaid", 123, 'abcd', '{"type":"gcm"}'))
 
-        #Test sanity checks
+        # Test sanity checks
         self.assertFalse(tping.gcm.ping("uaid", 123,
                                         'abcd', {"type": "foo"}))
         self.assertFalse(tping.gcm.ping("uaid", 123,
@@ -158,7 +157,6 @@ class PingerTestCase(TestCase):
                     }
         storage = Mock()
         tping = Pinger(storage, settings)
-        #unregister
         tping.storage.unregister.return_value = True
         self.assertTrue(tping.unregister('uaid'))
         tping.storage.unregister.return_value = False

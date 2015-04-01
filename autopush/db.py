@@ -115,8 +115,8 @@ class Storage(object):
             self.metrics.increment("error.provisioned.delete_notification")
             return False
 
-    ## Proprietary Ping storage info
-    ## Tempted to put this in own class.
+    # Proprietary Ping storage info
+    # Tempted to put this in own class.
 
     tableName = "router"
     ping_label = "proprietary_ping"
@@ -141,7 +141,7 @@ class Storage(object):
         except ProvisionedThroughputExceededException:
             return False
         except ValueError:
-            #Invalid connect JSON specified, most likely.
+            # Invalid connect JSON specified, most likely.
             return False
         return True
 

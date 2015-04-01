@@ -9,7 +9,6 @@ from twisted.python import log
 
 class GCMPinger(object):
     gcm = None
-    # Set these in init
     ttl = 60
     dryRun = 0
     collapseKey = "simplepush"
@@ -40,20 +39,20 @@ class GCMPinger(object):
             )
             reply = self.gcm.send(payload)
             # handle reply content
-            ## acks:
-            # for reg_id, msg_id in reply.success.items():
-            ## updates
-            # for old_id, new_id in reply.canonical.items():
-            ## naks:
-            # for reg_id, err_code in reply.failed.items():
+            # acks:
+            #  for reg_id, msg_id in reply.success.items():
+            # updates
+            #  for old_id, new_id in reply.canonical.items():
+            # naks:
+            #  for reg_id, err_code in reply.failed.items():
             if reply.failed.items().length > 0:
                 log.msg("Messages failed to be delivered.")
                 return False
-            ## uninstall:
-            # for reg_id in reply.not_registered:
-            ## retries:
-            # if reply.needs_retry():
-            # retry = reply.retry()
+            # uninstall:
+            #  for reg_id in reply.not_registered:
+            # retries:
+            #  if reply.needs_retry():
+            #   retry = reply.retry()
             # after delay, send gcm.send(retry)
             return True
         except gcm.GCMAuthenticationError, e:

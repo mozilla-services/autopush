@@ -71,7 +71,7 @@ def add_shared_args(parser):
 
 
 def add_pinger_args(parser):
-    #== GCM
+    # GCM
     parser.add_argument('--pinger', help='enable Proprietary Ping',
                         action='store_true',
                         default=False, env_var='PINGER')
@@ -89,7 +89,7 @@ def add_pinger_args(parser):
     parser.add_argument('--gcm_apikey',
                         help="%s API Key" % label,
                         type=str, env_var="GCM_APIKEY")
-    #== Apple iOS
+    # Apple Push Notification system (APNs) for iOS
     label = "Proprietary Ping: Apple Push Notification System:"
     parser.add_argument('--apns_sandbox',
                         help="%s Use Dev Sandbox",

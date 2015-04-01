@@ -158,7 +158,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             uaid = str(uuid.uuid4())
         self.uaid = uaid
 
-        ## TODO: add proprietary storage
         connect = data.get("connect")
         if connect is not None and self.settings.pinger is not None:
             self.transport.pauseProducing()
@@ -411,8 +410,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         toSend = []
         for update in updates:
             channel_id, version = update["channelID"], update["version"]
-            if channel_id in self.updates_sent and \
-                self.updates_sent[channel_id] > version:
+            if (
+                channel_id in self.updates_sent and
+                self.updates_sent[channel_id] > version
+            ):
                 # Already sent a newer version for this channel, so don't
                 # update our versioning
                 continue
