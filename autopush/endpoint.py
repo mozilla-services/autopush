@@ -13,13 +13,6 @@ from twisted.internet.threads import deferToThread
 from twisted.python import log
 
 
-def MakeEndPoint(fernet, endpoint_url, uaid, chid):
-    """ Create an endpoint (used both by websocket handler and
-    the /register endpoint """
-    token = fernet.encrypt((uaid + ":" + chid).encode('utf8'))
-    return endpoint_url + "/push/" + token
-
-
 class EndpointHandler(cyclone.web.RequestHandler):
     def initialize(self):
         self.metrics = self.ap_settings.metrics
@@ -281,7 +274,7 @@ class RegistrationHandler(cyclone.web.RequestHandler):
             conn = self.request.arguments.get(tags['conn'], [None])[0]
 
         if conn is None:
-            log.msg("Missing conn %s" % (conn))
+            log.msg("Missing %s %s" % (tags['conn'], conn))
             return False
 
         if chid is None or len(chid) == 0:
@@ -353,9 +346,7 @@ class RegistrationHandler(cyclone.web.RequestHandler):
         if not result:
             self.set_status(500, "Registration failure")
             return self.finish()
-        d = deferToThread(MakeEndPoint,
-                          self.ap_settings.fernet,
-                          self.ap_settings.endpoint_url,
+        d = deferToThread(self.ap_settings.makeEndpoint,
                           self.uaid,
                           self.chid)
         d.addCallbacks(self._return_channel,

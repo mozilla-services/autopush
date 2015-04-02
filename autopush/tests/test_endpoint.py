@@ -604,6 +604,16 @@ class RegistrationTestCase(unittest.TestCase):
     def tearDown(self):
         self.mock_dynamodb2.stop()
 
+    def test_ap_settings_update(self):
+        fake = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+        reg = self.reg
+        reg.ap_settings.update(banana="fruit")
+        eq_(reg.ap_settings.banana, "fruit")
+        reg.ap_settings.update(crypto_key=fake)
+        eq_(reg.ap_settings.fernet._encryption_key,
+            '\x00\x00\x00\x00\x00\x00\x00\x00'
+            '\x00\x00\x00\x00\x00\x00\x00\x00')
+
     @patch('uuid.uuid4', return_value=dummy_chid)
     def test_load_params_arguments(self, u=None):
         args = self.reg.request.arguments
@@ -802,4 +812,15 @@ class RegistrationTestCase(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.put(dummy_uaid)
+        return self.finish_deferred
+
+    def test_error_response(self):
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(
+                500,
+                'Error processing request',
+            )
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg._error_response(Exception)
         return self.finish_deferred

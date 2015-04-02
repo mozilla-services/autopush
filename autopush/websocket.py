@@ -2,8 +2,6 @@ import json
 import time
 import uuid
 
-from autopush.endpoint import MakeEndPoint
-
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
 from twisted.internet import reactor
@@ -276,9 +274,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.transport.pauseProducing()
 
         d = deferToThread(
-            MakeEndPoint,
-            self.settings.fernet,
-            self.settings.endpoint_url,
+            self.settings.makeEndpoint,
             self.uaid,
             chid)
         d.addCallbacks(self.finish_register, self.error_register,

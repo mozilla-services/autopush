@@ -287,10 +287,9 @@ def endpoint_main(sysargs=None):
     register.ap_settings = settings
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", endpoint),
-        # PUT /register/uaid => connect info
-        (r"/register/([^\/]+)", register),
+        # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint
-        (r"/register/([^\/]+)", register),
+        (r"/register/([^\/]+)?", register),
     ], default_host=settings.hostname, debug=args.debug
     )
 

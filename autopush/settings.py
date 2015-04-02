@@ -115,3 +115,8 @@ class AutopushSettings(object):
                 self.fernet = Fernet(val)
             else:
                 setattr(self, key, val)
+
+    def makeEndpoint(self, uaid, chid):
+        """ Create an endpoint from the identifiers"""
+        return self.endpoint_url + '/push/' + \
+            self.fernet.encrypt((uaid + ':' + chid).encode('utf8'))
