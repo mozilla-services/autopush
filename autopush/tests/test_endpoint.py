@@ -818,7 +818,6 @@ class RegistrationTestCase(unittest.TestCase):
         def handle_finish(value):
             self.reg.set_status.assert_called_with(
                 500,
-                'Error processing request',
             )
 
         self.finish_deferred.addCallback(handle_finish)
