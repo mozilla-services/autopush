@@ -55,6 +55,7 @@ setup(name="AutoPush",
       [console_scripts]
       autopush = autopush.main:connection_main
       autoendpoint = autopush.main:endpoint_main
+      autokey = autokey:main
       """,
       **extra_options
       )
