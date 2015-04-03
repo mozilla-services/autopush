@@ -11,6 +11,8 @@ from autopush.db import (
 )
 from autopush.metrics import DatadogMetrics, TwistedMetrics
 
+from autopush.pinger.pinger import Pinger
+
 
 class MetricSink(object):
     """Exists to swallow metrics when metrics are not active"""
@@ -41,6 +43,7 @@ class AutopushSettings(object):
                  storage_write_throughput=5,
                  statsd_host="localhost",
                  statsd_port=8125,
+                 pingConf=None,
                  enable_cors=False):
 
         # Setup the requests lib session
@@ -81,7 +84,8 @@ class AutopushSettings(object):
         self.router_hostname = router_hostname or default_hostname
         self.router_port = router_port
 
-        if endpoint_port == 80:
+        # default the port to 80
+        if endpoint_port is None or endpoint_port == 80:
             self.endpoint_url = "http://" + self.endpoint_hostname
         elif endpoint_port == 443:
             self.endpoint_url = "https://" + self.endpoint_hostname
@@ -98,6 +102,9 @@ class AutopushSettings(object):
                                                storage_write_throughput)
         self.storage = Storage(self.storage_table, self.metrics)
         self.router = Router(self.router_table, self.metrics)
+        self.pinger = None
+        if pingConf is not None:
+            self.pinger = Pinger(self.storage, pingConf)
 
         # CORS
         self.cors = enable_cors
@@ -108,3 +115,8 @@ class AutopushSettings(object):
                 self.fernet = Fernet(val)
             else:
                 setattr(self, key, val)
+
+    def makeEndpoint(self, uaid, chid):
+        """ Create an endpoint from the identifiers"""
+        return self.endpoint_url + '/push/' + \
+            self.fernet.encrypt((uaid + ':' + chid).encode('utf8'))

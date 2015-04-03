@@ -1,6 +1,7 @@
 import json
 import time
 import urlparse
+import uuid
 
 import cyclone.web
 
@@ -67,7 +68,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
     def _addCors(self):
         if self.ap_settings.cors:
-            self.set_header("Access-Control-Request-Method", "*")
+            self.set_header("Access-Control-Allow-Origin", "*")
+            self.set_header("Access-Control-Allow-Methods", "PUT")
 
     def _process_token(self, result):
         self.uaid, self.chid = result.split(":")
@@ -101,6 +103,32 @@ class EndpointHandler(cyclone.web.RequestHandler):
             self.write("Invalid")
             return self.finish()
 
+        # Is there a proprietary ping associated with this uaid?
+        pping = result.get("proprietary_ping")
+        if pping is not None:
+            d = deferToThread(
+                self.pinger.ping,
+                self.uaid,
+                self.version,
+                self.data,
+                pping)
+            d.addCallback(self._process_pping, result)
+            d.addErrback(self._error_response)
+            return
+        self._process_route(result)
+
+    def _process_pping(self, result, routeinfo):
+        if not result:
+            log.msg("proprietary ping failed, falling back to routing")
+            return self._process_route(routeinfo)
+        # Ping handoff succeeded, no further action required
+        self.metrics.increment("router.pping.hit")
+        # Since we're handing off, return 202
+        self.set_status(202)
+        self.write("Success")
+        self.finish()
+
+    def _process_route(self, result):
         # Determine if they're connected at the moment
         node_id = result.get("node_id")
 
@@ -131,6 +159,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
             self.write("Success")
+            # since we're handing off, return 202
+            self.set_status(202)
             return self.finish()
         elif result.status_code == 404:
             # Conditionally delete the node_id
@@ -220,3 +250,114 @@ class EndpointHandler(cyclone.web.RequestHandler):
         if exception is not None:
             log.err(exception)
         self.finish()
+
+
+class RegistrationHandler(cyclone.web.RequestHandler):
+
+    def _error_response(self, failure):
+        log.err(failure)
+        self.set_status(500)
+        self.write("Error processing request")
+        self.finish()
+
+    def _load_params(self):
+        tags = {'chid': 'channelid',
+                'conn': 'connect',
+                }
+        chid = conn = None
+        if len(self.request.body) > 0:
+            body = urlparse.parse_qs(self.request.body, keep_blank_values=True)
+            chid = body.get(tags['chid'], [None])[0]
+            conn = body.get(tags['conn'], [None])[0]
+        if chid is None:
+            chid = self.request.arguments.get(tags['chid'], [None])[0]
+        if conn is None:
+            conn = self.request.arguments.get(tags['conn'], [None])[0]
+
+        if conn is None:
+            log.msg("Missing %s %s" % (tags['conn'], conn))
+            return False
+
+        if chid is None or len(chid) == 0:
+            chid = str(uuid.uuid4())
+
+        self.chid = chid
+        self.conn = conn
+        return True
+
+    def initialize(self):
+        self.metrics = self.ap_settings.metrics
+
+    def options(self, token):
+        self._addCors()
+
+    def head(self, token):
+        self._addCors()
+
+    def _addCors(self):
+        if self.ap_settings.cors:
+            self.set_header("Access-Control-Allow-Origin", "*")
+            self.set_header("Access-Control-Allow-Methods", "GET,PUT")
+
+    def _error(self, code, msg):
+        self.set_status(code, msg)
+        self.finish()
+        return
+
+    @cyclone.web.asynchronous
+    def get(self, uaid=None):
+        if uaid is None:
+            return self._error(400, "invalid UAID")
+        try:
+            uuid.UUID(uaid)
+        except Exception, e:
+            log.msg("Improper UAID value specified %s" % e)
+            return self._error(400, "invalid UAID")
+        self.uaid = uaid
+
+        self.chid = str(uuid.uuid4())
+        self._registered(True)
+
+    @cyclone.web.asynchronous
+    def put(self, uaid=None):
+        self.metrics = self.ap_settings.metrics
+        self.start_time = time.time()
+
+        self.add_header("Content-Type", "application/json")
+
+        if uaid is None:
+            uaid = str(uuid.uuid4())
+        else:
+            try:
+                uuid.UUID(uaid)
+            except ValueError:
+                log.msg("Invalid UAID [%s], swapping for valid one" % uaid)
+                uaid = str(uuid.uuid4())
+
+        self.uaid = uaid
+        if not self._load_params():
+            log.msg("Invalid parameters")
+            self.set_status(400, "Invalid arguments")
+            self.finish()
+            return
+        d = deferToThread(self.pinger.register, self.uaid, self.conn)
+        d.addCallback(self._registered)
+        d.addErrback(self._error_response)
+
+    def _registered(self, result):
+        if not result:
+            self.set_status(500, "Registration failure")
+            return self.finish()
+        d = deferToThread(self.ap_settings.makeEndpoint,
+                          self.uaid,
+                          self.chid)
+        d.addCallbacks(self._return_channel,
+                       self._error_response)
+
+    def _return_channel(self, endpoint):
+        msg = {"useragentid": self.uaid,
+               "channelid": self.chid,
+               "endpoint": endpoint}
+        self.set_status(200)
+        self.write(json.dumps(msg))
+        return self.finish()

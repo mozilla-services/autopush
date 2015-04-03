@@ -1,5 +1,7 @@
 import unittest
 
+import twisted.internet.base
+
 from nose.tools import ok_
 from mock import Mock, patch
 
@@ -9,6 +11,7 @@ from autopush.metrics import DatadogMetrics, TwistedMetrics
 class TwistedMetricsTestCase(unittest.TestCase):
     @patch("autopush.metrics.reactor")
     def test_basic(self, mock_reactor):
+        twisted.internet.base.DelayedCall.debug = True
         m = TwistedMetrics()
         m.start()
         ok_(len(mock_reactor.mock_calls) > 0)

@@ -17,6 +17,7 @@ from txstatsd.metrics.metrics import Metrics
 
 import autopush.endpoint as endpoint
 from autopush.db import Router, Storage
+from autopush.pinger.pinger import Pinger
 from autopush.settings import AutopushSettings
 
 
@@ -56,6 +57,7 @@ class EndpointTestCase(unittest.TestCase):
         self.requests_mock = settings.requests = Mock(spec=requests.Session)
         self.router_mock = settings.router = Mock(spec=Router)
         self.storage_mock = settings.storage = Mock(spec=Storage)
+        self.pinger_mock = settings.pinger = Mock(spec=Pinger)
 
         self.request_mock = Mock(body=b'', arguments={})
         self.endpoint = endpoint.EndpointHandler(Application(),
@@ -178,6 +180,42 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.version, self.endpoint.data = 789, None
 
         self.endpoint._process_token('123:456')
+        return self.finish_deferred
+
+    def test_process_uaid_with_pping(self):
+        self.pinger_mock.configure_mock(**{
+            'ping.return_value': True})
+
+        def handle_finish(result):
+            self.assertTrue(result)
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.pinger = self.pinger_mock
+        self.endpoint.uaid = 'uaid'
+        self.endpoint.version = 123
+        self.endpoint.data = 'data'
+
+        self.endpoint._process_uaid({"proprietary_ping": '{"type":"test"}'})
+        return self.finish_deferred
+
+    def test_process_pping_with_bad_ping(self):
+        self.requests_mock.configure_mock(**{
+            'put.return_value.status_code': 200,
+        })
+
+        def handle_finish(result):
+            # message is presumed routed through the relay
+            self.assertTrue(result)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.pinger = self.pinger_mock
+        # skipping a fair number of pre-emptory steps.
+        self.endpoint.chid = 'chid'
+        self.endpoint.uaid = 'uaid'
+        self.endpoint.version = 123
+        self.endpoint.data = 'data'
+        self.endpoint.start_time = 0
+
+        self.endpoint._process_pping(False, {'node_id': 'node_id'})
         return self.finish_deferred
 
     def test_process_token_client_jumped(self):
@@ -385,7 +423,8 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.uaid, self.endpoint.chid = '123', '456'
         self.endpoint.version, self.endpoint.data = 789, None
 
-        self.endpoint._process_uaid({'node_id': 'https://example.com'})
+        # skip pping handler in _process_uaid.
+        self.endpoint._process_route({'node_id': 'https://example.com'})
         return self.finish_deferred
 
     def test_process_save_throughput_exceeded(self):
@@ -456,30 +495,38 @@ class EndpointTestCase(unittest.TestCase):
         return self._assert_jumped_client()
 
     def test_cors(self):
-        acrm = "Access-Control-Request-Method"
+        ch1 = "Access-Control-Allow-Origin"
+        ch2 = "Access-Control-Allow-Methods"
         endpoint = self.endpoint
         endpoint.ap_settings.cors = False
         endpoint._addCors()
-        assert endpoint._headers.get(acrm) != "*"
+        assert endpoint._headers.get(ch1) != "*"
+        assert endpoint._headers.get(ch2) != "PUT"
 
-        endpoint.clear_header(acrm)
+        endpoint.clear_header(ch1)
+        endpoint.clear_header(ch2)
         endpoint.ap_settings.cors = True
         endpoint._addCors()
-        eq_(endpoint._headers[acrm], "*")
+        eq_(endpoint._headers[ch1], "*")
+        eq_(endpoint._headers[ch2], "PUT")
 
     def test_cors_head(self):
-        acrm = "Access-Control-Request-Method"
+        ch1 = "Access-Control-Allow-Origin"
+        ch2 = "Access-Control-Allow-Methods"
         endpoint = self.endpoint
         endpoint.ap_settings.cors = True
         endpoint.head(None)
-        eq_(endpoint._headers[acrm], "*")
+        eq_(endpoint._headers[ch1], "*")
+        eq_(endpoint._headers[ch2], "PUT")
 
     def test_cors_options(self):
-        acrm = "Access-Control-Request-Method"
+        ch1 = "Access-Control-Allow-Origin"
+        ch2 = "Access-Control-Allow-Methods"
         endpoint = self.endpoint
         endpoint.ap_settings.cors = True
         endpoint.options(None)
-        eq_(endpoint._headers[acrm], "*")
+        eq_(endpoint._headers[ch1], "*")
+        eq_(endpoint._headers[ch2], "PUT")
 
     @patch_logger
     def test_write_error(self, log_mock):
@@ -525,3 +572,270 @@ class EndpointTestCase(unittest.TestCase):
     def _assert_miss_response(self):
         self.metrics_mock.increment.assert_called_with('router.broadcast.miss')
         self.write_mock.assert_called_with('Success')
+
+
+dummy_uaid = "00000000123412341234567812345678"
+dummy_chid = "11111111123412341234567812345678"
+
+
+class RegistrationTestCase(unittest.TestCase):
+
+    def initialize(self):
+        self.metrics = self.ap_settings.metrics
+
+    def setUp(self):
+        self.mock_dynamodb2 = mock_dynamodb2()
+        self.mock_dynamodb2.start()
+        twisted.internet.base.DelayedCall.debug = True
+        settings = endpoint.RegistrationHandler.ap_settings =\
+            AutopushSettings(
+                hostname="localhost",
+                statsd_host=None,
+            )
+        self.fernet_mock = settings.fernet = Mock(spec=Fernet)
+        self.metrics_mock = settings.metrics = Mock(spec=Metrics)
+        self.requests_mock = settings.requests = Mock(spec=requests.Session)
+        self.router_mock = settings.router = Mock(spec=Router)
+        self.storage_mock = settings.storage = Mock(spec=Storage)
+        self.pinger_mock = settings.pinger = Mock(spec=Pinger)
+
+        self.request_mock = Mock(body=b'', arguments={})
+        self.reg = endpoint.RegistrationHandler(Application(),
+                                                self.request_mock)
+
+        self.status_mock = self.reg.set_status = Mock()
+        self.write_mock = self.reg.write = Mock()
+
+        d = self.finish_deferred = Deferred()
+        self.reg.finish = lambda: d.callback(True)
+
+    def tearDown(self):
+        self.mock_dynamodb2.stop()
+
+    def test_ap_settings_update(self):
+        fake = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+        reg = self.reg
+        reg.ap_settings.update(banana="fruit")
+        eq_(reg.ap_settings.banana, "fruit")
+        reg.ap_settings.update(crypto_key=fake)
+        eq_(reg.ap_settings.fernet._encryption_key,
+            '\x00\x00\x00\x00\x00\x00\x00\x00'
+            '\x00\x00\x00\x00\x00\x00\x00\x00')
+
+    @patch('uuid.uuid4', return_value=dummy_chid)
+    def test_load_params_arguments(self, u=None):
+        args = self.reg.request.arguments
+        args['channelid'] = ['']
+        args['connect'] = ['{"type":"test"}']
+        self.assertTrue(self.reg._load_params())
+        eq_(self.reg.chid, dummy_chid)
+        eq_(self.reg.conn, '{"type":"test"}')
+
+    @patch('uuid.uuid4', return_value=dummy_chid)
+    def test_load_params_body(self, u=None):
+        self.reg.request.body = b'connect={"type":"test"}'
+        self.assertTrue(self.reg._load_params())
+        eq_(self.reg.chid, dummy_chid)
+        eq_(self.reg.conn, '{"type":"test"}')
+
+    def test_load_params_invalid_body(self):
+        self.reg.request.body = b'connect={"type":"test"}'
+        self.assertTrue(not self.reg._load_params())
+
+    @patch('uuid.uuid4', return_value=dummy_chid)
+    def test_load_params_prefer_body(self, t):
+        args = self.reg.request.arguments
+        args['connect'] = ['{"type":"invalid"}']
+        self.reg.request.body = b'connect={"type":"test"}'
+        self.assertTrue(self.reg._load_params())
+
+    @patch('uuid.uuid4', return_value=dummy_chid)
+    def test_load_params_no_conn(self, t):
+        self.reg.request.body = b'noconnect={"type":"test"}'
+        self.assertTrue(not self.reg._load_params())
+
+    def test_cors(self):
+        ch1 = "Access-Control-Allow-Origin"
+        ch2 = "Access-Control-Allow-Methods"
+        reg = self.reg
+        reg.ap_settings.cors = False
+        reg._addCors()
+        assert reg._headers.get(ch1) != "*"
+        assert reg._headers.get(ch2) != "GET,PUT"
+
+        reg.clear_header(ch1)
+        reg.clear_header(ch2)
+        reg.ap_settings.cors = True
+        reg._addCors()
+        eq_(reg._headers[ch1], "*")
+        eq_(reg._headers[ch2], "GET,PUT")
+
+    def test_cors_head(self):
+        ch1 = "Access-Control-Allow-Origin"
+        ch2 = "Access-Control-Allow-Methods"
+        reg = self.reg
+        reg.ap_settings.cors = True
+        reg.head(None)
+        eq_(reg._headers[ch1], "*")
+        eq_(reg._headers[ch2], "GET,PUT")
+
+    def test_cors_options(self):
+        ch1 = "Access-Control-Allow-Origin"
+        ch2 = "Access-Control-Allow-Methods"
+        reg = self.reg
+        reg.ap_settings.cors = True
+        reg.options(None)
+        eq_(reg._headers[ch1], "*")
+        eq_(reg._headers[ch2], "GET,PUT")
+
+    @patch('uuid.uuid4', return_value=dummy_chid)
+    def test_get_valid(self, arg):
+        # All is well check.
+        self.fernet_mock.configure_mock(**{
+            'encrypt.return_value': 'abcd123',
+        })
+        self.reg.ap_settings.endpont_url = "http://localhost"
+
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(200)
+            self.reg.write.assert_called_with(
+                '{"useragentid": "' + dummy_uaid + '", '
+                '"channelid": "' + dummy_chid + '", '
+                '"endpoint": "http://localhost/push/abcd123"}')
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.get(dummy_uaid)
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=dummy_chid)
+    def test_get_no_uuid(self, arg):
+        self.fernet_mock.configure_mock(**{
+            'encrypt.return_value': 'abcd123',
+        })
+        self.reg.ap_settings.endpont_url = "http://localhost"
+
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(400, 'invalid UAID')
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.get(None)
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=dummy_chid)
+    def test_get_bad_uuid(self, arg):
+        self.fernet_mock.configure_mock(**{
+            'encrypt.return_value': 'abcd123',
+        })
+        self.reg.ap_settings.endpont_url = "http://localhost"
+
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(400, 'invalid UAID')
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.get('invalid')
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=dummy_uaid)
+    def test_put(self, arg):
+        self.reg.pinger = self.pinger_mock
+        args = self.reg.request.arguments
+        args['connect'] = ['{"type":"test"}']
+        self.fernet_mock.configure_mock(**{
+            'encrypt.return_value': 'abcd123',
+        })
+
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(200)
+            self.reg.write.assert_called_with(
+                '{"useragentid": "' + dummy_uaid + '", '
+                '"channelid": "' + dummy_uaid + '", '
+                '"endpoint": "http://localhost/push/abcd123"}')
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.put(None)
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=dummy_uaid)
+    def test_put_bad_uaid(self, arg):
+        self.reg.pinger = self.pinger_mock
+        args = self.reg.request.arguments
+        args['connect'] = ['{"type":"test"}']
+        self.fernet_mock.configure_mock(**{
+            'encrypt.return_value': 'abcd123',
+        })
+
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(200)
+            self.reg.write.assert_called_with(
+                '{"useragentid": "' + dummy_uaid + '", '
+                '"channelid": "' + dummy_uaid + '", '
+                '"endpoint": "http://localhost/push/abcd123"}')
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.put('invalid')
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=dummy_uaid)
+    def test_put_bad_params(self, arg):
+        self.reg.pinger = self.pinger_mock
+        args = self.reg.request.arguments
+        args['invalid_connect'] = ['{"type":"test"}']
+        self.fernet_mock.configure_mock(**{
+            'encrypt.return_value': 'abcd123',
+        })
+
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(400, 'Invalid arguments')
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.put('')
+        return self.finish_deferred
+
+    def test_put_uaid_chid(self):
+        self.reg.pinger = self.pinger_mock
+        args = self.reg.request.arguments
+        args['connect'] = ['{"type":"test"}']
+        args['channelid'] = [dummy_chid]
+        self.fernet_mock.configure_mock(**{
+            'encrypt.return_value': 'abcd123',
+        })
+
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(200)
+            self.reg.write.assert_called_with(
+                '{"useragentid": "' + dummy_uaid + '", '
+                '"channelid": "' + dummy_chid + '", '
+                '"endpoint": "http://localhost/push/abcd123"}')
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.put(dummy_uaid)
+        return self.finish_deferred
+
+    def test_bad_put(self):
+        self.reg.pinger = self.pinger_mock
+        self.pinger_mock.configure_mock(**{
+            'register.return_value': False,
+        })
+        args = self.reg.request.arguments
+        args['connect'] = ['{"type":"test"}']
+        args['channelid'] = [dummy_chid]
+        self.fernet_mock.configure_mock(**{
+            'encrypt.return_value': 'abcd123',
+        })
+
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(500, 'Registration failure')
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.put(dummy_uaid)
+        return self.finish_deferred
+
+    def test_error_response(self):
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(
+                500,
+            )
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg._error_response(Exception)
+        return self.finish_deferred

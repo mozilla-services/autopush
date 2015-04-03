@@ -47,6 +47,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Track notifications we don't need to delete separately
         self.direct_updates = {}
         self.channels = set()
+        self.pinger = None
 
     #############################################################
     #                    Connection Methods
@@ -119,6 +120,14 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                 if defer:
                     defer.cancel()
 
+    def returnError(self, messageType, reason, statusCode, close=True):
+        self.sendJSON({"messageType": messageType,
+                       "reason": reason,
+                       "status": statusCode})
+        if close:
+            self.sendClose()
+        return
+
     def sendJSON(self, body):
         self.sendMessage(json.dumps(body).encode('utf8'), False)
 
@@ -133,10 +142,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return
 
         if self.uaid:
-            self.sendJSON(
-                {"messageType": "hello", "reason": "duplicate hello",
-                 "status": 401})
-            self.sendClose()
+            self.returnError("hello", "duplicate hello", 401)
             return
 
         uaid = data.get("uaid")
@@ -148,9 +154,20 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                 pass
         if not uaid or not valid:
             uaid = str(uuid.uuid4())
-
         self.uaid = uaid
 
+        connect = data.get("connect")
+        if connect is not None and self.settings.pinger is not None:
+            self.transport.pauseProducing()
+            d = deferToThread(self.settings.pinger.register, uaid, connect)
+            d.addCallback(self._check_router, True)
+            d.addErrback(self.err_hello)
+        else:
+            self._check_router(False)
+
+    def _check_router(self, paused=False):
+        if paused:
+            self.transport.resumeProducing()
         # User exists?
         router = self.settings.router
         url = "http://%s:%s" % (self.settings.router_hostname,
@@ -158,7 +175,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # Attempt to register the user for this session
         self.transport.pauseProducing()
-        d = deferToThread(router.register_user, uaid, url, self.connected_at)
+        d = deferToThread(router.register_user,
+                          self.uaid, url, self.connected_at)
         d.addCallback(self.finish_hello)
         d.addErrback(self.err_hello)
         self._register = d
@@ -166,9 +184,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def err_hello(self, failure):
         self.transport.resumeProducing()
-        msg = {"messageType": "hello", "reason": "error", "status": 503}
-        self.sendJSON(msg)
-        self.sendClose()
+        self.returnError("hello", "error", 503)
 
     def finish_hello(self, result):
         self.transport.resumeProducing()
@@ -255,12 +271,12 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             uuid.UUID(chid)
         except ValueError:
             return self.bad_message("register")
-
         self.transport.pauseProducing()
 
         d = deferToThread(
-            self.settings.fernet.encrypt,
-            (self.uaid + ":" + chid).encode('utf8'))
+            self.settings.makeEndpoint,
+            self.uaid,
+            chid)
         d.addCallbacks(self.finish_register, self.error_register,
                        callbackArgs=(chid,))
 
@@ -269,12 +285,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         msg = {"messageType": "register", "status": 500}
         self.sendJSON(msg)
 
-    def finish_register(self, token, chid):
+    def finish_register(self, endpoint, chid):
         self.transport.resumeProducing()
-        url = self.settings.endpoint_url
         msg = {"messageType": "register",
                "channelID": chid,
-               "pushEndpoint": "%s/push/%s" % (url, token),
+               "pushEndpoint": endpoint,
                "status": 200
                }
         self.sendJSON(msg)
@@ -391,8 +406,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         toSend = []
         for update in updates:
             channel_id, version = update["channelID"], update["version"]
-            if channel_id in self.updates_sent and \
-               self.updates_sent[channel_id] > version:
+            if (
+                channel_id in self.updates_sent and
+                self.updates_sent[channel_id] > version
+            ):
                 # Already sent a newer version for this channel, so don't
                 # update our versioning
                 continue
