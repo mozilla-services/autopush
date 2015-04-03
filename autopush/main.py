@@ -122,6 +122,16 @@ def _parse_connection(sysargs=None):
     parser.add_argument('-r', '--router_port',
                         help="HTTP Router Port for internal router connects",
                         type=int, default=8081, env_var="ROUTER_PORT")
+    parser.add_argument('--router_ssl_key',
+                        help="Routing listener SSL key path", type=str,
+                        default="", env_var="ROUTER_SSL_KEY")
+    parser.add_argument('--router_ssl_cert',
+                        help="Routing listener SSL cert path", type=str,
+                        default="", env_var="ROUTER_SSL_CERT")
+    parser.add_argument('--endpoint_hostname', help="HTTP Endpoint Hostname",
+                        type=str, default=None, env_var="ENDPOINT_HOSTNAME")
+    parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
+                        type=int, default=8082, env_var="ENDPOINT_PORT")
 
     add_pinger_args(parser)
     add_shared_args(parser)
@@ -248,13 +258,20 @@ def connection_main(sysargs=None):
 
     settings.metrics.start()
 
+    # Start the WebSocket listener.
     if args.ssl_key:
-        contextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
-                                                          args.ssl_cert)
-        listenWS(factory, contextFactory)
-        reactor.listenSSL(args.router_port, site, contextFactory)
+        wsContextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
+                                                            args.ssl_cert)
+        listenWS(factory, wsContextFactory)
     else:
         reactor.listenTCP(args.port, factory)
+
+    # Start the internal routing listener.
+    if args.router_ssl_key:
+        routerContextFactory = ssl.DefaultOpenSSLContextFactory(
+            args.router_ssl_key, args.router_ssl_cert)
+        reactor.listenSSL(args.router_port, site, routerContextFactory)
+    else:
         reactor.listenTCP(args.router_port, site)
 
     reactor.suggestThreadPoolSize(50)
