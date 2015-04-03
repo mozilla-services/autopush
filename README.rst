@@ -33,7 +33,7 @@ There are two programs that will have scripts setup after installing (In the
 You will need to have a ``~/.boto`` file or ``AWS`` environment keys setup
 before either of these will run properly. By default they will create a router
 and storage DynamoDB table named ``storage`` and ``router`` with provisioned
-throughputs of ``1``.
+throughputs of ``5``.
 
 You can then test that this works by using the `simplepush tester <https://github.com/mozilla-services/simplepush_test>`_, like so:
 
