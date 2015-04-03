@@ -1,7 +1,7 @@
 import socket
 
-import requests
 from cryptography.fernet import Fernet
+from twisted.web.client import Agent, HTTPConnectionPool
 
 from autopush.db import (
     get_router_table,
@@ -39,6 +39,7 @@ class AutopushSettings(object):
                "max_data"]
 
     def __init__(self,
+                 reactor,
                  crypto_key=None,
                  datadog_api_key=None,
                  datadog_app_key=None,
@@ -62,15 +63,12 @@ class AutopushSettings(object):
                  pingConf=None,
                  enable_cors=False):
 
-        # Setup the requests lib session
-        sess = requests.Session()
-        adapter = requests.adapters.HTTPAdapter(pool_connections=100,
-                                                pool_maxsize=100)
-        sec_adapter = requests.adapters.HTTPAdapter(pool_connections=100,
-                                                    pool_maxsize=100)
-        sess.mount('http://', adapter)
-        sess.mount('https://', sec_adapter)
-        self.requests = sess
+        # Use a persistent connection pool for HTTP requests.
+        pool = HTTPConnectionPool(reactor)
+        pool.maxPersistentPerHost = 100
+        # Close idle connections after 5 minutes.
+        pool.cachedConnectionTimeout = 300
+        self.agent = Agent(reactor, pool=pool)
 
         # Metrics setup
         if datadog_api_key:
