@@ -14,6 +14,19 @@ from autopush.metrics import DatadogMetrics, TwistedMetrics
 from autopush.pinger.pinger import Pinger
 
 
+default_ports = {
+    "ws": 80,
+    "http": 80,
+    "wss": 443,
+    "https": 443,
+}
+
+def canonical_url(scheme, hostname, port=None):
+    if port is None or port == default_ports.get(scheme):
+        return "%s://%s" % (scheme, hostname)
+    return "%s://%s:%s" % (scheme, hostname, port)
+
+
 class MetricSink(object):
     """Exists to swallow metrics when metrics are not active"""
     def increment(*args, **kwargs):
@@ -31,8 +44,10 @@ class AutopushSettings(object):
                  datadog_flush_interval=None,
                  hostname=None,
                  port=None,
+                 router_scheme=None,
                  router_hostname=None,
                  router_port=None,
+                 endpoint_scheme=None,
                  endpoint_hostname=None,
                  endpoint_port=None,
                  router_tablename="router",
@@ -79,19 +94,20 @@ class AutopushSettings(object):
         default_hostname = socket.gethostname()
         self.hostname = hostname or default_hostname
         self.port = port
-        self.endpoint_hostname = endpoint_hostname or default_hostname
-        self.endpoint_port = endpoint_port
-        self.router_hostname = router_hostname or default_hostname
-        self.router_port = router_port
+        self.endpoint_hostname = endpoint_hostname or self.hostname
+        self.router_hostname = router_hostname or self.hostname
 
-        # default the port to 80
-        if endpoint_port is None or endpoint_port == 80:
-            self.endpoint_url = "http://" + self.endpoint_hostname
-        elif endpoint_port == 443:
-            self.endpoint_url = "https://" + self.endpoint_hostname
-        else:
-            self.endpoint_url = "http://%s:%s" % (self.endpoint_hostname,
-                                                  endpoint_port)
+        self.router_url = canonical_url(
+            router_scheme or 'http',
+            self.router_hostname,
+            router_port
+        )
+
+        self.endpoint_url = canonical_url(
+            endpoint_scheme or 'http',
+            self.endpoint_hostname,
+            endpoint_port
+        )
 
         # Database objects
         self.router_table = get_router_table(router_tablename,
