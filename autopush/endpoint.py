@@ -68,7 +68,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
     def _addCors(self):
         if self.ap_settings.cors:
-            self.set_header("Access-Control-Request-Method", "*")
+            self.set_header("Access-Control-Allow-Origin", "*")
+            self.set_header("Access-Control-Allow-Methods", "PUT")
 
     def _process_token(self, result):
         self.uaid, self.chid = result.split(":")
@@ -295,7 +296,8 @@ class RegistrationHandler(cyclone.web.RequestHandler):
 
     def _addCors(self):
         if self.ap_settings.cors:
-            self.set_header("Access-Control-Request-Method", "*")
+            self.set_header("Access-Control-Allow-Origin", "*")
+            self.set_header("Access-Control-Allow-Methods", "GET,PUT")
 
     def _error(self, code, msg):
         self.set_status(code, msg)

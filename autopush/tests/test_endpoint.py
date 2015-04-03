@@ -495,30 +495,38 @@ class EndpointTestCase(unittest.TestCase):
         return self._assert_jumped_client()
 
     def test_cors(self):
-        acrm = "Access-Control-Request-Method"
+        ch1 = "Access-Control-Allow-Origin"
+        ch2 = "Access-Control-Allow-Methods"
         endpoint = self.endpoint
         endpoint.ap_settings.cors = False
         endpoint._addCors()
-        assert endpoint._headers.get(acrm) != "*"
+        assert endpoint._headers.get(ch1) != "*"
+        assert endpoint._headers.get(ch2) != "PUT"
 
-        endpoint.clear_header(acrm)
+        endpoint.clear_header(ch1)
+        endpoint.clear_header(ch2)
         endpoint.ap_settings.cors = True
         endpoint._addCors()
-        eq_(endpoint._headers[acrm], "*")
+        eq_(endpoint._headers[ch1], "*")
+        eq_(endpoint._headers[ch2], "PUT")
 
     def test_cors_head(self):
-        acrm = "Access-Control-Request-Method"
+        ch1 = "Access-Control-Allow-Origin"
+        ch2 = "Access-Control-Allow-Methods"
         endpoint = self.endpoint
         endpoint.ap_settings.cors = True
         endpoint.head(None)
-        eq_(endpoint._headers[acrm], "*")
+        eq_(endpoint._headers[ch1], "*")
+        eq_(endpoint._headers[ch2], "PUT")
 
     def test_cors_options(self):
-        acrm = "Access-Control-Request-Method"
+        ch1 = "Access-Control-Allow-Origin"
+        ch2 = "Access-Control-Allow-Methods"
         endpoint = self.endpoint
         endpoint.ap_settings.cors = True
         endpoint.options(None)
-        eq_(endpoint._headers[acrm], "*")
+        eq_(endpoint._headers[ch1], "*")
+        eq_(endpoint._headers[ch2], "PUT")
 
     @patch_logger
     def test_write_error(self, log_mock):
@@ -647,30 +655,38 @@ class RegistrationTestCase(unittest.TestCase):
         self.assertTrue(not self.reg._load_params())
 
     def test_cors(self):
-        acrm = "Access-Control-Request-Method"
+        ch1 = "Access-Control-Allow-Origin"
+        ch2 = "Access-Control-Allow-Methods"
         reg = self.reg
         reg.ap_settings.cors = False
         reg._addCors()
-        assert reg._headers.get(acrm) != "*"
+        assert reg._headers.get(ch1) != "*"
+        assert reg._headers.get(ch2) != "GET,PUT"
 
-        reg.clear_header(acrm)
+        reg.clear_header(ch1)
+        reg.clear_header(ch2)
         reg.ap_settings.cors = True
         reg._addCors()
-        eq_(reg._headers[acrm], "*")
+        eq_(reg._headers[ch1], "*")
+        eq_(reg._headers[ch2], "GET,PUT")
 
     def test_cors_head(self):
-        acrm = "Access-Control-Request-Method"
+        ch1 = "Access-Control-Allow-Origin"
+        ch2 = "Access-Control-Allow-Methods"
         reg = self.reg
         reg.ap_settings.cors = True
         reg.head(None)
-        eq_(reg._headers[acrm], "*")
+        eq_(reg._headers[ch1], "*")
+        eq_(reg._headers[ch2], "GET,PUT")
 
     def test_cors_options(self):
-        acrm = "Access-Control-Request-Method"
+        ch1 = "Access-Control-Allow-Origin"
+        ch2 = "Access-Control-Allow-Methods"
         reg = self.reg
         reg.ap_settings.cors = True
         reg.options(None)
-        eq_(reg._headers[acrm], "*")
+        eq_(reg._headers[ch1], "*")
+        eq_(reg._headers[ch2], "GET,PUT")
 
     @patch('uuid.uuid4', return_value=dummy_chid)
     def test_get_valid(self, arg):
