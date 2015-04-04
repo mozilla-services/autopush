@@ -21,6 +21,13 @@ from autopush.websocket import (
 )
 
 
+shared_config_files = [
+    '/etc/autopush_shared.ini',
+    '~/.autopush_shared.ini',
+    '.autopush_shared.ini',
+]
+
+
 def add_shared_args(parser):
     parser.add_argument('--debug', help='Debug Info.', action='store_true',
                         default=False, env_var="DEBUG")
@@ -102,11 +109,14 @@ def _parse_connection(sysargs=None):
     if sysargs is None:
         sysargs = sys.argv[1:]
 
+    config_files = [
+        '/etc/autopush_connection.ini',
+        '~/.autopush_connection.ini',
+        '.autopush_connection.ini'
+    ]
     parser = configargparse.ArgumentParser(
         description='Runs a Connection Node.',
-        default_config_files=['/etc/autopush_connection.ini',
-                              '~/.autopush_connection.ini',
-                              '.autopush_connection.ini'])
+        default_config_files=shared_config_files + config_files)
     parser.add_argument('--config', help='Configuration file path',
                         is_config_file=True)
     parser.add_argument('-p', '--port', help='Websocket Port', type=int,
@@ -141,11 +151,14 @@ def _parse_endpoint(sysargs=None):
     if sysargs is None:
         sysargs = sys.argv[1:]
 
+    config_files = [
+        '/etc/autopush_endpoint.ini',
+        '~/.autopush_endpoint.ini',
+        '.autopush_endpoint.ini'
+    ]
     parser = configargparse.ArgumentParser(
         description='Runs an Endpoint Node.',
-        default_config_files=['/etc/autopush_endpoint.ini',
-                              '~/.autopush_endpoint.ini',
-                              '.autopush_endpoint.ini'])
+        default_config_files=shared_config_files + config_files)
     parser.add_argument('--config', help='Configuration file path',
                         is_config_file=True)
     parser.add_argument('-p', '--port', help='Public HTTP Endpoint Port',

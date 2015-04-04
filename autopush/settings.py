@@ -21,6 +21,7 @@ default_ports = {
     "https": 443,
 }
 
+
 def canonical_url(scheme, hostname, port=None):
     if port is None or port == default_ports.get(scheme):
         return "%s://%s" % (scheme, hostname)
