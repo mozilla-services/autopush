@@ -29,6 +29,9 @@ shared_config_files = [
 
 
 def add_shared_args(parser):
+    parser.add_argument('--config-shared',
+                        help="Common configuration file path",
+                        dest='config_file', is_config_file=True)
     parser.add_argument('--debug', help='Debug Info.', action='store_true',
                         default=False, env_var="DEBUG")
     parser.add_argument('--crypto_key', help="Crypto key for tokens", type=str,
@@ -117,8 +120,9 @@ def _parse_connection(sysargs=None):
     parser = configargparse.ArgumentParser(
         description='Runs a Connection Node.',
         default_config_files=shared_config_files + config_files)
-    parser.add_argument('--config', help='Configuration file path',
-                        is_config_file=True)
+    parser.add_argument('--config-connection',
+                        help="Connection node configuration file path",
+                        dest='config_file', is_config_file=True)
     parser.add_argument('-p', '--port', help='Websocket Port', type=int,
                         default=8080, env_var="PORT")
     parser.add_argument('--router_hostname',
@@ -159,8 +163,9 @@ def _parse_endpoint(sysargs=None):
     parser = configargparse.ArgumentParser(
         description='Runs an Endpoint Node.',
         default_config_files=shared_config_files + config_files)
-    parser.add_argument('--config', help='Configuration file path',
-                        is_config_file=True)
+    parser.add_argument('--config-endpoint',
+                        help="Endpoint node configuration file path",
+                        dest='config_file', is_config_file=True)
     parser.add_argument('-p', '--port', help='Public HTTP Endpoint Port',
                         type=int, default=8082, env_var="PORT")
     parser.add_argument('--cors', help='Allow CORS PUTs for update.',
