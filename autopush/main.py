@@ -196,7 +196,6 @@ def make_settings(args, **kwargs):
             pingConf = None
 
     return AutopushSettings(
-        reactor,
         crypto_key=args.crypto_key,
         datadog_api_key=args.datadog_api_key,
         datadog_app_key=args.datadog_app_key,

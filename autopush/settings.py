@@ -1,6 +1,7 @@
 import socket
 
 from cryptography.fernet import Fernet
+from twisted.internet import reactor
 from twisted.web.client import Agent, HTTPConnectionPool
 
 from autopush.db import (
@@ -39,7 +40,6 @@ class AutopushSettings(object):
                "max_data"]
 
     def __init__(self,
-                 reactor,
                  crypto_key=None,
                  datadog_api_key=None,
                  datadog_app_key=None,

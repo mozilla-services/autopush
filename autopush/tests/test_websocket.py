@@ -39,7 +39,6 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto = SimplePushServerProtocol()
 
         settings = AutopushSettings(
-            reactor,
             hostname="localhost",
             statsd_host=None,
         )
@@ -867,7 +866,6 @@ class RouterHandlerTestCase(unittest.TestCase):
         twisted.internet.base.DelayedCall.debug = True
 
         self.ap_settings = AutopushSettings(
-            reactor,
             hostname="localhost",
             statsd_host=None,
         )
@@ -911,7 +909,6 @@ class NotificationHandlerTestCase(unittest.TestCase):
         twisted.internet.base.DelayedCall.debug = True
 
         self.ap_settings = AutopushSettings(
-            reactor,
             hostname="localhost",
             statsd_host=None,
         )

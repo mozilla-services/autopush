@@ -11,7 +11,6 @@ from mock import Mock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_
 from StringIO import StringIO
-from twisted.internet import reactor
 from twisted.internet.defer import Deferred, maybeDeferred
 from twisted.python.failure import Failure
 from twisted.trial import unittest
@@ -60,7 +59,6 @@ class EndpointTestCase(unittest.TestCase):
         twisted.internet.base.DelayedCall.debug = True
 
         settings = endpoint.EndpointHandler.ap_settings = AutopushSettings(
-            reactor,
             hostname="localhost",
             statsd_host=None,
         )
@@ -645,7 +643,6 @@ class RegistrationTestCase(unittest.TestCase):
         twisted.internet.base.DelayedCall.debug = True
         settings = endpoint.RegistrationHandler.ap_settings =\
             AutopushSettings(
-                reactor,
                 hostname="localhost",
                 statsd_host=None,
             )
