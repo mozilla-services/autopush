@@ -3,7 +3,6 @@ import time
 import urlparse
 
 import cyclone.web
-
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
@@ -211,6 +210,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
     def _finish_missed_store(self, result=None):
         self.metrics.increment("router.broadcast.miss")
         self.write("Success")
+        self.set_status(202)
         self.finish()
 
     def write_error(self, code, exception=None):
