@@ -1,5 +1,6 @@
 import functools
 import json
+import time
 
 import twisted.internet.base
 from boto.dynamodb2.exceptions import (
@@ -408,6 +409,23 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._save_notification('https://example.com')
         return self.finish_deferred
 
+    def test_send_notification_unicode_url(self):
+        self._configure_agent_mock(200)
+
+        def handle_finish(result):
+            self._assert_push_request(u'https://example.com/push/123')
+            self.metrics_mock.increment.assert_called_with(
+                'router.broadcast.hit')
+            self.write_mock.assert_called_with('Success')
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.uaid, self.endpoint.chid = '123', '456'
+        self.endpoint.version, self.endpoint.data = 789, None
+        self.endpoint.start_time = time.time()
+
+        self.endpoint._process_route({'node_id': u'https://example.com'})
+        return self.finish_deferred
+
     def test_send_notification_error(self):
         def fail_request():
             raise Failure(Exception('oops'))
@@ -616,6 +634,7 @@ class EndpointTestCase(unittest.TestCase):
             protocol.connectionLost(Failure(reason))
 
         def handle_request(method, url, **kwargs):
+            eq_(isinstance(url, unicode), False)
             d = Deferred()
             self.response_mock.configure_mock(**{
                 'code': code(url) if callable(code) else code,
