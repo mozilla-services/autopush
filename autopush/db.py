@@ -85,7 +85,7 @@ class Storage(object):
         try:
             cond = "attribute_not_exists(version) or version < :ver"
             conn.put_item(
-                "storage",
+                self.table.table_name,
                 item={
                     "uaid": {'S': uaid},
                     "chid": {'S': chid},
@@ -118,7 +118,6 @@ class Storage(object):
     # Proprietary Ping storage info
     # Tempted to put this in own class.
 
-    tableName = "router"
     ping_label = "proprietary_ping"
     type_label = "ping_type"
     modf_label = "modified"
@@ -131,7 +130,7 @@ class Storage(object):
             if cinfo.get("type") is None:
                 return False
             self.table.connection.update_item(
-                self.tableName,
+                self.table.table_name,
                 key={"uaid": {'S': uaid}},
                 attribute_updates={
                     self.ping_label: {"Action": "PUT",
@@ -158,7 +157,7 @@ class Storage(object):
     def unregister_connect(self, uaid):
         try:
             self.table.connection.update_item(
-                self.tableName,
+                self.table.table_name,
                 key={"uaid": {'S': uaid}},
                 attribute_updates={
                     self.ping_label: {"Action": "DELETE"},
@@ -192,7 +191,7 @@ class Router(object):
         try:
             cond = "attribute_not_exists(node_id) or (connected_at < :conn)"
             conn.put_item(
-                "router",
+                self.table.table_name,
                 item={
                     "uaid": {'S': uaid},
                     "node_id": {'S': node_id},
@@ -216,7 +215,7 @@ class Router(object):
         try:
             cond = "(node_id = :node) and (connected_at = :conn)"
             conn.put_item(
-                "router",
+                self.table.table_name,
                 item={
                     "uaid": {'S': item["uaid"]},
                     "connected_at": {'N': str(item["connected_at"])}
