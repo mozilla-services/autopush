@@ -8,6 +8,7 @@ from twisted.internet import reactor, task, ssl
 from twisted.python import log
 
 from autopush.endpoint import (EndpointHandler, RegistrationHandler)
+from autopush.health import StatusHandler
 from autopush.logging import setup_logging
 from autopush.settings import AutopushSettings
 from autopush.websocket import (
@@ -234,11 +235,14 @@ def connection_main(sysargs=None):
     r.ap_settings = settings
     n = NotificationHandler
     n.ap_settings = settings
+    s = StatusHandler
+    s.ap_settings = settings
 
     # Internal HTTP notification router
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", r),
-        (r"/notif/([^\/]+)", n)
+        (r"/notif/([^\/]+)", n),
+        (r"^/status/", s),
     ],
         default_host=settings.router_hostname, debug=args.debug,
         log_function=skip_request_logging
@@ -306,11 +310,14 @@ def endpoint_main(sysargs=None):
     endpoint.ap_settings = settings
     register = RegistrationHandler
     register.ap_settings = settings
+    status = StatusHandler
+    status.ap_settings = settings
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", endpoint),
         # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint
         (r"/register/([^\/]+)?", register),
+        (r"^/status", status),
     ],
         default_host=settings.hostname, debug=args.debug,
         log_function=skip_request_logging
