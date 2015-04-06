@@ -27,7 +27,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     parent_class = WebSocketServerProtocol
 
     def onConnect(self, request):
-        self.metrics = self.settings.metrics
+        self.metrics = self.ap_settings.metrics
         self.metrics.increment("client.socket.connect")
         self.uaid = None
         self.last_ping = 0
@@ -55,7 +55,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def processHandshake(self):
         """Disable host port checking on nonstandard ports since some
         clients are buggy and don't provide it"""
-        port = self.settings.port
+        port = self.ap_settings.port
         hide = port != 80 and port != 443
         if not hide:
             return self.parent_class.processHandshake(self)
@@ -114,8 +114,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.metrics.increment("client.socket.disconnect")
         elapsed = (ms_time() - self.connected_at) / 1000.0
         self.metrics.timing("client.socket.lifespan", duration=elapsed)
-        if self.uaid and self.settings.clients.get(self.uaid) == self:
-            del self.settings.clients[self.uaid]
+        if self.uaid and self.ap_settings.clients.get(self.uaid) == self:
+            del self.ap_settings.clients[self.uaid]
             for defer in [self._notification_fetch, self._register]:
                 if defer:
                     defer.cancel()
@@ -157,9 +157,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.uaid = uaid
 
         connect = data.get("connect")
-        if connect is not None and self.settings.pinger is not None:
+        if connect is not None and self.ap_settings.pinger is not None:
             self.transport.pauseProducing()
-            d = deferToThread(self.settings.pinger.register, uaid, connect)
+            d = deferToThread(self.ap_settings.pinger.register, uaid, connect)
             d.addCallback(self._check_router, True)
             d.addErrback(self.err_hello)
         else:
@@ -169,8 +169,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if paused:
             self.transport.resumeProducing()
         # User exists?
-        router = self.settings.router
-        url = self.settings.router_url
+        router = self.ap_settings.router
+        url = self.ap_settings.router_url
 
         # Attempt to register the user for this session
         self.transport.pauseProducing()
@@ -196,7 +196,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return
 
         msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}
-        self.settings.clients[self.uaid] = self
+        self.ap_settings.clients[self.uaid] = self
         self.sendJSON(msg)
         self.metrics.increment("updates.client.hello")
         self.process_notifications()
@@ -210,7 +210,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self._check_notifications = False
 
         # Prevent repeat calls
-        d = deferToThread(self.settings.storage.fetch_notifications, self.uaid)
+        d = deferToThread(self.ap_settings.storage.fetch_notifications,
+                          self.uaid)
         d.addErrback(self.cancel_notifications)
         d.addErrback(self.error_notifications)
         d.addCallback(self.finish_notifications)
@@ -255,7 +256,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def process_ping(self):
         now = time.time()
-        if now - self.last_ping < self.settings.min_ping_interval:
+        if now - self.last_ping < self.ap_settings.min_ping_interval:
             self.metrics.increment("updates.client.too_many_pings")
             return self.sendClose()
         self.last_ping = now
@@ -273,7 +274,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.transport.pauseProducing()
 
         d = deferToThread(
-            self.settings.makeEndpoint,
+            self.ap_settings.makeEndpoint,
             self.uaid,
             chid)
         d.addCallbacks(self.finish_register, self.error_register,
@@ -306,7 +307,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.metrics.increment("updates.client.unregister")
 
         # Delete any record from storage, we don't wait for this
-        d = deferToThread(self.settings.storage.delete_notification,
+        d = deferToThread(self.ap_settings.storage.delete_notification,
                           self.uaid, chid)
         d.addBoth(self.force_delete, chid)
         data["status"] = 200
@@ -318,7 +319,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             # This is an exception, log it
             log.err(result)
 
-        d = deferToThread(self.settings.storage.delete_notification,
+        d = deferToThread(self.ap_settings.storage.delete_notification,
                           self.uaid, chid)
         d.addErrback(self.force_delete, chid)
 
@@ -353,7 +354,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                 continue
 
             # Attempt to delete this notification from storage
-            storage = self.settings.storage
+            storage = self.ap_settings.storage
 
             # TODO: Check result here, and do something if this delete fails
             # like maybe do a new storage check
@@ -377,7 +378,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return None
 
         # Retry the operation and return its new deferred
-        d = deferToThread(self.settings.storage.delete_notification, uaid,
+        d = deferToThread(self.ap_settings.storage.delete_notification, uaid,
                           chid, version)
         d.addCallback(self.check_ack, uaid, chid, version)
         d.addErrback(log.err)
