@@ -151,16 +151,18 @@ class EndpointHandler(cyclone.web.RequestHandler):
         payload = json.dumps([{"channelID": self.chid,
                                "version": self.version,
                                "data": self.data}])
+        url = node_id + "/push/" + self.uaid
         return self.ap_settings.agent.request(
             "PUT",
-            node_id + "/push/" + self.uaid,
+            url.encode("utf8"),
             bodyProducer=FileBodyProducer(StringIO(payload)),
         ).addCallback(IgnoreBody.ignore)
 
     def _send_notification_check(self, node_id):
+        url = node_id + "/notif/" + self.uaid
         return self.ap_settings.agent.request(
             "PUT",
-            node_id + "/notif/" + self.uaid,
+            url.encode("utf8"),
         ).addCallback(IgnoreBody.ignore)
 
     def _process_routing(self, response, item):
