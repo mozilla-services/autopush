@@ -4,7 +4,6 @@ import uuid
 
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
-from eliot import Logger, Message, writeFailure
 from twisted.internet import reactor
 from twisted.internet.defer import (
     DeferredList,
@@ -26,9 +25,6 @@ def periodic_reporter(settings):
 class SimplePushServerProtocol(WebSocketServerProtocol):
     # Testing purposes
     parent_class = WebSocketServerProtocol
-
-    # Logger
-    logger = Logger()
 
     def log_err(self, failure):
         log.err(failure)

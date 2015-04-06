@@ -161,11 +161,11 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.settings.clients["asdf"] = self.proto
 
         # Stick a mock on
-        self.proto._notification_fetch = Mock()
+        self.proto._notification_fetch = notif_mock = Mock()
         self.proto.onClose(True, None, None)
         eq_(len(self.proto.settings.clients), 0)
-        eq_(len(list(self.proto._notification_fetch.mock_calls)), 1)
-        name, _, _ = self.proto._notification_fetch.mock_calls[0]
+        eq_(len(list(notif_mock.mock_calls)), 1)
+        name, _, _ = notif_mock.mock_calls[0]
         eq_(name, "cancel")
 
     def test_hello(self):

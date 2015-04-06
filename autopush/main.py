@@ -1,12 +1,9 @@
 """autopush daemon script"""
-import os
 import sys
 
 import configargparse
 import cyclone.web
-import twisted.python
 from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
-from functools import partial
 from twisted.internet import reactor, task, ssl
 from twisted.python import log
 
