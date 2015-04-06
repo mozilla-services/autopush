@@ -12,7 +12,7 @@ from moto import mock_dynamodb2
 from nose.tools import eq_
 from StringIO import StringIO
 from twisted.internet import reactor
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import Deferred, maybeDeferred
 from twisted.python.failure import Failure
 from twisted.trial import unittest
 from twisted.web.client import Agent, Response, ResponseDone
@@ -410,6 +410,28 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._save_notification('https://example.com')
         return self.finish_deferred
 
+    def test_send_notification_error(self):
+        def fail_request():
+            raise Failure(Exception('oops'))
+        self.agent_mock.configure_mock(**{
+            'request.side_effect': lambda method, url, **kwargs:
+                maybeDeferred(fail_request)
+        })
+
+        def handle_finish(result):
+            self._assert_push_request('https://example.com/push/123')
+            self._assert_error_response(result)
+            errors = self.flushLoggedErrors(Exception)
+            eq_(len(errors), 1)
+            eq_(errors[0].getErrorMessage(), 'oops')
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.uaid, self.endpoint.chid = '123', '456'
+        self.endpoint.version, self.endpoint.data = 789, None
+
+        self.endpoint._process_route({'node_id': 'https://example.com'})
+        return self.finish_deferred
+
     def test_process_routing_throughput_exceeded(self):
         self._configure_agent_mock(404)
         self.router_mock.configure_mock(**{
@@ -562,14 +584,14 @@ class EndpointTestCase(unittest.TestCase):
         eq_('bodyProducer' in params, True)
 
         if not expected_body:
-            return Deferred().callback(None)
+            return None
 
         request_body = StringIO()
         consumer = FileConsumer(request_body)
 
         producer = params.get('bodyProducer')
         if not producer:
-            return Deferred().errback('Missing body')
+            raise Exception('Missing body')
 
         def handle_body(result):
             eq_(json.loads(request_body.getvalue()), expected_body)
