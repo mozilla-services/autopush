@@ -173,8 +173,6 @@ class EndpointHandler(cyclone.web.RequestHandler):
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
             self.write("Success")
-            # since we're handing off, return 202
-            self.set_status(202)
             return self.finish()
         elif response.code == 404:
             # Conditionally delete the node_id
@@ -252,6 +250,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
     def _finish_missed_store(self, result=None):
         self.metrics.increment("router.broadcast.miss")
+        # since we're handing off, return 202
+        self.set_status(202)
         self.write("Success")
         self.finish()
 
