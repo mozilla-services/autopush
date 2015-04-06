@@ -694,7 +694,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
-        self.reg.ap_settings.endpont_url = "http://localhost"
+        self.reg.ap_settings.endpoint_url = "http://localhost"
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(200)
@@ -712,7 +712,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
-        self.reg.ap_settings.endpont_url = "http://localhost"
+        self.reg.ap_settings.endpoint_url = "http://localhost"
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(400, 'invalid UAID')
@@ -726,7 +726,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
-        self.reg.ap_settings.endpont_url = "http://localhost"
+        self.reg.ap_settings.endpoint_url = "http://localhost"
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(400, 'invalid UAID')

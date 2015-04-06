@@ -21,7 +21,17 @@ from autopush.websocket import (
 )
 
 
+shared_config_files = [
+    '/etc/autopush_shared.ini',
+    '~/.autopush_shared.ini',
+    '.autopush_shared.ini',
+]
+
+
 def add_shared_args(parser):
+    parser.add_argument('--config-shared',
+                        help="Common configuration file path",
+                        dest='config_file', is_config_file=True)
     parser.add_argument('--debug', help='Debug Info.', action='store_true',
                         default=False, env_var="DEBUG")
     parser.add_argument('--crypto_key', help="Crypto key for tokens", type=str,
@@ -64,10 +74,6 @@ def add_shared_args(parser):
                         type=int, default=5, env_var="ROUTER_WRITE_THROUGHPUT")
     parser.add_argument('--log_level', type=int, default=40,
                         env_var="LOG_LEVEL")
-    parser.add_argument('--endpoint_hostname', help="HTTP Endpoint Hostname",
-                        type=str, default=None, env_var="ENDPOINT_HOSTNAME")
-    parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
-                        type=int, default=8082, env_var="ENDPOINT_PORT")
 
 
 def add_pinger_args(parser):
@@ -106,13 +112,17 @@ def _parse_connection(sysargs=None):
     if sysargs is None:
         sysargs = sys.argv[1:]
 
+    config_files = [
+        '/etc/autopush_connection.ini',
+        '~/.autopush_connection.ini',
+        '.autopush_connection.ini'
+    ]
     parser = configargparse.ArgumentParser(
         description='Runs a Connection Node.',
-        default_config_files=['/etc/autopush_connection.ini',
-                              '~/.autopush_connection.ini',
-                              '.autopush_connection.ini'])
-    parser.add_argument('--config', help='Configuration file path',
-                        is_config_file=True)
+        default_config_files=shared_config_files + config_files)
+    parser.add_argument('--config-connection',
+                        help="Connection node configuration file path",
+                        dest='config_file', is_config_file=True)
     parser.add_argument('-p', '--port', help='Websocket Port', type=int,
                         default=8080, env_var="PORT")
     parser.add_argument('--router_hostname',
@@ -122,6 +132,18 @@ def _parse_connection(sysargs=None):
     parser.add_argument('-r', '--router_port',
                         help="HTTP Router Port for internal router connects",
                         type=int, default=8081, env_var="ROUTER_PORT")
+    parser.add_argument('--router_ssl_key',
+                        help="Routing listener SSL key path", type=str,
+                        default="", env_var="ROUTER_SSL_KEY")
+    parser.add_argument('--router_ssl_cert',
+                        help="Routing listener SSL cert path", type=str,
+                        default="", env_var="ROUTER_SSL_CERT")
+    parser.add_argument('--endpoint_scheme', help="HTTP Endpoint Scheme",
+                        type=str, default="http", env_var="ENDPOINT_SCHEME")
+    parser.add_argument('--endpoint_hostname', help="HTTP Endpoint Hostname",
+                        type=str, default=None, env_var="ENDPOINT_HOSTNAME")
+    parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
+                        type=int, default=8082, env_var="ENDPOINT_PORT")
 
     add_pinger_args(parser)
     add_shared_args(parser)
@@ -133,13 +155,17 @@ def _parse_endpoint(sysargs=None):
     if sysargs is None:
         sysargs = sys.argv[1:]
 
+    config_files = [
+        '/etc/autopush_endpoint.ini',
+        '~/.autopush_endpoint.ini',
+        '.autopush_endpoint.ini'
+    ]
     parser = configargparse.ArgumentParser(
         description='Runs an Endpoint Node.',
-        default_config_files=['/etc/autopush_endpoint.ini',
-                              '~/.autopush_endpoint.ini',
-                              '.autopush_endpoint.ini'])
-    parser.add_argument('--config', help='Configuration file path',
-                        is_config_file=True)
+        default_config_files=shared_config_files + config_files)
+    parser.add_argument('--config-endpoint',
+                        help="Endpoint node configuration file path",
+                        dest='config_file', is_config_file=True)
     parser.add_argument('-p', '--port', help='Public HTTP Endpoint Port',
                         type=int, default=8082, env_var="PORT")
     parser.add_argument('--cors', help='Allow CORS PUTs for update.',
@@ -209,8 +235,10 @@ def connection_main(sysargs=None):
     settings = make_settings(
         args,
         port=args.port,
+        endpoint_scheme=args.endpoint_scheme,
         endpoint_hostname=args.endpoint_hostname,
         endpoint_port=args.endpoint_port,
+        router_scheme="https" if args.router_ssl_key else "http",
         router_hostname=args.router_hostname,
         router_port=args.router_port,
     )
@@ -248,13 +276,20 @@ def connection_main(sysargs=None):
 
     settings.metrics.start()
 
+    # Start the WebSocket listener.
     if args.ssl_key:
         contextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
                                                           args.ssl_cert)
         listenWS(factory, contextFactory)
-        reactor.listenSSL(args.router_port, site, contextFactory)
     else:
         reactor.listenTCP(args.port, factory)
+
+    # Start the internal routing listener.
+    if args.router_ssl_key:
+        contextFactory = ssl.DefaultOpenSSLContextFactory(args.router_ssl_key,
+                                                          args.router_ssl_cert)
+        reactor.listenSSL(args.router_port, site, contextFactory)
+    else:
         reactor.listenTCP(args.router_port, site)
 
     reactor.suggestThreadPoolSize(50)
@@ -272,8 +307,9 @@ def endpoint_main(sysargs=None):
     log.startLogging(sys.stdout)
     settings = make_settings(
         args,
-        endpoint_hostname=args.endpoint_hostname,
-        endpoint_port=args.endpoint_port,
+        endpoint_scheme="https" if args.ssl_key else "http",
+        endpoint_hostname=args.hostname,
+        endpoint_port=args.port,
         enable_cors=args.cors
     )
 

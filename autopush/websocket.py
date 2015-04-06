@@ -170,8 +170,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.transport.resumeProducing()
         # User exists?
         router = self.settings.router
-        url = "http://%s:%s" % (self.settings.router_hostname,
-                                self.settings.router_port)
+        url = self.settings.router_url
 
         # Attempt to register the user for this session
         self.transport.pauseProducing()
