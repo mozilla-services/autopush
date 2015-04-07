@@ -7,7 +7,8 @@ from boto.dynamodb2.exceptions import (
 from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table
-from boto.dynamodb2.types import NUMBER
+from boto.dynamodb2.types import NUMBER, STRING
+from twisted.python import log
 
 import json
 
@@ -33,6 +34,14 @@ def create_storage_table(tablename="storage", read_throughput=5,
                         schema=[HashKey("uaid"), RangeKey("chid")],
                         throughput=dict(read=read_throughput,
                                         write=write_throughput),
+                        # Some bridge protocols only return tokens
+                        # Need an index to search for records by them.
+                        global_indexes=[
+                            GlobalKeysOnlyIndex(
+                                'BridgeTokenIndex',
+                                parts=[HashKey('bridge_token',
+                                               data_type=STRING)],
+                                throughput=dict(read=1, write=1))]
                         )
 
 
@@ -120,6 +129,7 @@ class Storage(object):
 
     tableName = "router"
     ping_label = "proprietary_ping"
+    token_label = "bridge_token"
     type_label = "ping_type"
     modf_label = "modified"
 
@@ -130,12 +140,15 @@ class Storage(object):
             # Always overwrite.
             if cinfo.get("type") is None:
                 return False
+            token = cinfo.get("token")
             self.table.connection.update_item(
                 self.tableName,
                 key={"uaid": {'S': uaid}},
                 attribute_updates={
                     self.ping_label: {"Action": "PUT",
                                       "Value": {'S': connect}},
+                    self.token_label: {"Action": "PUT",
+                                       "Value": {'S': token}},
                 }
             )
         except ProvisionedThroughputExceededException:
@@ -167,6 +180,34 @@ class Storage(object):
         except ProvisionedThroughputExceededException:
             return False
         return True
+
+    def byToken(self, action, token):
+        try:
+            if action == 'DELETE':
+                self.table.connection.update_item(
+                    self.tableName,
+                    key={self.token_label: {'S': token}},
+                    attribute_updates={
+                        self.ping_label: {"Action": "DELETE"},
+                        self.token_label: {"Action": "DELETE"},
+                    }
+                )
+                return True
+            if action == 'UPDATE':
+                record = self.table.get_item(
+                    consistent=True,
+                    bridge_token=token
+                )
+                connect = record.get(self.ping_label)
+                if connect is not None:
+                    jcon = json.loads(connect)
+                    jcon['token'] = token
+                    connect = json.dumps(jcon)
+                    return self.register_connect(record.get("uaid"), connect)
+                return True
+        except ProvisionedThroughputExceededException:
+            log.msg("Too many deletes...")
+        return False
 
 
 class Router(object):
