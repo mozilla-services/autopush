@@ -151,16 +151,18 @@ class EndpointHandler(cyclone.web.RequestHandler):
         payload = json.dumps([{"channelID": self.chid,
                                "version": self.version,
                                "data": self.data}])
+        url = node_id + "/push/" + self.uaid
         return self.ap_settings.agent.request(
             "PUT",
-            node_id + "/push/" + self.uaid,
+            url.encode("utf8"),
             bodyProducer=FileBodyProducer(StringIO(payload)),
         ).addCallback(IgnoreBody.ignore)
 
     def _send_notification_check(self, node_id):
+        url = node_id + "/notif/" + self.uaid
         return self.ap_settings.agent.request(
             "PUT",
-            node_id + "/notif/" + self.uaid,
+            url.encode("utf8"),
         ).addCallback(IgnoreBody.ignore)
 
     def _process_routing(self, response, item):
@@ -171,8 +173,6 @@ class EndpointHandler(cyclone.web.RequestHandler):
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
             self.write("Success")
-            # since we're handing off, return 202
-            self.set_status(202)
             return self.finish()
         elif response.code == 404:
             # Conditionally delete the node_id
@@ -250,6 +250,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
     def _finish_missed_store(self, result=None):
         self.metrics.increment("router.broadcast.miss")
+        # since we're handing off, return 202
+        self.set_status(202)
         self.write("Success")
         self.finish()
 

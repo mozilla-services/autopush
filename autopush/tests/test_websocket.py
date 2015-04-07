@@ -42,7 +42,7 @@ class WebsocketTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
-        self.proto.settings = settings
+        self.proto.ap_settings = settings
         self.proto.sendMessage = self.send_mock = Mock()
         self.proto.sendClose = self.close_mock = Mock()
         self.proto.transport = self.transport_mock = Mock()
@@ -82,17 +82,17 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_reporter(self):
         from autopush.websocket import periodic_reporter
-        periodic_reporter(self.proto.settings)
+        periodic_reporter(self.proto.ap_settings)
 
         # Verify metric increase of nothing
-        calls = self.proto.settings.metrics.method_calls
+        calls = self.proto.ap_settings.metrics.method_calls
         eq_(len(calls), 1)
         name, args, _ = calls[0]
         eq_(name, "gauge")
         eq_(args, ("update.client.connections", 0))
 
     def test_handeshake_sub(self):
-        self.proto.settings.port = 8080
+        self.proto.ap_settings.port = 8080
         self.proto.factory = Mock(externalPort=80)
 
         def check_subbed(s):
@@ -105,7 +105,7 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(self.proto.factory.externalPort, 80)
 
     def test_handshake_nosub(self):
-        self.proto.settings.port = 80
+        self.proto.ap_settings.port = 80
         self.proto.factory = Mock(externalPort=80)
 
         def check_subbed(s):
@@ -158,12 +158,12 @@ class WebsocketTestCase(unittest.TestCase):
     def test_close_with_cleanup(self):
         self._connect()
         self.proto.uaid = "asdf"
-        self.proto.settings.clients["asdf"] = self.proto
+        self.proto.ap_settings.clients["asdf"] = self.proto
 
         # Stick a mock on
         self.proto._notification_fetch = Mock()
         self.proto.onClose(True, None, None)
-        eq_(len(self.proto.settings.clients), 0)
+        eq_(len(self.proto.ap_settings.clients), 0)
         eq_(len(list(self.proto._notification_fetch.mock_calls)), 1)
         name, _, _ = self.proto._notification_fetch.mock_calls[0]
         eq_(name, "cancel")
@@ -212,7 +212,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_hello_failure(self):
         self._connect()
         # Fail out the register_user call
-        router = self.proto.settings.router
+        router = self.proto.ap_settings.router
         router.table.connection.put_item = Mock(side_effect=KeyError)
 
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -226,7 +226,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
 
         # Fail out the register_user call
-        self.proto.settings.router.register_user = Mock(return_value=False)
+        self.proto.ap_settings.router.register_user = Mock(return_value=False)
 
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
@@ -370,7 +370,7 @@ class WebsocketTestCase(unittest.TestCase):
         def throw_error(*args, **kwargs):
             raise Exception("Crypto explosion")
 
-        self.proto.settings.fernet = Mock(
+        self.proto.ap_settings.fernet = Mock(
             **{"encrypt.side_effect": throw_error})
         self._send_message(dict(messageType="register",
                                 channelID=str(uuid.uuid4())))
@@ -456,7 +456,7 @@ class WebsocketTestCase(unittest.TestCase):
         d.addBoth(lambda x: patcher.stop())
 
         # Replace storage delete with call to fail
-        table = self.proto.settings.storage.table
+        table = self.proto.ap_settings.storage.table
         delete = table.delete_item
 
         def raise_exception(*args, **kwargs):
@@ -524,7 +524,7 @@ class WebsocketTestCase(unittest.TestCase):
         uaid = str(uuid.uuid4()).replace('-', '')
         chid = str(uuid.uuid4()).replace('-', '')
 
-        storage = self.proto.settings.storage
+        storage = self.proto.ap_settings.storage
         storage.save_notification(uaid, chid, 10)
         self._send_message(dict(messageType="hello", channelIDs=[], uaid=uaid))
 
@@ -555,7 +555,7 @@ class WebsocketTestCase(unittest.TestCase):
         uaid = str(uuid.uuid4())
         chid = str(uuid.uuid4())
 
-        storage = self.proto.settings.storage
+        storage = self.proto.ap_settings.storage
         storage.save_notification(uaid, chid, 10)
 
         self._send_message(dict(messageType="hello", channelIDs=[], uaid=uaid))
@@ -644,7 +644,7 @@ class WebsocketTestCase(unittest.TestCase):
                 else:
                     return True
 
-        self.proto.settings.storage = Mock(
+        self.proto.ap_settings.storage = Mock(
             **{"delete_notification.side_effect": FailFirst()})
 
         chid = str(uuid.uuid4())
@@ -714,7 +714,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.uaid = str(uuid.uuid4())
 
         # Swap out fetch_notifications
-        self.proto.settings.storage.fetch_notifications = Mock(
+        self.proto.ap_settings.storage.fetch_notifications = Mock(
             return_value=[]
         )
 
@@ -746,7 +746,7 @@ class WebsocketTestCase(unittest.TestCase):
         def throw_error(*args, **kwargs):
             raise ProvisionedThroughputExceededException(None, None)
 
-        self.proto.settings.storage = Mock(
+        self.proto.ap_settings.storage = Mock(
             **{"fetch_notifications.side_effect": throw_error})
         self.proto.process_notifications()
         self.proto._check_notifications = True
@@ -778,7 +778,7 @@ class WebsocketTestCase(unittest.TestCase):
         # Populate the database for ourself
         uaid = str(uuid.uuid4())
         chid = str(uuid.uuid4())
-        storage = self.proto.settings.storage
+        storage = self.proto.ap_settings.storage
         storage.save_notification(uaid, chid, 12)
 
         self._connect()
@@ -811,7 +811,7 @@ class WebsocketTestCase(unittest.TestCase):
         # Populate the database for ourself
         uaid = str(uuid.uuid4())
         chid = str(uuid.uuid4())
-        storage = self.proto.settings.storage
+        storage = self.proto.ap_settings.storage
         storage.save_notification(uaid, chid, 12)
 
         self._connect()

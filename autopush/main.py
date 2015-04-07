@@ -247,9 +247,9 @@ def connection_main(sysargs=None):
     unified_setup()
 
     r = RouterHandler
-    r.settings = settings
+    r.ap_settings = settings
     n = NotificationHandler
-    n.settings = settings
+    n.ap_settings = settings
 
     # Internal HTTP notification router
     site = cyclone.web.Application([
@@ -265,7 +265,7 @@ def connection_main(sysargs=None):
         debugCodePaths=args.debug,
     )
     factory.protocol = SimplePushServerProtocol
-    factory.protocol.settings = settings
+    factory.protocol.ap_settings = settings
     factory.setProtocolOptions(
         webStatus=False,
         maxFramePayloadSize=2048,
@@ -317,7 +317,6 @@ def endpoint_main(sysargs=None):
 
     # Endpoint HTTP router
     endpoint = EndpointHandler
-    endpoint.settings = settings
     endpoint.ap_settings = settings
     register = RegistrationHandler
     register.ap_settings = settings
