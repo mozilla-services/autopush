@@ -23,7 +23,7 @@ class EliotObserver(object):
     def __init__(self):
         if "SENTRY_DSN" in os.environ:
             self.raven_client = raven.Client(
-                release=raven.fetch_package_version())
+                release=raven.fetch_package_version("autopush"))
         else:
             self.raven_client = None
         self.logger = Logger()
