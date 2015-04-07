@@ -253,7 +253,6 @@ class EndpointHandler(cyclone.web.RequestHandler):
         # since we're handing off, return 202
         self.set_status(202)
         self.write("Success")
-        self.set_status(202)
         self.finish()
 
     def write_error(self, code, exception=None):
