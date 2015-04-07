@@ -2,7 +2,7 @@ import unittest
 
 from mock import patch
 from moto import mock_dynamodb2
-from nose.util import eq_
+from nose.tools import eq_
 
 from autopush.main import (
     connection_main,

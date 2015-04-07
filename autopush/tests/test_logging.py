@@ -5,7 +5,7 @@ import twisted.internet
 import twisted.trial.unittest
 
 from mock import Mock, patch
-from nose.tools import eq_
+from nose.tools import eq_, ok_
 from twisted.python import log, failure
 
 from autopush.logging import setup_logging
@@ -40,6 +40,5 @@ class EliotLogTestCase(twisted.trial.unittest.TestCase):
         with patch("sys.stdout") as mock_stdout:
             log.msg("omg!", Type=7)
             eq_(len(mock_stdout.mock_calls), 1)
-            first_call = mock_stdout.mock_calls[0]
-            funcname, args, kwargs = first_call
-            self.assert_("Typee" in kwargs)
+            kwargs = mock_stdout.mock_calls[0][1][0]
+        ok_("Type" in kwargs)
