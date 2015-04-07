@@ -18,7 +18,7 @@ BUILD_DIRS = bin build deps include lib lib64 lib_pypy lib-python site-packages
 all:	build
 
 $(BIN)/pip: $(BIN)/pypy
-	wget https://bootstrap.pypa.io/get-pip.py
+	curl -O https://bootstrap.pypa.io/get-pip.py
 	$(PYTHON) get-pip.py
 	rm get-pip.py
 

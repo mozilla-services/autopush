@@ -17,9 +17,26 @@ You will first need to get pypy as appropriate for your system and put it's
 uncompressed folder in the autopush directory as ``pypy``.
 
 PyPy downloads can be found here: http://pypy.org/download.html#default-with-a-jit-compiler
+autopush requires PyPy >= 2.5.1.
 
 Once you have downloaded, decompressed, and renamed this to ``pypy``, you can
 run the Makefile with ``make``, which will setup the application.
+
+OS X
+~~~~
+
+autopush depends on the Python `cryptography <https://cryptography.io/en/latest/installation>`_
+library, which requires OpenSSL. If you're installing autopush on OS X
+with a custom version of OpenSSL, you'll need to set the ``ARCHFLAGS``
+environment variable, and add your OpenSSL library path to ``LDFLAGS`` and
+``CFLAGS`` before running ``make``:
+
+.. code-block:: bash
+
+    export ARCHFLAGS="-arch x86_64"
+    # Homebrew installs OpenSSL to `/usr/local/opt/openssl` instead of
+    # `/usr/local`.
+    export LDFLAGS="-L/usr/local/lib" CFLAGS="-I/usr/local/include"
 
 Running
 =======
@@ -33,7 +50,7 @@ There are two programs that will have scripts setup after installing (In the
 You will need to have a ``~/.boto`` file or ``AWS`` environment keys setup
 before either of these will run properly. By default they will create a router
 and storage DynamoDB table named ``storage`` and ``router`` with provisioned
-throughputs of ``1``.
+throughputs of ``5``.
 
 You can then test that this works by using the `simplepush tester <https://github.com/mozilla-services/simplepush_test>`_, like so:
 

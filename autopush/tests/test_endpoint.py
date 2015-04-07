@@ -1,7 +1,7 @@
 import functools
 import json
+import time
 
-import requests
 import twisted.internet.base
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
@@ -11,14 +11,25 @@ from cyclone.web import Application
 from mock import Mock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_
-from twisted.internet.defer import Deferred
+from StringIO import StringIO
+from twisted.internet.defer import Deferred, maybeDeferred
+from twisted.python.failure import Failure
 from twisted.trial import unittest
+from twisted.web.client import Agent, Response, ResponseDone
 from txstatsd.metrics.metrics import Metrics
 
 import autopush.endpoint as endpoint
 from autopush.db import Router, Storage
 from autopush.pinger.pinger import Pinger
 from autopush.settings import AutopushSettings
+
+
+class FileConsumer(object):
+    def __init__(self, file):
+        self.file = file
+
+    def write(self, data):
+        self.file.write(data)
 
 
 def patch_logger(test):
@@ -54,7 +65,8 @@ class EndpointTestCase(unittest.TestCase):
         )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
         self.metrics_mock = settings.metrics = Mock(spec=Metrics)
-        self.requests_mock = settings.requests = Mock(spec=requests.Session)
+        self.agent_mock = settings.agent = Mock(spec=Agent)
+        self.response_mock = Mock(spec=Response)
         self.router_mock = settings.router = Mock(spec=Router)
         self.storage_mock = settings.storage = Mock(spec=Storage)
         self.pinger_mock = settings.pinger = Mock(spec=Pinger)
@@ -198,9 +210,7 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_process_pping_with_bad_ping(self):
-        self.requests_mock.configure_mock(**{
-            'put.return_value.status_code': 200,
-        })
+        self._configure_agent_mock(200)
 
         def handle_finish(result):
             # message is presumed routed through the relay
@@ -239,20 +249,18 @@ class EndpointTestCase(unittest.TestCase):
     def test_process_token_client_busy(self):
         self.router_mock.configure_mock(**{
             'get_uaid.return_value': {'node_id': 'https://example.com'}})
-        self.requests_mock.configure_mock(**{
-            'put.side_effect': lambda url, **kwargs: Mock(
-                status_code=503 if '/push/' in url else 200)})
         self.storage_mock.configure_mock(**{
             'save_notification.return_value': True})
+        self._configure_agent_mock(lambda url: 503 if '/push/' in url else 200)
 
         def handle_save(result):
             eq_(self.endpoint.client_check, True)
-            self._assert_push_request('https://example.com/push/123')
-            calls = self.requests_mock.put.mock_calls
+            calls = self.agent_mock.request.mock_calls
             eq_(len(calls), 2)
-            _, (url,), params = calls[1]
+            _, (method, url), params = calls[1]
             eq_(url, 'https://example.com/notif/123')
             self._assert_miss_response()
+            return self._assert_push_request('https://example.com/push/123')
         self.finish_deferred.addCallback(handle_save)
 
         self.endpoint.version, self.endpoint.data = 789, None
@@ -267,25 +275,24 @@ class EndpointTestCase(unittest.TestCase):
             'clear_node.return_value': True})
         self.storage_mock.configure_mock(**{
             'save_notification.return_value': True})
-        self.requests_mock.configure_mock(**{
-            'put.return_value.status_code': 404})
+        self._configure_agent_mock(404)
         d = Deferred()
         jumped_client_mock = Mock(side_effect=lambda *args, **kwargs:
                                   d.callback(True))
         self.endpoint._process_jumped_client = jumped_client_mock
 
         def handle_finish(result):
-            self.requests_mock.put.assert_called_with(
-                'https://example.com/push/123',
-                data=json.dumps([{
-                    "channelID": '456',
-                    'version': 789,
-                    'data': 'ohai'
-                }]),
-            )
             self.router_mock.clear_node.assert_called_with(node_record)
             self.storage_mock.save_notification.assert_called_with(
                 uaid='123', chid='456', version=789)
+            return self._assert_push_request(
+                'https://example.com/push/123',
+                expected_body=[{
+                    'channelID': '456',
+                    'version': 789,
+                    'data': 'ohai'
+                }]
+            )
         d.addCallback(handle_finish)
 
         self.endpoint.version, self.endpoint.data = 789, 'ohai'
@@ -295,24 +302,23 @@ class EndpointTestCase(unittest.TestCase):
 
     def test_process_token_conditional_delete_fail(self):
         node_record = {'node_id': 'https://example.com'}
-        self.requests_mock.configure_mock(**{
-            'put.return_value.status_code': 404})
+        self._configure_agent_mock(404)
         self.router_mock.configure_mock(**{
             'get_uaid.return_value': node_record,
             'clear_node.return_value': False})
 
         def handle_delete(result):
-            self.requests_mock.put.assert_called_with(
-                'https://example.com/push/123',
-                data=json.dumps([{
-                    "channelID": '456',
-                    'version': 789,
-                    'data': 'ohai'
-                }]),
-            )
             self.router_mock.clear_node.assert_called_with(node_record)
             self.status_mock.assert_called_with(503)
             self.write_mock.assert_called_with('Server is busy')
+            return self._assert_push_request(
+                'https://example.com/push/123',
+                expected_body=[{
+                    'channelID': '456',
+                    'version': 789,
+                    'data': 'ohai'
+                }]
+            )
         self.finish_deferred.addCallback(handle_delete)
 
         self.endpoint.version, self.endpoint.data = 789, 'ohai'
@@ -338,10 +344,8 @@ class EndpointTestCase(unittest.TestCase):
     def test_save_notification_client_jumped(self):
         self.storage_mock.configure_mock(**{
             'save_notification.return_value': True})
-        self.requests_mock.configure_mock(**{
-            'put.side_effect': lambda url, **kwargs: Mock(
-                status_code=404 if 'example.com' in url else 200)
-        })
+        self._configure_agent_mock(lambda url:
+                                   404 if 'example.com' in url else 200)
         self.router_mock.configure_mock(**{
             'get_uaid.return_value': {
                 'node_id': 'https://example.org'}})
@@ -349,12 +353,12 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.storage_mock.save_notification.assert_called_with(
                 uaid='123', chid='456', version=789)
-            calls = self.requests_mock.put.mock_calls
+            calls = self.agent_mock.request.mock_calls
             eq_(len(calls), 2)
-            _, (old_node_url,), _ = calls[0]
+            _, (_, old_node_url), _ = calls[0]
             eq_(old_node_url, 'https://example.com/notif/123')
             self.router_mock.get_uaid.assert_called_with('123')
-            _, (new_node_url,), _ = calls[1]
+            _, (_, new_node_url), _ = calls[1]
             eq_(new_node_url, 'https://example.org/notif/123')
             self._assert_miss_response()
         self.finish_deferred.addCallback(handle_finish)
@@ -405,10 +409,47 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._save_notification('https://example.com')
         return self.finish_deferred
 
-    def test_process_routing_throughput_exceeded(self):
-        self.requests_mock.configure_mock(**{
-            'put.return_value.status_code': 404
+    def test_send_notification_unicode_url(self):
+        self._configure_agent_mock(200)
+
+        def handle_finish(result):
+            self._assert_push_request(u'https://example.com/push/123')
+            self.metrics_mock.increment.assert_called_with(
+                'router.broadcast.hit')
+            self.write_mock.assert_called_with('Success')
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.uaid, self.endpoint.chid = '123', '456'
+        self.endpoint.version, self.endpoint.data = 789, None
+        self.endpoint.start_time = time.time()
+
+        self.endpoint._process_route({'node_id': u'https://example.com'})
+        return self.finish_deferred
+
+    def test_send_notification_error(self):
+        def fail_request():
+            raise Failure(Exception('oops'))
+        self.agent_mock.configure_mock(**{
+            'request.side_effect': lambda method, url, **kwargs:
+                maybeDeferred(fail_request)
         })
+
+        def handle_finish(result):
+            self._assert_push_request('https://example.com/push/123')
+            self._assert_error_response(result)
+            errors = self.flushLoggedErrors(Exception)
+            eq_(len(errors), 1)
+            eq_(errors[0].getErrorMessage(), 'oops')
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.uaid, self.endpoint.chid = '123', '456'
+        self.endpoint.version, self.endpoint.data = 789, None
+
+        self.endpoint._process_route({'node_id': 'https://example.com'})
+        return self.finish_deferred
+
+    def test_process_routing_throughput_exceeded(self):
+        self._configure_agent_mock(404)
         self.router_mock.configure_mock(**{
             'clear_node.side_effect': ProvisionedThroughputExceededException(
                 402, 'pay up or el$e')
@@ -416,8 +457,8 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             eq_(self.endpoint.client_check, False)
-            self._assert_push_request('https://example.com/push/123')
             self._assert_throughput_exceeded_response()
+            return self._assert_push_request('https://example.com/push/123')
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.uaid, self.endpoint.chid = '123', '456'
@@ -453,26 +494,25 @@ class EndpointTestCase(unittest.TestCase):
                 'node_id': 'https://example.org'
             },
         })
-        self.requests_mock.configure_mock(**{
-            'put.return_value.status_code': 200})
+        self._configure_agent_mock(200)
 
         def handle_finish(result):
             self.fernet_mock.decrypt.assert_called_with('token')
             self.router_mock.get_uaid.assert_called_with('123')
-            self.requests_mock.put.assert_called_with(
-                'https://example.org/push/123',
-                data=json.dumps([{
-                    'channelID': '456',
-                    'version': 789,
-                    'data': 'ohai'
-                }]),
-            )
             self.metrics_mock.increment.assert_called_with(
                 'router.broadcast.hit')
             eq_(len(self.metrics_mock.timing.mock_calls), 1)
             _, (name,), _ = self.metrics_mock.timing.mock_calls[0]
             eq_(name, 'updates.handled')
             self.write_mock.assert_called_with('Success')
+            return self._assert_push_request(
+                'https://example.org/push/123',
+                expected_body=[{
+                    'channelID': '456',
+                    'version': 789,
+                    'data': 'ohai'
+                }]
+            )
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.request.body = b'version=789&data=ohai'
@@ -480,18 +520,15 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_process_jumped_client_hit(self):
-        self.requests_mock.configure_mock(**{
-            'put.return_value.status_code': 200})
+        self._configure_agent_mock(200)
         return self._assert_jumped_client()
 
     def test_process_jumped_client_miss(self):
-        self.requests_mock.configure_mock(**{
-            'put.return_value.status_code': 404})
+        self._configure_agent_mock(404)
         return self._assert_jumped_client()
 
     def test_process_jumped_client_error(self):
-        self.requests_mock.configure_mock(**{
-            'put.side_effect': IOError})
+        self._configure_agent_mock(500, IOError())
         return self._assert_jumped_client()
 
     def test_cors(self):
@@ -543,8 +580,8 @@ class EndpointTestCase(unittest.TestCase):
 
     def _assert_jumped_client(self):
         def handle_finish(result):
-            self.requests_mock.put.assert_called_with(
-                'https://example.com/notif/123')
+            self.agent_mock.request.assert_called_with(
+                'PUT', 'https://example.com/notif/123')
             self._assert_miss_response()
         self.finish_deferred.addCallback(handle_finish)
 
@@ -554,12 +591,30 @@ class EndpointTestCase(unittest.TestCase):
             'node_id': 'https://example.com'})
         return self.finish_deferred
 
-    def _assert_push_request(self, expected_url):
-        calls = self.requests_mock.put.mock_calls
+    def _assert_push_request(self, expected_url, expected_body=None):
+        calls = self.agent_mock.request.mock_calls
         eq_(len(calls) >= 1, True)
-        _, (actual_url,), params = calls[0]
+        _, (method, actual_url), params = calls[0]
+        eq_(method, 'PUT')
         eq_(actual_url, expected_url)
-        eq_('data' in params, True)
+        eq_('bodyProducer' in params, True)
+
+        if not expected_body:
+            return None
+
+        request_body = StringIO()
+        consumer = FileConsumer(request_body)
+
+        producer = params.get('bodyProducer')
+        if not producer:
+            raise Exception('Missing body')
+
+        def handle_body(result):
+            eq_(json.loads(request_body.getvalue()), expected_body)
+            return None
+        d = producer.startProducing(consumer)
+        d.addCallback(handle_body)
+        return d
 
     def _assert_error_response(self, result):
         self.status_mock.assert_called_with(500)
@@ -572,6 +627,24 @@ class EndpointTestCase(unittest.TestCase):
     def _assert_miss_response(self):
         self.metrics_mock.increment.assert_called_with('router.broadcast.miss')
         self.write_mock.assert_called_with('Success')
+
+    def _configure_agent_mock(self, code, reason=ResponseDone()):
+        def deliver_body(protocol):
+            protocol.dataReceived('Fake response')
+            protocol.connectionLost(Failure(reason))
+
+        def handle_request(method, url, **kwargs):
+            eq_(isinstance(url, unicode), False)
+            d = Deferred()
+            self.response_mock.configure_mock(**{
+                'code': code(url) if callable(code) else code,
+                'deliverBody.side_effect': deliver_body
+            })
+            d.callback(self.response_mock)
+            return d
+        self.agent_mock.configure_mock(**{
+            'request.side_effect': handle_request
+        })
 
 
 dummy_uaid = "00000000123412341234567812345678"
@@ -594,7 +667,6 @@ class RegistrationTestCase(unittest.TestCase):
             )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
         self.metrics_mock = settings.metrics = Mock(spec=Metrics)
-        self.requests_mock = settings.requests = Mock(spec=requests.Session)
         self.router_mock = settings.router = Mock(spec=Router)
         self.storage_mock = settings.storage = Mock(spec=Storage)
         self.pinger_mock = settings.pinger = Mock(spec=Pinger)
@@ -694,7 +766,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
-        self.reg.ap_settings.endpont_url = "http://localhost"
+        self.reg.ap_settings.endpoint_url = "http://localhost"
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(200)
@@ -712,7 +784,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
-        self.reg.ap_settings.endpont_url = "http://localhost"
+        self.reg.ap_settings.endpoint_url = "http://localhost"
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(400, 'invalid UAID')
@@ -726,7 +798,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
-        self.reg.ap_settings.endpont_url = "http://localhost"
+        self.reg.ap_settings.endpoint_url = "http://localhost"
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(400, 'invalid UAID')

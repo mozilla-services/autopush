@@ -5,12 +5,15 @@ import uuid
 
 import cyclone.web
 
+from autopush.protocol import IgnoreBody
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
 from cryptography.fernet import InvalidToken
+from StringIO import StringIO
 from twisted.internet.threads import deferToThread
 from twisted.python import log
+from twisted.web.client import FileBodyProducer
 
 
 class EndpointHandler(cyclone.web.RequestHandler):
@@ -138,31 +141,40 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
         if node_id:
             # Attempt a delivery if they are connected
-            payload = json.dumps([{"channelID": self.chid,
-                                   "version": self.version,
-                                   "data": self.data}])
-            d = deferToThread(
-                self.ap_settings.requests.put,
-                node_id + "/push/" + self.uaid,
-                data=payload
-            )
+            d = self._send_notification(node_id)
             d.addCallback(self._process_routing, result)
             d.addErrback(self._error_response)
         else:
             self._save_notification()
 
-    def _process_routing(self, result, item):
+    def _send_notification(self, node_id):
+        payload = json.dumps([{"channelID": self.chid,
+                               "version": self.version,
+                               "data": self.data}])
+        url = node_id + "/push/" + self.uaid
+        return self.ap_settings.agent.request(
+            "PUT",
+            url.encode("utf8"),
+            bodyProducer=FileBodyProducer(StringIO(payload)),
+        ).addCallback(IgnoreBody.ignore)
+
+    def _send_notification_check(self, node_id):
+        url = node_id + "/notif/" + self.uaid
+        return self.ap_settings.agent.request(
+            "PUT",
+            url.encode("utf8"),
+        ).addCallback(IgnoreBody.ignore)
+
+    def _process_routing(self, response, item):
         node_id = item.get("node_id")
-        if result.status_code == 200:
+        if response.code == 200:
             # Success, return!
             self.metrics.increment("router.broadcast.hit")
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
             self.write("Success")
-            # since we're handing off, return 202
-            self.set_status(202)
             return self.finish()
-        elif result.status_code == 404:
+        elif response.code == 404:
             # Conditionally delete the node_id
             d = deferToThread(self.ap_settings.router.clear_node, item)
             d.addCallback(self._process_node_delete)
@@ -171,7 +183,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
             return
 
         # Client was busy, remember to tell it to check
-        self.client_check = result.status_code == 503
+        self.client_check = response.code == 503
         self._save_notification(node_id)
 
     def _process_node_delete(self, result):
@@ -195,8 +207,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
     def _process_save(self, result, node_id=None):
         if self.client_check:
             # If we already know where the client was connected...
-            d = deferToThread(self.ap_settings.requests.put,
-                              node_id + "/notif/" + self.uaid)
+            d = self._send_notification_check(node_id)
             d.addCallback(self._process_notif, node_id)
             d.addErrback(self._error_response)
         else:
@@ -207,10 +218,10 @@ class EndpointHandler(cyclone.web.RequestHandler):
             d.addErrback(self._handle_overload)
             d.addErrback(self._error_response)
 
-    def _process_notif(self, result, node_id=None):
-        """Process the result of a requests.PUT to a Connection Node's
-        /notif/ handler"""
-        if result.status_code != 404:
+    def _process_notif(self, response, node_id=None):
+        """Process the result of a PUT to a Connection Node's /notif/
+        handler"""
+        if response.code != 404:
             # Client was notified fine, we're done
             self._finish_missed_store()
             return
@@ -231,8 +242,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
         if not node_id:
             return self._finish_missed_store()
 
-        d = deferToThread(self.ap_settings.requests.put,
-                          node_id + "/notif/" + self.uaid)
+        d = self._send_notification_check(node_id)
         # No check on response here, because if they jumped since we
         # got this they'll definitely get the stored notification
         # We ignore errors here too, as that's a hell of an edge case
@@ -240,6 +250,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
     def _finish_missed_store(self, result=None):
         self.metrics.increment("router.broadcast.miss")
+        # since we're handing off, return 202
+        self.set_status(202)
         self.write("Success")
         self.finish()
 
