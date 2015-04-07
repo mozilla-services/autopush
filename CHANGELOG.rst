@@ -8,6 +8,8 @@ Autopush Changelog
 Features
 --------
 
+* Use IProducer to more precisely monitor when the client has drained the data
+  to immediately resume sending more data. Resolves Issue #28.
 * Add /status HTTP endpoint for autopush/autoendpoint. Resolves Issue #27.
 * Add example stage/prod config files. Resolves Issue #22.
 * Switch internal routing from requests to twisted http-client. Resolves Issue

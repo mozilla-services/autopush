@@ -9,8 +9,10 @@ from twisted.internet.defer import (
     DeferredList,
     CancelledError
 )
+from twisted.internet.interfaces import IProducer
 from twisted.internet.threads import deferToThread
 from twisted.python import log
+from zope.interface import implements
 
 
 def ms_time():
@@ -23,13 +25,33 @@ def periodic_reporter(settings):
 
 
 class SimplePushServerProtocol(WebSocketServerProtocol):
+    implements(IProducer)
+
     # Testing purposes
     parent_class = WebSocketServerProtocol
 
     def log_err(self, failure):
         log.err(failure)
 
+    def pauseProducing(self):
+        self._paused = True
+
+    def resumeProducing(self):
+        self._paused = False
+
+    def stopProducing(self):
+        self._paused = True
+        self._should_stop = True
+
+    @property
+    def paused(self):
+        return self._paused
+
     def onConnect(self, request):
+        # Setup ourself to handle producing the data
+        self.transport.bufferSize = 2 * 1024
+        self.transport.registerProducer(self, True)
+
         if request:
             self._user_agent = request.headers.get("user-agent")
         else:
@@ -38,11 +60,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if self._user_agent:
             self.base_tags.append("user-agent:%s" % self._user_agent)
         self._should_stop = False
+        self._paused = False
         self.metrics = self.ap_settings.metrics
         self.metrics.increment("client.socket.connect", tags=self.base_tags)
         self.uaid = None
         self.last_ping = 0
-        self.accept_notification = True
         self.check_storage = False
         self.connected_at = ms_time()
 
@@ -169,7 +191,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.uaid = uaid
 
         connect = data.get("connect")
-        if connect is not None and self.ap_settings.pinger is not None:
+        if connect and self.ap_settings.pinger:
             self.transport.pauseProducing()
             d = deferToThread(self.ap_settings.pinger.register, uaid, connect)
             d.addCallback(self._check_router, True)
@@ -219,6 +241,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if self._should_stop:
             return
 
+        # Are we paused? Try again later.
+        if self.paused:
+            reactor.callLater(1, self.process_notifications)
+            return
+
         # Are we already running?
         if self._notification_fetch:
             # Cancel the prior, last one wins
@@ -253,9 +280,17 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             # Exponential back-off on retries
             self._notification_success = False
             reactor.callLater(tries*2+1, self.process_notifications, tries+1)
+        else:
+            self.metrics.increment(
+                "error.process_notifications.retries_exceeded",
+                tags=self.base_tags)
 
     def finish_notifications(self, notifs):
         self._notification_fetch = None
+
+        # Are we paused, try again later
+        if self.paused:
+            reactor.callLater(1, self.process_notifications)
 
         updates = []
         notifs = notifs or []
@@ -266,12 +301,16 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             version = int(s['version'])
             if self.updates_sent.get(chid, 0) >= version:
                 continue
+            direct_notif = self.direct_updates.get(chid)
+            if direct_notif and direct_notif >= version:
+                continue
+            elif direct_notif:
+                # We're going to send a newer one, ignore the direct older
+                # one for acks
+                del self.direct_updates[chid]
             self.updates_sent[chid] = version
             updates.append({"channelID": chid, "version": version})
         if updates:
-            # If we need to send notifications, we now expect a response
-            # before any more notification processing
-            self.accept_notification = False
             msg = {"messageType": "notification", "updates": updates}
             self.sendJSON(msg)
 
@@ -351,55 +390,44 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                           self.uaid, chid)
         d.addErrback(self.force_delete, chid)
 
+    def ack_update(self, update):
+        chid = update.get("channelID")
+        version = update.get("version")
+        if not chid or not version:
+            return
+
+        # If its a direct update, remove it and return
+        if self.direct_updates.get(chid) == version:
+            del self.direct_updates[chid]
+            return
+
+        # Remove the update if version matches
+        if self.updates_sent.get(chid) == version:
+            del self.updates_sent[chid]
+        else:
+            return
+
+        # If we ack'd a notification that wasn't direct, delete it
+        d = deferToThread(self.ap_settings.storage.delete_notification,
+                          self.uaid, chid, version)
+        d.addCallback(self.check_ack, self.uaid, chid, version)
+        d.addErrback(self.log_err)
+        return d
+
     def process_ack(self, data):
         updates = data.get("updates")
         if not updates or not isinstance(updates, list):
             return
 
         self.metrics.increment("updates.client.ack")
-        defers = []
-        for update in updates:
-            chid = update.get("channelID")
-            version = update.get("version")
-            if not chid or not version:
-                continue
-
-            skip = False
-            # We always need to delete direct updates
-            if self.direct_updates.get(chid) == version:
-                del self.direct_updates[chid]
-                skip = True
-
-            # If this is the same as a version we sent, delete
-            # as well
-            if self.updates_sent.get(chid) == version:
-                del self.updates_sent[chid]
-            else:
-                # An ack for something we aren't tracking?
-                continue
-
-            if skip:
-                continue
-
-            # Attempt to delete this notification from storage
-            storage = self.ap_settings.storage
-
-            # TODO: Check result here, and do something if this delete fails
-            # like maybe do a new storage check
-            d = deferToThread(storage.delete_notification,
-                              self.uaid, chid, version)
-            d.addCallback(self.check_ack, self.uaid, chid, version)
-            d.addErrback(self.log_err)
-            defers.append(d)
-
-        # If that was the last ack we were expecting, we're clear now
-        if not self.updates_sent:
-            self.accept_notification = True
+        defers = filter(None, map(self.ack_update, updates))
 
         if defers:
             self.transport.pauseProducing()
             dl = DeferredList(defers)
-            dl.addBoth(self.check_missed_notifications)
+            dl.addBoth(self.check_missed_notifications, True)
+        else:
+            self.check_missed_notifications(None)
 
     def check_ack(self, result, uaid, chid, version):
         if result:
@@ -412,17 +440,14 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         d.addErrback(self.log_err)
         return d
 
-    def check_missed_notifications(self, results):
-        # Resume consuming ack's
-        self.transport.resumeProducing()
+    def check_missed_notifications(self, results, resume=False):
+        if resume:
+            # Resume consuming ack's
+            self.transport.resumeProducing()
 
-        # If they're all ack'd, we will send notifications again
-        if not self.updates_sent:
-            self.accept_notification = True
-
-            # Should we check again?
-            if self._check_notifications:
-                self.process_notifications()
+        # Should we check again?
+        if self._check_notifications:
+            self.process_notifications()
 
     def bad_message(self, typ):
         msg = {"messageType": typ, "status": 401}
@@ -433,24 +458,18 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def send_notifications(self, updates):
         toSend = []
         for update in updates:
-            channel_id, version = update["channelID"], update["version"]
-            if (
-                channel_id in self.updates_sent and
-                self.updates_sent[channel_id] > version
-            ):
-                # Already sent a newer version for this channel, so don't
-                # update our versioning
+            chid, version = update["channelID"], update["version"]
+            if self.updates_sent.get(chid, 0) >= version or \
+               self.direct_updates.get(chid, 0) >= version:
                 continue
 
             # Otherwise we can record we sent this version
-            self.direct_updates[channel_id] = version
-            self.updates_sent[channel_id] = version
+            self.direct_updates[chid] = version
             toSend.append(update)
 
         if toSend:
             msg = {"messageType": "notification", "updates": toSend}
             self.sendJSON(msg)
-            self.accept_notification = False
 
 
 class RouterHandler(cyclone.web.RequestHandler):
@@ -462,7 +481,7 @@ class RouterHandler(cyclone.web.RequestHandler):
             settings.metrics.increment("updates.router.disconnected")
             return self.write("Client not connected.")
 
-        if not client.accept_notification:
+        if client.paused:
             self.set_status(503)
             settings.metrics.increment("updates.router.busy")
             return self.write("Client busy.")
@@ -482,7 +501,7 @@ class NotificationHandler(cyclone.web.RequestHandler):
             settings.metrics.increment("updates.notification.disconnected")
             return self.write("Client not connected.")
 
-        if not client.accept_notification:
+        if client.paused:
             # Client already busy waiting for stuff, flag for check
             client._check_notifications = True
             self.set_status(202)

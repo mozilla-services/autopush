@@ -21,7 +21,7 @@ class TwistedMetrics(object):
     def gauge(self, name, count, **kwargs):
         self._metric.gauge(name, count)
 
-    def timing(self, name, duration):
+    def timing(self, name, duration, **kwargs):
         self._metric.timing(name, duration)
 
 
