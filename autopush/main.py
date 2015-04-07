@@ -1,17 +1,14 @@
 """autopush daemon script"""
-import os
 import sys
 
 import configargparse
 import cyclone.web
-import raven
-import twisted.python
 from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
-from functools import partial
-from twisted.python import log
 from twisted.internet import reactor, task, ssl
+from twisted.python import log
 
 from autopush.endpoint import (EndpointHandler, RegistrationHandler)
+from autopush.logging import setup_logging
 from autopush.settings import AutopushSettings
 from autopush.websocket import (
     SimplePushServerProtocol,
@@ -214,20 +211,9 @@ def make_settings(args, **kwargs):
     )
 
 
-def logToSentry(client, event):
-    if not event.get('isError') or 'failure' not in event:
-        return
-
-    f = event['failure']
-    client.captureException((f.type, f.value, f.getTracebackObject()))
-
-
-def unified_setup():
-    if 'SENTRY_DSN' in os.environ:
-        # Setup the Sentry client
-        client = raven.Client(release=raven.fetch_package_version())
-        logger = partial(logToSentry, client)
-        twisted.python.log.addObserver(logger)
+def skip_request_logging(handler):
+    """Ignores request logging"""
+    pass
 
 
 def connection_main(sysargs=None):
@@ -242,9 +228,7 @@ def connection_main(sysargs=None):
         router_hostname=args.router_hostname,
         router_port=args.router_port,
     )
-
-    log.startLogging(sys.stdout)
-    unified_setup()
+    setup_logging("Autopush")
 
     r = RouterHandler
     r.ap_settings = settings
@@ -254,8 +238,11 @@ def connection_main(sysargs=None):
     # Internal HTTP notification router
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", r),
-        (r"/notif/([^\/]+)", n),
-    ], default_host=settings.router_hostname)
+        (r"/notif/([^\/]+)", n)
+    ],
+        default_host=settings.router_hostname, debug=args.debug,
+        log_function=skip_request_logging
+    )
 
     # Public websocket server
     proto = "wss" if args.ssl_key else "ws"
@@ -304,7 +291,6 @@ def connection_main(sysargs=None):
 
 def endpoint_main(sysargs=None):
     args, parser = _parse_endpoint(sysargs)
-    log.startLogging(sys.stdout)
     settings = make_settings(
         args,
         endpoint_scheme="https" if args.ssl_key else "http",
@@ -313,7 +299,7 @@ def endpoint_main(sysargs=None):
         enable_cors=args.cors
     )
 
-    unified_setup()
+    setup_logging("Autoendpoint")
 
     # Endpoint HTTP router
     endpoint = EndpointHandler
@@ -325,7 +311,9 @@ def endpoint_main(sysargs=None):
         # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint
         (r"/register/([^\/]+)?", register),
-    ], default_host=settings.hostname, debug=args.debug
+    ],
+        default_host=settings.hostname, debug=args.debug,
+        log_function=skip_request_logging
     )
 
     # No reason that the endpoint couldn't handle both...

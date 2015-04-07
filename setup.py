@@ -49,6 +49,7 @@ setup(name="AutoPush",
           "service-identity>=14.0.0",
           "raven>=0.5.2",
           "datadog>=0.2.0",
+          "eliot>=0.6.0",
       ],
       entry_points="""
       [console_scripts]

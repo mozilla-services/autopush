@@ -80,6 +80,14 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_message(d)
         return d
 
+    def test_headers_locate(self):
+        from autobahn.websocket.protocol import ConnectionRequest
+        req = ConnectionRequest("localhost", {"user-agent": "Me"},
+                                "localhost", "/", {}, "1", "localhost",
+                                [], [])
+        self.proto.onConnect(req)
+        eq_(self.proto._user_agent, "Me")
+
     def test_reporter(self):
         from autopush.websocket import periodic_reporter
         periodic_reporter(self.proto.ap_settings)
@@ -161,11 +169,11 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ap_settings.clients["asdf"] = self.proto
 
         # Stick a mock on
-        self.proto._notification_fetch = Mock()
+        self.proto._notification_fetch = notif_mock = Mock()
         self.proto.onClose(True, None, None)
         eq_(len(self.proto.ap_settings.clients), 0)
-        eq_(len(list(self.proto._notification_fetch.mock_calls)), 1)
-        name, _, _ = self.proto._notification_fetch.mock_calls[0]
+        eq_(len(list(notif_mock.mock_calls)), 1)
+        name, _, _ = notif_mock.mock_calls[0]
         eq_(name, "cancel")
 
     def test_hello(self):
@@ -773,6 +781,22 @@ class WebsocketTestCase(unittest.TestCase):
 
         self.proto._notification_fetch.addBoth(check_error)
         return d
+
+    def test_process_notif_doesnt_run_after_stop(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto._should_stop = True
+        self.proto.process_notifications()
+        eq_(self.proto._notification_fetch, None)
+
+    def test_process_notif_stops_if_running_on_error(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.log_err = Mock()
+        self.proto._notification_fetch = notif_mock = Mock()
+        self.proto.error_notifications(None, 0, Mock())
+        eq_(self.proto._notification_fetch, notif_mock)
+        eq_(len(self.proto.log_err.mock_calls), 1)
 
     def test_notification_results(self):
         # Populate the database for ourself

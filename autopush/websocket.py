@@ -26,9 +26,20 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     # Testing purposes
     parent_class = WebSocketServerProtocol
 
+    def log_err(self, failure):
+        log.err(failure)
+
     def onConnect(self, request):
+        if request:
+            self._user_agent = request.headers.get("user-agent")
+        else:
+            self._user_agent = None
+        self.base_tags = []
+        if self._user_agent:
+            self.base_tags.append("user-agent:%s" % self._user_agent)
+        self._should_stop = False
         self.metrics = self.ap_settings.metrics
-        self.metrics.increment("client.socket.connect")
+        self.metrics.increment("client.socket.connect", tags=self.base_tags)
         self.uaid = None
         self.last_ping = 0
         self.accept_notification = True
@@ -107,13 +118,15 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # TODO: Any notifications directly delivered but not ack'd need
         # to be punted to an endpoint router
         uaid = getattr(self, "uaid", None)
+        self._should_stop = True
         if uaid:
             self.cleanUp()
 
     def cleanUp(self):
-        self.metrics.increment("client.socket.disconnect")
+        self.metrics.increment("client.socket.disconnect", tags=self.base_tags)
         elapsed = (ms_time() - self.connected_at) / 1000.0
-        self.metrics.timing("client.socket.lifespan", duration=elapsed)
+        self.metrics.timing("client.socket.lifespan", duration=elapsed,
+                            tags=self.base_tags)
         if self.uaid and self.ap_settings.clients.get(self.uaid) == self:
             del self.ap_settings.clients[self.uaid]
             for defer in [self._notification_fetch, self._register]:
@@ -126,7 +139,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                        "status": statusCode})
         if close:
             self.sendClose()
-        return
 
     def sendJSON(self, body):
         self.sendMessage(json.dumps(body).encode('utf8'), False)
@@ -178,6 +190,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                           self.uaid, url, self.connected_at)
         d.addCallback(self.finish_hello)
         d.addErrback(self.err_hello)
+        d.addErrback(self.log_err)
         self._register = d
         return d
 
@@ -198,10 +211,14 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}
         self.ap_settings.clients[self.uaid] = self
         self.sendJSON(msg)
-        self.metrics.increment("updates.client.hello")
+        self.metrics.increment("updates.client.hello", tags=self.base_tags)
         self.process_notifications()
 
-    def process_notifications(self):
+    def process_notifications(self, tries=0):
+        # Bail immediately if we are closed.
+        if self._should_stop:
+            return
+
         # Are we already running?
         if self._notification_fetch:
             # Cancel the prior, last one wins
@@ -213,7 +230,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         d = deferToThread(self.ap_settings.storage.fetch_notifications,
                           self.uaid)
         d.addErrback(self.cancel_notifications)
-        d.addErrback(self.error_notifications)
+        d.addErrback(self.error_notifications, tries, d)
         d.addCallback(self.finish_notifications)
         self._notification_fetch = d
 
@@ -221,12 +238,21 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Don't do anything else, we got cancelled
         fail.trap(CancelledError)
 
-    def error_notifications(self, fail):
+    def error_notifications(self, fail, tries, d):
         # Ignore errors, but we must re-run this if it failed
-        log.err(fail)
+        self.log_err(fail)
+
+        # If we're running, and its not us, or we already were cleared, then
+        # don't reschedule
+        if self._notification_fetch is not d:
+            return
+
         self._notification_fetch = None
         self._check_notifications = False
-        reactor.callLater(1, self.process_notifications)
+        if tries < 3:
+            # Exponential back-off on retries
+            self._notification_success = False
+            reactor.callLater(tries*2+1, self.process_notifications, tries+1)
 
     def finish_notifications(self, notifs):
         self._notification_fetch = None
@@ -257,7 +283,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def process_ping(self):
         now = time.time()
         if now - self.last_ping < self.ap_settings.min_ping_interval:
-            self.metrics.increment("updates.client.too_many_pings")
+            self.metrics.increment("updates.client.too_many_pings",
+                                   tags=self.base_tags)
             return self.sendClose()
         self.last_ping = now
         self.metrics.increment("updates.client.ping")
@@ -293,7 +320,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                "status": 200
                }
         self.sendJSON(msg)
-        self.metrics.increment("updates.client.register")
+        self.metrics.increment("updates.client.register", tags=self.base_tags)
 
     def process_unregister(self, data):
         if "channelID" not in data:
@@ -304,7 +331,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         except ValueError:
             return self.bad_message("unregister")
 
-        self.metrics.increment("updates.client.unregister")
+        self.metrics.increment("updates.client.unregister",
+                               tags=self.base_tags)
 
         # Delete any record from storage, we don't wait for this
         d = deferToThread(self.ap_settings.storage.delete_notification,
@@ -317,7 +345,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         """Forces another delete call through until it works"""
         if result not in [True, False]:
             # This is an exception, log it
-            log.err(result)
+            self.log_err(result)
 
         d = deferToThread(self.ap_settings.storage.delete_notification,
                           self.uaid, chid)
@@ -361,7 +389,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             d = deferToThread(storage.delete_notification,
                               self.uaid, chid, version)
             d.addCallback(self.check_ack, self.uaid, chid, version)
-            d.addErrback(log.err)
+            d.addErrback(self.log_err)
             defers.append(d)
 
         # If that was the last ack we were expecting, we're clear now
@@ -381,7 +409,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         d = deferToThread(self.ap_settings.storage.delete_notification, uaid,
                           chid, version)
         d.addCallback(self.check_ack, uaid, chid, version)
-        d.addErrback(log.err)
+        d.addErrback(self.log_err)
         return d
 
     def check_missed_notifications(self, results):
