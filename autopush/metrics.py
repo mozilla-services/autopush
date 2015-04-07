@@ -4,6 +4,7 @@ from txstatsd.metrics.metrics import Metrics
 
 import datadog
 from datadog import ThreadStats
+from datadog.util.hostname import get_hostname
 
 
 class TwistedMetrics(object):
@@ -31,15 +32,17 @@ class DatadogMetrics(object):
         self._client = ThreadStats()
         self._flush_interval = flush_interval
 
+        self._host = get_hostname()
+
     def start(self):
         self._client.start(flush_interval=self._flush_interval,
                            roll_up_interval=self._flush_interval)
 
     def increment(self, name, count=1, **kwargs):
-        self._client.increment(name, count, **kwargs)
+        self._client.increment(name, count, host=self._host, **kwargs)
 
     def gauge(self, name, count, **kwargs):
-        self._client.gauge(name, count, **kwargs)
+        self._client.gauge(name, count, host=self._host, **kwargs)
 
     def timing(self, name, duration, **kwargs):
-        self._client.timing(name, value=duration, **kwargs)
+        self._client.timing(name, value=duration, host=self._host, **kwargs)
