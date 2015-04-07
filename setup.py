@@ -41,10 +41,12 @@ setup(name="AutoPush",
           "cryptography>=0.7.2",
           "cyclone>=1.1",
           "boto>=2.36",
-          "requests>=2.5.3",
           "txstatsd>=1.0.0",
           "configargparse>=0.9.3",
+          "apns>=2.0.1",
+          "gcm-client>=0.1.4",
           "pyopenssl>=0.14",
+          "service-identity>=14.0.0",
           "raven>=0.5.2",
           "datadog>=0.2.0",
           "eliot>=0.6.0",
@@ -53,6 +55,7 @@ setup(name="AutoPush",
       [console_scripts]
       autopush = autopush.main:connection_main
       autoendpoint = autopush.main:endpoint_main
+      autokey = autokey:main
       """,
       **extra_options
       )

@@ -17,6 +17,8 @@ lib-python/*
 bin/*
 include/*
 lib_pypy/*
+*.swp
+*.ini
 pypy/
 src/
 .tox/

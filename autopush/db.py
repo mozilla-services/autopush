@@ -9,6 +9,8 @@ from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table
 from boto.dynamodb2.types import NUMBER
 
+import json
+
 
 def create_router_table(tablename="router", read_throughput=5,
                         write_throughput=5):
@@ -83,7 +85,7 @@ class Storage(object):
         try:
             cond = "attribute_not_exists(version) or version < :ver"
             conn.put_item(
-                "storage",
+                self.table.table_name,
                 item={
                     "uaid": {'S': uaid},
                     "chid": {'S': chid},
@@ -113,6 +115,58 @@ class Storage(object):
             self.metrics.increment("error.provisioned.delete_notification")
             return False
 
+    # Proprietary Ping storage info
+    # Tempted to put this in own class.
+
+    ping_label = "proprietary_ping"
+    type_label = "ping_type"
+    modf_label = "modified"
+
+    def register_connect(self, uaid, connect):
+        try:
+            cinfo = json.loads(connect)
+            """ Register a type of proprietary ping data"""
+            # Always overwrite.
+            if cinfo.get("type") is None:
+                return False
+            self.table.connection.update_item(
+                self.table.table_name,
+                key={"uaid": {'S': uaid}},
+                attribute_updates={
+                    self.ping_label: {"Action": "PUT",
+                                      "Value": {'S': connect}},
+                }
+            )
+        except ProvisionedThroughputExceededException:
+            return False
+        except ValueError:
+            # Invalid connect JSON specified, most likely.
+            return False
+        return True
+
+    def get_connection(self, uaid):
+        try:
+            record = self.table.get_item(consistent=True,
+                                         uaid=uaid)
+        except ItemNotFound:
+            return False
+        except ProvisionedThroughputExceededException:
+            return False
+        return json.loads(record.get(self.ping_label))
+
+    def unregister_connect(self, uaid):
+        try:
+            self.table.connection.update_item(
+                self.table.table_name,
+                key={"uaid": {'S': uaid}},
+                attribute_updates={
+                    self.ping_label: {"Action": "DELETE"},
+                },
+            )
+        except ProvisionedThroughputExceededException:
+            return False
+        return True
+
 
 class Router(object):
     def __init__(self, table, metrics):
@@ -137,7 +191,7 @@ class Router(object):
         try:
             cond = "attribute_not_exists(node_id) or (connected_at < :conn)"
             conn.put_item(
-                "router",
+                self.table.table_name,
                 item={
                     "uaid": {'S': uaid},
                     "node_id": {'S': node_id},
@@ -161,7 +215,7 @@ class Router(object):
         try:
             cond = "(node_id = :node) and (connected_at = :conn)"
             conn.put_item(
-                "router",
+                self.table.table_name,
                 item={
                     "uaid": {'S': item["uaid"]},
                     "connected_at": {'N': str(item["connected_at"])}

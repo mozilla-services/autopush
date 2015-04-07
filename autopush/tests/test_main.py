@@ -2,8 +2,13 @@ import unittest
 
 from mock import patch
 from moto import mock_dynamodb2
+from nose.util import eq_
 
-from autopush.main import connection_main, endpoint_main
+from autopush.main import (
+    connection_main,
+    endpoint_main,
+    make_settings
+)
 
 mock_dynamodb2 = mock_dynamodb2()
 
@@ -56,3 +61,36 @@ class EndpointMainTestCase(unittest.TestCase):
 
     def test_basic(self):
         endpoint_main([])
+
+    def test_ping_settings(self):
+        class arg:
+            # important stuff
+            pinger = True
+            gcm_apikey = "gcm.key"
+            apns_cert_file = "cert.file"
+            apns_key_file = "key.file"
+            # less important stuff
+            apns_sandbox = False
+            gcm_ttl = 999
+            gcm_dryrun = False
+            gcm_collapsekey = "collapse"
+
+            # filler
+            crypto_key = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+            datadog_api_key = "datadog_api_key"
+            datadog_app_key = "datadog_app_key"
+            datadog_flush_interval = "datadog_flush_interval"
+            hostname = "hostname"
+            statsd_host = "statsd_host"
+            statsd_port = "statsd_port"
+            router_tablename = "None"
+            storage_tablename = "None"
+            storage_read_throughput = 0
+            storage_write_throughput = 0
+            router_read_throughput = 0
+            router_write_throughput = 0
+
+        ap = make_settings(arg)
+        eq_(ap.pinger.gcm.gcm.api_key, arg.gcm_apikey)
+        eq_(ap.pinger.apns.apns.cert_file, arg.apns_cert_file)
+        eq_(ap.pinger.apns.apns.key_file, arg.apns_key_file)
