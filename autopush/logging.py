@@ -10,7 +10,6 @@ import sys
 import raven
 from eliot import add_destination, fields, Logger, MessageType
 from twisted.python.log import textFromEventDict, startLoggingWithObserver
-from twisted.python import log as twisted_log
 
 HOSTNAME = socket.getfqdn()
 LOGGER = None
@@ -21,36 +20,36 @@ TWISTED_LOG_MESSAGE = MessageType("twisted:log",
 
 class EliotObserver(object):
     """A Twisted log observer that logs to Eliot."""
-    def __init__(self, publisher=twisted_log):
-        """
-        :param publisher: A ``LogPublisher`` to capture logs from, or if no
-            argument is given the default Twisted log system.
-        """
+    def __init__(self):
         if "SENTRY_DSN" in os.environ:
-            self.raven_log = raven.Client(
+            self.raven_client = raven.Client(
                 release=raven.fetch_package_version())
         else:
-            self.raven_log = None
+            self.raven_client = None
         self.logger = Logger()
-        self.publisher = publisher
 
     def raven_log(self, event):
         f = event['failure']
-        self.raven_log.captureException(
+        self.raven_client.captureException(
             (f.type, f.value, f.getTracebackObject()))
 
     def __call__(self, msg):
         error = bool(msg.get("isError"))
 
-        if self.raven_log and (error or 'failure' in msg):
+        if self.raven_client and (error or 'failure' in msg):
             self.raven_log(msg)
+            error = True
 
         # Twisted log messages on Python 2 are bytes. We don't know the
         # encoding, but assume it's ASCII superset. Charmap will translate
         # ASCII correctly, and higher-bit characters just map to
         # corresponding Unicode code points, and will never fail at decoding.
         message = unicode(textFromEventDict(msg), "charmap")
-        TWISTED_LOG_MESSAGE(error=error, message=message).write(self.logger)
+        kw = msg.copy()
+        for key in ["message", "isError", "failure", "why", "format"]:
+            kw.pop(key, None)
+        TWISTED_LOG_MESSAGE(error=error, message=message, **kw).write(
+            self.logger)
 
     def start(self):
         """Start capturing Twisted logs."""
@@ -66,7 +65,7 @@ def stdout(message):
         msg["Severity"] = 3
     else:
         msg["Severity"] = 5
-    for key in ["Type", "EnvVersion", "Severity"]:
+    for key in ["Type", "Severity"]:
         if key in message:
             msg[key] = message.pop(key)
     msg["Timestamp"] = ts * 1000 * 1000 * 1000
@@ -74,12 +73,13 @@ def stdout(message):
     msg["EnvVersion"] = "1.0"
     msg["Logger"] = LOGGER
     sys.stdout.write(json.dumps(msg) + "\n")
-add_destination(stdout)
 
 
 def setup_logging(logger_name):
     global LOGGER
     LOGGER = "-".join([logger_name,
                        pkg_resources.get_distribution("autopush").version])
+    add_destination(stdout)
     ellie = EliotObserver()
     ellie.start()
+    return ellie

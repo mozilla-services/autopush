@@ -1,11 +1,12 @@
 import os
+import sys
 
 import twisted.internet
-import twisted.trial
+import twisted.trial.unittest
 
 from mock import Mock, patch
 from nose.tools import eq_
-from twisted.python import log
+from twisted.python import log, failure
 
 from autopush.logging import setup_logging
 
@@ -20,12 +21,25 @@ class SentryLogTestCase(twisted.trial.unittest.TestCase):
 
     def tearDown(self):
         self.mock_raven.stop()
+        log.startLogging(sys.stdout)
 
     def test_sentry_logging(self):
         os.environ["SENTRY_DSN"] = "some_locale"
         setup_logging("Autopush")
         eq_(len(self.mock_raven.mock_calls), 2)
 
-        log.err(Exception("eek"))
+        log.err(failure.Failure(Exception("eek")))
         self.flushLoggedErrors()
         eq_(len(self.mock_client.mock_calls), 1)
+        del os.environ["SENTRY_DSN"]
+
+
+class EliotLogTestCase(twisted.trial.unittest.TestCase):
+    def test_custom_type(self):
+        setup_logging("Autopush")
+        with patch("sys.stdout") as mock_stdout:
+            log.msg("omg!", Type=7)
+            eq_(len(mock_stdout.mock_calls), 1)
+            first_call = mock_stdout.mock_calls[0]
+            funcname, args, kwargs = first_call
+            self.assert_("Typee" in kwargs)
