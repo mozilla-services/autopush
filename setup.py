@@ -1,8 +1,7 @@
-__version__ = '0.1'
-
 import io
 import os
 
+from autopush import __version__
 from setuptools import setup, find_packages
 
 here = os.path.abspath(os.path.dirname(__file__))
