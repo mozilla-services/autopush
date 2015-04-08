@@ -38,4 +38,6 @@ EXPOSE 8080
 # HTTP update port.
 EXPOSE 8082
 
+ENV RESOLVE_HOSTNAMES 1
+
 CMD ["./automock/automock"]

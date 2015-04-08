@@ -1,6 +1,7 @@
 import socket
 
 from cryptography.fernet import Fernet
+from itertools import imap
 from twisted.internet import reactor
 from twisted.web.client import Agent, HTTPConnectionPool
 
@@ -49,6 +50,7 @@ class AutopushSettings(object):
                  statsd_host="localhost",
                  statsd_port=8125,
                  pingConf=None,
+                 resolve_hostnames=False,
                  enable_cors=False):
 
         # Use a persistent connection pool for HTTP requests.
@@ -79,11 +81,16 @@ class AutopushSettings(object):
 
         # Setup hosts/ports/urls
         default_hostname = socket.gethostname()
-        self.connection_hostname = connection_hostname or default_hostname
+        hostnames = (x or default_hostname for x in (connection_hostname,
+                     endpoint_hostname, router_hostname))
+        if resolve_hostnames:
+            hostnames = imap(resolve_hostname, hostnames)
+
+        self.connection_hostname, self.endpoint_hostname,\
+            self.router_hostname = hostnames
+
         self.connection_port = connection_port
-        self.endpoint_hostname = endpoint_hostname or default_hostname
         self.endpoint_port = endpoint_port
-        self.router_hostname = router_hostname or default_hostname
         self.router_port = router_port
 
         self.router_url = canonical_url(

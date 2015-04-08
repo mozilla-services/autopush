@@ -49,6 +49,8 @@ def add_shared_args(parser):
                         default=10, env_var="DATADOG_FLUSH_INTERVAL")
     parser.add_argument('--hostname', help="Hostname to announce under",
                         type=str, default=None, env_var="HOSTNAME")
+    parser.add_argument('--resolve_hostnames', help='Resolve all hostnames',
+                        type=bool, default=False, env_var="RESOLVE_HOSTNAMES")
     parser.add_argument('--statsd_host', help="Statsd Host", type=str,
                         default="localhost", env_var="STATSD_HOST")
     parser.add_argument('--statsd_port', help="Statsd Port", type=int,
@@ -223,6 +225,7 @@ def make_settings(args, **kwargs):
         storage_write_throughput=args.storage_write_throughput,
         router_read_throughput=args.router_read_throughput,
         router_write_throughput=args.router_write_throughput,
+        resolve_hostnames=args.resolve_hostnames,
         **kwargs
     )
 
