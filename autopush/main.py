@@ -26,10 +26,14 @@ shared_config_files = [
 ]
 
 
+def add_ssl_args(parser):
+    parser.add_argument('--ssl_key', help="SSL Key path", type=str,
+                        default="", env_var="SSL_KEY")
+    parser.add_argument('--ssl_cert', help="SSL Cert path", type=str,
+                        default="", env_var="SSL_CERT")
+
+
 def add_shared_args(parser):
-    parser.add_argument('--config-shared',
-                        help="Common configuration file path",
-                        dest='config_file', is_config_file=True)
     parser.add_argument('--debug', help='Debug Info.', action='store_true',
                         default=False, env_var="DEBUG")
     parser.add_argument('--crypto_key', help="Crypto key for tokens", type=str,
@@ -48,10 +52,6 @@ def add_shared_args(parser):
                         default="localhost", env_var="STATSD_HOST")
     parser.add_argument('--statsd_port', help="Statsd Port", type=int,
                         default=8125, env_var="STATSD_PORT")
-    parser.add_argument('--ssl_key', help="SSL Key path", type=str,
-                        default="", env_var="SSL_KEY")
-    parser.add_argument('--ssl_cert', help="SSL Cert path", type=str,
-                        default="", env_var="SSL_CERT")
     parser.add_argument('--router_tablename', help="DynamoDB Router Tablename",
                         type=str, default="router", env_var="ROUTER_TABLENAME")
     parser.add_argument('--storage_tablename',
@@ -72,6 +72,34 @@ def add_shared_args(parser):
                         type=int, default=5, env_var="ROUTER_WRITE_THROUGHPUT")
     parser.add_argument('--log_level', type=int, default=40,
                         env_var="LOG_LEVEL")
+
+
+def add_connection_args(parser):
+    parser.add_argument('--router_hostname',
+                        help="HTTP Router Hostname to use for internal "
+                        "router connects", type=str, default=None,
+                        env_var="ROUTER_HOSTNAME")
+    parser.add_argument('-r', '--router_port',
+                        help="HTTP Router Port for internal router connects",
+                        type=int, default=8081, env_var="ROUTER_PORT")
+    parser.add_argument('--router_ssl_key',
+                        help="Routing listener SSL key path", type=str,
+                        default="", env_var="ROUTER_SSL_KEY")
+    parser.add_argument('--router_ssl_cert',
+                        help="Routing listener SSL cert path", type=str,
+                        default="", env_var="ROUTER_SSL_CERT")
+    parser.add_argument('--endpoint_scheme', help="HTTP Endpoint Scheme",
+                        type=str, default="http", env_var="ENDPOINT_SCHEME")
+    parser.add_argument('--endpoint_hostname', help="HTTP Endpoint Hostname",
+                        type=str, default=None, env_var="ENDPOINT_HOSTNAME")
+    parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
+                        type=int, default=8082, env_var="ENDPOINT_PORT")
+
+
+def add_endpoint_args(parser):
+    parser.add_argument('--cors', help='Allow CORS PUTs for update.',
+                        action='store_true', default=False,
+                        env_var='ALLOW_CORS')
 
 
 def add_pinger_args(parser):
@@ -118,32 +146,17 @@ def _parse_connection(sysargs=None):
     parser = configargparse.ArgumentParser(
         description='Runs a Connection Node.',
         default_config_files=shared_config_files + config_files)
+    parser.add_argument('--config-shared',
+                        help="Common configuration file path",
+                        dest='config_file', is_config_file=True)
     parser.add_argument('--config-connection',
                         help="Connection node configuration file path",
                         dest='config_file', is_config_file=True)
     parser.add_argument('-p', '--port', help='Websocket Port', type=int,
                         default=8080, env_var="PORT")
-    parser.add_argument('--router_hostname',
-                        help="HTTP Router Hostname to use for internal "
-                        "router connects", type=str, default=None,
-                        env_var="ROUTER_HOSTNAME")
-    parser.add_argument('-r', '--router_port',
-                        help="HTTP Router Port for internal router connects",
-                        type=int, default=8081, env_var="ROUTER_PORT")
-    parser.add_argument('--router_ssl_key',
-                        help="Routing listener SSL key path", type=str,
-                        default="", env_var="ROUTER_SSL_KEY")
-    parser.add_argument('--router_ssl_cert',
-                        help="Routing listener SSL cert path", type=str,
-                        default="", env_var="ROUTER_SSL_CERT")
-    parser.add_argument('--endpoint_scheme', help="HTTP Endpoint Scheme",
-                        type=str, default="http", env_var="ENDPOINT_SCHEME")
-    parser.add_argument('--endpoint_hostname', help="HTTP Endpoint Hostname",
-                        type=str, default=None, env_var="ENDPOINT_HOSTNAME")
-    parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
-                        type=int, default=8082, env_var="ENDPOINT_PORT")
-
+    add_connection_args(parser)
     add_pinger_args(parser)
+    add_ssl_args(parser)
     add_shared_args(parser)
     args = parser.parse_args(sysargs)
     return args, parser
@@ -161,16 +174,18 @@ def _parse_endpoint(sysargs=None):
     parser = configargparse.ArgumentParser(
         description='Runs an Endpoint Node.',
         default_config_files=shared_config_files + config_files)
+    parser.add_argument('--config-shared',
+                        help="Common configuration file path",
+                        dest='config_file', is_config_file=True)
     parser.add_argument('--config-endpoint',
                         help="Endpoint node configuration file path",
                         dest='config_file', is_config_file=True)
     parser.add_argument('-p', '--port', help='Public HTTP Endpoint Port',
                         type=int, default=8082, env_var="PORT")
-    parser.add_argument('--cors', help='Allow CORS PUTs for update.',
-                        action='store_true', default=False,
-                        env_var='ALLOW_CORS')
-    add_shared_args(parser)
+    add_endpoint_args(parser)
     add_pinger_args(parser)
+    add_ssl_args(parser)
+    add_shared_args(parser)
     args = parser.parse_args(sysargs)
     return args, parser
 
@@ -198,7 +213,6 @@ def make_settings(args, **kwargs):
         datadog_api_key=args.datadog_api_key,
         datadog_app_key=args.datadog_app_key,
         datadog_flush_interval=args.datadog_flush_interval,
-        hostname=args.hostname,
         statsd_host=args.statsd_host,
         statsd_port=args.statsd_port,
         pingConf=pingConf,
@@ -217,20 +231,8 @@ def skip_request_logging(handler):
     pass
 
 
-def connection_main(sysargs=None):
-    args, parser = _parse_connection(sysargs)
-    settings = make_settings(
-        args,
-        port=args.port,
-        endpoint_scheme=args.endpoint_scheme,
-        endpoint_hostname=args.endpoint_hostname,
-        endpoint_port=args.endpoint_port,
-        router_scheme="https" if args.router_ssl_key else "http",
-        router_hostname=args.router_hostname,
-        router_port=args.router_port,
-    )
-    setup_logging("Autopush")
-
+def _setup_connection(settings, origin, debug=False, wsContextFactory=None,
+                      routerContextFactory=None):
     r = RouterHandler
     r.ap_settings = settings
     n = NotificationHandler
@@ -244,16 +246,15 @@ def connection_main(sysargs=None):
         (r"/notif/([^\/]+)", n),
         (r"^/status/", s),
     ],
-        default_host=settings.router_hostname, debug=args.debug,
+        default_host=settings.router_hostname, debug=debug,
         log_function=skip_request_logging
     )
 
     # Public websocket server
-    proto = "wss" if args.ssl_key else "ws"
     factory = WebSocketServerFactory(
-        "%s://%s:%s/" % (proto, args.hostname, args.port),
-        debug=args.debug,
-        debugCodePaths=args.debug,
+        origin,
+        debug=debug,
+        debugCodePaths=debug,
     )
     factory.protocol = SimplePushServerProtocol
     factory.protocol.ap_settings = settings
@@ -265,28 +266,87 @@ def connection_main(sysargs=None):
         failByDrop=False,
     )
 
-    settings.metrics.start()
-
     # Start the WebSocket listener.
-    if args.ssl_key:
-        contextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
-                                                          args.ssl_cert)
-        listenWS(factory, contextFactory)
+    if wsContextFactory:
+        listenWS(factory, wsContextFactory)
     else:
-        reactor.listenTCP(args.port, factory)
+        reactor.listenTCP(settings.connection_port, factory)
 
     # Start the internal routing listener.
-    if args.router_ssl_key:
-        contextFactory = ssl.DefaultOpenSSLContextFactory(args.router_ssl_key,
-                                                          args.router_ssl_cert)
-        reactor.listenSSL(args.router_port, site, contextFactory)
+    if routerContextFactory:
+        reactor.listenSSL(settings.router_port, site, routerContextFactory)
     else:
-        reactor.listenTCP(args.router_port, site)
-
-    reactor.suggestThreadPoolSize(50)
+        reactor.listenTCP(settings.router_port, site)
 
     l = task.LoopingCall(periodic_reporter, settings)
     l.start(1.0)
+
+
+def _setup_endpoint(settings, debug=False, contextFactory=None):
+    # Endpoint HTTP router
+    endpoint = EndpointHandler
+    endpoint.ap_settings = settings
+    register = RegistrationHandler
+    register.ap_settings = settings
+    status = StatusHandler
+    status.ap_settings = settings
+    site = cyclone.web.Application([
+        (r"/push/([^\/]+)", endpoint),
+        # PUT /register/ => connect info
+        # GET /register/uaid => chid + endpoint
+        (r"/register/([^\/]+)?", register),
+        (r"^/status", status),
+    ],
+        default_host=settings.endpoint_hostname, debug=debug,
+        log_function=skip_request_logging
+    )
+
+    # No reason that the endpoint couldn't handle both...
+    endpoint.pinger = settings.pinger
+    register.pinger = settings.pinger
+
+    if contextFactory:
+        reactor.listenSSL(settings.endpoint_port, site, contextFactory)
+    else:
+        reactor.listenTCP(settings.endpoint_port, site)
+
+
+def connection_main(sysargs=None):
+    args, parser = _parse_connection(sysargs)
+    settings = make_settings(
+        args,
+        endpoint_scheme=args.endpoint_scheme,
+        endpoint_hostname=args.endpoint_hostname,
+        connection_hostname=args.hostname,
+        connection_port=args.port,
+        endpoint_port=args.endpoint_port,
+        router_scheme="https" if args.router_ssl_key else "http",
+        router_hostname=args.router_hostname,
+        router_port=args.router_port,
+    )
+    setup_logging("Autopush")
+
+    proto = "wss" if args.ssl_key else "ws"
+    origin = "%s://%s:%s/" % (proto, settings.connection_hostname,
+                              settings.connection_port)
+
+    wsContextFactory = None
+    if args.ssl_key:
+        wsContextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
+                                                            args.ssl_cert)
+
+    routerContextFactory = None
+    if args.router_ssl_key:
+        routerContextFactory = ssl.DefaultOpenSSLContextFactory(
+            args.router_ssl_key, args.router_ssl_cert)
+
+    settings.metrics.start()
+    _setup_connection(settings, origin, debug=args.debug,
+                      wsContextFactory=wsContextFactory,
+                      routerContextFactory=routerContextFactory)
+
+    reactor.suggestThreadPoolSize(50)
+
     try:
         reactor.run()
     except KeyboardInterrupt:
@@ -305,36 +365,86 @@ def endpoint_main(sysargs=None):
 
     setup_logging("Autoendpoint")
 
-    # Endpoint HTTP router
-    endpoint = EndpointHandler
-    endpoint.ap_settings = settings
-    register = RegistrationHandler
-    register.ap_settings = settings
-    status = StatusHandler
-    status.ap_settings = settings
-    site = cyclone.web.Application([
-        (r"/push/([^\/]+)", endpoint),
-        # PUT /register/ => connect info
-        # GET /register/uaid => chid + endpoint
-        (r"/register/([^\/]+)?", register),
-        (r"^/status", status),
-    ],
-        default_host=settings.hostname, debug=args.debug,
-        log_function=skip_request_logging
-    )
-
-    # No reason that the endpoint couldn't handle both...
-    endpoint.pinger = settings.pinger
-    register.pinger = settings.pinger
-
-    settings.metrics.start()
-
+    contextFactory = None
     if args.ssl_key:
         contextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
                                                           args.ssl_cert)
-        reactor.listenSSL(args.port, site, contextFactory)
-    else:
-        reactor.listenTCP(args.port, site)
+
+    settings.metrics.start()
+    _setup_endpoint(settings, debug=args.debug, contextFactory=contextFactory)
+
+    reactor.suggestThreadPoolSize(50)
+    reactor.run()
+
+
+def unified_main(sysargs=None):
+    if sysargs is None:
+        sysargs = sys.argv[1:]
+
+    parser = configargparse.ArgumentParser(
+        description='Runs a unified push server.',
+        default_config_files=[
+            '/etc/autopush.ini',
+            '~/.autopush.ini',
+            '.autopush.ini'
+        ])
+    parser.add_argument('-c', '--connection_port', help="Websocket Port",
+                        type=int, default=8080, env_var="CONNECTION_PORT")
+    parser.add_argument('--connection_ssl_key',
+                        help="Connection node SSL key path",
+                        type=str, default="", env_var="CONNECTION_SSL_KEY")
+    parser.add_argument('--connection_ssl_cert',
+                        help="Connection node SSL cert path",
+                        type=str, default="", env_var="CONNECTION_SSL_CERT")
+    parser.add_argument('--endpoint_ssl_key',
+                        help="Endpoint node SSL key path",
+                        type=str, default="", env_var="ENDPOINT_SSL_KEY")
+    parser.add_argument('--endpoint_ssl_cert',
+                        help="Endpoint node SSL cert path",
+                        type=str, default="", env_var="ENDPOINT_SSL_CERT")
+    add_connection_args(parser)
+    add_endpoint_args(parser)
+    add_pinger_args(parser)
+    add_shared_args(parser)
+
+    args = parser.parse_args(sysargs)
+    settings = make_settings(
+        args,
+        endpoint_scheme="https" if args.endpoint_ssl_key else "http",
+        endpoint_hostname=args.hostname,
+        connection_hostname=args.hostname,
+        connection_port=args.connection_port,
+        endpoint_port=args.endpoint_port,
+        router_scheme="https" if args.router_ssl_key else "http",
+        router_hostname=args.router_hostname,
+        router_port=args.router_port,
+        enable_cors=args.cors
+    )
+    setup_logging("Autonode")
+
+    proto = "wss" if args.connection_ssl_cert else "ws"
+    origin = "%s://%s:%s/" % (proto, settings.connection_hostname,
+                              settings.connection_port)
+
+    wsContextFactory = routerContextFactory = endpointContextFactory = None
+    if args.connection_ssl_cert:
+        wsContextFactory = ssl.DefaultOpenSSLContextFactory(
+            args.connection_ssl_cert, args.connection_ssl_key)
+
+    if args.router_ssl_cert:
+        routerContextFactory = ssl.DefaultOpenSSLContextFactory(
+            args.router_ssl_cert, args.router_ssl_key)
+
+    if args.endpoint_ssl_cert:
+        endpointContextFactory = ssl.DefaultOpenSSLContextFactory(
+            args.endpoint_ssl_cert, args.endpoint_ssl_key)
+
+    settings.metrics.start()
+    _setup_connection(settings, origin, debug=args.debug,
+                      wsContextFactory=wsContextFactory,
+                      routerContextFactory=routerContextFactory)
+    _setup_endpoint(settings, debug=args.debug,
+                    contextFactory=endpointContextFactory)
 
     reactor.suggestThreadPoolSize(50)
     reactor.run()

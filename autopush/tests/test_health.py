@@ -19,7 +19,8 @@ class HealthTestCase(unittest.TestCase):
         self.mock_dynamodb2.start()
 
         self.settings = StatusHandler.ap_settings = AutopushSettings(
-            hostname="localhost",
+            connection_hostname="localhost",
+            endpoint_hostname="localhost",
             statsd_host=None,
         )
         self.request_mock = Mock()
