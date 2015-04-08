@@ -1,3 +1,5 @@
+.git
+.tox
 .DS_Store
 .svn
 *.pyc
@@ -17,3 +19,4 @@ lib-python/*
 bin/*
 include/*
 lib_pypy/*
+pypy

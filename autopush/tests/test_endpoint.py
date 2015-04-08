@@ -60,7 +60,7 @@ class EndpointTestCase(unittest.TestCase):
         twisted.internet.base.DelayedCall.debug = True
 
         settings = endpoint.EndpointHandler.ap_settings = AutopushSettings(
-            hostname="localhost",
+            endpoint_hostname="localhost",
             statsd_host=None,
         )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
@@ -662,7 +662,7 @@ class RegistrationTestCase(unittest.TestCase):
         twisted.internet.base.DelayedCall.debug = True
         settings = endpoint.RegistrationHandler.ap_settings =\
             AutopushSettings(
-                hostname="localhost",
+                endpoint_hostname="localhost",
                 statsd_host=None,
             )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)

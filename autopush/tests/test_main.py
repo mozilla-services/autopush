@@ -7,7 +7,14 @@ from nose.tools import eq_
 from autopush.main import (
     connection_main,
     endpoint_main,
+    unified_main,
     make_settings
+)
+from autopush.endpoint import (EndpointHandler, RegistrationHandler)
+from autopush.websocket import (
+    SimplePushServerProtocol,
+    RouterHandler,
+    NotificationHandler,
 )
 
 mock_dynamodb2 = mock_dynamodb2()
@@ -19,6 +26,41 @@ def setUp():
 
 def tearDown():
     mock_dynamodb2.stop()
+
+
+class UnifiedMainTestCase(unittest.TestCase):
+    def setUp(self):
+        patchers = [
+            "autopush.main.log",
+            "autopush.main.task",
+            "autopush.main.reactor",
+            "autopush.settings.TwistedMetrics",
+        ]
+        self.mocks = {}
+        for name in patchers:
+            patcher = patch(name)
+            self.mocks[name] = patcher.start()
+
+    def tearDown(self):
+        for mock in self.mocks.values():
+            mock.stop()
+
+    def test_basic(self):
+        unified_main([
+            "--hostname",
+            "localhost",
+        ])
+        eq_(len(self.mocks["autopush.main.reactor"].run.mock_calls), 1)
+        # Should use a unified settings object for all handlers.
+        settings = EndpointHandler.ap_settings
+        eq_(settings, RegistrationHandler.ap_settings)
+        eq_(settings, SimplePushServerProtocol.ap_settings)
+        eq_(settings, RouterHandler.ap_settings)
+        eq_(settings, NotificationHandler.ap_settings)
+        eq_(settings.connection_hostname, "localhost")
+        eq_(settings.connection_port, 8080)
+        eq_(settings.endpoint_url, "http://localhost:8082")
+        eq_(settings.router_url, "http://localhost:8081")
 
 
 class ConnectionMainTestCase(unittest.TestCase):
@@ -89,6 +131,7 @@ class EndpointMainTestCase(unittest.TestCase):
             storage_write_throughput = 0
             router_read_throughput = 0
             router_write_throughput = 0
+            resolve_hostnames = False
 
         ap = make_settings(arg)
         eq_(ap.pinger.gcm.gcm.api_key, arg.gcm_apikey)

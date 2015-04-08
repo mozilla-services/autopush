@@ -1,6 +1,7 @@
 import socket
 
 from cryptography.fernet import Fernet
+from itertools import imap
 from twisted.internet import reactor
 from twisted.web.client import Agent, HTTPConnectionPool
 
@@ -11,22 +12,9 @@ from autopush.db import (
     Router
 )
 from autopush.metrics import DatadogMetrics, TwistedMetrics
+from autopush.utils import canonical_url, resolve_hostname
 
 from autopush.pinger.pinger import Pinger
-
-
-default_ports = {
-    "ws": 80,
-    "http": 80,
-    "wss": 443,
-    "https": 443,
-}
-
-
-def canonical_url(scheme, hostname, port=None):
-    if port is None or port == default_ports.get(scheme):
-        return "%s://%s" % (scheme, hostname)
-    return "%s://%s:%s" % (scheme, hostname, port)
 
 
 class MetricSink(object):
@@ -44,8 +32,9 @@ class AutopushSettings(object):
                  datadog_api_key=None,
                  datadog_app_key=None,
                  datadog_flush_interval=None,
-                 hostname=None,
                  port=None,
+                 connection_hostname=None,
+                 connection_port=None,
                  router_scheme=None,
                  router_hostname=None,
                  router_port=None,
@@ -61,6 +50,7 @@ class AutopushSettings(object):
                  statsd_host="localhost",
                  statsd_port=8125,
                  pingConf=None,
+                 resolve_hostnames=False,
                  enable_cors=False):
 
         # Use a persistent connection pool for HTTP requests.
@@ -91,21 +81,28 @@ class AutopushSettings(object):
 
         # Setup hosts/ports/urls
         default_hostname = socket.gethostname()
-        self.hostname = hostname or default_hostname
-        self.port = port
-        self.endpoint_hostname = endpoint_hostname or self.hostname
-        self.router_hostname = router_hostname or self.hostname
+        hostnames = (x or default_hostname for x in (connection_hostname,
+                     endpoint_hostname, router_hostname))
+        if resolve_hostnames:
+            hostnames = imap(resolve_hostname, hostnames)
+
+        self.connection_hostname, self.endpoint_hostname,\
+            self.router_hostname = hostnames
+
+        self.connection_port = connection_port
+        self.endpoint_port = endpoint_port
+        self.router_port = router_port
 
         self.router_url = canonical_url(
             router_scheme or 'http',
             self.router_hostname,
-            router_port
+            self.router_port
         )
 
         self.endpoint_url = canonical_url(
             endpoint_scheme or 'http',
             self.endpoint_hostname,
-            endpoint_port
+            self.endpoint_port
         )
 
         # Database objects

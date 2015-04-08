@@ -94,7 +94,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def processHandshake(self):
         """Disable host port checking on nonstandard ports since some
         clients are buggy and don't provide it"""
-        port = self.ap_settings.port
+        port = self.ap_settings.connection_port
         hide = port != 80 and port != 443
         if not hide:
             return self.parent_class.processHandshake(self)

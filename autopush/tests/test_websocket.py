@@ -39,7 +39,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto = SimplePushServerProtocol()
 
         settings = AutopushSettings(
-            hostname="localhost",
+            connection_hostname="localhost",
             statsd_host=None,
         )
         self.proto.ap_settings = settings
@@ -111,7 +111,7 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(args, ("update.client.connections", 0))
 
     def test_handeshake_sub(self):
-        self.proto.ap_settings.port = 8080
+        self.proto.ap_settings.connection_port = 8080
         self.proto.factory = Mock(externalPort=80)
 
         def check_subbed(s):
@@ -124,7 +124,7 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(self.proto.factory.externalPort, 80)
 
     def test_handshake_nosub(self):
-        self.proto.ap_settings.port = 80
+        self.proto.ap_settings.connection_port = 80
         self.proto.factory = Mock(externalPort=80)
 
         def check_subbed(s):
@@ -1036,7 +1036,7 @@ class RouterHandlerTestCase(unittest.TestCase):
         twisted.internet.base.DelayedCall.debug = True
 
         self.ap_settings = AutopushSettings(
-            hostname="localhost",
+            connection_hostname="localhost",
             statsd_host=None,
         )
         self.ap_settings.metrics = Mock(spec=Metrics)
@@ -1080,7 +1080,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
         twisted.internet.base.DelayedCall.debug = True
 
         self.ap_settings = AutopushSettings(
-            hostname="localhost",
+            connection_hostname="localhost",
             statsd_host=None,
         )
         self.ap_settings.metrics = Mock(spec=Metrics)
