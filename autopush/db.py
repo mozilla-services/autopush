@@ -133,16 +133,17 @@ class Storage(object):
     modf_label = "modified"
 
     def register_connect(self, uaid, connect):
+        cinfo = json.loads(connect)
+        """ Register a type of proprietary ping data"""
+        # Always overwrite.
+        if cinfo.get("type") is None:
+            raise ValueError('missing "type" from connection info')
+        token = cinfo.get("token")
         try:
-            cinfo = json.loads(connect)
-            """ Register a type of proprietary ping data"""
-            # Always overwrite.
-            if cinfo.get("type") is None:
-                return False
-            token = cinfo.get("token")
             self.table.connection.update_item(
                 self.table.table_name,
-                key={"uaid": {'S': uaid}},
+                key={"uaid": {'S': uaid},
+                     "chid": {'S': " "}},
                 attribute_updates={
                     self.ping_label: {"Action": "PUT",
                                       "Value": {'S': connect}},
@@ -150,12 +151,10 @@ class Storage(object):
                                        "Value": {'S': token}},
                 }
             )
-        except ProvisionedThroughputExceededException:
-            return False
-        except ValueError:
-            # Invalid connect JSON specified, most likely.
-            return False
-        return True
+        except Exception, e:
+            log.err(e)
+            raise
+        return
 
     def get_connection(self, uaid):
         try:

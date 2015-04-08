@@ -8,10 +8,14 @@ from gcm_ping import GCMPinger
 
 from twisted.python import log
 
-__all__ = ["PingerUndefEx", "Pinger"]
+__all__ = ["PingerUndefEx", "PingerFailEx", "Pinger"]
 
 
 class PingerUndefEx(Exception):
+    pass
+
+
+class PingerFailEx(Exception):
     pass
 
 
@@ -34,13 +38,15 @@ class Pinger(object):
         if self.storage is None:
             raise PingerUndefEx("No storage defined for Pinger")
         if connect is None or connect is False:
-            return False
+            return None
         try:
             if self.storage.register_connect(uaid, connect) is False:
-                return False
+                log.msg("Failed to register connection for %s:%s" %
+                        (uaid, connect))
+                raise PingerFailEx("Unable to register connection")
         except Exception, e:
             log.err(e)
-            return False
+            raise
         return True
 
     def ping(self, uaid, version, data, connect):

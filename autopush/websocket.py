@@ -203,13 +203,18 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         else:
             self._check_router(False)
 
-    def _check_router(self, paused=False):
+    def _check_router(self, paused=False, pinger_register=None):
         if paused:
             self.transport.resumeProducing()
+        if pinger_register is not None and pinger_register is False:
+            msg = {"messageType": "hello",
+                   "reason": "bridge registration failed",
+                   "status": 503}
+            self.sendMessage(json.dumps(msg).encode('utf8'), False)
+            return
         # User exists?
         router = self.ap_settings.router
         url = self.ap_settings.router_url
-
         # Attempt to register the user for this session
         self.transport.pauseProducing()
         d = deferToThread(router.register_user,
