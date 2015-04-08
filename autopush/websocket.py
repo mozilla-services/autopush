@@ -26,6 +26,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     # Testing purposes
     parent_class = WebSocketServerProtocol
 
+    @property
+    def base_tags(self):
+        return self._base_tags if self._base_tags else None
+
     def log_err(self, failure):
         log.err(failure)
 
@@ -34,9 +38,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self._user_agent = request.headers.get("user-agent")
         else:
             self._user_agent = None
-        self.base_tags = []
+        self._base_tags = []
         if self._user_agent:
-            self.base_tags.append("user-agent:%s" % self._user_agent)
+            self._base_tags.append("user-agent:%s" % self._user_agent)
         self._should_stop = False
         self.metrics = self.ap_settings.metrics
         self.metrics.increment("client.socket.connect", tags=self.base_tags)
