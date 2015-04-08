@@ -80,6 +80,17 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_message(d)
         return d
 
+    def test_producer_interface(self):
+        self._connect()
+        self.proto.pauseProducing()
+        eq_(self.proto.paused, True)
+        self.proto.resumeProducing()
+        eq_(self.proto.paused, False)
+        eq_(self.proto._should_stop, False)
+        self.proto.stopProducing()
+        eq_(self.proto.paused, True)
+        eq_(self.proto._should_stop, True)
+
     def test_headers_locate(self):
         from autobahn.websocket.protocol import ConnectionRequest
         req = ConnectionRequest("localhost", {"user-agent": "Me"},
@@ -557,58 +568,6 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    def test_notification_dont_deliver_after_ack(self):
-        self._connect()
-
-        uaid = str(uuid.uuid4())
-        chid = str(uuid.uuid4())
-
-        storage = self.proto.ap_settings.storage
-        storage.save_notification(uaid, chid, 10)
-
-        self._send_message(dict(messageType="hello", channelIDs=[], uaid=uaid))
-
-        d = Deferred()
-
-        def wait_for_clear():
-            if not self.proto.accept_notification:
-                reactor.callLater(0.1, wait_for_clear)
-                return
-
-            # Accepting again
-            eq_(self.proto.updates_sent, {})
-
-            # Check that storage is clear
-            notifs = storage.fetch_notifications(uaid)
-            eq_(len(notifs), 0)
-            d.callback(True)
-
-        def check_notif_result(msg):
-            eq_(msg["messageType"], "notification")
-            updates = msg["updates"]
-            eq_(len(updates), 1)
-            eq_(updates[0]["channelID"], chid)
-            eq_(updates[0]["version"], 10)
-            eq_(self.proto.accept_notification, False)
-            # Send our ack
-            self._send_message(dict(messageType="ack",
-                                    updates=[{"channelID": chid,
-                                              "version": 10}]))
-
-            # Wait for updates to be cleared and notifications accepted again
-            reactor.callLater(0.1, wait_for_clear)
-
-        def check_hello_result(msg):
-            eq_(msg["status"], 200)
-
-            # Now wait for the notification
-            nd = self._check_response(check_notif_result)
-            nd.addErrback(lambda x: d.errback(x))
-
-        f = self._check_response(check_hello_result)
-        f.addErrback(lambda x: d.errback(x))
-        return d
-
     def test_ack(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -629,7 +588,6 @@ class WebsocketTestCase(unittest.TestCase):
                                               "version": 12}]))
 
             # Verify it was cleared out
-            eq_(len(self.proto.updates_sent), 0)
             eq_(len(self.proto.direct_updates), 0)
             d.callback(True)
 
@@ -782,6 +740,23 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto._notification_fetch.addBoth(check_error)
         return d
 
+    def test_process_notif_exceeded_tries(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.metrics = mock_metrics = Mock()
+        with patch("autopush.websocket.log"):
+            self.proto.error_notifications(None, 4, None)
+        eq_(len(mock_metrics.mock_calls), 1)
+
+    def test_process_notif_doesnt_run_when_paused(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.pauseProducing()
+        with patch("autopush.websocket.reactor") as mr:
+            self.proto.process_notifications()
+            mr.callLater.assert_called_with(
+                1, self.proto.process_notifications)
+
     def test_process_notif_doesnt_run_after_stop(self):
         self._connect()
         self.proto.uaid = str(uuid.uuid4())
@@ -798,14 +773,32 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(self.proto._notification_fetch, notif_mock)
         eq_(len(self.proto.log_err.mock_calls), 1)
 
+    def test_process_notif_paused_on_finish(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.pauseProducing()
+        with patch("autopush.websocket.reactor") as mr:
+            self.proto.finish_notifications(None)
+            mr.callLater.assert_called_with(
+                1, self.proto.process_notifications)
+
     def test_notification_results(self):
         # Populate the database for ourself
         uaid = str(uuid.uuid4())
         chid = str(uuid.uuid4())
+        chid2 = str(uuid.uuid4())
+        chid3 = str(uuid.uuid4())
         storage = self.proto.ap_settings.storage
         storage.save_notification(uaid, chid, 12)
+        storage.save_notification(uaid, chid2, 8)
+        storage.save_notification(uaid, chid3, 9)
 
         self._connect()
+        # Indicate we saw a newer direct version of chid2, and an older direct
+        # version of chid3
+        self.proto.direct_updates[chid2] = 9
+        self.proto.direct_updates[chid3] = 8
+
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 uaid=uaid))
 
@@ -813,10 +806,15 @@ class WebsocketTestCase(unittest.TestCase):
 
         def check_notifs(msg):
             eq_(msg["messageType"], "notification")
-            eq_(len(msg["updates"]), 1)
-            update = msg["updates"][0]
-            eq_(update["version"], 12)
-            eq_(update["channelID"], chid)
+            eq_(len(msg["updates"]), 2)
+            for update in msg["updates"]:
+                uchid = update["channelID"]
+                ver = update["version"]
+                if uchid == chid:
+                    eq_(ver, 12)
+                elif uchid == chid3:
+                    eq_(ver, 9)
+                self.assert_(uchid in [chid, chid3])
             d.callback(True)
 
         def check_result(msg):
@@ -829,6 +827,56 @@ class WebsocketTestCase(unittest.TestCase):
 
         cd = self._check_response(check_result)
         cd.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_notification_dont_deliver_after_ack(self):
+        self._connect()
+
+        uaid = str(uuid.uuid4())
+        chid = str(uuid.uuid4())
+
+        storage = self.proto.ap_settings.storage
+        storage.save_notification(uaid, chid, 10)
+
+        self._send_message(dict(messageType="hello", channelIDs=[], uaid=uaid))
+
+        d = Deferred()
+
+        def wait_for_clear():
+            if self.proto.updates_sent:
+                reactor.callLater(0.1, wait_for_clear)
+                return
+
+            # Accepting again
+            eq_(self.proto.updates_sent, {})
+
+            # Check that storage is clear
+            notifs = storage.fetch_notifications(uaid)
+            eq_(len(notifs), 0)
+            d.callback(True)
+
+        def check_notif_result(msg):
+            eq_(msg["messageType"], "notification")
+            updates = msg["updates"]
+            eq_(len(updates), 1)
+            eq_(updates[0]["channelID"], chid)
+            eq_(updates[0]["version"], 10)
+            # Send our ack
+            self._send_message(dict(messageType="ack",
+                                    updates=[{"channelID": chid,
+                                              "version": 10}]))
+
+            # Wait for updates to be cleared and notifications accepted again
+            reactor.callLater(0.1, wait_for_clear)
+
+        def check_hello_result(msg):
+            eq_(msg["status"], 200)
+
+            # Now wait for the notification
+            nd = self._check_response(check_notif_result)
+            nd.addErrback(lambda x: d.errback(x))
+        f = self._check_response(check_hello_result)
+        f.addErrback(lambda x: d.errback(x))
         return d
 
     def test_notification_dont_deliver(self):
@@ -905,6 +953,7 @@ class RouterHandlerTestCase(unittest.TestCase):
         uaid = str(uuid.uuid4())
         self.mock_request.body = "{}"
         self.ap_settings.clients[uaid] = client_mock = Mock()
+        client_mock.paused = False
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
         eq_(len(client_mock.mock_calls), 1)
@@ -948,6 +997,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
         uaid = str(uuid.uuid4())
         self.mock_request.body = "{}"
         self.ap_settings.clients[uaid] = client_mock = Mock()
+        client_mock.paused = False
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
         eq_(len(client_mock.mock_calls), 1)
@@ -956,7 +1006,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
         uaid = str(uuid.uuid4())
         self.mock_request.body = "{}"
         self.ap_settings.clients[uaid] = client_mock = Mock()
-        client_mock.accept_notification = False
+        client_mock.paused = True
         client_mock._check_notifications = False
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
