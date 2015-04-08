@@ -96,7 +96,7 @@ class AutopushSettings(object):
         self.connection_port = connection_port
         self.endpoint_hostname = endpoint_hostname or default_hostname
         self.endpoint_port = endpoint_port
-        self.router_hostname = router_hostname or self.connection_hostname
+        self.router_hostname = router_hostname or default_hostname
         self.router_port = router_port
 
         self.router_url = canonical_url(
