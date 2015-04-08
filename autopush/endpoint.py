@@ -4,8 +4,6 @@ import urlparse
 import uuid
 
 import cyclone.web
-
-from autopush.protocol import IgnoreBody
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
@@ -14,6 +12,8 @@ from StringIO import StringIO
 from twisted.internet.threads import deferToThread
 from twisted.python import log
 from twisted.web.client import FileBodyProducer
+
+from autopush.protocol import IgnoreBody
 
 
 class EndpointHandler(cyclone.web.RequestHandler):
