@@ -131,6 +131,7 @@ class EndpointMainTestCase(unittest.TestCase):
             storage_write_throughput = 0
             router_read_throughput = 0
             router_write_throughput = 0
+            resolve_hostnames = False
 
         ap = make_settings(arg)
         eq_(ap.pinger.gcm.gcm.api_key, arg.gcm_apikey)
