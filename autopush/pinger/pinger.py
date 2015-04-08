@@ -41,7 +41,7 @@ class Pinger(object):
             return None
         try:
             if self.storage.register_connect(uaid, connect) is False:
-                log.msg("Failed to register connection for %s:%s" %
+                log.err("Failed to register connection for %s:%s" %
                         (uaid, connect))
                 raise PingerFailEx("Unable to register connection")
         except Exception, e:
@@ -59,7 +59,7 @@ class Pinger(object):
                 return self.gcm.ping(uaid, version, data, connectInfo)
             if ptype == "apns" and self.apns is not None:
                 return self.apns.ping(uaid, version, data, connectInfo)
-            log.msg("Unknown connection type specified: ptype")
+            log.err("Unknown connection type specified: ptype")
             return False
         except Exception, e:
             log.err(e)

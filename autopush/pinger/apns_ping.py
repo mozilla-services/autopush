@@ -16,7 +16,7 @@ class APNSPinger(object):
                               key_file=config.get("key_file"))
         self.default_title = config.get("default_title", "SimplePush")
         self.default_body = config.get("default_body", "New Alert")
-        log.msg("Starting APNS pinger...")
+        #log.msg("Starting APNS pinger...")
 
     def ping(self, uaid, version, data, connectInfo):
         try:

@@ -18,15 +18,15 @@ class GCMPinger(object):
         self.dryRun = config.get("dryrun", False)
         self.collapseKey = config.get("collapseKey", "simplepush")
         self.gcm = gcm.GCM(config.get("apikey"))
-        log.msg("Starting GCM pinger...")
+        #log.msg("Starting GCM pinger...")
 
     def ping(self, uaid, version, data, connectInfo):
         try:
             if connectInfo.get("type").lower() != "gcm":
-                log.msg("connect info isn't gcm")
+                log.err("connect info isn't gcm")
                 return False
             if connectInfo.get("token") is None:
-                log.msg("connect info missing 'token'")
+                log.err("connect info missing 'token'")
                 return False
 
             payload = self.gcm.JSONMessage(
@@ -46,7 +46,7 @@ class GCMPinger(object):
             # naks:
             #  for reg_id, err_code in reply.failed.items():
             if reply.failed.items().length > 0:
-                log.msg("Messages failed to be delivered.")
+                log.err("Messages failed to be delivered.")
                 return False
             # uninstall:
             #  for reg_id in reply.not_registered:
