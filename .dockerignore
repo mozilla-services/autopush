@@ -17,3 +17,4 @@ lib-python/*
 bin/*
 include/*
 lib_pypy/*
+pypy
