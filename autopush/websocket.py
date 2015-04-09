@@ -1,6 +1,7 @@
 import json
 import time
 import uuid
+from functools import wraps
 
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
@@ -11,7 +12,7 @@ from twisted.internet.defer import (
 )
 from twisted.internet.interfaces import IProducer
 from twisted.internet.threads import deferToThread
-from twisted.python import log
+from twisted.python import failure, log
 from zope.interface import implements
 
 from autopush.protocol import IgnoreBody
@@ -24,6 +25,17 @@ def ms_time():
 def periodic_reporter(settings):
     settings.metrics.gauge("update.client.connections",
                            len(settings.clients))
+
+
+def log_exception(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return func(self, *args, **kwargs)
+        except Exception:
+            self.log_err(failure.Failure())
+            raise
+    return wrapper
 
 
 class SimplePushServerProtocol(WebSocketServerProtocol):
@@ -53,6 +65,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def paused(self):
         return self._paused
 
+    @log_exception
     def onConnect(self, request):
         # Setup ourself to handle producing the data
         self.transport.bufferSize = 2 * 1024
@@ -91,6 +104,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     #############################################################
     #                    Connection Methods
     #############################################################
+    @log_exception
     def processHandshake(self):
         """Disable host port checking on nonstandard ports since some
         clients are buggy and don't provide it"""
@@ -106,6 +120,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         finally:
             self.factory.externalPort = old_port
 
+    @log_exception
     def onMessage(self, payload, isBinary):
         if isBinary:
             self.sendClose()
@@ -142,6 +157,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         else:
             self.sendClose()
 
+    @log_exception
     def onClose(self, wasClean, code, reason):
         uaid = getattr(self, "uaid", None)
         self._should_stop = True

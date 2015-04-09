@@ -80,6 +80,20 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_message(d)
         return d
 
+    def test_exc_catcher(self):
+        self.proto.log_err = Mock()
+        req = Mock()
+
+        def raise_error(*args, **kwargs):
+            raise Exception("Oops")
+
+        req.headers.get.side_effect = raise_error
+
+        with self.assertRaises(Exception):
+            self.proto.onConnect(req)
+
+        req.headers.get.assert_called_with("user-agent")
+
     def test_producer_interface(self):
         self._connect()
         self.proto.pauseProducing()
