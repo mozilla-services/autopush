@@ -14,6 +14,8 @@ from twisted.internet.threads import deferToThread
 from twisted.python import log
 from zope.interface import implements
 
+from autopush.protocol import IgnoreBody
+
 
 def ms_time():
     return int(time.time() * 1000)
@@ -34,8 +36,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def base_tags(self):
         return self._base_tags if self._base_tags else None
 
-    def log_err(self, failure):
-        log.err(failure)
+    def log_err(self, failure, **kwargs):
+        log.err(failure, **kwargs)
 
     def pauseProducing(self):
         self._paused = True
@@ -141,8 +143,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.sendClose()
 
     def onClose(self, wasClean, code, reason):
-        # TODO: Any notifications directly delivered but not ack'd need
-        # to be punted to an endpoint router
         uaid = getattr(self, "uaid", None)
         self._should_stop = True
         if uaid:
@@ -153,11 +153,74 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         elapsed = (ms_time() - self.connected_at) / 1000.0
         self.metrics.timing("client.socket.lifespan", duration=elapsed,
                             tags=self.base_tags)
+
+        # Cleanup our client entry
         if self.uaid and self.ap_settings.clients.get(self.uaid) == self:
             del self.ap_settings.clients[self.uaid]
-            for defer in [self._notification_fetch, self._register]:
-                if defer:
-                    defer.cancel()
+
+        for defer in [self._notification_fetch, self._register]:
+            if defer:
+                defer.cancel()
+
+        # Attempt to deliver any notifications not originating from storage
+        if self.direct_updates:
+            defers = []
+            for chid, version in self.direct_updates.items():
+                d = deferToThread(
+                    self.ap_settings.storage.save_notification,
+                    self.uaid,
+                    chid,
+                    version
+                )
+                d.addErrback(self._retry_update_save, chid, version)
+                defers.append(d)
+
+            # Tag on the notifier once everything has been stored
+            dl = DeferredList(defers)
+            dl.addBoth(self._lookup_node)
+
+    def _retry_update_save(self, failure, chid, version):
+        """Failure handler for notification save errors, retries
+        indefinitely"""
+        self.log_err(failure)
+        d = deferToThread(
+            self.ap_settings.storage.save_notification,
+            self.uaid,
+            chid,
+            version
+        )
+        d.addErrback(self._retry_update_save, chid, version)
+        return d
+
+    def _lookup_node(self, results):
+        """Looks up the node to send a notify for it to check storage if
+        connected"""
+        # Locate the node that has this client connected
+        d = deferToThread(
+            self.ap_settings.router.get_uaid,
+            self.uaid
+        )
+        d.addCallback(self._notify_node)
+        d.addErrback(self.log_err, extra="Failed to get UAID for redeliver")
+
+    def _notify_node(self, result):
+        """Checks the result of lookup node to send the notify if the client is
+        connected elsewhere now"""
+        if not result:
+            self.metrics.increment("error.notify_uaid_failure")
+            return
+
+        node_id = result.get("node_id")
+        if not node_id:
+            return
+
+        # Send the notify to the node
+        url = node_id + "/notif/" + self.uaid
+        d = self.ap_settings.agent.request(
+            "PUT",
+            url.encode("utf8"),
+        ).addCallback(IgnoreBody.ignore)
+        d.addErrback(self.log_err, extra="Failed to notify node")
 
     def returnError(self, messageType, reason, statusCode, close=True):
         self.sendJSON({"messageType": messageType,

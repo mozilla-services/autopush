@@ -11,22 +11,9 @@ from autopush.db import (
     Router
 )
 from autopush.metrics import DatadogMetrics, TwistedMetrics
+from autopush.utils import canonical_url, resolve_ip
 
 from autopush.pinger.pinger import Pinger
-
-
-default_ports = {
-    "ws": 80,
-    "http": 80,
-    "wss": 443,
-    "https": 443,
-}
-
-
-def canonical_url(scheme, hostname, port=None):
-    if port is None or port == default_ports.get(scheme):
-        return "%s://%s" % (scheme, hostname)
-    return "%s://%s:%s" % (scheme, hostname, port)
 
 
 class MetricSink(object):
@@ -61,6 +48,7 @@ class AutopushSettings(object):
                  statsd_host="localhost",
                  statsd_port=8125,
                  pingConf=None,
+                 resolve_hostname=False,
                  enable_cors=False):
 
         # Use a persistent connection pool for HTTP requests.
@@ -92,6 +80,9 @@ class AutopushSettings(object):
         # Setup hosts/ports/urls
         default_hostname = socket.gethostname()
         self.hostname = hostname or default_hostname
+        if resolve_hostname:
+            self.hostname = resolve_ip(self.hostname)
+
         self.port = port
         self.endpoint_hostname = endpoint_hostname or self.hostname
         self.router_hostname = router_hostname or self.hostname

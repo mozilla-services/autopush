@@ -1,0 +1,46 @@
+# This Dockerfile runs the AutoPush connection and endpoint nodes in the same
+# container, using Moto to simulate DynamoDB calls.
+
+FROM stackbrew/debian:wheezy
+
+MAINTAINER Kit Cambridge <kcambridge@mozilla.com>
+
+# It's nice to have some newer packages
+RUN echo "deb http://ftp.debian.org/debian sid main" >> /etc/apt/sources.list
+
+ADD automock/boto.cfg /etc/boto.cfg
+ADD automock/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+RUN mkdir -p /home/autopush
+ADD . /home/autopush/
+
+ENV WORKDIR /home/autopush
+ENV PATH ${WORKDIR}/pypy/bin:$PATH
+
+WORKDIR ${WORKDIR}
+
+RUN \
+    apt-get update; \
+    apt-get install -y -qq make curl bzip2 libexpat1-dev gcc libssl-dev libffi-dev supervisor; \
+    mkdir -p /var/log/supervisor; \
+    curl -sSL https://bitbucket.org/pypy/pypy/downloads/pypy-2.5.1-linux64.tar.bz2 | tar xj; \
+    mv pypy-2.5.1-linux64 pypy; \
+    make clean && \
+    make && \
+    pip install moto && \
+    apt-get remove -y -qq make curl bzip2 libexpat1-dev gcc libssl-dev libffi-dev && \
+    apt-get install -y -qq libexpat1 libssl1.0.0 libffi6 && \
+    apt-get autoremove -y -qq && \
+    apt-get clean -y
+# End run
+
+# WebSocket connection port.
+EXPOSE 8080
+
+# HTTP update port.
+EXPOSE 8082
+
+RUN mkdir -p /var/log/automock
+VOLUME ["/var/log/automock", "/etc/autopush_shared.ini", "/etc/autopush_connection.ini", "/etc/autopush_endpoint.ini"]
+
+CMD ["/usr/bin/supervisord"]

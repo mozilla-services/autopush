@@ -8,6 +8,8 @@ Autopush Changelog
 Features
 --------
 
+* Send un-acknolwedged direct delivery messages to the router if the client is
+  disconnected without ack'ing them. Resolves Issue #36.
 * Use IProducer to more precisely monitor when the client has drained the data
   to immediately resume sending more data. Resolves Issue #28.
 * Add /status HTTP endpoint for autopush/autoendpoint. Resolves Issue #27.

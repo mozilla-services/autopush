@@ -187,6 +187,104 @@ class WebsocketTestCase(unittest.TestCase):
         name, _, _ = notif_mock.mock_calls[0]
         eq_(name, "cancel")
 
+    def test_close_with_delivery_cleanup(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.ap_settings.clients["asdf"] = self.proto
+        chid = str(uuid.uuid4())
+
+        # Stick an un-acked direct notification in
+        self.proto.direct_updates[chid] = 12
+
+        # save notification toss an error the first time
+        used = []
+
+        def throw_error(*args, **kwargs):
+            if used:
+                return Mock()
+            else:
+                used.append(True)
+                raise Exception("Connection Error")
+
+        # Apply some mocks
+        self.proto.ap_settings.storage.save_notification = mock_save = Mock()
+        self.proto.ap_settings.router.get_uaid = mock_get = Mock()
+        self.proto.ap_settings.agent = mock_agent = Mock()
+        mock_save.side_effect = throw_error
+        mock_get.return_value = dict(node_id="localhost:2000")
+
+        # Close the connection
+        self.proto.onClose(True, None, None)
+
+        d = Deferred()
+
+        def wait_for_agent_call():
+            if not mock_agent.mock_calls:
+                reactor.callLater(0.1, wait_for_agent_call)
+
+            self.flushLoggedErrors()
+            d.callback(True)
+        reactor.callLater(0.1, wait_for_agent_call)
+        return d
+
+    def test_close_with_delivery_cleanup_and_no_get_result(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.ap_settings.clients["asdf"] = self.proto
+        chid = str(uuid.uuid4())
+
+        # Stick an un-acked direct notification in
+        self.proto.direct_updates[chid] = 12
+
+        # Apply some mocks
+        self.proto.ap_settings.storage.save_notification = Mock()
+        self.proto.ap_settings.router.get_uaid = mock_get = Mock()
+        self.proto.metrics = mock_metrics = Mock()
+        mock_get.return_value = False
+
+        # Close the connection
+        self.proto.onClose(True, None, None)
+
+        d = Deferred()
+
+        def wait_for_agent_call():
+            if not mock_metrics.mock_calls:
+                reactor.callLater(0.1, wait_for_agent_call)
+
+            mock_metrics.increment.assert_called_with(
+                "error.notify_uaid_failure")
+            d.callback(True)
+        reactor.callLater(0.1, wait_for_agent_call)
+        return d
+
+    def test_close_with_delivery_cleanup_and_no_node_id(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.ap_settings.clients["asdf"] = self.proto
+        chid = str(uuid.uuid4())
+
+        # Stick an un-acked direct notification in
+        self.proto.direct_updates[chid] = 12
+
+        # Apply some mocks
+        self.proto.ap_settings.storage.save_notification = Mock()
+        self.proto.ap_settings.router.get_uaid = mock_get = Mock()
+        mock_get.return_value = mock_node_get = Mock()
+        mock_node_get.get.return_value = None
+
+        # Close the connection
+        self.proto.onClose(True, None, None)
+
+        d = Deferred()
+
+        def wait_for_agent_call():
+            if not mock_node_get.mock_calls:
+                reactor.callLater(0.1, wait_for_agent_call)
+
+            d.callback(True)
+        reactor.callLater(0.1, wait_for_agent_call)
+        return d
+
     def test_hello(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
