@@ -1,8 +1,10 @@
 .DS_Store
+.git
 .svn
 *.pyc
 *.egg-info
 *.egg
+.tox
 bin
 build
 dist
@@ -17,3 +19,4 @@ lib-python/*
 bin/*
 include/*
 lib_pypy/*
+pypy
