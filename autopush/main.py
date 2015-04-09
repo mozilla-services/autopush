@@ -57,6 +57,9 @@ def add_shared_args(parser):
                         default="", env_var="SSL_KEY")
     parser.add_argument('--ssl_cert', help="SSL Cert path", type=str,
                         default="", env_var="SSL_CERT")
+    parser.add_argument('--ssl_dh_param',
+                        help="SSL DH Param file (openssl dhparam 1024)",
+                        type=str, default="", env_var="SSL_DH_PARAM")
     parser.add_argument('--router_tablename', help="DynamoDB Router Tablename",
                         type=str, default="router", env_var="ROUTER_TABLENAME")
     parser.add_argument('--storage_tablename',
@@ -277,6 +280,8 @@ def connection_main(sysargs=None):
     if args.ssl_key:
         contextFactory = AutopushSSLContextFactory(args.ssl_key,
                                                    args.ssl_cert)
+        if args.ssl_dh_param:
+            contextFactory.getContext().load_tmp_dh(args.ssl_dh_param)
         listenWS(factory, contextFactory)
     else:
         reactor.listenTCP(args.port, factory)
@@ -285,6 +290,8 @@ def connection_main(sysargs=None):
     if args.router_ssl_key:
         contextFactory = AutopushSSLContextFactory(args.router_ssl_key,
                                                    args.router_ssl_cert)
+        if args.ssl_dh_param:
+            contextFactory.getContext().load_tmp_dh(args.ssl_dh_param)
         reactor.listenSSL(args.router_port, site, contextFactory)
     else:
         reactor.listenTCP(args.router_port, site)
@@ -338,6 +345,8 @@ def endpoint_main(sysargs=None):
     if args.ssl_key:
         contextFactory = AutopushSSLContextFactory(args.ssl_key,
                                                    args.ssl_cert)
+        if args.ssl_dh_param:
+            contextFactory.getContext().load_tmp_dh(args.ssl_dh_param)
         reactor.listenSSL(args.port, site, contextFactory)
     else:
         reactor.listenTCP(args.port, site)
