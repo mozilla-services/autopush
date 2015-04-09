@@ -11,6 +11,7 @@ from autopush.endpoint import (EndpointHandler, RegistrationHandler)
 from autopush.health import StatusHandler
 from autopush.logging import setup_logging
 from autopush.settings import AutopushSettings
+from autopush.utils import str2bool
 from autopush.websocket import (
     SimplePushServerProtocol,
     RouterHandler,
@@ -30,7 +31,7 @@ def add_shared_args(parser):
     parser.add_argument('--config-shared',
                         help="Common configuration file path",
                         dest='config_file', is_config_file=True)
-    parser.add_argument('--debug', help='Debug Info.', action='store_true',
+    parser.add_argument('--debug', help='Debug Info.', type=bool,
                         default=False, env_var="DEBUG")
     parser.add_argument('--crypto_key', help="Crypto key for tokens", type=str,
                         default="i_CYcNKa2YXrF_7V1Y-2MFfoEl7b6KX55y_9uvOKfJQ=",
@@ -77,8 +78,7 @@ def add_shared_args(parser):
 def add_pinger_args(parser):
     # GCM
     parser.add_argument('--pinger', help='enable Proprietary Ping',
-                        action='store_true',
-                        default=False, env_var='PINGER')
+                        type=bool, default=False, env_var='PINGER')
     label = "Proprietary Ping: Google Cloud Messaging:"
     parser.add_argument('--gcm_ttl',
                         help="%s Time to Live" % label,
@@ -118,6 +118,7 @@ def _parse_connection(sysargs=None):
     parser = configargparse.ArgumentParser(
         description='Runs a Connection Node.',
         default_config_files=shared_config_files + config_files)
+    parser.register('type', bool, str2bool)
     parser.add_argument('--config-connection',
                         help="Connection node configuration file path",
                         dest='config_file', is_config_file=True)
@@ -161,14 +162,14 @@ def _parse_endpoint(sysargs=None):
     parser = configargparse.ArgumentParser(
         description='Runs an Endpoint Node.',
         default_config_files=shared_config_files + config_files)
+    parser.register('type', bool, str2bool)
     parser.add_argument('--config-endpoint',
                         help="Endpoint node configuration file path",
                         dest='config_file', is_config_file=True)
     parser.add_argument('-p', '--port', help='Public HTTP Endpoint Port',
                         type=int, default=8082, env_var="PORT")
     parser.add_argument('--cors', help='Allow CORS PUTs for update.',
-                        action='store_true', default=False,
-                        env_var='ALLOW_CORS')
+                        type=bool, default=False, env_var='ALLOW_CORS')
     add_shared_args(parser)
     add_pinger_args(parser)
     args = parser.parse_args(sysargs)
