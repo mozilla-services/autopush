@@ -20,3 +20,4 @@ bin/*
 include/*
 lib_pypy/*
 pypy
+.coverage

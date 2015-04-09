@@ -40,4 +40,7 @@ EXPOSE 8080
 # HTTP update port.
 EXPOSE 8082
 
+RUN mkdir -p /var/log/automock
+VOLUME ["/var/log/automock", "/etc/autopush_shared.ini", "/etc/autopush_connection.ini", "/etc/autopush_endpoint.ini"]
+
 CMD ["/usr/bin/supervisord"]
