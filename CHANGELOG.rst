@@ -31,5 +31,6 @@ Features
 Bug Fixes
 ---------
 
+* Capture and log exceptions in websocket protocol functions.
 * Fix bug with 'settings' in cyclone overriding cyclone's settings. Resolves
   Issue #13.
