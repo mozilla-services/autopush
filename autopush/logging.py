@@ -70,7 +70,7 @@ def stdout(message):
             msg[key] = message.pop(key)
     msg["Timestamp"] = ts * 1000 * 1000 * 1000
     msg["Fields"] = message
-    msg["EnvVersion"] = "1.0"
+    msg["EnvVersion"] = "2.0"
     msg["Logger"] = LOGGER
     sys.stdout.write(json.dumps(msg) + "\n")
 
