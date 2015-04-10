@@ -8,6 +8,7 @@ Autopush Changelog
 Features
 --------
 
+* Verify ability to read/write DynamoDB tables on startup. Resolves Issue #46.
 * Send un-acknolwedged direct delivery messages to the router if the client is
   disconnected without ack'ing them. Resolves Issue #36.
 * Use IProducer to more precisely monitor when the client has drained the data
