@@ -49,6 +49,7 @@ class EndpointMainTestCase(unittest.TestCase):
             "autopush.main.task",
             "autopush.main.reactor",
             "autopush.settings.TwistedMetrics",
+            "autopush.settings.preflight_check",
         ]
         self.mocks = {}
         for name in patchers:

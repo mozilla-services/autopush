@@ -1,3 +1,5 @@
+import uuid
+
 from boto.exception import JSONResponseError
 from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
@@ -64,6 +66,32 @@ def get_storage_table(tablename="storage", read_throughput=5,
                                     write_throughput)
     else:
         return storage_table(tablename)
+
+
+def preflight_check(storage, router):
+    """Performs a pre-flight check of the storage/router to ensure appropriate
+    permissions for operation.
+
+    Failure to run correctly will raise an exception.
+
+    """
+    uaid = str(uuid.uuid4())
+    chid = str(uuid.uuid4())
+    node_id = "mynode:2020"
+    connected_at = 0
+    version = 12
+
+    # Store a notification, fetch it, delete it
+    storage.save_notification(uaid, chid, version)
+    notifs = storage.fetch_notifications(uaid)
+    assert len(notifs) > 0
+    storage.delete_notification(uaid, chid, version)
+
+    # Store a router entry, fetch it, delete it
+    router.register_user(uaid, node_id, connected_at)
+    item = router.get_uaid(uaid)
+    assert item.get("node_id") == node_id
+    router.clear_node(item)
 
 
 class Storage(object):

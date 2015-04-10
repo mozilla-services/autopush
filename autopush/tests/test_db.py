@@ -16,6 +16,7 @@ from autopush.db import (
     get_storage_table,
     create_router_table,
     create_storage_table,
+    preflight_check,
     Storage,
     Router,
 )
@@ -31,6 +32,21 @@ def setUp():
 
 def tearDown():
     mock_db2.stop()
+
+
+class DbCheckTestCase(unittest.TestCase):
+    def test_preflight_check(self):
+        router_table = get_router_table()
+        storage_table = get_storage_table()
+
+        def raise_exc(*args, **kwargs):
+            raise Exception("Oops")
+
+        router_table.clear_node = Mock()
+        router_table.clear_node.side_effect = raise_exc
+
+        with self.assertRaises(Exception):
+            preflight_check(storage_table, router_table)
 
 
 class StorageTestCase(unittest.TestCase):
