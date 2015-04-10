@@ -21,7 +21,7 @@ TWISTED_LOG_MESSAGE = MessageType("twisted:log",
 class EliotObserver(object):
     """A Twisted log observer that logs to Eliot."""
     def __init__(self):
-        if "SENTRY_DSN" in os.environ:
+        if os.environ.get("SENTRY_DSN"):
             self.raven_client = raven.Client(
                 release=raven.fetch_package_version("autopush"))
         else:

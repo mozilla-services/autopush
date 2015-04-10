@@ -7,6 +7,7 @@ from twisted.web.client import Agent, HTTPConnectionPool
 from autopush.db import (
     get_router_table,
     get_storage_table,
+    preflight_check,
     Storage,
     Router
 )
@@ -108,6 +109,10 @@ class AutopushSettings(object):
                                                storage_write_throughput)
         self.storage = Storage(self.storage_table, self.metrics)
         self.router = Router(self.router_table, self.metrics)
+
+        # Run preflight check
+        preflight_check(self.storage, self.router)
+
         self.pinger = None
         if pingConf is not None:
             self.pinger = Pinger(self.storage, pingConf)
