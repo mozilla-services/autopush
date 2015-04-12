@@ -98,7 +98,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # Track notifications we don't need to delete separately
         self.direct_updates = {}
-        self.channels = set()
         self.pinger = None
 
     #############################################################
@@ -194,6 +193,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             # Tag on the notifier once everything has been stored
             dl = DeferredList(defers)
             dl.addBoth(self._lookup_node)
+        del self.direct_updates
+        del self.updates_sent
+        del self._base_tags
 
     def _retry_update_save(self, failure, chid, version):
         """Failure handler for notification save errors, retries

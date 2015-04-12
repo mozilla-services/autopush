@@ -57,7 +57,7 @@ class AutopushSettings(object):
         pool.maxPersistentPerHost = 100
         # Close idle connections after 5 minutes.
         pool.cachedConnectionTimeout = 300
-        self.agent = Agent(reactor, pool=pool)
+        self.agent = Agent(reactor)
 
         # Metrics setup
         if datadog_api_key:
