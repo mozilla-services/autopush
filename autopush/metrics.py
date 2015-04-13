@@ -10,7 +10,7 @@ from datadog.util.hostname import get_hostname
 class TwistedMetrics(object):
     def __init__(self, statsd_host="localhost", statsd_port=8125):
         self.client = TwistedStatsDClient(statsd_host, statsd_port)
-        self._metric = Metrics(connection=self.client, namespace="pushgo")
+        self._metric = Metrics(connection=self.client, namespace="autopush")
 
     def start(self):
         protocol = StatsDClientProtocol(self.client)
