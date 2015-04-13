@@ -4,13 +4,14 @@ import sys
 import configargparse
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
-from twisted.internet import reactor, task, ssl
+from twisted.internet import reactor, task
 from twisted.python import log
 
 from autopush.endpoint import (EndpointHandler, RegistrationHandler)
 from autopush.health import StatusHandler
 from autopush.logging import setup_logging
 from autopush.settings import AutopushSettings
+from autopush.ssl import AutopushSSLContextFactory
 from autopush.utils import str2bool
 from autopush.websocket import (
     SimplePushServerProtocol,
@@ -56,6 +57,9 @@ def add_shared_args(parser):
                         default="", env_var="SSL_KEY")
     parser.add_argument('--ssl_cert', help="SSL Cert path", type=str,
                         default="", env_var="SSL_CERT")
+    parser.add_argument('--ssl_dh_param',
+                        help="SSL DH Param file (openssl dhparam 1024)",
+                        type=str, default="", env_var="SSL_DH_PARAM")
     parser.add_argument('--router_tablename', help="DynamoDB Router Tablename",
                         type=str, default="router", env_var="ROUTER_TABLENAME")
     parser.add_argument('--storage_tablename',
@@ -267,23 +271,27 @@ def connection_main(sysargs=None):
         maxFramePayloadSize=2048,
         maxMessagePayloadSize=2048,
         openHandshakeTimeout=5,
-        failByDrop=False,
+        failByDrop=True,
     )
 
     settings.metrics.start()
 
     # Start the WebSocket listener.
     if args.ssl_key:
-        contextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
-                                                          args.ssl_cert)
+        contextFactory = AutopushSSLContextFactory(args.ssl_key,
+                                                   args.ssl_cert)
+        if args.ssl_dh_param:
+            contextFactory.getContext().load_tmp_dh(args.ssl_dh_param)
         listenWS(factory, contextFactory)
     else:
         reactor.listenTCP(args.port, factory)
 
     # Start the internal routing listener.
     if args.router_ssl_key:
-        contextFactory = ssl.DefaultOpenSSLContextFactory(args.router_ssl_key,
-                                                          args.router_ssl_cert)
+        contextFactory = AutopushSSLContextFactory(args.router_ssl_key,
+                                                   args.router_ssl_cert)
+        if args.ssl_dh_param:
+            contextFactory.getContext().load_tmp_dh(args.ssl_dh_param)
         reactor.listenSSL(args.router_port, site, contextFactory)
     else:
         reactor.listenTCP(args.router_port, site)
@@ -335,8 +343,10 @@ def endpoint_main(sysargs=None):
     settings.metrics.start()
 
     if args.ssl_key:
-        contextFactory = ssl.DefaultOpenSSLContextFactory(args.ssl_key,
-                                                          args.ssl_cert)
+        contextFactory = AutopushSSLContextFactory(args.ssl_key,
+                                                   args.ssl_cert)
+        if args.ssl_dh_param:
+            contextFactory.getContext().load_tmp_dh(args.ssl_dh_param)
         reactor.listenSSL(args.port, site, contextFactory)
     else:
         reactor.listenTCP(args.port, site)
