@@ -187,7 +187,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                     chid,
                     version
                 )
-                d.addErrback(self._retry_update_save, chid, version)
                 defers.append(d)
 
             # Tag on the notifier once everything has been stored
@@ -196,19 +195,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         del self.direct_updates
         del self.updates_sent
         del self._base_tags
-
-    def _retry_update_save(self, failure, chid, version):
-        """Failure handler for notification save errors, retries
-        indefinitely"""
-        self.log_err(failure)
-        d = deferToThread(
-            self.ap_settings.storage.save_notification,
-            self.uaid,
-            chid,
-            version
-        )
-        d.addErrback(self._retry_update_save, chid, version)
-        return d
 
     def _lookup_node(self, results):
         """Looks up the node to send a notify for it to check storage if
