@@ -68,6 +68,10 @@ def stdout(message):
     for key in ["Type", "Severity"]:
         if key in message:
             msg[key] = message.pop(key)
+
+    if "message_type" in message:
+        msg["Type"] = message.pop("message_type")
+
     msg["Timestamp"] = ts * 1000 * 1000 * 1000
     msg["Fields"] = message
     msg["EnvVersion"] = "2.0"
