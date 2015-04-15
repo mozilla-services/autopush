@@ -28,3 +28,5 @@ class IgnoreBody(Protocol):
             self.deferred.callback(self.response)
         else:
             self.deferred.errback(reason)
+        del self.response
+        del self.deferred
