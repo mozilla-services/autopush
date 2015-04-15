@@ -210,21 +210,10 @@ class WebsocketTestCase(unittest.TestCase):
         # Stick an un-acked direct notification in
         self.proto.direct_updates[chid] = 12
 
-        # save notification toss an error the first time
-        used = []
-
-        def throw_error(*args, **kwargs):
-            if used:
-                return Mock()
-            else:
-                used.append(True)
-                raise Exception("Connection Error")
-
         # Apply some mocks
-        self.proto.ap_settings.storage.save_notification = mock_save = Mock()
+        self.proto.ap_settings.storage.save_notification = Mock()
         self.proto.ap_settings.router.get_uaid = mock_get = Mock()
         self.proto.ap_settings.agent = mock_agent = Mock()
-        mock_save.side_effect = throw_error
         mock_get.return_value = dict(node_id="localhost:2000")
 
         # Close the connection
