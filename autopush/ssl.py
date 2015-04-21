@@ -1,6 +1,5 @@
 from OpenSSL import SSL
 from twisted.internet import ssl
-from twisted.python import log
 
 MOZILLA_INTERMEDIATE_CIPHERS = (
     'ECDHE-RSA-AES128-GCM-SHA256:'
@@ -45,29 +44,11 @@ class AutopushSSLContextFactory(ssl.DefaultOpenSSLContextFactory):
             ctx.set_options(SSL.OP_CIPHER_SERVER_PREFERENCE)
             ctx.set_options(SSL.OP_NO_SSLv2)
             ctx.set_options(SSL.OP_NO_SSLv3)
-
-            disableSSLCompression()
+            ctx.set_options(SSL.OP_NO_COMPRESSION)
+            ctx.set_options(SSL.MODE_RELEASE_BUFFERS)
+            ctx.set_options(SSL.OP_ALL & ~SSL.OP_MICROSOFT_BIG_SSLV3_BUFFER)
 
             ctx.use_certificate_chain_file(self.certificateFileName)
             ctx.use_privatekey_file(self.privateKeyFileName)
 
             self._context = ctx
-
-
-def disableSSLCompression():
-    try:
-        import ctypes
-        import glob
-        openssl = ctypes.CDLL(None, ctypes.RTLD_GLOBAL)
-        try:
-            f = openssl.SSL_COMP_get_compression_methods # flake8: noqa
-        except AttributeError:
-            ssllib = sorted(glob.glob("/usr/lib/libssl.so.*"))[0]
-            openssl = ctypes.CDLL(ssllib, ctypes.RTLD_GLOBAL)
-
-        openssl.SSL_COMP_get_compression_methods.restype = ctypes.c_void_p
-        openssl.sk_zero.argtypes = [ctypes.c_void_p]
-        openssl.sk_zero(openssl.SSL_COMP_get_compression_methods())
-    except Exception, e:
-        log.msg('disableSSLCompression: Failed:')
-        log.msg(e)

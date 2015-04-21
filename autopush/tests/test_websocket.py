@@ -210,21 +210,10 @@ class WebsocketTestCase(unittest.TestCase):
         # Stick an un-acked direct notification in
         self.proto.direct_updates[chid] = 12
 
-        # save notification toss an error the first time
-        used = []
-
-        def throw_error(*args, **kwargs):
-            if used:
-                return Mock()
-            else:
-                used.append(True)
-                raise Exception("Connection Error")
-
         # Apply some mocks
-        self.proto.ap_settings.storage.save_notification = mock_save = Mock()
+        self.proto.ap_settings.storage.save_notification = Mock()
         self.proto.ap_settings.router.get_uaid = mock_get = Mock()
         self.proto.ap_settings.agent = mock_agent = Mock()
-        mock_save.side_effect = throw_error
         mock_get.return_value = dict(node_id="localhost:2000")
 
         # Close the connection
@@ -852,14 +841,6 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto._notification_fetch.addBoth(check_error)
         return d
 
-    def test_process_notif_exceeded_tries(self):
-        self._connect()
-        self.proto.uaid = str(uuid.uuid4())
-        self.proto.metrics = mock_metrics = Mock()
-        with patch("autopush.websocket.log"):
-            self.proto.error_notifications(None, 4, None)
-        eq_(len(mock_metrics.mock_calls), 1)
-
     def test_process_notif_doesnt_run_when_paused(self):
         self._connect()
         self.proto.uaid = str(uuid.uuid4())
@@ -875,15 +856,6 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto._should_stop = True
         self.proto.process_notifications()
         eq_(self.proto._notification_fetch, None)
-
-    def test_process_notif_stops_if_running_on_error(self):
-        self._connect()
-        self.proto.uaid = str(uuid.uuid4())
-        self.proto.log_err = Mock()
-        self.proto._notification_fetch = notif_mock = Mock()
-        self.proto.error_notifications(None, 0, Mock())
-        eq_(self.proto._notification_fetch, notif_mock)
-        eq_(len(self.proto.log_err.mock_calls), 1)
 
     def test_process_notif_paused_on_finish(self):
         self._connect()
