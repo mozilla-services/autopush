@@ -130,16 +130,16 @@ class StorageTestCase(unittest.TestCase):
         storage.table.connection = Mock()
 
         # try bad connect data:
-        result = storage.register_connect("uaid", 'invalid')
-        eq_(result, False)
+        self.assertRaises(ValueError, storage.register_connect,
+                          "uaid", 'invalid')
 
         # try bad connect data:
-        result = storage.register_connect("uaid", '{"notype":"test"}')
-        eq_(result, False)
+        self.assertRaises(ValueError, storage.register_connect,
+                          "uaid", '{"notype":"test"}')
 
         # try minimal correct data
-        result = storage.register_connect("uaid", '{"type":"test"}')
-        eq_(result, True)
+        self.assertRaises(None, storage.register_connect("uaid",
+                          '{"type":"test"}'))
 
     def test_register_connect_over(self):
         storage = Storage(get_storage_table(), MetricSink())
@@ -149,8 +149,8 @@ class StorageTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         storage.table.connection.update_item.side_effect = raise_error
-        results = storage.register_connect("uaid", '{"type":"test"}')
-        eq_(results, False)
+        self.assertRaises(ProvisionedThroughputExceededException,
+                          storage.register_connect, "uaid", '{"type":"test"}')
 
     def test_unregister_connect(self):
         storage = Storage(get_storage_table(), MetricSink())
@@ -195,6 +195,24 @@ class StorageTestCase(unittest.TestCase):
         storage.table.connection.get_item.side_effect = raise_error
         results = storage.get_connection("uaid")
         eq_(results, False)
+
+    def test_byToken_delete(self):
+        storage = Storage(get_storage_table(), MetricSink())
+        storage.table.connection = Mock()
+        result = storage.byToken('DELETE', 'abc123')
+        eq_(result, True)
+
+    def test_byToken_update(self):
+        storage = Storage(get_storage_table(), MetricSink())
+        storage.table = Mock()
+        storage.table.connection = Mock()
+        storage.table.connection.update_item.return_value
+        storage.table.get_item.return_value = \
+            {"uaid": "test",
+             "proprietary_ping":
+             '{"type": "test", "token": "old123"}'}
+        result = storage.byToken('UPDATE', 'new456')
+        eq_(result, True)
 
 
 class RouterTestCase(unittest.TestCase):

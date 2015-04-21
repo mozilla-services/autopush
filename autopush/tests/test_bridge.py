@@ -9,13 +9,13 @@ from unittest import TestCase
 import gcmclient as gcm
 import apns
 
-from autopush.pinger.pinger import (Pinger, PingerUndefEx)
+from autopush.bridge.bridge import (Bridge, BridgeUndefEx, BridgeFailEx)
 
 
 mock_dynamodb2 = mock_dynamodb2()
 
 
-class PingerTestCase(TestCase):
+class BridgeTestCase(TestCase):
 
     f_gcm = Mock()
     f_apns = Mock()
@@ -36,20 +36,20 @@ class PingerTestCase(TestCase):
                     'apns': {'cert_file': 'fake.cert', 'key_file': 'fake.key'},
                     }
         storage = Mock()
-        tping = Pinger(storage, settings)
+        tping = Bridge(storage, settings)
         self.assertFalse(tping.register('uaid', None))
         tping.storage = None
-        self.assertRaises(PingerUndefEx, tping.register, 'uaid', 'connect')
+        self.assertRaises(BridgeUndefEx, tping.register, 'uaid', 'connect')
         tping.storage = storage
 
         tping.storage.register_connect.return_value = True
         self.assertTrue(tping.register('uaid', 'connect'))
 
         tping.storage.register_connect.return_value = False
-        self.assertFalse(tping.register('uaid', 'connect'))
+        self.assertRaises(BridgeFailEx, tping.register, 'uaid', 'connect')
 
-        tping.storage.register_connect.side_effect = Exception
-        self.assertFalse(tping.register('uaid', 'true'))
+        tping.storage.register_connect.side_effect = BridgeFailEx
+        self.assertRaises(BridgeFailEx, tping.register, 'uaid', 'true')
 
     @patch.object(gcm, 'GCM', return_value=f_gcm)
     @patch.object(gcm, 'JSONMessage', return_value=f_gcm)
@@ -59,15 +59,15 @@ class PingerTestCase(TestCase):
         settings = {'gcm': {'apikey': '12345678abcdefg'},
                     'apns': {'cert_file': 'fake.cert', 'key_file': 'fake.key'},
                     }
-        self.assertRaises(PingerUndefEx, Pinger, None, settings)
+        self.assertRaises(BridgeUndefEx, Bridge, None, settings)
 
         # with storage:
         storage = Mock()
         storage.register_connect.return_value = True
 
-        # Pinger init doesn't actually use anything in storage, but it does
+        # bridge init doesn't actually use anything in storage, but it does
         # check to see if it's null as a sanity check
-        tping = Pinger(storage, settings)
+        tping = Bridge(storage, settings)
         mgcm.assert_called_with(settings['gcm']['apikey'])
         mapns.assert_called_with(
             use_sandbox=False,
@@ -156,10 +156,10 @@ class PingerTestCase(TestCase):
                     'apns': {'cert_file': 'fake.cert', 'key_file': 'fake.key'},
                     }
         storage = Mock()
-        tping = Pinger(storage, settings)
+        tping = Bridge(storage, settings)
         tping.storage.unregister.return_value = True
         self.assertTrue(tping.unregister('uaid'))
         tping.storage.unregister.return_value = False
         self.assertFalse(tping.unregister('uaid'))
         tping.storage = None
-        self.assertRaises(PingerUndefEx, tping.unregister, 'uaid')
+        self.assertRaises(BridgeUndefEx, tping.unregister, 'uaid')

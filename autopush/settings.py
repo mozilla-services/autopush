@@ -14,7 +14,7 @@ from autopush.db import (
 from autopush.metrics import DatadogMetrics, TwistedMetrics
 from autopush.utils import canonical_url, resolve_ip
 
-from autopush.pinger.pinger import Pinger
+from autopush.bridge.bridge import Bridge
 
 
 class MetricSink(object):
@@ -113,9 +113,9 @@ class AutopushSettings(object):
         # Run preflight check
         preflight_check(self.storage, self.router)
 
-        self.pinger = None
+        self.bridge = None
         if pingConf is not None:
-            self.pinger = Pinger(self.storage, pingConf)
+            self.bridge = Bridge(self.storage, pingConf)
 
         # CORS
         self.cors = enable_cors

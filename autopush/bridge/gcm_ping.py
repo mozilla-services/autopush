@@ -7,7 +7,7 @@ import gcmclient as gcm
 from twisted.python import log
 
 
-class GCMPinger(object):
+class GCMBridge(object):
     gcm = None
     ttl = 60
     dryRun = 0
@@ -18,7 +18,7 @@ class GCMPinger(object):
         self.dryRun = config.get("dryrun", False)
         self.collapseKey = config.get("collapseKey", "simplepush")
         self.gcm = gcm.GCM(config.get("apikey"))
-        #log.msg("Starting GCM pinger...")
+        log.msg("Starting GCM bridge...")
 
     def ping(self, uaid, version, data, connectInfo):
         try:

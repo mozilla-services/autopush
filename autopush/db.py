@@ -36,7 +36,8 @@ def create_storage_table(tablename="storage", read_throughput=5,
                         schema=[HashKey("uaid"), RangeKey("chid")],
                         throughput=dict(read=read_throughput,
                                         write=write_throughput),
-                        # Some bridge protocols only return tokens
+                        # Some bridge protocols only return tokens for things
+                        # like feedback or error reporting.
                         # Need an index to search for records by them.
                         global_indexes=[
                             GlobalKeysOnlyIndex(
@@ -211,7 +212,7 @@ class Storage(object):
         try:
             if action == 'DELETE':
                 self.table.connection.update_item(
-                    self.tableName,
+                    self.table.table_name,
                     key={self.token_label: {'S': token}},
                     attribute_updates={
                         self.ping_label: {"Action": "DELETE"},
@@ -229,7 +230,7 @@ class Storage(object):
                     jcon = json.loads(connect)
                     jcon['token'] = token
                     connect = json.dumps(jcon)
-                    return self.register_connect(record.get("uaid"), connect)
+                    self.register_connect(record.get("uaid"), connect)
                 return True
         except ProvisionedThroughputExceededException:
             log.msg("Too many deletes...")

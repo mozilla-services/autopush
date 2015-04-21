@@ -110,7 +110,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
         pping = result.get("proprietary_ping")
         if pping is not None:
             d = deferToThread(
-                self.pinger.ping,
+                self.bridge.ping,
                 self.uaid,
                 self.version,
                 self.data,
@@ -352,7 +352,7 @@ class RegistrationHandler(cyclone.web.RequestHandler):
             self.set_status(400, "Invalid arguments")
             self.finish()
             return
-        d = deferToThread(self.pinger.register, self.uaid, self.conn)
+        d = deferToThread(self.bridge.register, self.uaid, self.conn)
         d.addCallback(self._registered)
         d.addErrback(self._error_response)
 

@@ -3,47 +3,47 @@
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
 import json
-from apns_ping import APNSPinger
-from gcm_ping import GCMPinger
+from apns_ping import APNSBridge
+from gcm_ping import GCMBridge
 
 from twisted.python import log
 
-__all__ = ["PingerUndefEx", "PingerFailEx", "Pinger"]
+__all__ = ["BridgeUndefEx", "BridgeFailEx", "Bridge"]
 
 
-class PingerUndefEx(Exception):
+class BridgeUndefEx(Exception):
     pass
 
 
-class PingerFailEx(Exception):
+class BridgeFailEx(Exception):
     pass
 
 
-class Pinger(object):
+class Bridge(object):
     storage = None
 
     def __init__(self, storage, settings):
         if storage is None:
-            raise PingerUndefEx("No storage defined for Pinger")
+            raise BridgeUndefEx("No storage defined for Bridge")
         self.storage = storage
         self.gcm = None
         self.apns = None
         if settings.get('gcm'):
-            self.gcm = GCMPinger(settings.get('gcm'))
+            self.gcm = GCMBridge(settings.get('gcm'))
         if settings.get('apns'):
-            self.apns = APNSPinger(settings.get('apns'))
+            self.apns = APNSBridge(settings.get('apns'))
 
     def register(self, uaid, connect):
         # Store the connect string to the database
         if self.storage is None:
-            raise PingerUndefEx("No storage defined for Pinger")
+            raise BridgeUndefEx("No storage defined for Bridge")
         if connect is None or connect is False:
             return None
         try:
             if self.storage.register_connect(uaid, connect) is False:
                 log.err("Failed to register connection for %s:%s" %
                         (uaid, connect))
-                raise PingerFailEx("Unable to register connection")
+                raise BridgeFailEx("Unable to register connection")
         except Exception, e:
             log.err(e)
             raise
@@ -67,7 +67,7 @@ class Pinger(object):
 
     def unregister(self, uaid):
         if self.storage is None:
-            raise PingerUndefEx("No storage defined for Pinger")
+            raise BridgeUndefEx("No storage defined for Bridge")
         if self.storage.unregister(uaid) is False:
             return False
         return True

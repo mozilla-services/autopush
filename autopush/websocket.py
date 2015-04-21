@@ -98,7 +98,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # Track notifications we don't need to delete separately
         self.direct_updates = {}
-        self.pinger = None
+        self.bridge = None
 
     #############################################################
     #                    Connection Methods
@@ -276,18 +276,18 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.uaid = uaid
 
         connect = data.get("connect")
-        if connect and self.ap_settings.pinger:
+        if connect and self.ap_settings.bridge:
             self.transport.pauseProducing()
-            d = deferToThread(self.ap_settings.pinger.register, uaid, connect)
+            d = deferToThread(self.ap_settings.bridge.register, uaid, connect)
             d.addCallback(self._check_router, True)
             d.addErrback(self.err_hello)
         else:
             self._check_router(False)
 
-    def _check_router(self, paused=False, pinger_register=None):
+    def _check_router(self, paused=False, bridge_register=None):
         if paused:
             self.transport.resumeProducing()
-        if pinger_register is not None and pinger_register is False:
+        if bridge_register is not None and bridge_register is False:
             msg = {"messageType": "hello",
                    "reason": "bridge registration failed",
                    "status": 503}
