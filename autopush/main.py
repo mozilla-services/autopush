@@ -298,14 +298,6 @@ def connection_main(sysargs=None):
 
     reactor.suggestThreadPoolSize(50)
 
-    import gc
-
-    def collector():
-        gc.collect()
-
-    gcl = task.LoopingCall(collector)
-    gcl.start(90)
-
     l = task.LoopingCall(periodic_reporter, settings)
     l.start(1.0)
     try:
@@ -343,14 +335,6 @@ def endpoint_main(sysargs=None):
         default_host=settings.hostname, debug=args.debug,
         log_function=skip_request_logging
     )
-
-    import gc
-
-    def collector():
-        gc.collect()
-
-    gcl = task.LoopingCall(collector)
-    gcl.start(90)
 
     # No reason that the endpoint couldn't handle both...
     endpoint.pinger = settings.pinger
