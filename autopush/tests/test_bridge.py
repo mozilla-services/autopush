@@ -6,10 +6,11 @@ from mock import Mock, patch
 from moto import mock_dynamodb2
 from unittest import TestCase
 
-import gcmclient as gcm
+import gcmclient
 import apns
 
 from autopush.bridge.bridge import (Bridge, BridgeUndefEx, BridgeFailEx)
+from autopush.bridge.apns_ping import (APNSBridge)
 
 
 mock_dynamodb2 = mock_dynamodb2()
@@ -22,14 +23,14 @@ class BridgeTestCase(TestCase):
 
     def setUp(self):
         mock_dynamodb2.start()
-        self.r_gcm = gcm.GCM
+        self.r_gcm = gcmclient.GCM
         self.s_apns = apns.APNs
 
     def tearDown(self):
         mock_dynamodb2.stop()
 
-    @patch.object(gcm, 'GCM', return_value=f_gcm)
-    @patch.object(gcm, 'JSONMessage', return_value=f_gcm)
+    @patch.object(gcmclient, 'GCM', return_value=f_gcm)
+    @patch.object(gcmclient, 'JSONMessage', return_value=f_gcm)
     @patch.object(apns, 'APNs', return_value=f_apns)
     def test_register(self, mapns=None, mgcmj=None, mgcm=None):
         settings = {'gcm': {'apikey': '12345678abcdefg'},
@@ -51,8 +52,8 @@ class BridgeTestCase(TestCase):
         tping.storage.register_connect.side_effect = BridgeFailEx
         self.assertRaises(BridgeFailEx, tping.register, 'uaid', 'true')
 
-    @patch.object(gcm, 'GCM', return_value=f_gcm)
-    @patch.object(gcm, 'JSONMessage', return_value=f_gcm)
+    @patch.object(gcmclient, 'GCM', return_value=f_gcm)
+    @patch.object(gcmclient, 'JSONMessage', return_value=f_gcm)
     @patch.object(apns, 'APNs', return_value=f_apns)
     def test_Ping(self, mapns=None, mgcmj=None, mgcm=None):
         # no storage:
@@ -73,6 +74,7 @@ class BridgeTestCase(TestCase):
             use_sandbox=False,
             cert_file=settings['apns']['cert_file'],
             key_file=settings['apns']['key_file'],
+            enhanced=True,
         )
         self.assertTrue(tping.gcm is not None)
         self.assertTrue(tping.apns is not None)
@@ -81,18 +83,16 @@ class BridgeTestCase(TestCase):
         class zfr:
             length = 0
 
-        class rfr:
-            length = 1
         self.f_gcm.JSONMessage.return_value = "valid_json"
         self.f_gcm.send = Mock()
         self.f_gcm.send.return_value = Mock()
         self.f_gcm.send.return_value.failed.items = Mock()
-        self.f_gcm.send.return_value.failed.items.return_value = zfr
+        self.f_gcm.send.return_value.failed.items.return_value = []
 
         # no connect
         self.assertFalse(tping.ping("uaid", 123, 'abcd', None))
-        self.assertFalse(tping.ping("uaid", 123, 'abcd', '{"type":"foo"}'))
-        self.assertFalse(tping.ping("uaid", 123, 'abcd', '{"type":"gcm"}'))
+        self.assertFalse(tping.ping("uaid", 123, 'abcd', {"type": "foo"}))
+        self.assertFalse(tping.ping("uaid", 123, 'abcd', {"type": "gcm"}))
 
         # Test sanity checks
         self.assertFalse(tping.gcm.ping("uaid", 123,
@@ -103,53 +103,76 @@ class BridgeTestCase(TestCase):
                                          'abcd', {"type": "foo"}))
         self.assertFalse(tping.apns.ping("uaid", 123,
                                          'abcd', {"type": "apns"}))
-
+        self.f_gcm.send.return_value.canonical.items = Mock()
+        self.f_gcm.send.return_value.canonical.items.return_value = []
+        self.f_gcm.send.return_value.not_registered = []
+        self.f_gcm.send.return_value.needs_retry.return_value = False
         reply = tping.ping("uaid", 123, 'abcd',
-                           '{"type":"gcm","token":"abcd123"}')
+                           {"type": "gcm", "token": "abcd123"})
         self.assertTrue(reply)
-        self.f_gcm.JSONMessage.assert_called_with(
+        gcmclient.JSONMessage.assert_called_with(
             registration_ids=[u'abcd123'],
             collapse_key='simplepush',
             time_to_live=60,
             dry_run=False,
-            data={'Msg': 'abcd', 'Version': 123})
-        self.f_gcm.send.side_effect = gcm.GCMAuthenticationError
+            data={'Msg': 'abcd', 'Ver': 123})
+
+        self.f_gcm.send.return_value.failed.items.return_value = [1]
         self.assertFalse(tping.ping('uaid', 123, 'data',
-                         '{"type":"gcm", "token":"abcd123"}'))
-        self.f_gcm.send.side_effect = ValueError
+                         {"type": "gcm", "token": "abcd123"}))
+        # Why isn't this actually triggering the exception handler?
+        self.f_gcm.send.side_effect = gcmclient.GCMAuthenticationError
         self.assertFalse(tping.ping('uaid', 123, 'data',
-                         '{"type":"gcm", "token":"abcd123"}'))
+                                    {"type": "gcm", "token": "abcd123"}))
         self.f_gcm.send.side_effect = Exception
         self.assertFalse(tping.ping('uaid', 123, 'data',
-                         '{"type":"gcm", "token":"abcd123"}'))
-        self.f_gcm.send.side_effect = None
-        self.f_gcm.send.return_value.failed.items.return_value = rfr
+                         {"type": "gcm", "token": "abcd123"}))
+        self.f_gcm.send.side_effect = ValueError
         self.assertFalse(tping.ping('uaid', 123, 'data',
-                         '{"type":"gcm", "token":"abcd123"}'))
-        self.f_gcm.send.return_value.failed.items.return_value = zfr
+                         {"type": "gcm", "token": "abcd123"}))
 
         # APNs test
+        apns.gateway_server = Mock()
         self.f_apns.gateway_server = Mock()
+        self.f_apns.gateway_server.send_notification = Mock()
         reply = tping.ping("uaid", 123, 'abcd',
-                           '{"type":"apns","token":"abcd123"}')
+                           {"type": "apns", "token": "abcd123"})
         self.assertTrue(reply)
         # Need to find a better way to parse the second param of this
         ca = str(self.f_apns.gateway_server.send_notification.call_args)
-        rs = "custom={'Msg': 'abcd', 'Version': 123}"
+        rs = "custom={'Msg': 'abcd', 'Ver': 123}"
         self.assertTrue(ca.find(rs) > -1)
 
         reply = tping.ping("uaid", 123, 'abcd',
-                           '{"type":"apns","token":"abcd123"}')
+                           {"type": "apns", "token": "abcd123"})
         self.assertTrue(reply)
 
         self.f_apns.gateway_server.send_notification.side_effect = Exception
         reply = tping.ping("uaid", 123, 'abcd',
-                           '{"type":"apns","token":"abcd123"}')
+                           {"type": "apns", "token": "abcd123"})
         self.assertFalse(reply)
-        self.f_apns.gateway_server.send_notification.side_effect = None
 
-    @patch.object(gcm, 'GCM', return_value=f_gcm)
-    @patch.object(gcm, 'JSONMessage', return_value=f_gcm)
+    @patch.object(apns, 'APNs', return_value=f_apns)
+    def test_apns_error(self, mapns=None):
+        settings = {'gcm': {'apikey': '12345678abcdefg'},
+                    'apns': {'cert_file': 'fake.cert', 'key_file': 'fake.key'},
+                    }
+        storage = Mock()
+        storage.register_connect.return_value = True
+        tapns = APNSBridge(settings, storage)
+
+        tapns.messages = {1: {}}
+        tapns._error({'status': 0, 'identifier': 1})
+        self.assertTrue(len(tapns.messages) == 0)
+        self.f_apns.gateway_server = Mock()
+        self.f_apns.gateway_server.send_notification = Mock()
+        tapns.messages = {1: {'token': 'abcd', 'payload': '1234'}}
+        tapns._error({'status': 1, 'identifier': 1})
+        self.f_apns.gateway_server.send_notification.assert_called_with(
+            'abcd', '1234', 1)
+
+    @patch.object(gcmclient, 'GCM', return_value=f_gcm)
+    @patch.object(gcmclient, 'JSONMessage', return_value=f_gcm)
     @patch.object(apns, 'APNs', return_value=f_apns)
     def test_unregister(self, mapns=None, mgcmj=None, mgcm=None):
         settings = {'gcm': {'apikey': '12345678abcdefg'},

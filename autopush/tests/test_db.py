@@ -131,15 +131,15 @@ class StorageTestCase(unittest.TestCase):
 
         # try bad connect data:
         self.assertRaises(ValueError, storage.register_connect,
-                          "uaid", 'invalid')
+                          "uaid", {})
 
         # try bad connect data:
         self.assertRaises(ValueError, storage.register_connect,
-                          "uaid", '{"notype":"test"}')
+                          "uaid", {"notype": "test"})
 
         # try minimal correct data
         self.assertRaises(None, storage.register_connect("uaid",
-                          '{"type":"test"}'))
+                          {"type": "test"}))
 
     def test_register_connect_over(self):
         storage = Storage(get_storage_table(), MetricSink())
@@ -150,7 +150,7 @@ class StorageTestCase(unittest.TestCase):
 
         storage.table.connection.update_item.side_effect = raise_error
         self.assertRaises(ProvisionedThroughputExceededException,
-                          storage.register_connect, "uaid", '{"type":"test"}')
+                          storage.register_connect, "uaid", {"type": "test"})
 
     def test_unregister_connect(self):
         storage = Storage(get_storage_table(), MetricSink())

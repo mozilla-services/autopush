@@ -162,12 +162,12 @@ class Storage(object):
     modf_label = "modified"
 
     def register_connect(self, uaid, connect):
-        cinfo = json.loads(connect)
         """ Register a type of proprietary ping data"""
         # Always overwrite.
-        if cinfo.get("type") is None:
+        if connect.get("type") is None:
             raise ValueError('missing "type" from connection info')
-        token = cinfo.get("token")
+        token = connect.get("token")
+        sconnect = json.dumps(connect)
         try:
             self.table.connection.update_item(
                 self.table.table_name,
@@ -175,7 +175,7 @@ class Storage(object):
                      "chid": {'S': " "}},
                 attribute_updates={
                     self.ping_label: {"Action": "PUT",
-                                      "Value": {'S': connect}},
+                                      "Value": {'S': sconnect}},
                     self.token_label: {"Action": "PUT",
                                        "Value": {'S': token}},
                 }
@@ -188,7 +188,8 @@ class Storage(object):
     def get_connection(self, uaid):
         try:
             record = self.table.get_item(consistent=True,
-                                         uaid=uaid)
+                                         uaid=uaid,
+                                         chid=' ')
         except ItemNotFound:
             return False
         except ProvisionedThroughputExceededException:
@@ -199,7 +200,8 @@ class Storage(object):
         try:
             self.table.connection.update_item(
                 self.table.table_name,
-                key={"uaid": {'S': uaid}},
+                key={"uaid": {'S': uaid},
+                     "chid": {'S': ' '}},
                 attribute_updates={
                     self.ping_label: {"Action": "DELETE"},
                 },
@@ -229,8 +231,7 @@ class Storage(object):
                 if connect is not None:
                     jcon = json.loads(connect)
                     jcon['token'] = token
-                    connect = json.dumps(jcon)
-                    self.register_connect(record.get("uaid"), connect)
+                    self.register_connect(record.get("uaid"), jcon)
                 return True
         except ProvisionedThroughputExceededException:
             log.msg("Too many deletes...")

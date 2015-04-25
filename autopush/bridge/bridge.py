@@ -2,7 +2,6 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-import json
 from apns_ping import APNSBridge
 from gcm_ping import GCMBridge
 
@@ -29,9 +28,9 @@ class Bridge(object):
         self.gcm = None
         self.apns = None
         if settings.get('gcm'):
-            self.gcm = GCMBridge(settings.get('gcm'))
+            self.gcm = GCMBridge(settings.get('gcm'), storage)
         if settings.get('apns'):
-            self.apns = APNSBridge(settings.get('apns'))
+            self.apns = APNSBridge(settings.get('apns'), storage)
 
     def register(self, uaid, connect):
         # Store the connect string to the database
@@ -49,11 +48,10 @@ class Bridge(object):
             raise
         return True
 
-    def ping(self, uaid, version, data, connect):
+    def ping(self, uaid, version, data, connectInfo):
         try:
-            if connect is None or connect is False:
+            if connectInfo is None or connectInfo is False:
                 return False
-            connectInfo = json.loads(connect)
             ptype = connectInfo.get("type").lower().strip()
             if ptype == "gcm" and self.gcm is not None:
                 return self.gcm.ping(uaid, version, data, connectInfo)

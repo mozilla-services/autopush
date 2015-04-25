@@ -105,20 +105,28 @@ class EndpointHandler(cyclone.web.RequestHandler):
             self.set_status(404)
             self.write("Invalid")
             return self.finish()
+        uaid = result.get('uaid')
 
-        # Is there a proprietary ping associated with this uaid?
-        pping = result.get("proprietary_ping")
-        if pping is not None:
-            d = deferToThread(
-                self.bridge.ping,
-                self.uaid,
-                self.version,
-                self.data,
-                pping)
-            d.addCallback(self._process_pping, result)
-            d.addErrback(self._error_response)
-            return
-        self._process_route(result)
+        d = deferToThread(self.ap_settings.storage.get_connection,
+                          uaid)
+        d.addCallback(self._send_pping, uaid, result)
+        d.addErrback(self._error_response)
+
+    def _send_pping(self, pping_info, uaid, routeinfo):
+        try:
+            if pping_info is not None:
+                d = deferToThread(
+                    self.bridge.ping,
+                    self.uaid,
+                    self.version,
+                    self.data,
+                    pping_info)
+                d.addCallback(self._process_pping, routeinfo)
+                d.addErrback(self._error_response)
+                return
+        except AttributeError:
+            pass
+        self._process_route(routeinfo)
 
     def _process_pping(self, result, routeinfo):
         if not result:
