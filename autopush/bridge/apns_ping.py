@@ -47,7 +47,7 @@ class APNSBridge(object):
         if err['status'] in [1, 255]:
             log.msg("Retrying...")
             self._connect()
-            resend = self.messages.get(err['identifier'])
+            resend = self.messages.get(err.get('identifier'))
             if resend is None:
                 return
             self.apns.gateway_server.send_notification(resend['token'],

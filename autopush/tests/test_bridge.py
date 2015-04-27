@@ -11,6 +11,7 @@ import apns
 
 from autopush.bridge.bridge import (Bridge, BridgeUndefEx, BridgeFailEx)
 from autopush.bridge.apns_ping import (APNSBridge)
+from autopush.bridge.gcm_ping import (GCMBridge)
 
 from twisted.internet import reactor
 
@@ -160,15 +161,35 @@ class BridgeTestCase(TestCase):
         ca = str(self.f_apns.gateway_server.send_notification.call_args)
         rs = "custom={'Msg': 'abcd', 'Ver': 123}"
         self.assertTrue(ca.find(rs) > -1)
-
         reply = tping.ping("uaid", 123, 'abcd',
                            {"type": "apns", "token": "abcd123"})
         self.assertTrue(reply)
 
+        # Clear the messages so we can test autoprune.
+        tping.apns.messages = {1: {'token': 'dump', 'payload': {}}}
+        reply = tping.ping("uaid", 456, 'efgh',
+                           {"type": "apns", "token": "keep123"})
+        self.assertTrue(len(tping.apns.messages) and
+                        tping.apns.messages.get(1) is None)
         self.f_apns.gateway_server.send_notification.side_effect = Exception
         reply = tping.ping("uaid", 123, 'abcd',
                            {"type": "apns", "token": "abcd123"})
         self.assertFalse(reply)
+
+    @patch.object(gcmclient, 'GCM', return_value=f_gcm)
+    def test_Ping_result(self, mgcm=None):
+        storage = Mock()
+        tgcm = GCMBridge({}, storage)
+        reply = Mock()
+        reply.canonical = Mock()
+        reply.failed = Mock()
+        reply.retry = Mock()
+        reply.canonical.items.return_value = []
+        reply.not_registered = []
+        reply.failed.items.return_value = []
+        reply.needs_retry.return_value = True
+        reply.retry.return_value = "ignored"
+        self.assertFalse(tgcm._result(reply, 6))
 
     @patch.object(apns, 'APNs', return_value=f_apns)
     def test_apns_error(self, mapns=None):
@@ -184,10 +205,14 @@ class BridgeTestCase(TestCase):
         self.assertTrue(len(tapns.messages) == 0)
         self.f_apns.gateway_server = Mock()
         self.f_apns.gateway_server.send_notification = Mock()
-        tapns.messages = {1: {'token': 'abcd', 'payload': '1234'}}
+        tapns.messages = {1: {'token': 'abcd', 'payload': '1234'},
+                          }
         tapns._error({'status': 1, 'identifier': 1})
         self.f_apns.gateway_server.send_notification.assert_called_with(
             'abcd', '1234', 1)
+        self.f_apns.gateway_server.send_notification = Mock()
+        tapns._error({'status': 1})
+        self.assertFalse(self.f_apns.gatemway_server.send_notification.called)
 
     @patch.object(gcmclient, 'GCM', return_value=f_gcm)
     @patch.object(gcmclient, 'JSONMessage', return_value=f_gcm)
