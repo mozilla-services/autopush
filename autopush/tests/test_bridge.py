@@ -12,6 +12,8 @@ import apns
 from autopush.bridge.bridge import (Bridge, BridgeUndefEx, BridgeFailEx)
 from autopush.bridge.apns_ping import (APNSBridge)
 
+from twisted.internet import reactor
+
 
 mock_dynamodb2 = mock_dynamodb2()
 
@@ -52,10 +54,11 @@ class BridgeTestCase(TestCase):
         tping.storage.register_connect.side_effect = BridgeFailEx
         self.assertRaises(BridgeFailEx, tping.register, 'uaid', 'true')
 
+    @patch.object(reactor, 'callLater', return_value=None)
     @patch.object(gcmclient, 'GCM', return_value=f_gcm)
     @patch.object(gcmclient, 'JSONMessage', return_value=f_gcm)
     @patch.object(apns, 'APNs', return_value=f_apns)
-    def test_Ping(self, mapns=None, mgcmj=None, mgcm=None):
+    def test_Ping(self, mapns=None, mgcmj=None, mgcm=None, mreactor=None):
         # no storage:
         settings = {'gcm': {'apikey': '12345678abcdefg'},
                     'apns': {'cert_file': 'fake.cert', 'key_file': 'fake.key'},
@@ -80,9 +83,6 @@ class BridgeTestCase(TestCase):
         self.assertTrue(tping.apns is not None)
 
         # GCM test
-        class zfr:
-            length = 0
-
         self.f_gcm.JSONMessage.return_value = "valid_json"
         self.f_gcm.send = Mock()
         self.f_gcm.send.return_value = Mock()
@@ -120,7 +120,25 @@ class BridgeTestCase(TestCase):
         self.f_gcm.send.return_value.failed.items.return_value = [1]
         self.assertFalse(tping.ping('uaid', 123, 'data',
                          {"type": "gcm", "token": "abcd123"}))
-        # Why isn't this actually triggering the exception handler?
+
+        self.f_gcm.send.return_value.failed.items.return_value = []
+        self.f_gcm.send.return_value.not_registered = [1]
+        self.assertFalse(tping.ping('uaid', 123, 'data',
+                         {"type": "gcm", "token": "abcd123"}))
+
+        self.f_gcm.send.return_value.not_registered = []
+        self.f_gcm.send.return_value.canonical.items.return_value = [[1, 2]]
+        self.assertTrue(tping.ping('uaid', 123, 'data',
+                                   {"type": "gcm", "token": "abcd123"}))
+        self.f_gcm.send.return_value.canonical.items.return_value = []
+
+        # Payload value is Mock'd.
+        self.f_gcm.send.return_value.needs_retry.return_value = True
+        self.f_gcm.send.return_value.retry = Mock()
+        self.f_gcm.send.return_value.retry.return_value = "payload"
+        self.assertTrue(tping.ping('uaid', 123, 'data',
+                                   {"type": "gcm", "token": "abcd123"}))
+
         self.f_gcm.send.side_effect = gcmclient.GCMAuthenticationError
         self.assertFalse(tping.ping('uaid', 123, 'data',
                                     {"type": "gcm", "token": "abcd123"}))

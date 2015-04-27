@@ -35,7 +35,6 @@ class GCMBridge(object):
                 log.err("connect info missing 'token'")
                 return False
 
-            log.msg("Calling gcm.JSONMessage...")
             payload = gcmclient.JSONMessage(
                 registration_ids=[connectInfo.get("token")],
                 collapse_key=self.collapseKey,
@@ -63,7 +62,7 @@ class GCMBridge(object):
             return self._result(result, iter)
         except Exception, e:
             self._error(e)
-        return False
+            raise
 
     def _result(self, reply, iter=0):
         # handle reply content
@@ -74,14 +73,14 @@ class GCMBridge(object):
             self.storage.byToken('UPDATE', new_id)
             # No need to retransmit
         # naks:
+        # uninstall:
+        for reg_id in reply.not_registered:
+            self.storage.byToken('DELETE', reg_id)
+            return False
         #  for reg_id, err_code in reply.failed.items():
         if len(reply.failed.items()) > 0:
             log.err("Messages failed to be delivered.")
             log.msg("GCM failures: %s" % json.dumps(reply.failed.items()))
-            return False
-        # uninstall:
-        for reg_id in reply.not_registered:
-            self.storage.byToken('DELETE', reg_id)
             return False
         # retries:
         if reply.needs_retry():

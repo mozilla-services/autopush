@@ -49,19 +49,15 @@ class Bridge(object):
         return True
 
     def ping(self, uaid, version, data, connectInfo):
-        try:
-            if connectInfo is None or connectInfo is False:
-                return False
-            ptype = connectInfo.get("type").lower().strip()
-            if ptype == "gcm" and self.gcm is not None:
-                return self.gcm.ping(uaid, version, data, connectInfo)
-            if ptype == "apns" and self.apns is not None:
-                return self.apns.ping(uaid, version, data, connectInfo)
-            log.err("Unknown connection type specified: ptype")
+        if connectInfo is None or connectInfo is False:
             return False
-        except Exception, e:
-            log.err(e)
-            return False
+        ptype = connectInfo.get("type").lower().strip()
+        if ptype == "gcm" and self.gcm is not None:
+            return self.gcm.ping(uaid, version, data, connectInfo)
+        if ptype == "apns" and self.apns is not None:
+            return self.apns.ping(uaid, version, data, connectInfo)
+        log.err("Unknown connection type specified: ptype")
+        return False
 
     def unregister(self, uaid):
         if self.storage is None:
