@@ -66,7 +66,7 @@ class EndpointMainTestCase(unittest.TestCase):
     def test_ping_settings(self):
         class arg:
             # important stuff
-            pinger = True
+            bridge = True
             gcm_apikey = "gcm.key"
             apns_cert_file = "cert.file"
             apns_key_file = "key.file"
@@ -93,6 +93,6 @@ class EndpointMainTestCase(unittest.TestCase):
             resolve_hostname = False
 
         ap = make_settings(arg)
-        eq_(ap.pinger.gcm.gcm.api_key, arg.gcm_apikey)
-        eq_(ap.pinger.apns.apns.cert_file, arg.apns_cert_file)
-        eq_(ap.pinger.apns.apns.key_file, arg.apns_key_file)
+        eq_(ap.bridge.gcm.gcm.api_key, arg.gcm_apikey)
+        eq_(ap.bridge.apns.apns.cert_file, arg.apns_cert_file)
+        eq_(ap.bridge.apns.apns.key_file, arg.apns_key_file)

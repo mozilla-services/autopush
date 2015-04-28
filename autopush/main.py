@@ -82,10 +82,10 @@ def add_shared_args(parser):
                         env_var="LOG_LEVEL")
 
 
-def add_pinger_args(parser):
+def add_bridge_args(parser):
     # GCM
-    parser.add_argument('--pinger', help='enable Proprietary Ping',
-                        type=bool, default=False, env_var='PINGER')
+    parser.add_argument('--bridge', help='enable Proprietary Ping',
+                        type=bool, default=False, env_var='BRIDGE')
     label = "Proprietary Ping: Google Cloud Messaging:"
     parser.add_argument('--gcm_ttl',
                         help="%s Time to Live" % label,
@@ -151,7 +151,7 @@ def _parse_connection(sysargs=None):
     parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
                         type=int, default=8082, env_var="ENDPOINT_PORT")
 
-    add_pinger_args(parser)
+    add_bridge_args(parser)
     add_shared_args(parser)
     args = parser.parse_args(sysargs)
     return args, parser
@@ -178,16 +178,17 @@ def _parse_endpoint(sysargs=None):
     parser.add_argument('--cors', help='Allow CORS PUTs for update.',
                         type=bool, default=False, env_var='ALLOW_CORS')
     add_shared_args(parser)
-    add_pinger_args(parser)
+    add_bridge_args(parser)
+
     args = parser.parse_args(sysargs)
     return args, parser
 
 
 def make_settings(args, **kwargs):
     pingConf = None
-    if args.pinger:
+    if args.bridge:
         pingConf = {}
-        # if you have the critical elements for each pinger, create it
+        # if you have the critical elements for each bridge, create it
         if args.apns_cert_file is not None and args.apns_key_file is not None:
             pingConf["apns"] = {"sandbox": args.apns_sandbox,
                                 "cert_file": args.apns_cert_file,
@@ -197,7 +198,7 @@ def make_settings(args, **kwargs):
                                "dryrun": args.gcm_dryrun,
                                "collapsekey": args.gcm_collapsekey,
                                "apikey": args.gcm_apikey}
-        # If you have no settings, you have no pinger.
+        # If you have no settings, you have no bridge.
         if pingConf is {}:
             pingConf = None
 
@@ -353,8 +354,8 @@ def endpoint_main(sysargs=None):
     gcl.start(90)
 
     # No reason that the endpoint couldn't handle both...
-    endpoint.pinger = settings.pinger
-    register.pinger = settings.pinger
+    endpoint.bridge = settings.bridge
+    register.bridge = settings.bridge
 
     settings.metrics.start()
 
