@@ -87,7 +87,7 @@ class GCMBridge(object):
             retry = reply.retry()
             if iter > 5:
                 self._error("Failed repeated attempts to send message %s" %
-                        retry)
+                            retry)
                 return False
             # include delay
             iter = iter + 1

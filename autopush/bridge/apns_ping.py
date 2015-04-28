@@ -68,15 +68,16 @@ class APNSBridge(object):
                                    content_available=1,
                                    custom={"Msg": data,
                                            "Ver": version})
-            id = time.time()
-            self.messages[id] = {"token": token, "payload": payload}
+            current_id = int(time.time())
+            self.messages[current_id] = {"token": token, "payload": payload}
             # TODO: Add listener for error handling.
             apns.gateway_server.register_response_listener(self._error)
-            self.apns.gateway_server.send_notification(token, payload, id)
+            self.apns.gateway_server.send_notification(
+                token, payload, current_id)
             # cleanup sent messages
             if len(self.messages):
                 for id in self.messages.keys():
-                    if id < time.time() - self.config.get("expry", 10):
+                    if id < current_id - self.config.get("expry", 10):
                         del self.messages[id]
                     else:
                         break
