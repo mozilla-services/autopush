@@ -49,7 +49,7 @@ class Bridge(object):
         return True
 
     def ping(self, uaid, version, data, connectInfo):
-        if connectInfo is None or connectInfo is False:
+        if not connectInfo:
             return False
         ptype = connectInfo.get("type").lower().strip()
         if ptype == "gcm" and self.gcm is not None:

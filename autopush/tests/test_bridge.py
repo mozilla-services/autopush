@@ -143,10 +143,10 @@ class BridgeTestCase(TestCase):
         self.f_gcm.send.side_effect = gcmclient.GCMAuthenticationError
         self.assertFalse(tping.ping('uaid', 123, 'data',
                                     {"type": "gcm", "token": "abcd123"}))
-        self.f_gcm.send.side_effect = Exception
+        mgcmj.side_effect = ValueError
         self.assertFalse(tping.ping('uaid', 123, 'data',
-                         {"type": "gcm", "token": "abcd123"}))
-        self.f_gcm.send.side_effect = ValueError
+                         {"type": "gcm", "token": "☃"}))
+        self.f_gcm.send.side_effect = Exception
         self.assertFalse(tping.ping('uaid', 123, 'data',
                          {"type": "gcm", "token": "abcd123"}))
 
@@ -158,9 +158,9 @@ class BridgeTestCase(TestCase):
                            {"type": "apns", "token": "abcd123"})
         self.assertTrue(reply)
         # Need to find a better way to parse the second param of this
-        ca = str(self.f_apns.gateway_server.send_notification.call_args)
-        rs = "custom={'Msg': 'abcd', 'Ver': 123}"
-        self.assertTrue(ca.find(rs) > -1)
+        _, (_, payload, _), _ = \
+            self.f_apns.gateway_server.send_notification.mock_calls[0]
+        self.assertEqual(payload.custom, {'Msg': 'abcd', 'Ver': 123})
         reply = tping.ping("uaid", 123, 'abcd',
                            {"type": "apns", "token": "abcd123"})
         self.assertTrue(reply)

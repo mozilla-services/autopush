@@ -29,10 +29,10 @@ class GCMBridge(object):
     def ping(self, uaid, version, data, connectInfo):
         try:
             if connectInfo.get("type").lower() != "gcm":
-                log.err("connect info isn't gcm")
+                self._error("connect info isn't gcm")
                 return False
             if connectInfo.get("token") is None:
-                log.err("connect info missing 'token'")
+                self._error("connect info missing 'token'")
                 return False
 
             payload = gcmclient.JSONMessage(
@@ -44,12 +44,8 @@ class GCMBridge(object):
                       "Ver": version}
             )
             return self._send(payload)
-        except gcmclient.GCMAuthenticationError, e:
-            log.err("Authentication Error: %s" % e)
         except ValueError, e:
-            log.err("GCM returned error %s" % e)
-        except Exception, e:
-            log.err("Unhandled exception caught %s" % e)
+            self._error("GCM returned error %s" % e)
         return False
 
     def _error(self, err, **kwargs):
@@ -60,9 +56,11 @@ class GCMBridge(object):
         try:
             result = self.gcm.send(payload)
             return self._result(result, iter)
+        except gcmclient.GCMAuthenticationError, e:
+            self._error("Authentication Error: %s" % e)
         except Exception, e:
-            self._error(e)
-            raise
+            self._error("Unhandled exception in GCM bridge: %s" % e)
+        return False
 
     def _result(self, reply, iter=0):
         # handle reply content
@@ -70,26 +68,28 @@ class GCMBridge(object):
         #  for reg_id, msg_id in reply.success.items():
         # updates
         for old_id, new_id in reply.canonical.items():
+            log.msg("GCM id changed : %s => " % old_id, new_id)
             self.storage.byToken('UPDATE', new_id)
             # No need to retransmit
         # naks:
         # uninstall:
         for reg_id in reply.not_registered:
+            log.msg("GCM no longer registered: %s" % reg_id)
             self.storage.byToken('DELETE', reg_id)
             return False
         #  for reg_id, err_code in reply.failed.items():
         if len(reply.failed.items()) > 0:
-            log.err("Messages failed to be delivered.")
+            self._error("Messages failed to be delivered.")
             log.msg("GCM failures: %s" % json.dumps(reply.failed.items()))
             return False
         # retries:
         if reply.needs_retry():
             retry = reply.retry()
             if iter > 5:
-                log.err("Failed repeated attempts to send message %s" %
+                self._error("Failed repeated attempts to send message %s" %
                         retry)
                 return False
-            # TODO: include delay
+            # include delay
             iter = iter + 1
             reactor.callLater(5 * iter, self._send, retry, iter)
         return True

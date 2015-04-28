@@ -43,7 +43,7 @@ class APNSBridge(object):
             log.msg("Success")
             del self.messages[err['identifier']]
             return
-        log.err("Error encountered %s" % self.errors[err['status']])
+        log.err("APNs Error encountered: %s" % self.errors[err['status']])
         if err['status'] in [1, 255]:
             log.msg("Retrying...")
             self._connect()
@@ -82,5 +82,5 @@ class APNSBridge(object):
                         break
             return True
         except Exception, e:
-            log.err(e)
-            return False
+            log.err("Unhandled APNs Exception: %s", e)
+        return False
