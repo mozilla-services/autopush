@@ -9,7 +9,8 @@ from boto.dynamodb2.exceptions import (
 from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table
-from boto.dynamodb2.types import NUMBER
+from boto.dynamodb2.types import NUMBER, STRING
+from twisted.python import log
 
 import json
 
@@ -35,6 +36,15 @@ def create_storage_table(tablename="storage", read_throughput=5,
                         schema=[HashKey("uaid"), RangeKey("chid")],
                         throughput=dict(read=read_throughput,
                                         write=write_throughput),
+                        # Some bridge protocols only return tokens for things
+                        # like feedback or error reporting.
+                        # Need an index to search for records by them.
+                        global_indexes=[
+                            GlobalKeysOnlyIndex(
+                                'BridgeTokenIndex',
+                                parts=[HashKey('bridge_token',
+                                               data_type=STRING)],
+                                throughput=dict(read=1, write=1))]
                         )
 
 
@@ -147,36 +157,40 @@ class Storage(object):
     # Tempted to put this in own class.
 
     ping_label = "proprietary_ping"
+    token_label = "bridge_token"
     type_label = "ping_type"
     modf_label = "modified"
 
     def register_connect(self, uaid, connect):
+        """ Register a type of proprietary ping data"""
+        # Always overwrite.
+        if connect.get("type") is None:
+            raise ValueError('missing "type" from connection info')
+        token = connect.get("token")
+        sconnect = json.dumps(connect)
         try:
-            cinfo = json.loads(connect)
-            """ Register a type of proprietary ping data"""
-            # Always overwrite.
-            if cinfo.get("type") is None:
-                return False
             self.table.connection.update_item(
                 self.table.table_name,
-                key={"uaid": {'S': uaid}},
+                key={"uaid": {'S': uaid},
+                     "chid": {'S': " "}},
                 attribute_updates={
                     self.ping_label: {"Action": "PUT",
-                                      "Value": {'S': connect}},
+                                      "Value": {'S': sconnect}},
+                    self.token_label: {"Action": "PUT",
+                                       "Value": {'S': token}},
                 }
             )
-        except ProvisionedThroughputExceededException:
-            return False
-        except ValueError:
-            # Invalid connect JSON specified, most likely.
-            return False
-        return True
+        except Exception, e:
+            log.err(e)
+            raise
+        return
 
     def get_connection(self, uaid):
         try:
             record = self.table.get_item(consistent=True,
-                                         uaid=uaid)
-        except ItemNotFound:
+                                         uaid=uaid,
+                                         chid=' ')
+        except (ItemNotFound, JSONResponseError):
             return False
         except ProvisionedThroughputExceededException:
             return False
@@ -186,7 +200,8 @@ class Storage(object):
         try:
             self.table.connection.update_item(
                 self.table.table_name,
-                key={"uaid": {'S': uaid}},
+                key={"uaid": {'S': uaid},
+                     "chid": {'S': ' '}},
                 attribute_updates={
                     self.ping_label: {"Action": "DELETE"},
                 },
@@ -194,6 +209,33 @@ class Storage(object):
         except ProvisionedThroughputExceededException:
             return False
         return True
+
+    def byToken(self, action, token):
+        try:
+            if action == 'DELETE':
+                self.table.connection.update_item(
+                    self.table.table_name,
+                    key={self.token_label: {'S': token}},
+                    attribute_updates={
+                        self.ping_label: {"Action": "DELETE"},
+                        self.token_label: {"Action": "DELETE"},
+                    }
+                )
+                return True
+            if action == 'UPDATE':
+                record = self.table.get_item(
+                    consistent=True,
+                    bridge_token=token
+                )
+                connect = record.get(self.ping_label)
+                if connect is not None:
+                    jcon = json.loads(connect)
+                    jcon['token'] = token
+                    self.register_connect(record.get("uaid"), jcon)
+                return True
+        except ProvisionedThroughputExceededException:
+            log.msg("Too many deletes...")
+        return False
 
 
 class Router(object):
@@ -208,8 +250,8 @@ class Router(object):
             self.metrics.increment("error.provisioned.get_uaid")
             raise
         except (ItemNotFound, JSONResponseError):
-            # Under tests, this failed without catching a JSONResponseError,
-            # which is weird as hell. But whatever, we'll catch that too.
+            # We trap JSONResponseError because Moto returns text instead of
+            # JSON when looking up values in empty tables.
             return False
 
     def register_user(self, uaid, node_id, connected_at):

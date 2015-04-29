@@ -20,7 +20,7 @@ from txstatsd.metrics.metrics import Metrics
 
 import autopush.endpoint as endpoint
 from autopush.db import Router, Storage
-from autopush.pinger.pinger import Pinger
+from autopush.bridge.bridge import Bridge
 from autopush.settings import AutopushSettings
 
 
@@ -69,7 +69,7 @@ class EndpointTestCase(unittest.TestCase):
         self.response_mock = Mock(spec=Response)
         self.router_mock = settings.router = Mock(spec=Router)
         self.storage_mock = settings.storage = Mock(spec=Storage)
-        self.pinger_mock = settings.pinger = Mock(spec=Pinger)
+        self.bridge_mock = settings.bridge = Mock(spec=Bridge)
 
         self.request_mock = Mock(body=b'', arguments={})
         self.endpoint = endpoint.EndpointHandler(Application(),
@@ -195,13 +195,13 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_process_uaid_with_pping(self):
-        self.pinger_mock.configure_mock(**{
+        self.bridge_mock.configure_mock(**{
             'ping.return_value': True})
 
         def handle_finish(result):
             self.assertTrue(result)
         self.finish_deferred.addCallback(handle_finish)
-        self.endpoint.pinger = self.pinger_mock
+        self.endpoint.bridge = self.bridge_mock
         self.endpoint.uaid = 'uaid'
         self.endpoint.version = 123
         self.endpoint.data = 'data'
@@ -217,7 +217,7 @@ class EndpointTestCase(unittest.TestCase):
             self.assertTrue(result)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.endpoint.pinger = self.pinger_mock
+        self.endpoint.bridge = self.bridge_mock
         # skipping a fair number of pre-emptory steps.
         self.endpoint.chid = 'chid'
         self.endpoint.uaid = 'uaid'
@@ -431,7 +431,7 @@ class EndpointTestCase(unittest.TestCase):
             raise Failure(Exception('oops'))
         self.agent_mock.configure_mock(**{
             'request.side_effect': lambda method, url, **kwargs:
-                maybeDeferred(fail_request)
+            maybeDeferred(fail_request)
         })
 
         def handle_finish(result):
@@ -669,7 +669,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.metrics_mock = settings.metrics = Mock(spec=Metrics)
         self.router_mock = settings.router = Mock(spec=Router)
         self.storage_mock = settings.storage = Mock(spec=Storage)
-        self.pinger_mock = settings.pinger = Mock(spec=Pinger)
+        self.bridge_mock = settings.bridge = Mock(spec=Bridge)
 
         self.request_mock = Mock(body=b'', arguments={})
         self.reg = endpoint.RegistrationHandler(Application(),
@@ -809,7 +809,7 @@ class RegistrationTestCase(unittest.TestCase):
 
     @patch('uuid.uuid4', return_value=dummy_uaid)
     def test_put(self, arg):
-        self.reg.pinger = self.pinger_mock
+        self.reg.bridge = self.bridge_mock
         args = self.reg.request.arguments
         args['connect'] = ['{"type":"test"}']
         self.fernet_mock.configure_mock(**{
@@ -829,7 +829,7 @@ class RegistrationTestCase(unittest.TestCase):
 
     @patch('uuid.uuid4', return_value=dummy_uaid)
     def test_put_bad_uaid(self, arg):
-        self.reg.pinger = self.pinger_mock
+        self.reg.bridge = self.bridge_mock
         args = self.reg.request.arguments
         args['connect'] = ['{"type":"test"}']
         self.fernet_mock.configure_mock(**{
@@ -849,7 +849,7 @@ class RegistrationTestCase(unittest.TestCase):
 
     @patch('uuid.uuid4', return_value=dummy_uaid)
     def test_put_bad_params(self, arg):
-        self.reg.pinger = self.pinger_mock
+        self.reg.bridge = self.bridge_mock
         args = self.reg.request.arguments
         args['invalid_connect'] = ['{"type":"test"}']
         self.fernet_mock.configure_mock(**{
@@ -864,7 +864,7 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_put_uaid_chid(self):
-        self.reg.pinger = self.pinger_mock
+        self.reg.bridge = self.bridge_mock
         args = self.reg.request.arguments
         args['connect'] = ['{"type":"test"}']
         args['channelid'] = [dummy_chid]
@@ -884,8 +884,8 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_bad_put(self):
-        self.reg.pinger = self.pinger_mock
-        self.pinger_mock.configure_mock(**{
+        self.reg.bridge = self.bridge_mock
+        self.bridge_mock.configure_mock(**{
             'register.return_value': False,
         })
         args = self.reg.request.arguments
