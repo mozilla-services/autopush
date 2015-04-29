@@ -190,7 +190,7 @@ class Storage(object):
             record = self.table.get_item(consistent=True,
                                          uaid=uaid,
                                          chid=' ')
-        except ItemNotFound:
+        except (ItemNotFound, JSONResponseError):
             return False
         except ProvisionedThroughputExceededException:
             return False
@@ -250,8 +250,8 @@ class Router(object):
             self.metrics.increment("error.provisioned.get_uaid")
             raise
         except (ItemNotFound, JSONResponseError):
-            # Under tests, this failed without catching a JSONResponseError,
-            # which is weird as hell. But whatever, we'll catch that too.
+            # We trap JSONResponseError because Moto returns text instead of
+            # JSON when looking up values in empty tables.
             return False
 
     def register_user(self, uaid, node_id, connected_at):
