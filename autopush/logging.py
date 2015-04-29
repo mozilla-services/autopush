@@ -36,7 +36,7 @@ class EliotObserver(object):
     def __call__(self, msg):
         error = bool(msg.get("isError"))
 
-        if self.raven_client and (error or 'failure' in msg):
+        if self.raven_client and 'failure' in msg:
             self.raven_log(msg)
             error = True
 
