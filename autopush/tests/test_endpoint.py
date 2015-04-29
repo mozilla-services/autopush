@@ -827,7 +827,7 @@ class RegistrationTestCase(unittest.TestCase):
             call_args = self.reg.write.call_args
             ok_(call_args is not None)
             args = call_args[0]
-            ok_(eval(args[0]), called_arg)
+            eq_(eval(args[0]), called_arg)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.put(None)
@@ -850,7 +850,7 @@ class RegistrationTestCase(unittest.TestCase):
             call_args = self.reg.write.call_args
             ok_(call_args is not None)
             args = call_args[0]
-            ok_(eval(args[0]), called_arg)
+            eq_(eval(args[0]), called_arg)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.put('invalid')
@@ -889,7 +889,7 @@ class RegistrationTestCase(unittest.TestCase):
             call_args = self.reg.write.call_args
             ok_(call_args is not None)
             args = call_args[0]
-            ok_(eval(args[0]), called_arg)
+            eq_(eval(args[0]), called_arg)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.put(dummy_uaid)
