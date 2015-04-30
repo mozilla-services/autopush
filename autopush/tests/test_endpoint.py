@@ -10,7 +10,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from cyclone.web import Application
 from mock import Mock, patch
 from moto import mock_dynamodb2
-from nose.tools import eq_
+from nose.tools import eq_, ok_
 from StringIO import StringIO
 from twisted.internet.defer import Deferred, maybeDeferred
 from twisted.python.failure import Failure
@@ -770,10 +770,13 @@ class RegistrationTestCase(unittest.TestCase):
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(200)
-            self.reg.write.assert_called_with(
-                '{"useragentid": "' + dummy_uaid + '", '
-                '"channelid": "' + dummy_chid + '", '
-                '"endpoint": "http://localhost/push/abcd123"}')
+            called_arg = dict(useragentid=dummy_uaid,
+                              channelid=dummy_chid,
+                              endpoint="http://localhost/push/abcd123")
+            call_args = self.reg.write.call_args
+            ok_(call_args is not None)
+            args = call_args[0]
+            eq_(eval(args[0]), called_arg)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.get(dummy_uaid)
@@ -818,10 +821,13 @@ class RegistrationTestCase(unittest.TestCase):
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(200)
-            self.reg.write.assert_called_with(
-                '{"useragentid": "' + dummy_uaid + '", '
-                '"channelid": "' + dummy_uaid + '", '
-                '"endpoint": "http://localhost/push/abcd123"}')
+            called_arg = dict(useragentid=dummy_uaid,
+                              channelid=dummy_uaid,
+                              endpoint="http://localhost/push/abcd123")
+            call_args = self.reg.write.call_args
+            ok_(call_args is not None)
+            args = call_args[0]
+            eq_(eval(args[0]), called_arg)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.put(None)
@@ -838,10 +844,13 @@ class RegistrationTestCase(unittest.TestCase):
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(200)
-            self.reg.write.assert_called_with(
-                '{"useragentid": "' + dummy_uaid + '", '
-                '"channelid": "' + dummy_uaid + '", '
-                '"endpoint": "http://localhost/push/abcd123"}')
+            called_arg = dict(useragentid=dummy_uaid,
+                              channelid=dummy_uaid,
+                              endpoint="http://localhost/push/abcd123")
+            call_args = self.reg.write.call_args
+            ok_(call_args is not None)
+            args = call_args[0]
+            eq_(eval(args[0]), called_arg)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.put('invalid')
@@ -874,10 +883,13 @@ class RegistrationTestCase(unittest.TestCase):
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(200)
-            self.reg.write.assert_called_with(
-                '{"useragentid": "' + dummy_uaid + '", '
-                '"channelid": "' + dummy_chid + '", '
-                '"endpoint": "http://localhost/push/abcd123"}')
+            called_arg = dict(useragentid=dummy_uaid,
+                              channelid=dummy_chid,
+                              endpoint="http://localhost/push/abcd123")
+            call_args = self.reg.write.call_args
+            ok_(call_args is not None)
+            args = call_args[0]
+            eq_(eval(args[0]), called_arg)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.put(dummy_uaid)
