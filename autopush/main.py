@@ -8,7 +8,7 @@ from twisted.internet import reactor, task
 from twisted.python import log
 
 from autopush.endpoint import (EndpointHandler, RegistrationHandler)
-from autopush.health import StatusHandler
+from autopush.health import (HealthHandler, StatusHandler)
 from autopush.logging import setup_logging
 from autopush.settings import AutopushSettings
 from autopush.ssl import AutopushSSLContextFactory
@@ -227,6 +227,17 @@ def skip_request_logging(handler):
     pass
 
 
+def mount_health_handlers(site, settings):
+    status = StatusHandler
+    status.ap_settings = settings
+    health = HealthHandler
+    health.ap_settings = settings
+    site.add_handlers(".*$", [
+        (r"^/status", status),
+        (r"^/health", health),
+    ])
+
+
 def connection_main(sysargs=None):
     args, parser = _parse_connection(sysargs)
     settings = make_settings(
@@ -245,18 +256,16 @@ def connection_main(sysargs=None):
     r.ap_settings = settings
     n = NotificationHandler
     n.ap_settings = settings
-    s = StatusHandler
-    s.ap_settings = settings
 
     # Internal HTTP notification router
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", r),
         (r"/notif/([^\/]+)", n),
-        (r"^/status/", s),
     ],
         default_host=settings.router_hostname, debug=args.debug,
         log_function=skip_request_logging
     )
+    mount_health_handlers(site, settings)
 
     # Public websocket server
     proto = "wss" if args.ssl_key else "ws"
@@ -324,18 +333,16 @@ def endpoint_main(sysargs=None):
     endpoint.ap_settings = settings
     register = RegistrationHandler
     register.ap_settings = settings
-    status = StatusHandler
-    status.ap_settings = settings
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", endpoint),
         # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint
         (r"/register/([^\/]+)?", register),
-        (r"^/status", status),
     ],
         default_host=settings.hostname, debug=args.debug,
         log_function=skip_request_logging
     )
+    mount_health_handlers(site, settings)
 
     # No reason that the endpoint couldn't handle both...
     endpoint.bridge = settings.bridge
