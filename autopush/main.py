@@ -265,6 +265,8 @@ def connection_main(sysargs=None):
         router_scheme="https" if args.router_ssl_key else "http",
         router_hostname=args.router_hostname,
         router_port=args.router_port,
+        min_ping_interval=args.min_ping_interval,
+        pong_delay=args.pong_delay,
     )
     setup_logging("Autopush")
 
