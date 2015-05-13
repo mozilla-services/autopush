@@ -157,6 +157,13 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_close(d)
         return d
 
+    def test_not_dict(self):
+        self.proto.onMessage("[]", False)
+        d = Deferred()
+        d.addCallback(lambda x: True)
+        self._wait_for_close(d)
+        return d
+
     def test_bad_json(self):
         self.proto.onMessage("}{{bad_json!!", False)
         d = Deferred()
