@@ -8,7 +8,7 @@ from boto.dynamodb2.exceptions import (
 from cyclone.web import Application
 from mock import Mock, patch
 from moto import mock_dynamodb2
-from nose.tools import eq_
+from nose.tools import (eq_, ok_)
 from txstatsd.metrics.metrics import Metrics
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
@@ -411,6 +411,22 @@ class WebsocketTestCase(unittest.TestCase):
 
         f = self._check_response(check_result)
         f.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_ping_pong_delay(self):
+        self.proto.ap_settings.pong_delay = 5
+        last_ping = []
+
+        def ping_again(result):
+            last_ping.append(self.proto.last_ping)
+            return self.proto.process_ping()
+
+        def ping_done(result):
+            ok_(self.proto.last_ping > last_ping[0])
+
+        d = self.test_ping()
+        d.addCallback(ping_again)
+        d.addCallback(ping_done)
         return d
 
     def test_ping_too_many(self):
