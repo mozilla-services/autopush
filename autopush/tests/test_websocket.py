@@ -414,7 +414,8 @@ class WebsocketTestCase(unittest.TestCase):
         return d
 
     def test_ping_pong_delay(self):
-        self.proto.ap_settings.pong_delay = 5
+        pong_delay = 5
+        self.proto.ap_settings.pong_delay = pong_delay
         last_ping = []
 
         def ping_again(result):
@@ -422,7 +423,7 @@ class WebsocketTestCase(unittest.TestCase):
             return self.proto.process_ping()
 
         def ping_done(result):
-            ok_(self.proto.last_ping > last_ping[0])
+            ok_(self.proto.last_ping - last_ping[0] >= pong_delay)
 
         d = self.test_ping()
         d.addCallback(ping_again)
