@@ -294,7 +294,6 @@ def connection_main(sysargs=None):
         maxFramePayloadSize=2048,
         maxMessagePayloadSize=2048,
         openHandshakeTimeout=5,
-        failByDrop=True,
     )
 
     settings.metrics.start()
