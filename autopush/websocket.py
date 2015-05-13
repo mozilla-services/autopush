@@ -45,8 +45,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     # Testing purposes
     parent_class = WebSocketServerProtocol
 
-    too_many_pings = False
-
     @property
     def base_tags(self):
         return self._base_tags if self._base_tags else None

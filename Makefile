@@ -9,7 +9,8 @@ PYTHON = $(BIN)/pypy
 INSTALL = $(BIN)/pip install
 PATH := $(BIN):$(PATH)
 
-BUILD_DIRS = bin build deps include lib lib64 lib_pypy lib-python site-packages
+BUILD_DIRS = bin build deps include lib lib64 lib_pypy lib-python\
+	src site-packages .tox .eggs .coverage
 
 
 .PHONY: all build test coverage lint clean clean-env
@@ -32,6 +33,7 @@ $(BIN)/paster: lib $(BIN)/pip
 	$(PYTHON) setup.py develop
 
 clean-env:
+	rm -rf *.egg-info
 	rm -rf $(BUILD_DIRS)
 
 clean:	clean-env
