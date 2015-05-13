@@ -50,6 +50,8 @@ class AutopushSettings(object):
                  statsd_port=8125,
                  pingConf=None,
                  resolve_hostname=False,
+                 min_ping_interval=20,
+                 max_data=4096,
                  enable_cors=False):
 
         # Use a persistent connection pool for HTTP requests.
@@ -71,8 +73,8 @@ class AutopushSettings(object):
         key = crypto_key or Fernet.generate_key()
         self.fernet = Fernet(key)
 
-        self.min_ping_interval = 20
-        self.max_data = 4096
+        self.min_ping_interval = min_ping_interval
+        self.max_data = max_data
         self.clients = {}
 
         # Setup hosts/ports/urls

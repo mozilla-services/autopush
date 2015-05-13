@@ -80,6 +80,11 @@ def add_shared_args(parser):
                         type=int, default=5, env_var="ROUTER_WRITE_THROUGHPUT")
     parser.add_argument('--log_level', type=int, default=40,
                         env_var="LOG_LEVEL")
+    parser.add_argument(
+        '--max_data',
+        help="Max data segment length in bytes",
+        default=4096,
+        env_var='MAX_DATA')
 
 
 def add_bridge_args(parser):
@@ -150,6 +155,14 @@ def _parse_connection(sysargs=None):
                         type=str, default=None, env_var="ENDPOINT_HOSTNAME")
     parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
                         type=int, default=8082, env_var="ENDPOINT_PORT")
+    parser.add_argument(
+        '--min_ping_interval',
+        help="Minimum Interval in seconds between pings before " +
+        "disconnecting websocket client as being " +
+        "'too aggressive'",
+        default=20,
+        type=int,
+        env_var="MIN_PING_INTERVAL")
 
     add_bridge_args(parser)
     add_shared_args(parser)
