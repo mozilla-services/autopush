@@ -262,7 +262,7 @@ class WebsocketTestCase(unittest.TestCase):
                 reactor.callLater(0.1, wait_for_agent_call)
 
             mock_metrics.increment.assert_called_with(
-                "error.notify_uaid_failure")
+                "error.notify_uaid_failure", tags=None)
             d.callback(True)
         reactor.callLater(0.1, wait_for_agent_call)
         return d

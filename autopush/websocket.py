@@ -46,7 +46,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     @property
     def base_tags(self):
-        return self._base_tags if self._base_tags else None
+        try:
+            return self._base_tags
+        except AttributeError:
+            return None
 
     def log_err(self, failure, **kwargs):
         log.err(failure, **kwargs)
@@ -223,7 +226,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         """Checks the result of lookup node to send the notify if the client is
         connected elsewhere now"""
         if not result:
-            self.metrics.increment("error.notify_uaid_failure")
+            self.metrics.increment("error.notify_uaid_failure",
+                                   tags=self.base_tags)
             return
 
         node_id = result.get("node_id")
@@ -399,7 +403,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                                    tags=self.base_tags)
             return self.sendClose()
         self.last_ping = now
-        self.metrics.increment("updates.client.ping")
+        self.metrics.increment("updates.client.ping", tags=self.base_tags)
         return self.sendMessage("{}", False)
 
     def process_register(self, data):
@@ -492,7 +496,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if not updates or not isinstance(updates, list):
             return
 
-        self.metrics.increment("updates.client.ack")
+        self.metrics.increment("updates.client.ack", tags=self.base_tags)
         defers = filter(None, map(self.ack_update, updates))
 
         if defers:
