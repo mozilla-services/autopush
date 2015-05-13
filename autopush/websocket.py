@@ -125,9 +125,13 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.sendClose()
             return
 
+        data = None
         try:
             data = json.loads(payload.decode('utf8'))
         except:
+            pass
+
+        if not isinstance(data, dict):
             self.sendClose()
             return
 
