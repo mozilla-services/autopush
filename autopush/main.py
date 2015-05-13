@@ -163,6 +163,9 @@ def _parse_connection(sysargs=None):
         default=20,
         type=int,
         env_var="MIN_PING_INTERVAL")
+    parser.add_argument('--pong_delay', help=("Time to wait after receiving a "
+                        "pong for clients that ping too frequently"),
+                        default=0, type=int, env_var="PONG_DELAY")
 
     add_bridge_args(parser)
     add_shared_args(parser)

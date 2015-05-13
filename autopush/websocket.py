@@ -7,6 +7,7 @@ import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
 from twisted.internet import reactor
 from twisted.internet.defer import (
+    Deferred,
     DeferredList,
     CancelledError
 )
@@ -43,6 +44,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     # Testing purposes
     parent_class = WebSocketServerProtocol
+
+    too_many_pings = False
 
     @property
     def base_tags(self):
@@ -392,15 +395,24 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self._check_notifications = False
             reactor.callLater(1, self.process_notifications)
 
+    def _send_ping(self):
+        self.last_ping = time.time()
+        self.metrics.increment("updates.client.ping")
+        return self.sendMessage("{}", False)
+
     def process_ping(self):
         now = time.time()
         if now - self.last_ping < self.ap_settings.min_ping_interval:
+            if self.ap_settings.pong_delay > 0:
+                d = Deferred()
+                d.addCallback(lambda x: self._send_ping())
+                reactor.callLater(self.ap_settings.pong_delay, d.callback,
+                                  True)
+                return d
             self.metrics.increment("updates.client.too_many_pings",
                                    tags=self.base_tags)
             return self.sendClose()
-        self.last_ping = now
-        self.metrics.increment("updates.client.ping")
-        return self.sendMessage("{}", False)
+        self._send_ping()
 
     def process_register(self, data):
         if "channelID" not in data:
