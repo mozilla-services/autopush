@@ -395,7 +395,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def _send_ping(self):
         self.last_ping = time.time()
-        self.metrics.increment("updates.client.ping")
+        self.metrics.increment("updates.client.ping", tags=self.base_tags)
         return self.sendMessage("{}", False)
 
     def process_ping(self):
