@@ -74,6 +74,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.transport.bufferSize = 2 * 1024
         self.transport.registerProducer(self, True)
 
+        for k in ['auto_ping_interval', 'auto_ping_timeout']:
+            v = self.ap_settings.attr(k)
+            if v:
+                self.setProtcolOptions(**dict({k: v}))
         if request:
             self._user_agent = request.headers.get("user-agent")
         else:
@@ -167,6 +171,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def onClose(self, wasClean, code, reason):
         uaid = getattr(self, "uaid", None)
         self._should_stop = True
+        # Cancel any pending defers
         if uaid:
             self.cleanUp()
 
@@ -209,7 +214,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Delete and remove remaining dicts and lists
         del self.direct_updates
         del self.updates_sent
-        del self._base_tags
 
     def _lookup_node(self, results):
         """Looks up the node to send a notify for it to check storage if
@@ -298,6 +302,20 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # User exists?
         router = self.ap_settings.router
         url = self.ap_settings.router_url
+        import pdb;pdb.set_trace()
+        record = self.router.get_uaid(self.uaid)
+        if record:
+            #TODO kill the other notif with a DELETE /notif/uaid
+            killUrl = record.get("node_id")
+            d = self.ap_settings.agent.request(
+                "DELETE",
+                killUrl.encode("utf8"),
+            ).addCallback(self._reg_user, router, url)
+            d.addErrback(self.log_err, extra="Failed to kill old client")
+            return
+        self._reg_user(self, None, router, url)
+
+    def _reg_user(self, result, router, url):
         # Attempt to register the user for this session
         self.transport.pauseProducing()
         d = deferToThread(router.register_user,
