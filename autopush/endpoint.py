@@ -1,3 +1,4 @@
+import hashlib
 import json
 import time
 import urlparse
@@ -18,6 +19,7 @@ from autopush.protocol import IgnoreBody
 
 class EndpointHandler(cyclone.web.RequestHandler):
     def initialize(self):
+        self.uaid_hash = None
         self.metrics = self.ap_settings.metrics
 
     def _load_params(self):
@@ -64,6 +66,9 @@ class EndpointHandler(cyclone.web.RequestHandler):
             data["remote-ip"] = req.headers["x-forwarded-for"]
         else:
             data["remote-ip"] = req.remote_ip
+
+        if getattr(self, "uaid_hash", None):
+            data["uaid_hash"] = self.uaid_hash
 
         return data
 
@@ -124,6 +129,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
             self.write("Invalid")
             return self.finish()
         uaid = result.get('uaid')
+        if uaid:
+            self.uaid_hash = hashlib.sha224(uaid).hexdigest()
 
         d = deferToThread(self.ap_settings.storage.get_connection,
                           uaid)

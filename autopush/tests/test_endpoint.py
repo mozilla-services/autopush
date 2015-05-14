@@ -1,4 +1,5 @@
 import functools
+import hashlib
 import json
 import time
 import sys
@@ -96,6 +97,14 @@ class EndpointTestCase(unittest.TestCase):
         self.request_mock.headers["x-forwarded-for"] = "local2"
         d = self.endpoint._client_info()
         eq_(d["remote-ip"], "local2")
+        self.endpoint.uaid_hash = "faa"
+        d = self.endpoint._client_info()
+        eq_(d["uaid_hash"], "faa")
+
+    def test_process_uaid(self):
+        self.endpoint._process_uaid({"uaid": "fred"})
+        val = hashlib.sha224("fred").hexdigest()
+        eq_(self.endpoint.uaid_hash, val)
 
     def test_load_params_arguments(self):
         args = self.endpoint.request.arguments
