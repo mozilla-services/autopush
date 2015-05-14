@@ -10,7 +10,7 @@ from boto.dynamodb2.exceptions import (
 from cryptography.fernet import InvalidToken
 from StringIO import StringIO
 from twisted.internet.threads import deferToThread
-from twisted.python import log
+from twisted.python import failure, log
 from twisted.web.client import FileBodyProducer
 
 from autopush.protocol import IgnoreBody
@@ -263,12 +263,12 @@ class EndpointHandler(cyclone.web.RequestHandler):
         self.write("Success")
         self.finish()
 
-    def write_error(self, code, exception=None):
+    def write_error(self, code, **kwargs):
         """ Write the error (otherwise unhandled exception when dealing with
         unknown method specifications.) """
         self.set_status(code)
-        if exception is not None:
-            log.err(exception)
+        if "exc_info" in kwargs:
+            log.err(failure.Failure(*kwargs["exc_info"]))
         self.finish()
 
 

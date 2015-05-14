@@ -1,6 +1,7 @@
 import functools
 import json
 import time
+import sys
 
 import twisted.internet.base
 from boto.dynamodb2.exceptions import (
@@ -574,7 +575,12 @@ class EndpointTestCase(unittest.TestCase):
         class testX(Exception):
             pass
 
-        self.endpoint.write_error(999, testX)
+        try:
+            raise testX()
+        except:
+            exc_info = sys.exc_info()
+
+        self.endpoint.write_error(999, exc_info=exc_info)
         self.status_mock.assert_called_with(999)
         self.assertTrue(log_mock.err.called)
 
