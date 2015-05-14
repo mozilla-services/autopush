@@ -11,6 +11,12 @@ Features
 * Add structured logging output for the endpoint for additional request
   metadata. Resolves Issue #67.
 
+Bug Fixes
+---------
+
+* Fix bug with deferreds not being tracked, causing access to objects that were
+  cleaned up. Resolves Issue #66.
+
 1.0rc1 (Apr 29, 2015)
 =====================
 
