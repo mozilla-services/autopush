@@ -2,6 +2,15 @@
 Autopush Changelog
 ==================
 
+1.1rc2 (**dev**)
+================
+
+Bug Fixes
+---------
+
+* Fix bug with deferreds not being tracked, causing access to objects that were
+  cleaned up. Resolves Issue #66.
+
 1.0rc1 (Apr 29, 2015)
 =====================
 
