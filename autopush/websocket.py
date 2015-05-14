@@ -7,6 +7,7 @@ import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
 from twisted.internet import reactor
 from twisted.internet.defer import (
+    Deferred,
     DeferredList,
     CancelledError
 )
@@ -74,10 +75,13 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.transport.bufferSize = 2 * 1024
         self.transport.registerProducer(self, True)
 
-        for k in ['auto_ping_interval', 'auto_ping_timeout']:
-            v = self.ap_settings.attr(k)
-            if v:
-                self.setProtcolOptions(**dict({k: v}))
+        try:
+            self.setProtocolOptions(
+                autoPingInterval=self.ap_settings.auto_ping_interval,
+                autoPingTimeout=self.ap_settings.auto_ping_timeout)
+        except AttributeError, ex:
+            self.log_err("Could not set Websocket Ping options: %s" % ex)
+
         if request:
             self._user_agent = request.headers.get("user-agent")
         else:
@@ -171,7 +175,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def onClose(self, wasClean, code, reason):
         uaid = getattr(self, "uaid", None)
         self._should_stop = True
-        # Cancel any pending defers
         if uaid:
             self.cleanUp()
 
@@ -300,23 +303,27 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.sendMessage(json.dumps(msg).encode('utf8'), False)
             return
         # User exists?
+        # Attempt to register the user for this session
+        # First, check to see if this uaid is registered somewhere else
+        record = self.ap_settings.router.get_uaid(self.uaid)
+        if record:
+            killUrl = record.get("node_id")
+            # Only delete foreign registers. We can handle the others.
+            if killUrl != self.ap_settings.router_url:
+                log.msg("Killing duplicate uaid: %s at %s" %
+                        (self.uaid, killUrl))
+                killUrl = killUrl + "/notif/" + self.uaid
+                d = self.ap_settings.agent.request(
+                    "DELETE",
+                    killUrl.encode("utf8"),
+                ).addCallback(self._reg_user)
+                d.addErrback(self.log_err, extra="Failed to kill old client")
+                return
+        self._reg_user()
+
+    def _reg_user(self, result=None, **kwargs):
         router = self.ap_settings.router
         url = self.ap_settings.router_url
-        import pdb;pdb.set_trace()
-        record = self.router.get_uaid(self.uaid)
-        if record:
-            #TODO kill the other notif with a DELETE /notif/uaid
-            killUrl = record.get("node_id")
-            d = self.ap_settings.agent.request(
-                "DELETE",
-                killUrl.encode("utf8"),
-            ).addCallback(self._reg_user, router, url)
-            d.addErrback(self.log_err, extra="Failed to kill old client")
-            return
-        self._reg_user(self, None, router, url)
-
-    def _reg_user(self, result, router, url):
-        # Attempt to register the user for this session
         self.transport.pauseProducing()
         d = deferToThread(router.register_user,
                           self.uaid, url, self.connected_at)
@@ -414,15 +421,24 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self._check_notifications = False
             reactor.callLater(1, self.process_notifications)
 
+    def _send_ping(self):
+        self.last_ping = time.time()
+        self.metrics.increment("updates.client.ping", tags=self.base_tags)
+        return self.sendMessage("{}", False)
+
     def process_ping(self):
         now = time.time()
         if now - self.last_ping < self.ap_settings.min_ping_interval:
+            if self.ap_settings.pong_delay > 0:
+                d = Deferred()
+                d.addCallback(lambda x: self._send_ping())
+                reactor.callLater(self.ap_settings.pong_delay, d.callback,
+                                  True)
+                return d
             self.metrics.increment("updates.client.too_many_pings",
                                    tags=self.base_tags)
             return self.sendClose()
-        self.last_ping = now
-        self.metrics.increment("updates.client.ping", tags=self.base_tags)
-        return self.sendMessage("{}", False)
+        self._send_ping()
 
     def process_register(self, data):
         if "channelID" not in data:
@@ -514,7 +530,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if not updates or not isinstance(updates, list):
             return
 
-        self.metrics.increment("updates.client.ack", tags=self.base_tags)
+        self.metrics.increment("updates.client.ack",
+                               tags=self._base_tags)
         defers = filter(None, map(self.ack_update, updates))
 
         if defers:
@@ -607,3 +624,9 @@ class NotificationHandler(cyclone.web.RequestHandler):
         client.process_notifications()
         settings.metrics.increment("updates.notification.checking")
         self.write("Notification check started")
+
+    def delete(self, uaid):
+        client = self.ap_settings.clients.get(uaid)
+        if client:
+            client.onClose(False, 0, "duplication")
+            return self.write("Terminated duplicate")

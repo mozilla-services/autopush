@@ -163,6 +163,21 @@ def _parse_connection(sysargs=None):
         default=20,
         type=int,
         env_var="MIN_PING_INTERVAL")
+    parser.add_argument(
+        '--auto_ping_interval',
+        help="Interval between Websocket pings",
+        default=0,
+        type=float,
+        env_var="AUTO_PING_INTERVAL")
+    parser.add_argument(
+        '--auto_ping_timeout',
+        help="Timeout in seconds for Websocket ping replys",
+        default=4,
+        type=float,
+        env_var="AUTO_PING_TIMEOUT")
+    parser.add_argument('--pong_delay', help=("Time to wait after receiving a "
+                        "pong for clients that ping too frequently"),
+                        default=0, type=int, env_var="PONG_DELAY")
 
     add_bridge_args(parser)
     add_shared_args(parser)
@@ -262,6 +277,10 @@ def connection_main(sysargs=None):
         router_scheme="https" if args.router_ssl_key else "http",
         router_hostname=args.router_hostname,
         router_port=args.router_port,
+        min_ping_interval=args.min_ping_interval,
+        auto_ping_interval=args.auto_ping_interval,
+        auto_ping_timeout=args.auto_ping_timeout,
+        pong_delay=args.pong_delay,
     )
     setup_logging("Autopush")
 
@@ -294,7 +313,6 @@ def connection_main(sysargs=None):
         maxFramePayloadSize=2048,
         maxMessagePayloadSize=2048,
         openHandshakeTimeout=5,
-        failByDrop=True,
     )
 
     settings.metrics.start()

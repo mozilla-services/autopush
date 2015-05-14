@@ -2,6 +2,21 @@
 Autopush Changelog
 ==================
 
+1.1rc2 (May xx, 2015)
+=====================
+
+Bug Fixes
+---------
+* kill older, duplicate UAID entries that may still be connected.
+* use Websocket Pings to detect dead connections.
+
+1.1rc1 (May 13, 2015)
+=====================
+
+Bug Fixes
+---------
+* Fix issues with aggressive client pings.
+
 1.0rc1 (Apr 29, 2015)
 =====================
 

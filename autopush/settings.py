@@ -51,6 +51,9 @@ class AutopushSettings(object):
                  pingConf=None,
                  resolve_hostname=False,
                  min_ping_interval=20,
+                 auto_ping_interval=0,
+                 auto_ping_timeout=4,
+                 pong_delay=0,
                  max_data=4096,
                  enable_cors=False):
 
@@ -73,6 +76,7 @@ class AutopushSettings(object):
         key = crypto_key or Fernet.generate_key()
         self.fernet = Fernet(key)
 
+        self.pong_delay = pong_delay
         self.min_ping_interval = min_ping_interval
         self.max_data = max_data
         self.clients = {}

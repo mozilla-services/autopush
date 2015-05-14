@@ -8,7 +8,7 @@ from boto.dynamodb2.exceptions import (
 from cyclone.web import Application
 from mock import Mock, patch
 from moto import mock_dynamodb2
-from nose.tools import eq_
+from nose.tools import (eq_, ok_)
 from txstatsd.metrics.metrics import Metrics
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
@@ -262,7 +262,7 @@ class WebsocketTestCase(unittest.TestCase):
                 reactor.callLater(0.1, wait_for_agent_call)
 
             mock_metrics.increment.assert_called_with(
-                "error.notify_uaid_failure", tags=None)
+                "error.notify_uaid_failure", tags=[])
             d.callback(True)
         reactor.callLater(0.1, wait_for_agent_call)
         return d
@@ -393,6 +393,20 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_close(d)
         return d
 
+    def test_hello_dead_connection(self):
+        """
+        self._connect()
+        self._send_message(dict(
+            messageType="hello",
+            uaid="deadbeef00000000000000000",
+            channelIDs=[]))
+        self.proto.ap_settings.router.get_uaid = mock_uaid = Mock(
+            return_value = {"get_uaid": Mock(
+                return_value = {"node_id": "http://localhost:8080"}
+            )})
+        """
+        pass
+
     def test_ping(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -411,6 +425,23 @@ class WebsocketTestCase(unittest.TestCase):
 
         f = self._check_response(check_result)
         f.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_ping_pong_delay(self):
+        pong_delay = 5
+        self.proto.ap_settings.pong_delay = pong_delay
+        last_ping = []
+
+        def ping_again(result):
+            last_ping.append(self.proto.last_ping)
+            return self.proto.process_ping()
+
+        def ping_done(result):
+            ok_(self.proto.last_ping - last_ping[0] >= pong_delay)
+
+        d = self.test_ping()
+        d.addCallback(ping_again)
+        d.addCallback(ping_done)
         return d
 
     def test_ping_too_many(self):
@@ -597,7 +628,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         def wait_for_times():
             if len(mock_log.mock_calls) > 0:
-                eq_(len(mock_log.mock_calls), 1)
+                eq_(len(mock_log.mock_calls), 2)
                 d.callback(True)
                 return
             reactor.callLater(0.1, wait_for_times)
