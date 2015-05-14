@@ -65,12 +65,13 @@ def stdout(message):
         msg["Severity"] = 3
     else:
         msg["Severity"] = 5
-    for key in ["Type", "Severity"]:
-        if key in message:
-            msg[key] = message.pop(key)
 
     if "message_type" in message:
         msg["Type"] = message.pop("message_type")
+
+    for key in ["Type", "Severity", "type", "severity"]:
+        if key in message:
+            msg[key.title()] = message.pop(key)
 
     msg["Timestamp"] = ts * 1000 * 1000 * 1000
     msg["Fields"] = message

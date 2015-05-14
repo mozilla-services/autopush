@@ -5,6 +5,12 @@ Autopush Changelog
 1.1rc2 (**dev**)
 ================
 
+Features
+--------
+
+* Add structured logging output for the endpoint for additional request
+  metadata. Resolves Issue #67.
+
 Bug Fixes
 ---------
 

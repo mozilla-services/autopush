@@ -1,6 +1,8 @@
 import functools
+import hashlib
 import json
 import time
+import sys
 
 import twisted.internet.base
 from boto.dynamodb2.exceptions import (
@@ -71,7 +73,7 @@ class EndpointTestCase(unittest.TestCase):
         self.storage_mock = settings.storage = Mock(spec=Storage)
         self.bridge_mock = settings.bridge = Mock(spec=Bridge)
 
-        self.request_mock = Mock(body=b'', arguments={})
+        self.request_mock = Mock(body=b'', arguments={}, headers={})
         self.endpoint = endpoint.EndpointHandler(Application(),
                                                  self.request_mock)
 
@@ -83,6 +85,26 @@ class EndpointTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.mock_dynamodb2.stop()
+
+    def test_client_info(self):
+        h = self.request_mock.headers
+        h["user-agent"] = "myself"
+        d = self.endpoint._client_info()
+        eq_(d["user-agent"], "myself")
+        self.request_mock.remote_ip = "local1"
+        d = self.endpoint._client_info()
+        eq_(d["remote-ip"], "local1")
+        self.request_mock.headers["x-forwarded-for"] = "local2"
+        d = self.endpoint._client_info()
+        eq_(d["remote-ip"], "local2")
+        self.endpoint.uaid_hash = "faa"
+        d = self.endpoint._client_info()
+        eq_(d["uaid_hash"], "faa")
+
+    def test_process_uaid(self):
+        self.endpoint._process_uaid({"uaid": "fred"})
+        val = hashlib.sha224("fred").hexdigest()
+        eq_(self.endpoint.uaid_hash, val)
 
     def test_load_params_arguments(self):
         args = self.endpoint.request.arguments
@@ -574,7 +596,22 @@ class EndpointTestCase(unittest.TestCase):
         class testX(Exception):
             pass
 
-        self.endpoint.write_error(999, testX)
+        try:
+            raise testX()
+        except:
+            exc_info = sys.exc_info()
+
+        self.endpoint.write_error(999, exc_info=exc_info)
+        self.status_mock.assert_called_with(999)
+        self.assertTrue(log_mock.err.called)
+
+    @patch_logger
+    def test_write_error_no_exc(self, log_mock):
+        """ Write error is triggered by sending the app a request
+        with an invalid method (e.g. "put" instead of "PUT").
+        This is not code that is triggered within normal flow, but
+        by the cyclone wrapper. """
+        self.endpoint.write_error(999)
         self.status_mock.assert_called_with(999)
         self.assertTrue(log_mock.err.called)
 
@@ -671,7 +708,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.storage_mock = settings.storage = Mock(spec=Storage)
         self.bridge_mock = settings.bridge = Mock(spec=Bridge)
 
-        self.request_mock = Mock(body=b'', arguments={})
+        self.request_mock = Mock(body=b'', arguments={}, headers={})
         self.reg = endpoint.RegistrationHandler(Application(),
                                                 self.request_mock)
 
@@ -683,6 +720,18 @@ class RegistrationTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.mock_dynamodb2.stop()
+
+    def test_client_info(self):
+        h = self.request_mock.headers
+        h["user-agent"] = "myself"
+        d = self.reg._client_info()
+        eq_(d["user-agent"], "myself")
+        self.request_mock.remote_ip = "local1"
+        d = self.reg._client_info()
+        eq_(d["remote-ip"], "local1")
+        self.request_mock.headers["x-forwarded-for"] = "local2"
+        d = self.reg._client_info()
+        eq_(d["remote-ip"], "local2")
 
     def test_ap_settings_update(self):
         fake = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
