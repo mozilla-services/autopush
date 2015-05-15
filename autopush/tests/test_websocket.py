@@ -430,7 +430,7 @@ class WebsocketTestCase(unittest.TestCase):
         return d
 
     def test_ping_pong_delay(self):
-        pong_delay = 5
+        pong_delay = 0.5
         self.proto.ap_settings.pong_delay = pong_delay
         last_ping = []
 

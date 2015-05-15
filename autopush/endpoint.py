@@ -1,3 +1,4 @@
+import hashlib
 import json
 import time
 import urlparse
@@ -10,7 +11,7 @@ from boto.dynamodb2.exceptions import (
 from cryptography.fernet import InvalidToken
 from StringIO import StringIO
 from twisted.internet.threads import deferToThread
-from twisted.python import log
+from twisted.python import failure, log
 from twisted.web.client import FileBodyProducer
 
 from autopush.protocol import IgnoreBody
@@ -18,6 +19,7 @@ from autopush.protocol import IgnoreBody
 
 class EndpointHandler(cyclone.web.RequestHandler):
     def initialize(self):
+        self.uaid_hash = None
         self.metrics = self.ap_settings.metrics
 
     def _load_params(self):
@@ -53,6 +55,23 @@ class EndpointHandler(cyclone.web.RequestHandler):
     def head(self, token):
         self._addCors()
 
+    def _client_info(self):
+        """Returns a dict of additional client data"""
+        req = self.request
+        data = {}
+        if "user-agent" in req.headers:
+            data["user-agent"] = req.headers["user-agent"]
+
+        if "x-forwarded-for" in req.headers:
+            data["remote-ip"] = req.headers["x-forwarded-for"]
+        else:
+            data["remote-ip"] = req.remote_ip
+
+        if getattr(self, "uaid_hash", None):
+            data["uaid_hash"] = self.uaid_hash
+
+        return data
+
     @cyclone.web.asynchronous
     def put(self, token):
         self.start_time = time.time()
@@ -62,6 +81,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
         self._addCors()
         if self.data and len(self.data) > self.ap_settings.max_data:
             self.set_status(401)
+            log.msg("Data too large", **self._client_info())
             self.write("Data too large")
             return self.finish()
 
@@ -84,17 +104,19 @@ class EndpointHandler(cyclone.web.RequestHandler):
     def _bad_token(self, failure):
         failure.trap(InvalidToken)
         self.set_status(401)
+        log.msg("Invalid token", **self._client_info())
         self.write("Invalid token")
         self.finish()
 
     def _handle_overload(self, failure):
         failure.trap(ProvisionedThroughputExceededException)
         self.set_status(503)
+        log.msg("Throughput Exceeded", **self._client_info())
         self.write("Server busy, try later")
         self.finish()
 
     def _error_response(self, failure):
-        log.err(failure)
+        log.err(failure, **self._client_info())
         self.set_status(500)
         self.write("Error processing request")
         self.finish()
@@ -103,9 +125,12 @@ class EndpointHandler(cyclone.web.RequestHandler):
         """Process the result of the AWS call"""
         if not result:
             self.set_status(404)
+            log.msg("UAID not found in AWS.", **self._client_info())
             self.write("Invalid")
             return self.finish()
         uaid = result.get('uaid')
+        if uaid:
+            self.uaid_hash = hashlib.sha224(uaid).hexdigest()
 
         d = deferToThread(self.ap_settings.storage.get_connection,
                           uaid)
@@ -130,12 +155,14 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
     def _process_pping(self, result, routeinfo):
         if not result:
-            log.msg("proprietary ping failed, falling back to routing")
+            log.msg("proprietary ping failed, falling back to routing",
+                    **self._client_info())
             return self._process_route(routeinfo)
         # Ping handoff succeeded, no further action required
         self.metrics.increment("router.pping.hit")
         # Since we're handing off, return 202
         self.set_status(202)
+        log.msg("proprietary ping success", **self._client_info())
         self.write("Success")
         self.finish()
 
@@ -181,6 +208,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
             self.write("Success")
+            log.msg("Successful delivery", **self._client_info())
             return self.finish()
         elif response.code == 404:
             # Conditionally delete the node_id
@@ -200,6 +228,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
             # try again and get luckier
             self.set_status(503)
             self.write("Server is busy")
+            self.metrics.increment("updates.client.hop")
+            log.msg("Client hopped between delivery", **self._client_info())
             self.finish()
         else:
             # Delete was ok, proceed to save the notification
@@ -244,6 +274,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
             # Client got deleted too? bummer.
             self.set_status(404)
             self.write("Invalid")
+            self.metrics.increment("updates.client.deleted")
+            log.msg("Client deleted during delivery", **self._client_info())
             return self.finish()
 
         node_id = result.get("node_id")
@@ -259,23 +291,40 @@ class EndpointHandler(cyclone.web.RequestHandler):
     def _finish_missed_store(self, result=None):
         self.metrics.increment("router.broadcast.miss")
         # since we're handing off, return 202
+        log.msg("Router miss, message stored.", **self._client_info())
         self.set_status(202)
         self.write("Success")
         self.finish()
 
-    def write_error(self, code, exception=None):
+    def write_error(self, code, **kwargs):
         """ Write the error (otherwise unhandled exception when dealing with
         unknown method specifications.) """
         self.set_status(code)
-        if exception is not None:
-            log.err(exception)
+        if "exc_info" in kwargs:
+            log.err(failure.Failure(*kwargs["exc_info"]),
+                    **self._client_info())
+        else:
+            log.err("Error in handler: %s" % code, **self._client_info())
         self.finish()
 
 
 class RegistrationHandler(cyclone.web.RequestHandler):
+    def _client_info(self):
+        """Returns a dict of additional client data"""
+        req = self.request
+        data = {}
+        if "user-agent" in req.headers:
+            data["user-agent"] = req.headers["user-agent"]
+
+        if "x-forwarded-for" in req.headers:
+            data["remote-ip"] = req.headers["x-forwarded-for"]
+        else:
+            data["remote-ip"] = req.remote_ip
+
+        return data
 
     def _error_response(self, failure):
-        log.err(failure)
+        log.err(failure, **self._client_info())
         self.set_status(500)
         self.write("Error processing request")
         self.finish()
@@ -351,12 +400,13 @@ class RegistrationHandler(cyclone.web.RequestHandler):
             try:
                 uuid.UUID(uaid)
             except ValueError:
-                log.msg("Invalid UAID [%s], swapping for valid one" % uaid)
+                log.msg("Invalid UAID [%s], swapping for valid one" % uaid,
+                        **self._client_info())
                 uaid = str(uuid.uuid4())
 
         self.uaid = uaid
         if not self._load_params():
-            log.msg("Invalid parameters")
+            log.msg("Invalid parameters", **self._client_info())
             self.set_status(400, "Invalid arguments")
             self.finish()
             return
@@ -367,6 +417,7 @@ class RegistrationHandler(cyclone.web.RequestHandler):
     def _registered(self, result):
         if not result:
             self.set_status(500, "Registration failure")
+            log.err("Registration failure", **self._client_info())
             return self.finish()
         d = deferToThread(self.ap_settings.makeEndpoint,
                           self.uaid,
@@ -380,4 +431,5 @@ class RegistrationHandler(cyclone.web.RequestHandler):
                "endpoint": endpoint}
         self.set_status(200)
         self.write(json.dumps(msg))
+        log.msg("Endpoint registered via HTTP", **self._client_info())
         return self.finish()
