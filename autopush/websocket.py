@@ -74,10 +74,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     @property
     def base_tags(self):
-        try:
-            return self._base_tags
-        except AttributeError:
-            return None
+        return self._base_tags if self._base_tags else None
 
     def log_err(self, failure, **kwargs):
         log.err(failure, **kwargs)
@@ -536,8 +533,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if not updates or not isinstance(updates, list):
             return
 
-        self.metrics.increment("updates.client.ack",
-                               tags=self._base_tags)
+        self.metrics.increment("updates.client.ack", tags=self.base_tags)
         defers = filter(None, map(self.ack_update, updates))
 
         if defers:

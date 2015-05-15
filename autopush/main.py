@@ -278,8 +278,6 @@ def connection_main(sysargs=None):
         router_hostname=args.router_hostname,
         router_port=args.router_port,
         min_ping_interval=args.min_ping_interval,
-        auto_ping_interval=args.auto_ping_interval,
-        auto_ping_timeout=args.auto_ping_timeout,
         pong_delay=args.pong_delay,
     )
     setup_logging("Autopush")

@@ -51,8 +51,6 @@ class AutopushSettings(object):
                  pingConf=None,
                  resolve_hostname=False,
                  min_ping_interval=20,
-                 auto_ping_interval=0,
-                 auto_ping_timeout=4,
                  pong_delay=0,
                  max_data=4096,
                  enable_cors=False):
