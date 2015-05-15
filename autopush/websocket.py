@@ -102,12 +102,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.transport.bufferSize = 2 * 1024
         self.transport.registerProducer(self, True)
 
-        try:
-            self.setProtocolOptions(
-                autoPingInterval=self.ap_settings.auto_ping_interval,
-                autoPingTimeout=self.ap_settings.auto_ping_timeout)
-        except AttributeError, ex:
-            self.log_err("Could not set Websocket Ping options: %s" % ex)
         self._callbacks = []
 
         if request:

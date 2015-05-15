@@ -262,7 +262,7 @@ class WebsocketTestCase(unittest.TestCase):
                 reactor.callLater(0.1, wait_for_agent_call)
 
             mock_metrics.increment.assert_called_with(
-                "error.notify_uaid_failure", tags=None)
+                "error.notify_uaid_failure", tags=[])
             d.callback(True)
         reactor.callLater(0.1, wait_for_agent_call)
         return d
@@ -394,18 +394,20 @@ class WebsocketTestCase(unittest.TestCase):
         return d
 
     def test_hello_dead_connection(self):
-        """
+        fakeHost = 'http://otherhost:2000'
+        fakeUaid = 'deadbeef0000000000000000'
         self._connect()
-        self._send_message(dict(
-            messageType="hello",
-            uaid="deadbeef00000000000000000",
-            channelIDs=[]))
-        self.proto.ap_settings.router.get_uaid = mock_uaid = Mock(
-            return_value = {"get_uaid": Mock(
-                return_value = {"node_id": "http://localhost:8080"}
-            )})
-        """
-        pass
+        self.proto.ap_settings.router_url = "http://localhost:2000"
+        self.proto.uaid = fakeUaid
+        self.proto.ap_settings.router.get_uaid = mock_get = Mock()
+        self.proto.ap_settings.agent = mock_agent = Mock()
+        mock_agent.request.return_value = Mock()
+        mock_get.return_value = dict(node_id=fakeHost)
+        self.proto._reg_user = Mock()
+        self.proto._check_router()
+        mock_agent.request.assert_called_with(
+            'DELETE',
+            "%s/notif/%s" % (fakeHost, fakeUaid))
 
     def test_ping(self):
         self._connect()
@@ -628,7 +630,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         def wait_for_times():
             if len(mock_log.mock_calls) > 0:
-                eq_(len(mock_log.mock_calls), 2)
+                eq_(len(mock_log.mock_calls), 1)
                 d.callback(True)
                 return
             reactor.callLater(0.1, wait_for_times)
@@ -1139,3 +1141,13 @@ class NotificationHandlerTestCase(unittest.TestCase):
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
         eq_(self.status_mock.call_args, ((404,),))
+
+    def test_delete(self):
+        uaid = str(uuid.uuid4())
+        self.ap_settings.clients[uaid] = mock_client = Mock()
+        mock_client.onClose = Mock()
+        self.handler.delete(uaid)
+        mock_client.onClose.assert_called_with(
+            False,
+            0,
+            "duplication")

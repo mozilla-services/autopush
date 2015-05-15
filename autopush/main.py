@@ -306,6 +306,10 @@ def connection_main(sysargs=None):
         debug=args.debug,
         debugCodePaths=args.debug,
     )
+    factory.setProtocolOptions(
+        autoPingInterval=args.auto_ping_interval,
+        autoPingTimeout=args.auto_ping_timeout,
+    )
     factory.protocol = SimplePushServerProtocol
     factory.protocol.ap_settings = settings
     factory.setProtocolOptions(
