@@ -633,7 +633,6 @@ class NotificationHandler(cyclone.web.RequestHandler):
 
     def delete(self, uaid, ignored, connectionTime):
         client = self.ap_settings.clients.get(uaid)
-        print "connected_at %s " % client.get("connected_at")
         if client and client.get("connected_at") == connectionTime:
             client.onClose(False, 0, "duplication")
             return self.write("Terminated duplicate")
