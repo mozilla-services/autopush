@@ -1131,9 +1131,6 @@ class NotificationHandlerTestCase(unittest.TestCase):
         now = int(time.time())
         self.ap_settings.clients[uaid] = mock_client = Mock()
         mock_client.get.return_value = now
-        mock_client.onClose = Mock()
+        mock_client.sendClose = Mock()
         self.handler.delete(uaid, "", now)
-        mock_client.onClose.assert_called_with(
-            False,
-            0,
-            "duplication")
+        mock_client.sendClose.assert_called()
