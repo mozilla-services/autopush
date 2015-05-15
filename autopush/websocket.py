@@ -329,26 +329,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                    "status": 503}
             self.sendMessage(json.dumps(msg).encode('utf8'), False)
             return
-        # User exists?
-        # Attempt to register the user for this session
-        # First, check to see if this uaid is registered somewhere else
-        record = self.ap_settings.router.get_uaid(self.uaid)
-        if record:
-            killUrl = record.get("node_id")
-            # Only delete foreign registers. We can handle the others.
-            if killUrl != self.ap_settings.router_url:
-                log.msg("Killing duplicate uaid: %s at %s" %
-                        (self.uaid, killUrl))
-                killUrl = killUrl + "/notif/" + self.uaid
-                d = self.ap_settings.agent.request(
-                    "DELETE",
-                    killUrl.encode("utf8"),
-                ).addCallback(self._reg_user)
-                d.addErrback(self.log_err, extra="Failed to kill old client")
-                return
-        self._reg_user()
-
-    def _reg_user(self, result=None, **kwargs):
         router = self.ap_settings.router
         url = self.ap_settings.router_url
         self.transport.pauseProducing()
@@ -651,8 +631,9 @@ class NotificationHandler(cyclone.web.RequestHandler):
         settings.metrics.increment("updates.notification.checking")
         self.write("Notification check started")
 
-    def delete(self, uaid):
+    def delete(self, uaid, ignored, connectionTime):
         client = self.ap_settings.clients.get(uaid)
-        if client:
+        print "connected_at %s " % client.get("connected_at")
+        if client and client.get("connected_at") == connectionTime:
             client.onClose(False, 0, "duplication")
             return self.write("Terminated duplicate")

@@ -1,4 +1,5 @@
 import json
+import time
 import uuid
 
 import twisted.internet.base
@@ -393,22 +394,6 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_close(d)
         return d
 
-    def test_hello_dead_connection(self):
-        fakeHost = 'http://otherhost:2000'
-        fakeUaid = 'deadbeef0000000000000000'
-        self._connect()
-        self.proto.ap_settings.router_url = "http://localhost:2000"
-        self.proto.uaid = fakeUaid
-        self.proto.ap_settings.router.get_uaid = mock_get = Mock()
-        self.proto.ap_settings.agent = mock_agent = Mock()
-        mock_agent.request.return_value = Mock()
-        mock_get.return_value = dict(node_id=fakeHost)
-        self.proto._reg_user = Mock()
-        self.proto._check_router()
-        mock_agent.request.assert_called_with(
-            'DELETE',
-            "%s/notif/%s" % (fakeHost, fakeUaid))
-
     def test_ping(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -547,7 +532,7 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    def test_unregister(self):
+    def test_ws_unregister(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
@@ -571,7 +556,7 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    def test_unregister_without_chid(self):
+    def test_ws_unregister_without_chid(self):
         self._connect()
         self.proto.uaid = str(uuid.uuid4())
         self._send_message(dict(messageType="unregister"))
@@ -588,7 +573,7 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    def test_unregister_bad_chid(self):
+    def test_ws_unregister_bad_chid(self):
         self._connect()
         self.proto.uaid = str(uuid.uuid4())
         self._send_message(dict(messageType="unregister",
@@ -605,7 +590,7 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    def test_unregister_fail(self):
+    def test_ws_unregister_fail(self):
         patcher = patch('autopush.websocket.log', spec=True)
         mock_log = patcher.start()
         self._connect()
@@ -1049,7 +1034,6 @@ class WebsocketTestCase(unittest.TestCase):
             # Chain our check for the call
             self.proto._notification_fetch.addBoth(check_call)
             self.proto._notification_fetch.addErrback(lambda x: d.errback(x))
-
         self.proto._register.addCallback(after_hello)
         self.proto._register.addErrback(lambda x: d.errback(x))
         return d
@@ -1144,9 +1128,11 @@ class NotificationHandlerTestCase(unittest.TestCase):
 
     def test_delete(self):
         uaid = str(uuid.uuid4())
+        now = int(time.time())
         self.ap_settings.clients[uaid] = mock_client = Mock()
+        mock_client.get.return_value = now
         mock_client.onClose = Mock()
-        self.handler.delete(uaid)
+        self.handler.delete(uaid, "", now)
         mock_client.onClose.assert_called_with(
             False,
             0,
