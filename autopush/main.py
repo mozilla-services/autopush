@@ -306,10 +306,6 @@ def connection_main(sysargs=None):
         debug=args.debug,
         debugCodePaths=args.debug,
     )
-    factory.setProtocolOptions(
-        autoPingInterval=args.auto_ping_interval,
-        autoPingTimeout=args.auto_ping_timeout,
-    )
     factory.protocol = SimplePushServerProtocol
     factory.protocol.ap_settings = settings
     factory.setProtocolOptions(
@@ -317,6 +313,8 @@ def connection_main(sysargs=None):
         maxFramePayloadSize=2048,
         maxMessagePayloadSize=2048,
         openHandshakeTimeout=5,
+        autoPingInterval=args.auto_ping_interval,
+        autoPingTimeout=args.auto_ping_timeout,
     )
 
     settings.metrics.start()
