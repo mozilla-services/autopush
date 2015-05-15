@@ -326,10 +326,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                    "status": 503}
             self.sendMessage(json.dumps(msg).encode('utf8'), False)
             return
-        # User exists?
         router = self.ap_settings.router
         url = self.ap_settings.router_url
-        # Attempt to register the user for this session
         self.transport.pauseProducing()
         d = self.deferToThread(router.register_user,
                                self.uaid, url, self.connected_at)
@@ -628,3 +626,9 @@ class NotificationHandler(cyclone.web.RequestHandler):
         client.process_notifications()
         settings.metrics.increment("updates.notification.checking")
         self.write("Notification check started")
+
+    def delete(self, uaid, ignored, connectionTime):
+        client = self.ap_settings.clients.get(uaid)
+        if client and client.get("connected_at") == connectionTime:
+            client.sendClose()
+            return self.write("Terminated duplicate")

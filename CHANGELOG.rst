@@ -16,6 +16,8 @@ Bug Fixes
 
 * Fix bug with deferreds not being tracked, causing access to objects that were
   cleaned up. Resolves Issue #66.
+* kill older, duplicate UAID entries that may still be connected.
+* use Websocket Pings to detect dead connections.
 
 1.0rc1 (Apr 29, 2015)
 =====================

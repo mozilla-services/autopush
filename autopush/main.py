@@ -163,6 +163,18 @@ def _parse_connection(sysargs=None):
         default=20,
         type=int,
         env_var="MIN_PING_INTERVAL")
+    parser.add_argument(
+        '--auto_ping_interval',
+        help="Interval between Websocket pings",
+        default=0,
+        type=float,
+        env_var="AUTO_PING_INTERVAL")
+    parser.add_argument(
+        '--auto_ping_timeout',
+        help="Timeout in seconds for Websocket ping replys",
+        default=4,
+        type=float,
+        env_var="AUTO_PING_TIMEOUT")
     parser.add_argument('--pong_delay', help=("Time to wait after receiving a "
                         "pong for clients that ping too frequently"),
                         default=0, type=int, env_var="PONG_DELAY")
@@ -299,6 +311,8 @@ def connection_main(sysargs=None):
         maxFramePayloadSize=2048,
         maxMessagePayloadSize=2048,
         openHandshakeTimeout=5,
+        autoPingInterval=args.auto_ping_interval,
+        autoPingTimeout=args.auto_ping_timeout,
     )
 
     settings.metrics.start()

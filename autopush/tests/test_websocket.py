@@ -1,4 +1,5 @@
 import json
+import time
 import uuid
 
 import twisted.internet.base
@@ -531,7 +532,7 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    def test_unregister(self):
+    def test_ws_unregister(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
@@ -555,7 +556,7 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    def test_unregister_without_chid(self):
+    def test_ws_unregister_without_chid(self):
         self._connect()
         self.proto.uaid = str(uuid.uuid4())
         self._send_message(dict(messageType="unregister"))
@@ -572,7 +573,7 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    def test_unregister_bad_chid(self):
+    def test_ws_unregister_bad_chid(self):
         self._connect()
         self.proto.uaid = str(uuid.uuid4())
         self._send_message(dict(messageType="unregister",
@@ -589,7 +590,7 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    def test_unregister_fail(self):
+    def test_ws_unregister_fail(self):
         patcher = patch('autopush.websocket.log', spec=True)
         mock_log = patcher.start()
         self._connect()
@@ -1033,7 +1034,6 @@ class WebsocketTestCase(unittest.TestCase):
             # Chain our check for the call
             self.proto._notification_fetch.addBoth(check_call)
             self.proto._notification_fetch.addErrback(lambda x: d.errback(x))
-
         self.proto._register.addCallback(after_hello)
         self.proto._register.addErrback(lambda x: d.errback(x))
         return d
@@ -1125,3 +1125,12 @@ class NotificationHandlerTestCase(unittest.TestCase):
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
         eq_(self.status_mock.call_args, ((404,),))
+
+    def test_delete(self):
+        uaid = str(uuid.uuid4())
+        now = int(time.time())
+        self.ap_settings.clients[uaid] = mock_client = Mock()
+        mock_client.get.return_value = now
+        mock_client.sendClose = Mock()
+        self.handler.delete(uaid, "", now)
+        mock_client.sendClose.assert_called()
