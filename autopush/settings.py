@@ -55,7 +55,7 @@ class AutopushSettings(object):
 
         # Use a persistent connection pool for HTTP requests.
         pool = HTTPConnectionPool(reactor)
-        self.agent = Agent(reactor, pool=pool)
+        self.agent = Agent(reactor, connectTimeout=5, pool=pool)
 
         # Metrics setup
         if datadog_api_key:

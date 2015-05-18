@@ -9,18 +9,26 @@ from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
 from cryptography.fernet import InvalidToken
+from repoze.lru import LRUCache
 from StringIO import StringIO
 from twisted.internet.threads import deferToThread
+from twisted.internet.error import ConnectionRefusedError, UserError
 from twisted.python import failure, log
 from twisted.web.client import FileBodyProducer
 
 from autopush.protocol import IgnoreBody
 
 
+dead_cache = LRUCache(150)
+
+
 class EndpointHandler(cyclone.web.RequestHandler):
     def initialize(self):
         self.uaid_hash = None
         self.metrics = self.ap_settings.metrics
+
+    def _node_key(self, node_id):
+        return node_id + "-%s" % int(time.time()/3600)
 
     def _load_params(self):
         # If there's a request body, parse it out
@@ -57,20 +65,12 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
     def _client_info(self):
         """Returns a dict of additional client data"""
-        req = self.request
-        data = {}
-        if "user-agent" in req.headers:
-            data["user-agent"] = req.headers["user-agent"]
-
-        if "x-forwarded-for" in req.headers:
-            data["remote-ip"] = req.headers["x-forwarded-for"]
-        else:
-            data["remote-ip"] = req.remote_ip
-
-        if getattr(self, "uaid_hash", None):
-            data["uaid_hash"] = self.uaid_hash
-
-        return data
+        return {
+            "user-agent": self.request.headers.get("user-agent", ""),
+            "remote-ip": self.request.headers.get("x-forwarded-for",
+                                                  self.request.remote_ip),
+            "uaid_hash": getattr(self, "uaid_hash", ""),
+        }
 
     @cyclone.web.asynchronous
     def put(self, token):
@@ -174,10 +174,13 @@ class EndpointHandler(cyclone.web.RequestHandler):
         # delivery at this moment later.
         self.client_check = False
 
-        if node_id:
+        if node_id and dead_cache.get(self._node_key(node_id)):
+            return self._process_routing(None, result)
+        elif node_id:
             # Attempt a delivery if they are connected
             d = self._send_notification(node_id)
             d.addCallback(self._process_routing, result)
+            d.addErrback(self._process_agent_fail, result)
             d.addErrback(self._error_response)
         else:
             self._save_notification()
@@ -200,9 +203,17 @@ class EndpointHandler(cyclone.web.RequestHandler):
             url.encode("utf8"),
         ).addCallback(IgnoreBody.ignore)
 
+    def _process_agent_fail(self, fail, item):
+        fail.trap(ConnectionRefusedError, UserError)
+        dead_cache.put(self._node_key(item["node_id"]), True)
+        log.err("Agent failed to connect to host: %s" % item["node_id"],
+                **self._client_info())
+        self.metrics.increment("updates.client.host_gone")
+        self._process_routing(False, item)
+
     def _process_routing(self, response, item):
         node_id = item.get("node_id")
-        if response.code == 200:
+        if response and response.code == 200:
             # Success, return!
             self.metrics.increment("router.broadcast.hit")
             time_diff = time.time() - self.start_time
@@ -210,7 +221,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
             self.write("Success")
             log.msg("Successful delivery", **self._client_info())
             return self.finish()
-        elif response.code == 404:
+        elif not response or response.code == 404:
             # Conditionally delete the node_id
             d = deferToThread(self.ap_settings.router.clear_node, item)
             d.addCallback(self._process_node_delete)
@@ -247,6 +258,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
             # If we already know where the client was connected...
             d = self._send_notification_check(node_id)
             d.addCallback(self._process_notif, node_id)
+            d.addErrback(self._notif_check_fail, node_id)
             d.addErrback(self._error_response)
         else:
             # Saved the notification, check for if the client is somewhere
@@ -255,6 +267,18 @@ class EndpointHandler(cyclone.web.RequestHandler):
             d.addCallback(self._process_jumped_client)
             d.addErrback(self._handle_overload)
             d.addErrback(self._error_response)
+
+    def _notif_check_fail(self, fail, node_id):
+        """Handle the inability to contact a node to inform it of the
+        notification
+
+        In this case, we were unable to notify the node, but we've saved the
+        notification, so skip to acknowledging.
+
+        """
+        fail.trap(ConnectionRefusedError, UserError)
+        dead_cache.put(self._node_key(node_id), True)
+        self._finish_missed_store()
 
     def _process_notif(self, response, node_id=None):
         """Process the result of a PUT to a Connection Node's /notif/
@@ -280,6 +304,10 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
         node_id = result.get("node_id")
         if not node_id:
+            return self._finish_missed_store()
+
+        # Is this a dead node?
+        if dead_cache.get(self._node_key(node_id)):
             return self._finish_missed_store()
 
         d = self._send_notification_check(node_id)
@@ -311,17 +339,12 @@ class EndpointHandler(cyclone.web.RequestHandler):
 class RegistrationHandler(cyclone.web.RequestHandler):
     def _client_info(self):
         """Returns a dict of additional client data"""
-        req = self.request
-        data = {}
-        if "user-agent" in req.headers:
-            data["user-agent"] = req.headers["user-agent"]
-
-        if "x-forwarded-for" in req.headers:
-            data["remote-ip"] = req.headers["x-forwarded-for"]
-        else:
-            data["remote-ip"] = req.remote_ip
-
-        return data
+        return {
+            "user-agent": self.request.headers.get("user-agent", ""),
+            "remote-ip": self.request.headers.get("x-forwarded-for",
+                                                  self.request.remote_ip),
+            "uaid_hash": getattr(self, "uaid_hash", ""),
+        }
 
     def _error_response(self, failure):
         log.err(failure, **self._client_info())

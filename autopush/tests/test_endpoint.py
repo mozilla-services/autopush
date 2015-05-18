@@ -15,6 +15,7 @@ from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
 from StringIO import StringIO
 from twisted.internet.defer import Deferred, maybeDeferred
+from twisted.internet.error import UserError
 from twisted.python.failure import Failure
 from twisted.trial import unittest
 from twisted.web.client import Agent, Response, ResponseDone
@@ -468,6 +469,68 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.version, self.endpoint.data = 789, None
 
         self.endpoint._process_route({'node_id': 'https://example.com'})
+        return self.finish_deferred
+
+    def test_send_notification_dead_node(self):
+        def fail_request():
+            raise Failure(UserError('oops'))
+        self.agent_mock.configure_mock(**{
+            'request.side_effect': lambda method, url, **kwargs:
+            maybeDeferred(fail_request)
+        })
+
+        self.storage_mock.configure_mock(**{
+            'save_notification.return_value': True})
+        self.router_mock.configure_mock(**{
+            'get_uaid.return_value': {'node_id': 'https://deadexample.com'}})
+
+        def handle_finish(result):
+            self._assert_miss_response()
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.uaid, self.endpoint.chid = '123', '456'
+        self.endpoint.version, self.endpoint.data = 789, None
+
+        self.endpoint._process_route({'node_id': 'https://deadexample.com'})
+        return self.finish_deferred
+
+    def test_send_notification_dead_node_notify(self):
+        def fail_request():
+            raise Failure(UserError('oops'))
+        self.agent_mock.configure_mock(**{
+            'request.side_effect': lambda method, url, **kwargs:
+            maybeDeferred(fail_request)
+        })
+
+        def handle_finish(result):
+            self._assert_miss_response()
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.client_check = True
+        self.endpoint.uaid, self.endpoint.chid = '123', '456'
+        self.endpoint.version, self.endpoint.data = 789, None
+        self.endpoint._process_save(None, node_id='https://deadexample.com')
+        return self.finish_deferred
+
+    def test_send_notification_known_dead_node(self):
+        import autopush.endpoint
+        autopush.endpoint.dead_cache.put(
+            self.endpoint._node_key("https://deadexample.com"),
+            True)
+
+        self.storage_mock.configure_mock(**{
+            'save_notification.return_value': True})
+        self.router_mock.configure_mock(**{
+            'get_uaid.return_value': {'node_id': 'https://deadexample.com'}})
+
+        def handle_finish(result):
+            self._assert_miss_response()
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.uaid, self.endpoint.chid = '123', '456'
+        self.endpoint.version, self.endpoint.data = 789, None
+
+        self.endpoint._process_route({'node_id': 'https://deadexample.com'})
         return self.finish_deferred
 
     def test_process_routing_throughput_exceeded(self):
