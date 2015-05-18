@@ -156,14 +156,6 @@ def _parse_connection(sysargs=None):
     parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
                         type=int, default=8082, env_var="ENDPOINT_PORT")
     parser.add_argument(
-        '--min_ping_interval',
-        help="Minimum Interval in seconds between pings before " +
-        "disconnecting websocket client as being " +
-        "'too aggressive'",
-        default=20,
-        type=int,
-        env_var="MIN_PING_INTERVAL")
-    parser.add_argument(
         '--auto_ping_interval',
         help="Interval between Websocket pings",
         default=0,
@@ -175,9 +167,6 @@ def _parse_connection(sysargs=None):
         default=4,
         type=float,
         env_var="AUTO_PING_TIMEOUT")
-    parser.add_argument('--pong_delay', help=("Time to wait after receiving a "
-                        "pong for clients that ping too frequently"),
-                        default=0, type=int, env_var="PONG_DELAY")
 
     add_bridge_args(parser)
     add_shared_args(parser)
@@ -277,8 +266,6 @@ def connection_main(sysargs=None):
         router_scheme="https" if args.router_ssl_key else "http",
         router_hostname=args.router_hostname,
         router_port=args.router_port,
-        min_ping_interval=args.min_ping_interval,
-        pong_delay=args.pong_delay,
     )
     setup_logging("Autopush")
 

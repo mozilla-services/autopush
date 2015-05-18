@@ -416,33 +416,14 @@ class WebsocketTestCase(unittest.TestCase):
         return d
 
     def test_ping_pong_delay(self):
-        pong_delay = 0.5
-        self.proto.ap_settings.pong_delay = pong_delay
-        last_ping = []
-
-        def ping_again(result):
-            last_ping.append(self.proto.last_ping)
-            return self.proto.process_ping()
-
-        def ping_done(result):
-            ok_(self.proto.last_ping - last_ping[0] >= pong_delay)
-
-        d = self.test_ping()
-        d.addCallback(ping_again)
-        d.addCallback(ping_done)
-        return d
-
-    def test_ping_too_many(self):
-        d = self.test_ping()
-
-        closed = Deferred()
-
-        def ping_again(result):
-            self._send_message({})
-            self._wait_for_close(closed)
-
-        d.addCallback(ping_again)
-        return closed
+        self._connect()
+        self.proto.last_ping = time.time()-8
+        f = Deferred()
+        d = self.proto.process_ping()
+        # This should be a deferred
+        ok_(d is not None)
+        d.addBoth(lambda x: f.callback(x))
+        return f
 
     def test_register(self):
         self._connect()

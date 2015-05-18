@@ -5,10 +5,25 @@ Autopush Changelog
 1.1rc3 (**dev**)
 ================
 
+Features
+--------
+
+* Pong delay can no longer be set, and uses an adaptive value based on the last
+  ping to try and accurately compensate for higher latency connections. This
+  also removes the min_ping_interval option such that if a client is pinging
+  too frequently we will instead leave space for up to the clients timeout of
+  10-sec (a hardcoded client value).
+
 Bug Fixes
 ---------
 
 * Add CancelledError trap to all deferreds in websocket.py. Resolves Issue #74.
+
+Backwards Incompatibility
+-------------------------
+
+* Removed min_ping_interval config option.
+* Removed pong_delay config option.
 
 1.1rc2 (May 15, 2015)
 =====================
