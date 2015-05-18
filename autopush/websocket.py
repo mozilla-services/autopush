@@ -52,8 +52,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         def trapCancel(fail):
             fail.trap(CancelledError)
 
-        d.addErrback(trapCancel)
-
         self._callbacks.append(d)
 
         def f(result):
@@ -61,6 +59,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                 self._callbacks.remove(d)
             return result
         d.addBoth(f)
+        d.addErrback(trapCancel)
         return d
 
     def deferToLater(self, when, func, *args, **kwargs):
