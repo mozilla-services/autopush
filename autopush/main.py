@@ -290,7 +290,7 @@ def connection_main(sysargs=None):
     # Internal HTTP notification router
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", r),
-        (r"/notif/([^\/]+)", n),
+        (r"/notif/([^\/]+)(/([^\/]+))?", n),
     ],
         default_host=settings.router_hostname, debug=args.debug,
         log_function=skip_request_logging

@@ -260,7 +260,7 @@ class Router(object):
         conn = self.table.connection
         try:
             cond = "attribute_not_exists(node_id) or (connected_at < :conn)"
-            conn.put_item(
+            result = conn.put_item(
                 self.table.table_name,
                 item={
                     "uaid": {'S': uaid},
@@ -270,9 +270,10 @@ class Router(object):
                 condition_expression=cond,
                 expression_attribute_values={
                     ":conn": {'N': str(connected_at)}
-                }
+                },
+                return_values="ALL_OLD",
             )
-            return True
+            return result
         except ConditionalCheckFailedException:
             return False
         except ProvisionedThroughputExceededException:

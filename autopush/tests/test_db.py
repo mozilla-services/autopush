@@ -290,7 +290,7 @@ class RouterTestCase(unittest.TestCase):
         r = get_router_table()
         router = Router(r, MetricSink())
         result = router.register_user(uaid, "me", 1234)
-        eq_(result, True)
+        eq_(bool(result), True)
         result = router.get_uaid(uaid)
         eq_(bool(result), True)
         eq_(result["node_id"], "me")

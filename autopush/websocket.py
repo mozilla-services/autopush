@@ -331,7 +331,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.transport.pauseProducing()
         d = self.deferToThread(router.register_user,
                                self.uaid, url, self.connected_at)
-        d.addCallback(self.finish_hello)
+        d.addCallback(self._check_other_nodes)
         d.addErrback(self.err_hello)
         d.addErrback(self.log_err)
         self._register = d
@@ -341,9 +341,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.transport.resumeProducing()
         self.returnError("hello", "error", 503)
 
-    def finish_hello(self, result):
+    def _check_other_nodes(self, result):
         self.transport.resumeProducing()
-        self._register = None
         if not result:
             # Registration failed
             msg = {"messageType": "hello", "reason": "already_connected",
@@ -351,13 +350,30 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.sendMessage(json.dumps(msg).encode('utf8'), False)
             return
 
+        if result.get("Attributes", {}).get("node_id"):
+            # Get the previous information returned from dynamodb.
+            attrs = result.get("Attributes")
+            node_id = attrs.get("node_id", {}).get('S')
+            uaid = attrs.get("uaid", {}).get('S')
+            connected_at = attrs.get("connected_at", {}).get('N')
+            url = "%s/notif/%s/%s" % (node_id, uaid, connected_at)
+            d = self.ap_settings.agent.request(
+                "DELETE",
+                url.encode("utf8"),
+            ).addCallback(self.finish_hello)
+            d.addErrback(self.log_err, extra="Failed to delete old node")
+            return
+        self.finish_hello()
+
+    def finish_hello(self, **args):
+        self._register = None
         msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}
         self.ap_settings.clients[self.uaid] = self
         self.sendJSON(msg)
         self.metrics.increment("updates.client.hello", tags=self.base_tags)
         self.process_notifications()
 
-    def process_notifications(self):
+    def process_notifications(self, *args):
         # Bail immediately if we are closed.
         if self._should_stop:
             return
@@ -607,7 +623,7 @@ class RouterHandler(cyclone.web.RequestHandler):
 
 
 class NotificationHandler(cyclone.web.RequestHandler):
-    def put(self, uaid):
+    def put(self, uaid, **args):
         client = self.ap_settings.clients.get(uaid)
         settings = self.ap_settings
         if not client:
@@ -629,6 +645,6 @@ class NotificationHandler(cyclone.web.RequestHandler):
 
     def delete(self, uaid, ignored, connectionTime):
         client = self.ap_settings.clients.get(uaid)
-        if client and client.get("connected_at") == connectionTime:
+        if client and client.connected_at == int(connectionTime):
             client.sendClose()
             return self.write("Terminated duplicate")
