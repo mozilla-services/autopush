@@ -501,7 +501,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def force_delete(self, result, chid):
         """Forces another delete call through until it works"""
-        if result not in [True, False]:
+        if isinstance(result, failure.Failure):
             # This is an exception, log it
             self.log_err(result)
 
