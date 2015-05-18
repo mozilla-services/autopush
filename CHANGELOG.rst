@@ -5,6 +5,15 @@ Autopush Changelog
 1.1rc3 (**dev**)
 ================
 
+Features
+--------
+
+* Pong delay can no longer be set, and uses an adaptive value based on the last
+  ping to try and accurately compensate for higher latency connections. This
+  also removes the min_ping_interval option such that if a client is pinging
+  too frequently we will instead leave space for up to the clients timeout of
+  10-sec (a hardcoded client value).
+
 Bug Fixes
 ---------
 
