@@ -427,16 +427,28 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return self.sendMessage("{}", False)
 
     def process_ping(self):
+        """Adaptive ping processing
+
+        Clients in the wild have a bug that lowers their ping interval to 0. It
+        will never increase for them, but if we disconnect them, then they will
+        reconnect in 5 seconds. As such, its beneficial for us and the client
+        to delay a response to a client pinging fast, but not such that its
+        worse than the alternative, reconnecting.
+
+        Therefore we will attempt to send this ping within the 10 second
+        timeout many clients already have, based on guesstimating latency from
+        the last ping. The last ping is not necessarilly latency, but it will
+        allow us to avoid sending too fast, but not waiting too long. The
+        practical result is that we will respond to each ping within 0-9 sec
+        depending on when we last got a ping.
+
+        """
         now = time.time()
-        if now - self.last_ping < self.ap_settings.min_ping_interval:
-            if self.ap_settings.pong_delay > 0:
-                d = self.deferToLater(self.ap_settings.pong_delay,
-                                      self._send_ping)
-                return d
-            self.metrics.increment("updates.client.too_many_pings",
-                                   tags=self.base_tags)
-            return self.sendClose()
-        self._send_ping()
+        last_ping_ago = now-self.last_ping
+        if last_ping_ago >= 9:
+            self._send_ping()
+        else:
+            return self.deferToLater(9-last_ping_ago, self._send_ping)
 
     def process_register(self, data):
         if "channelID" not in data:
