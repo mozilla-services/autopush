@@ -19,6 +19,12 @@ Bug Fixes
 
 * Add CancelledError trap to all deferreds in websocket.py. Resolves Issue #74.
 
+Backwards Incompatibility
+-------------------------
+
+* Removed min_ping_interval config option.
+* Removed pong_delay config option.
+
 1.1rc2 (May 15, 2015)
 =====================
 
