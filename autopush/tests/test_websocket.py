@@ -202,7 +202,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ap_settings.clients["asdf"] = self.proto
 
         # Stick a mock on
-        self.proto._notification_fetch = notif_mock = Mock()
+        notif_mock = Mock()
+        self.proto._callbacks.append(notif_mock)
         self.proto.onClose(True, None, None)
         eq_(len(self.proto.ap_settings.clients), 0)
         eq_(len(list(notif_mock.mock_calls)), 1)

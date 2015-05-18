@@ -2,6 +2,14 @@
 Autopush Changelog
 ==================
 
+1.1rc3 (**dev**)
+================
+
+Bug Fixes
+---------
+
+* Add CancelledError trap to all deferreds in websocket.py. Resolves Issue #74.
+
 1.1rc2 (May 15, 2015)
 =====================
 

@@ -48,6 +48,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     # Defer helpers
     def deferToThread(self, func, *args, **kwargs):
         d = deferToThread(func, *args, **kwargs)
+
+        def trapCancel(fail):
+            fail.trap(CancelledError)
+
         self._callbacks.append(d)
 
         def f(result):
@@ -55,10 +59,16 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                 self._callbacks.remove(d)
             return result
         d.addBoth(f)
+        d.addErrback(trapCancel)
         return d
 
     def deferToLater(self, when, func, *args, **kwargs):
         d = Deferred()
+
+        def trapCancel(fail):
+            fail.trap(CancelledError)
+
+        d.addErrback(trapCancel)
         self._callbacks.append(d)
 
         def f():
@@ -210,15 +220,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Cancel any outstanding deferreds
         for d in self._callbacks:
             d.cancel()
-
-        # Cancel defers and remove references
-        if self._notification_fetch:
-            self._notification_fetch.cancel()
-            del self._notification_fetch
-
-        if self._register:
-            self._register.cancel()
-            del self._register
 
         # Attempt to deliver any notifications not originating from storage
         if self.direct_updates:
@@ -377,14 +378,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Prevent repeat calls
         d = self.deferToThread(self.ap_settings.storage.fetch_notifications,
                                self.uaid)
-        d.addErrback(self.cancel_notifications)
         d.addErrback(self.error_notifications)
         d.addCallback(self.finish_notifications)
         self._notification_fetch = d
-
-    def cancel_notifications(self, fail):
-        # Don't do anything else, we got cancelled
-        fail.trap(CancelledError)
 
     def error_notifications(self, fail):
         # If we error'd out on this important check, we drop the connection
