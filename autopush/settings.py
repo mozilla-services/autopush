@@ -50,14 +50,12 @@ class AutopushSettings(object):
                  statsd_port=8125,
                  pingConf=None,
                  resolve_hostname=False,
-                 min_ping_interval=20,
-                 pong_delay=0,
                  max_data=4096,
                  enable_cors=False):
 
         # Use a persistent connection pool for HTTP requests.
         pool = HTTPConnectionPool(reactor)
-        self.agent = Agent(reactor, pool=pool)
+        self.agent = Agent(reactor, connectTimeout=5, pool=pool)
 
         # Metrics setup
         if datadog_api_key:
@@ -74,8 +72,6 @@ class AutopushSettings(object):
         key = crypto_key or Fernet.generate_key()
         self.fernet = Fernet(key)
 
-        self.pong_delay = pong_delay
-        self.min_ping_interval = min_ping_interval
         self.max_data = max_data
         self.clients = {}
 

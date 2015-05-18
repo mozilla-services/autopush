@@ -48,6 +48,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     # Defer helpers
     def deferToThread(self, func, *args, **kwargs):
         d = deferToThread(func, *args, **kwargs)
+
+        def trapCancel(fail):
+            fail.trap(CancelledError)
+
         self._callbacks.append(d)
 
         def f(result):
@@ -55,10 +59,16 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                 self._callbacks.remove(d)
             return result
         d.addBoth(f)
+        d.addErrback(trapCancel)
         return d
 
     def deferToLater(self, when, func, *args, **kwargs):
         d = Deferred()
+
+        def trapCancel(fail):
+            fail.trap(CancelledError)
+
+        d.addErrback(trapCancel)
         self._callbacks.append(d)
 
         def f():
@@ -210,15 +220,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Cancel any outstanding deferreds
         for d in self._callbacks:
             d.cancel()
-
-        # Cancel defers and remove references
-        if self._notification_fetch:
-            self._notification_fetch.cancel()
-            del self._notification_fetch
-
-        if self._register:
-            self._register.cancel()
-            del self._register
 
         # Attempt to deliver any notifications not originating from storage
         if self.direct_updates:
@@ -393,14 +394,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Prevent repeat calls
         d = self.deferToThread(self.ap_settings.storage.fetch_notifications,
                                self.uaid)
-        d.addErrback(self.cancel_notifications)
         d.addErrback(self.error_notifications)
         d.addCallback(self.finish_notifications)
         self._notification_fetch = d
-
-    def cancel_notifications(self, fail):
-        # Don't do anything else, we got cancelled
-        fail.trap(CancelledError)
 
     def error_notifications(self, fail):
         # If we error'd out on this important check, we drop the connection
@@ -447,16 +443,28 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return self.sendMessage("{}", False)
 
     def process_ping(self):
+        """Adaptive ping processing
+
+        Clients in the wild have a bug that lowers their ping interval to 0. It
+        will never increase for them, but if we disconnect them, then they will
+        reconnect in 5 seconds. As such, its beneficial for us and the client
+        to delay a response to a client pinging fast, but not such that its
+        worse than the alternative, reconnecting.
+
+        Therefore we will attempt to send this ping within the 10 second
+        timeout many clients already have, based on guesstimating latency from
+        the last ping. The last ping is not necessarilly latency, but it will
+        allow us to avoid sending too fast, but not waiting too long. The
+        practical result is that we will respond to each ping within 0-9 sec
+        depending on when we last got a ping.
+
+        """
         now = time.time()
-        if now - self.last_ping < self.ap_settings.min_ping_interval:
-            if self.ap_settings.pong_delay > 0:
-                d = self.deferToLater(self.ap_settings.pong_delay,
-                                      self._send_ping)
-                return d
-            self.metrics.increment("updates.client.too_many_pings",
-                                   tags=self.base_tags)
-            return self.sendClose()
-        self._send_ping()
+        last_ping_ago = now-self.last_ping
+        if last_ping_ago >= 9:
+            self._send_ping()
+        else:
+            return self.deferToLater(9-last_ping_ago, self._send_ping)
 
     def process_register(self, data):
         if "channelID" not in data:
@@ -509,7 +517,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def force_delete(self, result, chid):
         """Forces another delete call through until it works"""
-        if result not in [True, False]:
+        if isinstance(result, failure.Failure):
             # This is an exception, log it
             self.log_err(result)
 
