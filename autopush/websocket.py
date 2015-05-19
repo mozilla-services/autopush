@@ -373,7 +373,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             if existing:
                 if existing.connected_at <= last_connect:
                     existing.sendClose()
-                    return
                 if existing.connected_at > last_connect:
                     self.sendClose()
                     return
