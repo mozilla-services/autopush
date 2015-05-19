@@ -368,12 +368,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             connected_at = self._get_aval(attrs.get("connected_at", {}), 'N')
             url = "%s/notif/%s/%s" % (node_id, uaid, connected_at)
             if not getattr(self, 'testing', False):
-                d = self.ap_settings.agent.request(
+                self.ap_settings.agent.request(
                     "DELETE",
                     url.encode("utf8"),
-                ).addCallback(self.finish_hello)
-                d.addErrback(self.log_err, extra="Failed to delete old node")
-                return
+                ).addErrback(self.log_err, extra="Failed to delete old node")
         self.finish_hello()
 
     def finish_hello(self, *args):
