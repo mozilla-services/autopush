@@ -517,10 +517,12 @@ class WebsocketTestCase(unittest.TestCase):
         return d
 
     def test_register_kill_others(self):
+        self._connect()
         mock_agent = Mock()
         self.proto.ap_settings.agent = mock_agent
         nodeId = "http://localhost"
         uaid = "deadbeef-0000-0000-0000-000000000000"
+        self.proto.uaid = uaid
         connected = int(time.time())
         res = {"Attributes": {
                "node_id": {"S": nodeId},

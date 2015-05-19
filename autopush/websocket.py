@@ -11,6 +11,9 @@ from twisted.internet.defer import (
     DeferredList,
     CancelledError
 )
+from twisted.internet.error import (
+    ConnectError, ConnectionRefusedError, UserError
+)
 from twisted.internet.interfaces import IProducer
 from twisted.internet.threads import deferToThread
 from twisted.python import failure, log
@@ -365,15 +368,30 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             attrs = result.get("Attributes")
             node_id = self._get_aval(attrs.get("node_id", {}), 'S')
             uaid = self._get_aval(attrs.get("uaid", {}), 'S')
-            connected_at = self._get_aval(attrs.get("connected_at", {}), 'N')
-            url = "%s/notif/%s/%s" % (node_id, uaid, connected_at)
-            if not getattr(self, 'testing', False):
-                d = self.ap_settings.agent.request(
-                    "DELETE",
-                    url.encode("utf8"),
-                ).addCallback(self.finish_hello)
-                d.addErrback(self.log_err, extra="Failed to delete old node")
-                return
+            last_connect = self._get_aval(attrs.get("connected_at", {}), 'N')
+            existing = self.ap_settings.clients.get(uaid)
+            if existing:
+                if self.connected_at <= existing.connected_at:
+                    self.sendClose()
+                    return
+                else:
+                    existing.sendClose()
+            if node_id is not self.ap_settings.router_url:
+                url = "%s/notif/%s/%s" % (node_id, uaid, last_connect)
+
+                def _eat_connections(*args):
+                    failure.trap(
+                        ConnectError, ConnectionRefusedError, UserError
+                    )
+
+                if not getattr(self, 'testing', False):
+                    d = self.ap_settings.agent.request(
+                        "DELETE",
+                        url.encode("utf8"),
+                    )
+                    d.addErrback(_eat_connections)
+                    d.addErrback(self.log_err,
+                                 extra="Failed to delete old node")
         self.finish_hello()
 
     def finish_hello(self, *args):
@@ -384,7 +402,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.metrics.increment("updates.client.hello", tags=self.base_tags)
         self.process_notifications()
 
-    def process_notifications(self, *args):
+    def process_notifications(self):
         # Bail immediately if we are closed.
         if self._should_stop:
             return
@@ -470,11 +488,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         """
         now = time.time()
-        last_ping_ago = now-self.last_ping
+        last_ping_ago = now - self.last_ping
         if last_ping_ago >= 9:
             self._send_ping()
         else:
-            return self.deferToLater(9-last_ping_ago, self._send_ping)
+            return self.deferToLater(9 - last_ping_ago, self._send_ping)
 
     def process_register(self, data):
         if "channelID" not in data:
