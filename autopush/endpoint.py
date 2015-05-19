@@ -12,7 +12,11 @@ from cryptography.fernet import InvalidToken
 from repoze.lru import LRUCache
 from StringIO import StringIO
 from twisted.internet.threads import deferToThread
-from twisted.internet.error import ConnectionRefusedError, UserError
+from twisted.internet.error import (
+    ConnectError,
+    ConnectionRefusedError,
+    UserError
+)
 from twisted.python import failure, log
 from twisted.web.client import FileBodyProducer
 
@@ -204,7 +208,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
         ).addCallback(IgnoreBody.ignore)
 
     def _process_agent_fail(self, fail, item):
-        fail.trap(ConnectionRefusedError, UserError)
+        fail.trap(ConnectError, ConnectionRefusedError, UserError)
         dead_cache.put(self._node_key(item["node_id"]), True)
         log.err("Agent failed to connect to host: %s" % item["node_id"],
                 **self._client_info())
@@ -276,7 +280,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
         notification, so skip to acknowledging.
 
         """
-        fail.trap(ConnectionRefusedError, UserError)
+        fail.trap(ConnectError, ConnectionRefusedError, UserError)
         dead_cache.put(self._node_key(node_id), True)
         self._finish_missed_store()
 
