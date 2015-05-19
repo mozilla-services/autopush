@@ -11,6 +11,9 @@ from twisted.internet.defer import (
     DeferredList,
     CancelledError
 )
+from twisted.internet.error import (
+    ConnectError, ConnectionRefusedError, UserError
+)
 from twisted.internet.interfaces import IProducer
 from twisted.internet.threads import deferToThread
 from twisted.python import failure, log
@@ -366,12 +369,27 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             node_id = self._get_aval(attrs.get("node_id", {}), 'S')
             uaid = self._get_aval(attrs.get("uaid", {}), 'S')
             connected_at = self._get_aval(attrs.get("connected_at", {}), 'N')
-            url = "%s/notif/%s/%s" % (node_id, uaid, connected_at)
-            if not getattr(self, 'testing', False):
-                self.ap_settings.agent.request(
-                    "DELETE",
-                    url.encode("utf8"),
-                ).addErrback(self.log_err, extra="Failed to delete old node")
+            inSelf = self.ap_settings.clients.get(uaid)
+            if inSelf:
+                if inSelf.connected_at <= connected_at:
+                    inSelf.sendClose()
+            else:
+                url = "%s/notif/%s/%s" % (node_id, uaid, connected_at)
+
+                def _eatConnections(*args):
+                    failure.trap(
+                        ConnectError, ConnectionRefusedError, UserError
+                    )
+
+                if not getattr(self, 'testing', False):
+                    self.ap_settings.agent.request(
+                        "DELETE",
+                        url.encode("utf8"),
+                    ).addErrback(
+                        _eatConnections
+                    ).addErrback(
+                        self.log_err,
+                        extra="Failed to delete old node")
         self.finish_hello()
 
     def finish_hello(self, *args):
@@ -468,11 +486,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         """
         now = time.time()
-        last_ping_ago = now-self.last_ping
+        last_ping_ago = now - self.last_ping
         if last_ping_ago >= 9:
             self._send_ping()
         else:
-            return self.deferToLater(9-last_ping_ago, self._send_ping)
+            return self.deferToLater(9 - last_ping_ago, self._send_ping)
 
     def process_register(self, data):
         if "channelID" not in data:
