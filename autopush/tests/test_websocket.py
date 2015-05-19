@@ -50,6 +50,8 @@ class WebsocketTestCase(unittest.TestCase):
         settings.metrics = Mock(spec=Metrics)
 
     def _connect(self):
+        # Do not call agent
+        self.proto.testing = True
         self.proto.onConnect(None)
 
     def _send_message(self, msg):

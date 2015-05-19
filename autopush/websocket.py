@@ -342,6 +342,15 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.transport.resumeProducing()
         self.returnError("hello", "error", 503)
 
+    def _get_aval(self, val, type):
+        # Live testing shows that dynamodb returns attribute values as
+        # dicts, where moto returns them as straight values. This isolates
+        # for testing
+        try:
+            return val.get(type)
+        except AttributeError:
+            return val
+
     def _check_other_nodes(self, result):
         self.transport.resumeProducing()
         if not result:
@@ -354,19 +363,20 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if result.get("Attributes", {}).get("node_id"):
             # Get the previous information returned from dynamodb.
             attrs = result.get("Attributes")
-            node_id = attrs.get("node_id", {}).get('S')
-            uaid = attrs.get("uaid", {}).get('S')
-            connected_at = attrs.get("connected_at", {}).get('N')
+            node_id = self._get_aval(attrs.get("node_id", {}), 'S')
+            uaid = self._get_aval(attrs.get("uaid", {}), 'S')
+            connected_at = self._get_aval(attrs.get("connected_at", {}), 'N')
             url = "%s/notif/%s/%s" % (node_id, uaid, connected_at)
-            d = self.ap_settings.agent.request(
-                "DELETE",
-                url.encode("utf8"),
-            ).addCallback(self.finish_hello)
-            d.addErrback(self.log_err, extra="Failed to delete old node")
-            return
+            if not getattr(self, 'testing', False):
+                d = self.ap_settings.agent.request(
+                    "DELETE",
+                    url.encode("utf8"),
+                ).addCallback(self.finish_hello)
+                d.addErrback(self.log_err, extra="Failed to delete old node")
+                return
         self.finish_hello()
 
-    def finish_hello(self, **args):
+    def finish_hello(self, *args):
         self._register = None
         msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}
         self.ap_settings.clients[self.uaid] = self
@@ -631,7 +641,7 @@ class RouterHandler(cyclone.web.RequestHandler):
 
 
 class NotificationHandler(cyclone.web.RequestHandler):
-    def put(self, uaid, **args):
+    def put(self, uaid, *args):
         client = self.ap_settings.clients.get(uaid)
         settings = self.ap_settings
         if not client:
