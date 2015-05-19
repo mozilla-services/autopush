@@ -384,7 +384,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.metrics.increment("updates.client.hello", tags=self.base_tags)
         self.process_notifications()
 
-    def process_notifications(self, *args):
+    def process_notifications(self):
         # Bail immediately if we are closed.
         if self._should_stop:
             return
