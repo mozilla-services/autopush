@@ -368,15 +368,19 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             attrs = result.get("Attributes")
             node_id = self._get_aval(attrs.get("node_id", {}), 'S')
             uaid = self._get_aval(attrs.get("uaid", {}), 'S')
-            connected_at = self._get_aval(attrs.get("connected_at", {}), 'N')
-            inSelf = self.ap_settings.clients.get(uaid)
-            if inSelf:
-                if inSelf.connected_at <= connected_at:
-                    inSelf.sendClose()
+            last_connect = self._get_aval(attrs.get("connected_at", {}), 'N')
+            existing = self.ap_settings.clients.get(uaid)
+            if existing:
+                if existing.connected_at <= last_connect:
+                    existing.sendClose()
+                    return
+                if existing.connected_at > last_connect:
+                    self.sendClose()
+                    return
             else:
-                url = "%s/notif/%s/%s" % (node_id, uaid, connected_at)
+                url = "%s/notif/%s/%s" % (node_id, uaid, last_connect)
 
-                def _eatConnections(*args):
+                def _eat_connections(*args):
                     failure.trap(
                         ConnectError, ConnectionRefusedError, UserError
                     )
@@ -386,10 +390,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                         "DELETE",
                         url.encode("utf8"),
                     ).addErrback(
-                        _eatConnections
+                        _eat_connections
                     ).addErrback(
                         self.log_err,
-                        extra="Failed to delete old node")
+                        extra="Failed to delete old node"
+                    )
         self.finish_hello()
 
     def finish_hello(self, *args):
