@@ -20,6 +20,7 @@ Bug Fixes
 * Fix 500 errors in endpoint caused by timeouts when trying to deliver to
   expired nodes in the cluster. Resolves Issue #75.
 * Add CancelledError trap to all deferreds in websocket.py. Resolves Issue #74.
+* Aggressively delete old TCP connections on device reregistration (#72)
 
 Backwards Incompatibility
 -------------------------

@@ -50,6 +50,8 @@ class WebsocketTestCase(unittest.TestCase):
         settings.metrics = Mock(spec=Metrics)
 
     def _connect(self):
+        # Do not call agent
+        self.proto.testing = True
         self.proto.onConnect(None)
 
     def _send_message(self, msg):
@@ -513,6 +515,22 @@ class WebsocketTestCase(unittest.TestCase):
         f = self._check_response(check_register_result)
         f.addErrback(lambda x: d.errback(x))
         return d
+
+    def test_register_kill_others(self):
+        mock_agent = Mock()
+        self.proto.ap_settings.agent = mock_agent
+        nodeId = "http://localhost"
+        uaid = "deadbeef-0000-0000-0000-000000000000"
+        connected = int(time.time())
+        res = {"Attributes": {
+               "node_id": {"S": nodeId},
+               "uaid": {"S": uaid},
+               "connected_at": {"N": connected}},
+               }
+        self.proto._check_other_nodes(res)
+        mock_agent.request.assert_called(
+            "DELETE",
+            "%s/notif/%s/%s" % (nodeId, uaid, connected))
 
     def test_ws_unregister(self):
         self._connect()
