@@ -386,15 +386,13 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                     )
 
                 if not getattr(self, 'testing', False):
-                    self.ap_settings.agent.request(
+                    d = self.ap_settings.agent.request(
                         "DELETE",
                         url.encode("utf8"),
-                    ).addErrback(
-                        _eat_connections
-                    ).addErrback(
-                        self.log_err,
-                        extra="Failed to delete old node"
                     )
+                    d.addErrback(_eat_connections)
+                    d.addErrback(self.log_err,
+                                 extra="Failed to delete old node")
         self.finish_hello()
 
     def finish_hello(self, *args):
