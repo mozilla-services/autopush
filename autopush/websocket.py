@@ -371,12 +371,12 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             last_connect = self._get_aval(attrs.get("connected_at", {}), 'N')
             existing = self.ap_settings.clients.get(uaid)
             if existing:
-                if existing.connected_at <= last_connect:
-                    existing.sendClose()
-                if existing.connected_at > last_connect:
+                if self.connected_at <= existing.connected_at:
                     self.sendClose()
                     return
-            else:
+                else:
+                    existing.sendClose()
+            if node_id is not self.ap_settings.router_url:
                 url = "%s/notif/%s/%s" % (node_id, uaid, last_connect)
 
                 def _eat_connections(*args):
