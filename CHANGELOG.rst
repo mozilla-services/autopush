@@ -2,6 +2,13 @@
 Autopush Changelog
 ==================
 
+1.2.1 (May 20, 2015)
+====================
+
+Bug Fixes
+---------
+* Fix error with blank UAIDs being rejected as "already registered"
+
 1.2.0 (May 19, 2015)
 ====================
 
