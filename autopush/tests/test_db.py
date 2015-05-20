@@ -290,10 +290,25 @@ class RouterTestCase(unittest.TestCase):
         r = get_router_table()
         router = Router(r, MetricSink())
         result = router.register_user(uaid, "me", 1234)
-        eq_(bool(result), True)
+        eq_(result[0], True)
+        eq_(result[1], {'Attributes':
+            {"uaid": uaid,
+             "connected_at": "1234",
+             "node_id": "me"},
+            "ConsumedCapacityUnits": 1})
         result = router.get_uaid(uaid)
         eq_(bool(result), True)
         eq_(result["node_id"], "me")
+
+    def test_save_new(self):
+        r = get_router_table()
+        router = Router(r, MetricSink())
+        # Sadly, moto currently does not return an empty value like boto
+        # when not updating data.
+        router.table.connection = Mock()
+        router.table.connection.put_item.return_value = {}
+        result = router.register_user("", "me", 1234)
+        eq_(result[0], True)
 
     def test_save_fail(self):
         r = get_router_table()
@@ -305,7 +320,7 @@ class RouterTestCase(unittest.TestCase):
         router.table.connection = Mock()
         router.table.connection.put_item.side_effect = raise_condition
         result = router.register_user("asdf", "asdf", 1234)
-        eq_(result, False)
+        eq_(result, (False, {}))
 
     def test_node_clear(self):
         r = get_router_table()

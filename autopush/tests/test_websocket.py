@@ -357,7 +357,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
 
         # Fail out the register_user call
-        self.proto.ap_settings.router.register_user = Mock(return_value=False)
+        self.proto.ap_settings.router.register_user = \
+            Mock(return_value=(False, {}))
 
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
@@ -529,7 +530,7 @@ class WebsocketTestCase(unittest.TestCase):
                "uaid": {"S": uaid},
                "connected_at": {"N": connected}},
                }
-        self.proto._check_other_nodes(res)
+        self.proto._check_other_nodes((True, res))
         mock_agent.request.assert_called(
             "DELETE",
             "%s/notif/%s/%s" % (nodeId, uaid, connected))
