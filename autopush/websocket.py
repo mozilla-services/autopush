@@ -356,16 +356,17 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def _check_other_nodes(self, result):
         self.transport.resumeProducing()
-        if not result:
+        registered, previous = result
+        if not registered:
             # Registration failed
             msg = {"messageType": "hello", "reason": "already_connected",
                    "status": 500}
             self.sendMessage(json.dumps(msg).encode('utf8'), False)
             return
 
-        if result.get("Attributes", {}).get("node_id"):
+        if previous and previous.get("Attributes", {}).get("node_id"):
             # Get the previous information returned from dynamodb.
-            attrs = result.get("Attributes")
+            attrs = previous.get("Attributes")
             node_id = self._get_aval(attrs.get("node_id", {}), 'S')
             uaid = self._get_aval(attrs.get("uaid", {}), 'S')
             last_connect = self._get_aval(attrs.get("connected_at", {}), 'N')
@@ -376,7 +377,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                     return
                 else:
                     existing.sendClose()
-            if node_id is not self.ap_settings.router_url:
+            if node_id != self.ap_settings.router_url:
                 url = "%s/notif/%s/%s" % (node_id, uaid, last_connect)
 
                 def _eat_connections(*args):

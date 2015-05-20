@@ -273,9 +273,9 @@ class Router(object):
                 },
                 return_values="ALL_OLD",
             )
-            return result
+            return (True, result)
         except ConditionalCheckFailedException:
-            return False
+            return (False, {})
         except ProvisionedThroughputExceededException:
             self.metrics.increment("error.provisioned.register_user")
             raise
