@@ -2,6 +2,14 @@
 Autopush Changelog
 ==================
 
+1.3.0 (**dev**)
+===============
+
+Internal
+--------
+
+* Refactor proprietary ping handling for modularized dispatch. Issue #82.
+
 1.2.1 (May 20, 2015)
 ====================
 
