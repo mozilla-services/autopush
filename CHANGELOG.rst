@@ -2,6 +2,13 @@
 Autopush Changelog
 ==================
 
+1.2.2 (May 21, 2015)
+====================
+
+Bug Fixes
+---------
+* Correct trap for TCP connection closer
+
 1.2.1 (May 20, 2015)
 ====================
 
