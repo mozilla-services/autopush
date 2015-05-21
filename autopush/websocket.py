@@ -380,8 +380,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             if node_id != self.ap_settings.router_url:
                 url = "%s/notif/%s/%s" % (node_id, uaid, last_connect)
 
-                def _eat_connections(failure):
-                    failure.trap(
+                def _eat_connections(fail):
+                    fail.trap(
                         ConnectError, ConnectionRefusedError, UserError
                     )
 
