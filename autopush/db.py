@@ -249,10 +249,11 @@ class Router(object):
         except ProvisionedThroughputExceededException:
             self.metrics.increment("error.provisioned.get_uaid")
             raise
-        except (ItemNotFound, JSONResponseError):
+        except JSONResponseError:
             # We trap JSONResponseError because Moto returns text instead of
-            # JSON when looking up values in empty tables.
-            return False
+            # JSON when looking up values in empty tables. We re-throw the
+            # correct ItemNotFound exception
+            raise ItemNotFound("uaid not found")
 
     def register_user(self, uaid, node_id, connected_at):
         """Attempt to register this user if it doesn't already exist or

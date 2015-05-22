@@ -347,12 +347,10 @@ def endpoint_main(sysargs=None):
     setup_logging("Autoendpoint")
 
     # Endpoint HTTP router
-    endpoint = EndpointHandler
-    endpoint.ap_settings = settings
     register = RegistrationHandler
     register.ap_settings = settings
     site = cyclone.web.Application([
-        (r"/push/([^\/]+)", endpoint),
+        (r"/push/([^\/]+)", EndpointHandler, dict(ap_settings=settings)),
         # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint
         (r"/register/([^\/]+)?", register),
@@ -363,7 +361,6 @@ def endpoint_main(sysargs=None):
     mount_health_handlers(site, settings)
 
     # No reason that the endpoint couldn't handle both...
-    endpoint.bridge = settings.bridge
     register.bridge = settings.bridge
 
     settings.metrics.start()

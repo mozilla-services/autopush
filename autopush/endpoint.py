@@ -1,11 +1,19 @@
+"""HTTP Endpoint for Notifications
+
+This is the primary running code of the ``autoendpoint`` script that handles
+the reception of HTTP notification requests for AppServers.
+
+"""
 import hashlib
 import json
 import time
 import urlparse
 import uuid
+from collections import namedtuple
 
 import cyclone.web
 from boto.dynamodb2.exceptions import (
+    ItemNotFound,
     ProvisionedThroughputExceededException,
 )
 from cryptography.fernet import InvalidToken
@@ -26,132 +34,196 @@ from autopush.protocol import IgnoreBody
 dead_cache = LRUCache(150)
 
 
+class RequestParams(namedtuple("RequestParams", "version data")):
+    """Parsed request parameters containing the version and data
+    in a request"""
+
+
+def node_key(node_id):
+    """Generate a node key for the dead node cache"""
+    return node_id + "-%s" % int(time.time()/3600)
+
+
+def parse_request_params(request):
+    """Parse request params from either the body or query as needed and
+    return them.
+
+    :returns: Parsed request params.
+    :rtype: :class:`RequestParams`
+
+    """
+    # If there's a request body, parse it out
+    version = data = None
+    if len(request.body) > 0:
+        body_args = urlparse.parse_qs(request.body, keep_blank_values=True)
+        version = body_args.get("version")
+        data = body_args.get("data")
+    else:
+        version = request.arguments.get("version")
+        data = request.arguments.get("data")
+
+    # These come out as lists, unlist them
+    if version is not None:
+        try:
+            version = int(version[0])
+        except ValueError:
+            version = None
+    if data is not None:
+        data = data[0]
+
+    if version is None or version < 1:
+        version = int(time.time())
+
+    return RequestParams(version=version, data=data)
+
+
 class EndpointHandler(cyclone.web.RequestHandler):
-    def initialize(self):
-        self.uaid_hash = None
-        self.metrics = self.ap_settings.metrics
+    #############################################################
+    #                    Cyclone API Methods
+    #############################################################
+    def initialize(self, ap_settings):
+        """Setup basic aliases and attributes"""
+        self.uaid_hash = ""
+        self.ap_settings = ap_settings
+        self.bridge = ap_settings.bridge
+        self.metrics = ap_settings.metrics
 
-    def _node_key(self, node_id):
-        return node_id + "-%s" % int(time.time()/3600)
-
-    def _load_params(self):
-        # If there's a request body, parse it out
-        version = data = None
-        if len(self.request.body) > 0:
-            body_args = urlparse.parse_qs(self.request.body,
-                                          keep_blank_values=True)
-            version = body_args.get("version")
-            data = body_args.get("data")
-        else:
-            version = self.request.arguments.get("version")
-            data = self.request.arguments.get("data")
-
-        # These come out as lists, unlist them
-        if version is not None:
-            try:
-                version = int(version[0])
-            except ValueError:
-                version = None
-        if data is not None:
-            data = data[0]
-
-        if version is None or version < 1:
-            version = int(time.time())
-
-        self.version = version
-        self.data = data
-
-    def options(self, token):
+    def prepare(self):
+        """Common request preparation"""
         self._addCors()
+
+    def write_error(self, code, **kwargs):
+        """Write the error (otherwise unhandled exception when dealing with
+        unknown method specifications.)
+
+        This is a Cyclone API Override method.
+
+        """
+        self.set_status(code)
+        if "exc_info" in kwargs:
+            log.err(failure.Failure(*kwargs["exc_info"]),
+                    **self._client_info())
+        else:
+            log.err("Error in handler: %s" % code, **self._client_info())
+        self.finish()
+
+    #############################################################
+    #                    Cyclone HTTP Methods
+    #############################################################
+    def options(self, token):
+        """HTTP OPTIONS Handler"""
 
     def head(self, token):
-        self._addCors()
-
-    def _client_info(self):
-        """Returns a dict of additional client data"""
-        return {
-            "user-agent": self.request.headers.get("user-agent", ""),
-            "remote-ip": self.request.headers.get("x-forwarded-for",
-                                                  self.request.remote_ip),
-            "uaid_hash": getattr(self, "uaid_hash", ""),
-        }
+        """HTTP HEAD Handler"""
 
     @cyclone.web.asynchronous
     def put(self, token):
+        """HTTP PUT Handler
+
+        Primary entry-point to handling a notification for a push client.
+
+        """
         self.start_time = time.time()
         fernet = self.ap_settings.fernet
 
-        self._load_params()
-        self._addCors()
-        if self.data and len(self.data) > self.ap_settings.max_data:
+        self.params = params = parse_request_params(self.request)
+        if params.data and len(params.data) > self.ap_settings.max_data:
             self.set_status(401)
             log.msg("Data too large", **self._client_info())
             self.write("Data too large")
             return self.finish()
 
         d = deferToThread(fernet.decrypt, token.encode('utf8'))
-        d.addCallback(self._process_token)
-        d.addErrback(self._bad_token).addErrback(self._error_response)
+        d.addCallback(self._token_valid)
+        d.addErrback(self._token_err)
+        d.addErrback(self._error_response)
+
+    #############################################################
+    #                    Utility Methods
+    #############################################################
+    def _client_info(self):
+        """Returns a dict of additional client data"""
+        return {
+            "user-agent": self.request.headers.get("user-agent", ""),
+            "remote-ip": self.request.headers.get("x-forwarded-for",
+                                                  self.request.remote_ip),
+            "uaid_hash": self.uaid_hash,
+        }
 
     def _addCors(self):
         if self.ap_settings.cors:
             self.set_header("Access-Control-Allow-Origin", "*")
             self.set_header("Access-Control-Allow-Methods", "PUT")
 
-    def _process_token(self, result):
-        self.uaid, self.chid = result.split(":")
+    def _db_error_handling(self, d):
+        """Tack on the common error handling for a dynamodb request and
+        uncaught exceptions"""
+        d.addErrback(self._overload_err)
+        d.addErrback(self._response_err)
+        return d
 
-        d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
-        d.addCallback(self._process_uaid)
-        d.addErrback(self._handle_overload).addErrback(self._error_response)
-
-    def _bad_token(self, failure):
-        failure.trap(InvalidToken)
-        self.set_status(401)
-        log.msg("Invalid token", **self._client_info())
-        self.write("Invalid token")
+    #############################################################
+    #                    Error Callbacks
+    #############################################################
+    def _response_err(self, fail):
+        """errBack for exceptions that should be logged"""
+        log.err(fail, **self._client_info())
+        self.set_status(500)
+        self.write("Error processing request")
         self.finish()
 
-    def _handle_overload(self, failure):
-        failure.trap(ProvisionedThroughputExceededException)
+    def _overload_err(self, fail):
+        """errBack for throughput provisioned exceptions"""
+        fail.trap(ProvisionedThroughputExceededException)
         self.set_status(503)
         log.msg("Throughput Exceeded", **self._client_info())
         self.write("Server busy, try later")
         self.finish()
 
-    def _error_response(self, failure):
-        log.err(failure, **self._client_info())
-        self.set_status(500)
-        self.write("Error processing request")
+    def _token_err(self, fail):
+        """errBack for token decryption fail"""
+        fail.trap(InvalidToken)
+        self.set_status(401)
+        log.msg("Invalid token", **self._client_info())
+        self.write("Invalid token")
         self.finish()
 
-    def _process_uaid(self, result):
-        """Process the result of the AWS call"""
-        if not result:
-            self.set_status(404)
-            log.msg("UAID not found in AWS.", **self._client_info())
-            self.write("Invalid")
-            return self.finish()
-        uaid = result.get('uaid')
-        if uaid:
-            self.uaid_hash = hashlib.sha224(uaid).hexdigest()
+    def _uaid_not_found_err(self, fail):
+        """errBack for uaid lookup not finding the user"""
+        fail.trap(ItemNotFound)
+        self.set_status(404)
+        log.msg("UAID not found in AWS.", **self._client_info())
+        self.write("Invalid")
+        return self.finish()
 
-        d = deferToThread(self.ap_settings.storage.get_connection,
-                          uaid)
-        d.addCallback(self._send_pping, uaid, result)
-        d.addErrback(self._error_response)
+    #############################################################
+    #                    Callbacks
+    #############################################################
+    def _token_valid(self, result):
+        self.uaid, self.chid = result.split(":")
+        self.uaid_hash = hashlib.sha224(self.uaid).hexdigest()
+        d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
+        d.addCallback(self._uaid_lookup_results)
+        d.addErrback(self._uaid_not_found_err)
+        self._db_error_handling(d)
 
-    def _send_pping(self, pping_info, uaid, routeinfo):
+    def _uaid_lookup_results(self, result):
+        """Process the result of the AWS UAID lookup"""
+        d = deferToThread(self.ap_settings.storage.get_connection, self.uaid)
+        d.addCallback(self._send_pping, result)
+        self._db_error_handling(d)
+
+    def _send_pping(self, pping_info, routeinfo):
         try:
             if pping_info is not None:
                 d = deferToThread(
                     self.bridge.ping,
                     self.uaid,
-                    self.version,
-                    self.data,
+                    self.params.version,
+                    self.params.data,
                     pping_info)
                 d.addCallback(self._process_pping, routeinfo)
-                d.addErrback(self._error_response)
+                d.addErrback(self._response_err)
                 return
         except AttributeError:
             pass
@@ -178,21 +250,21 @@ class EndpointHandler(cyclone.web.RequestHandler):
         # delivery at this moment later.
         self.client_check = False
 
-        if node_id and dead_cache.get(self._node_key(node_id)):
+        if node_id and dead_cache.get(node_key(node_id)):
             return self._process_routing(None, result)
         elif node_id:
             # Attempt a delivery if they are connected
             d = self._send_notification(node_id)
             d.addCallback(self._process_routing, result)
             d.addErrback(self._process_agent_fail, result)
-            d.addErrback(self._error_response)
+            d.addErrback(self._response_err)
         else:
             self._save_notification()
 
     def _send_notification(self, node_id):
         payload = json.dumps([{"channelID": self.chid,
-                               "version": self.version,
-                               "data": self.data}])
+                               "version": self.params.version,
+                               "data": self.params.data}])
         url = node_id + "/push/" + self.uaid
         return self.ap_settings.agent.request(
             "PUT",
@@ -209,7 +281,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
     def _process_agent_fail(self, fail, item):
         fail.trap(ConnectError, ConnectionRefusedError, UserError)
-        dead_cache.put(self._node_key(item["node_id"]), True)
+        dead_cache.put(node_key(item["node_id"]), True)
         log.err("Agent failed to connect to host: %s" % item["node_id"],
                 **self._client_info())
         self.metrics.increment("updates.client.host_gone")
@@ -229,8 +301,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
             # Conditionally delete the node_id
             d = deferToThread(self.ap_settings.router.clear_node, item)
             d.addCallback(self._process_node_delete)
-            d.addErrback(self._handle_overload)
-            d.addErrback(self._error_response)
+            d.addErrback(self._overload_err)
+            d.addErrback(self._response_err)
             return
 
         # Client was busy, remember to tell it to check
@@ -253,9 +325,11 @@ class EndpointHandler(cyclone.web.RequestHandler):
     def _save_notification(self, node_id=None):
         """Save the notification"""
         d = deferToThread(self.ap_settings.storage.save_notification,
-                          uaid=self.uaid, chid=self.chid, version=self.version)
+                          uaid=self.uaid, chid=self.chid,
+                          version=self.params.version)
         d.addCallback(self._process_save, node_id)
-        d.addErrback(self._handle_overload).addErrback(self._error_response)
+        d.addErrback(self._overload_err)
+        d.addErrback(self._response_err)
 
     def _process_save(self, result, node_id=None):
         if self.client_check:
@@ -263,14 +337,14 @@ class EndpointHandler(cyclone.web.RequestHandler):
             d = self._send_notification_check(node_id)
             d.addCallback(self._process_notif, node_id)
             d.addErrback(self._notif_check_fail, node_id)
-            d.addErrback(self._error_response)
+            d.addErrback(self._response_err)
         else:
             # Saved the notification, check for if the client is somewhere
             # now
             d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
             d.addCallback(self._process_jumped_client)
-            d.addErrback(self._handle_overload)
-            d.addErrback(self._error_response)
+            d.addErrback(self._overload_err)
+            d.addErrback(self._response_err)
 
     def _notif_check_fail(self, fail, node_id):
         """Handle the inability to contact a node to inform it of the
@@ -281,7 +355,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
         """
         fail.trap(ConnectError, ConnectionRefusedError, UserError)
-        dead_cache.put(self._node_key(node_id), True)
+        dead_cache.put(node_key(node_id), True)
         self._finish_missed_store()
 
     def _process_notif(self, response, node_id=None):
@@ -295,7 +369,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
         # Client jumped, if they reconnected somewhere, try one more time
         d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
         d.addCallback(self._process_jumped_client)
-        d.addErrback(self._handle_overload).addErrback(self._error_response)
+        d.addErrback(self._overload_err)
+        d.addErrback(self._response_err)
 
     def _process_jumped_client(self, result):
         if not result:
@@ -311,7 +386,7 @@ class EndpointHandler(cyclone.web.RequestHandler):
             return self._finish_missed_store()
 
         # Is this a dead node?
-        if dead_cache.get(self._node_key(node_id)):
+        if dead_cache.get(node_key(node_id)):
             return self._finish_missed_store()
 
         d = self._send_notification_check(node_id)
@@ -328,16 +403,6 @@ class EndpointHandler(cyclone.web.RequestHandler):
         self.write("Success")
         self.finish()
 
-    def write_error(self, code, **kwargs):
-        """ Write the error (otherwise unhandled exception when dealing with
-        unknown method specifications.) """
-        self.set_status(code)
-        if "exc_info" in kwargs:
-            log.err(failure.Failure(*kwargs["exc_info"]),
-                    **self._client_info())
-        else:
-            log.err("Error in handler: %s" % code, **self._client_info())
-        self.finish()
 
 
 class RegistrationHandler(cyclone.web.RequestHandler):
