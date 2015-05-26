@@ -245,8 +245,7 @@ class RouterTestCase(unittest.TestCase):
         uaid = str(uuid.uuid4())
         r = get_router_table()
         router = Router(r, MetricSink())
-        result = router.get_uaid(uaid)
-        eq_(result, False)
+        self.assertRaises(ItemNotFound, router.get_uaid, uaid)
 
     def test_uaid_provision_failed(self):
         r = get_router_table()

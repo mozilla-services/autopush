@@ -27,15 +27,8 @@ def ms_time():
 
 
 def periodic_reporter(settings):
-    print len(settings.clients)
-    print len(reactor.getReaders())
-    print len(reactor.getWriters())
     settings.metrics.gauge("update.client.connections",
                            len(settings.clients))
-    settings.metrics.increment("endpoint.twisted.readers",
-                               len(reactor.getReaders()))
-    settings.metrics.increment("endpoint.twisted.writers",
-                               len(reactor.getWriters()))
 
 
 def log_exception(func):
