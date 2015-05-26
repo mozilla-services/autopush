@@ -85,7 +85,7 @@ class InternalRouter(object):
         #               - Both: Done, return 202
         #       - Success (no node): Done, return 202
         #       - Error (db error): Done, return 202
-        #       - Error (no node) : Done, return 404
+        #       - Error (no client) : Done, return 404
         #   - Error (db error): Done, return 503
         try:
             result = yield deferToThread(
