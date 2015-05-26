@@ -141,13 +141,13 @@ class EndpointHandler(cyclone.web.RequestHandler):
         router = available_routers[router_key]()
         router.initialize(self.ap_settings)
         d = Deferred()
-        d.addCallback(router.route_notification)
+        d.addCallback(router.route_notification, result)
+        d.addCallback(self._router_completed, result)
         d.addErrback(self._router_fail_err)
         d.addErrback(self._response_err)
-        d.addCallback(self._router_completed, result)
 
         # Call the prepared router
-        d.callback((notification, result))
+        d.callback(notification)
 
     def _router_completed(self, response, uaid_data):
         # TODO: Add some custom wake logic here

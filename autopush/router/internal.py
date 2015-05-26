@@ -44,10 +44,9 @@ class InternalRouter(object):
         self.metrics = ap_settings.metrics
 
     @inlineCallbacks
-    def route_notification(self, result):
+    def route_notification(self, notification, uaid_data):
         """Route a notification to an internal node, and store it if the node
         can't deliver immediately or is no longer a valid node"""
-        notification, uaid_data = result
         # Determine if they're connected at the moment
         self.node_id = node_id = uaid_data.get("node_id")
         self.uaid = uaid_data["uaid"]
