@@ -21,15 +21,19 @@ class IRouter(object):
     def initialize(self, settings):
         """Initialize the Router to handle a notification with the given
         settings"""
-        raise NotImplementedError()
+        raise NotImplementedError("initialize must be implemented")
 
-    def route_notification(self, notification):
+    def route_notification(self, notification, routing_data):
         """Route a notification
 
-        Return a RouterResponse upon successful routing, or raise a
-        RouterException if routing has failed.
+        :param notification: A :class:`~autopush.endpoint.Notificaiton`
+                             instance.
+        :param uaid_data: A dict of the full uaid data from the db.
+        :returns: A :class:`RouterResponse` object upon successful routing.
+        :raises: A :class:`RouterException` if routing fails.
 
         This function runs in the main reactor, if a yield is needed then a
-        deferred must be returned.
+        deferred must be returned for the callback chain.
 
         """
+        raise NotImplementedError("route_notification must be implemented")

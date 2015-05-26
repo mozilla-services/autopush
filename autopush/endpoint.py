@@ -17,39 +17,23 @@ from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
 from cryptography.fernet import InvalidToken
-from repoze.lru import LRUCache
-from StringIO import StringIO
+from twisted.internet.defer import Deferred
 from twisted.internet.threads import deferToThread
-from twisted.internet.error import (
-    ConnectError,
-    ConnectionRefusedError,
-    UserError
-)
 from twisted.python import failure, log
-from twisted.web.client import FileBodyProducer
 
-from autopush.protocol import IgnoreBody
-
-
-dead_cache = LRUCache(150)
+from autopush.router import available_routers
+from autopush.router.interface import RouterException
 
 
-class RequestParams(namedtuple("RequestParams", "version data")):
-    """Parsed request parameters containing the version and data
-    in a request"""
-
-
-def node_key(node_id):
-    """Generate a node key for the dead node cache"""
-    return node_id + "-%s" % int(time.time()/3600)
+class Notification(namedtuple("Notification", "version data channel_id")):
+    """Parsed notification from the request"""
 
 
 def parse_request_params(request):
     """Parse request params from either the body or query as needed and
     return them.
 
-    :returns: Parsed request params.
-    :rtype: :class:`RequestParams`
+    :returns: Tuple of (version, data).
 
     """
     # If there's a request body, parse it out
@@ -74,7 +58,7 @@ def parse_request_params(request):
     if version is None or version < 1:
         version = int(time.time())
 
-    return RequestParams(version=version, data=data)
+    return version, data
 
 
 class EndpointHandler(cyclone.web.RequestHandler):
@@ -126,17 +110,50 @@ class EndpointHandler(cyclone.web.RequestHandler):
         self.start_time = time.time()
         fernet = self.ap_settings.fernet
 
-        self.params = params = parse_request_params(self.request)
-        if params.data and len(params.data) > self.ap_settings.max_data:
+        version, data = parse_request_params(self.request)
+        if data and len(data) > self.ap_settings.max_data:
             self.set_status(401)
             log.msg("Data too large", **self._client_info())
             self.write("Data too large")
             return self.finish()
 
         d = deferToThread(fernet.decrypt, token.encode('utf8'))
-        d.addCallback(self._token_valid)
+        d.addCallback(self._token_valid, version, data)
         d.addErrback(self._token_err)
-        d.addErrback(self._error_response)
+        d.addErrback(self._response_err)
+
+    #############################################################
+    #                    Callbacks
+    #############################################################
+    def _token_valid(self, result, version, data):
+        self.uaid, chid = result.split(":")
+        self.uaid_hash = hashlib.sha224(self.uaid).hexdigest()
+        notification = Notification(version=version, data=data,
+                                    channel_id=chid)
+        d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
+        d.addCallback(self._uaid_lookup_results, notification)
+        d.addErrback(self._uaid_not_found_err)
+        self._db_error_handling(d)
+
+    def _uaid_lookup_results(self, result, notification):
+        """Process the result of the AWS UAID lookup"""
+        router_key = result.get("router", "internal_simplepush")
+        router = available_routers[router_key]()
+        router.initialize(self.ap_settings)
+        d = Deferred()
+        d.addCallback(router.route_notification)
+        d.addErrback(self._router_fail_err)
+        d.addErrback(self._response_err)
+        d.addCallback(self._router_completed, result)
+
+        # Call the prepared router
+        d.callback((notification, result))
+
+    def _router_completed(self, response, uaid_data):
+        # TODO: Add some custom wake logic here
+        self.set_status(response.status_code)
+        self.write(response.response_body)
+        return self.finish()
 
     #############################################################
     #                    Utility Methods
@@ -166,7 +183,13 @@ class EndpointHandler(cyclone.web.RequestHandler):
     #                    Error Callbacks
     #############################################################
     def _response_err(self, fail):
-        """errBack for exceptions that should be logged"""
+        """errBack for all exceptions that should be logged
+
+        This traps all exceptions to prevent any further callbacks from
+        running.
+
+        """
+        fail.trap(Exception)
         log.err(fail, **self._client_info())
         self.set_status(500)
         self.write("Error processing request")
@@ -196,213 +219,14 @@ class EndpointHandler(cyclone.web.RequestHandler):
         self.write("Invalid")
         return self.finish()
 
-    #############################################################
-    #                    Callbacks
-    #############################################################
-    def _token_valid(self, result):
-        self.uaid, self.chid = result.split(":")
-        self.uaid_hash = hashlib.sha224(self.uaid).hexdigest()
-        d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
-        d.addCallback(self._uaid_lookup_results)
-        d.addErrback(self._uaid_not_found_err)
-        self._db_error_handling(d)
-
-    def _uaid_lookup_results(self, result):
-        """Process the result of the AWS UAID lookup"""
-        d = deferToThread(self.ap_settings.storage.get_connection, self.uaid)
-        d.addCallback(self._send_pping, result)
-        self._db_error_handling(d)
-
-    def _send_pping(self, pping_info, routeinfo):
-        try:
-            if pping_info is not None:
-                d = deferToThread(
-                    self.bridge.ping,
-                    self.uaid,
-                    self.params.version,
-                    self.params.data,
-                    pping_info)
-                d.addCallback(self._process_pping, routeinfo)
-                d.addErrback(self._response_err)
-                return
-        except AttributeError:
-            pass
-        self._process_route(routeinfo)
-
-    def _process_pping(self, result, routeinfo):
-        if not result:
-            log.msg("proprietary ping failed, falling back to routing",
-                    **self._client_info())
-            return self._process_route(routeinfo)
-        # Ping handoff succeeded, no further action required
-        self.metrics.increment("router.pping.hit")
-        # Since we're handing off, return 202
-        self.set_status(202)
-        log.msg("proprietary ping success", **self._client_info())
-        self.write("Success")
-        self.finish()
-
-    def _process_route(self, result):
-        # Determine if they're connected at the moment
-        node_id = result.get("node_id")
-
-        # Indicator if we got a node_id, but the node won't handle
-        # delivery at this moment later.
-        self.client_check = False
-
-        if node_id and dead_cache.get(node_key(node_id)):
-            return self._process_routing(None, result)
-        elif node_id:
-            # Attempt a delivery if they are connected
-            d = self._send_notification(node_id)
-            d.addCallback(self._process_routing, result)
-            d.addErrback(self._process_agent_fail, result)
-            d.addErrback(self._response_err)
-        else:
-            self._save_notification()
-
-    def _send_notification(self, node_id):
-        payload = json.dumps([{"channelID": self.chid,
-                               "version": self.params.version,
-                               "data": self.params.data}])
-        url = node_id + "/push/" + self.uaid
-        return self.ap_settings.agent.request(
-            "PUT",
-            url.encode("utf8"),
-            bodyProducer=FileBodyProducer(StringIO(payload)),
-        ).addCallback(IgnoreBody.ignore)
-
-    def _send_notification_check(self, node_id):
-        url = node_id + "/notif/" + self.uaid
-        return self.ap_settings.agent.request(
-            "PUT",
-            url.encode("utf8"),
-        ).addCallback(IgnoreBody.ignore)
-
-    def _process_agent_fail(self, fail, item):
-        fail.trap(ConnectError, ConnectionRefusedError, UserError)
-        dead_cache.put(node_key(item["node_id"]), True)
-        log.err("Agent failed to connect to host: %s" % item["node_id"],
-                **self._client_info())
-        self.metrics.increment("updates.client.host_gone")
-        self._process_routing(False, item)
-
-    def _process_routing(self, response, item):
-        node_id = item.get("node_id")
-        if response and response.code == 200:
-            # Success, return!
-            self.metrics.increment("router.broadcast.hit")
-            time_diff = time.time() - self.start_time
-            self.metrics.timing("updates.handled", duration=time_diff)
-            self.write("Success")
-            log.msg("Successful delivery", **self._client_info())
-            return self.finish()
-        elif not response or response.code == 404:
-            # Conditionally delete the node_id
-            d = deferToThread(self.ap_settings.router.clear_node, item)
-            d.addCallback(self._process_node_delete)
-            d.addErrback(self._overload_err)
-            d.addErrback(self._response_err)
-            return
-
-        # Client was busy, remember to tell it to check
-        self.client_check = response.code == 503
-        self._save_notification(node_id)
-
-    def _process_node_delete(self, result):
-        if not result:
-            # Client hopped, punt this request so app-server can
-            # try again and get luckier
-            self.set_status(503)
-            self.write("Server is busy")
-            self.metrics.increment("updates.client.hop")
-            log.msg("Client hopped between delivery", **self._client_info())
-            self.finish()
-        else:
-            # Delete was ok, proceed to save the notification
-            self._save_notification()
-
-    def _save_notification(self, node_id=None):
-        """Save the notification"""
-        d = deferToThread(self.ap_settings.storage.save_notification,
-                          uaid=self.uaid, chid=self.chid,
-                          version=self.params.version)
-        d.addCallback(self._process_save, node_id)
-        d.addErrback(self._overload_err)
-        d.addErrback(self._response_err)
-
-    def _process_save(self, result, node_id=None):
-        if self.client_check:
-            # If we already know where the client was connected...
-            d = self._send_notification_check(node_id)
-            d.addCallback(self._process_notif, node_id)
-            d.addErrback(self._notif_check_fail, node_id)
-            d.addErrback(self._response_err)
-        else:
-            # Saved the notification, check for if the client is somewhere
-            # now
-            d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
-            d.addCallback(self._process_jumped_client)
-            d.addErrback(self._overload_err)
-            d.addErrback(self._response_err)
-
-    def _notif_check_fail(self, fail, node_id):
-        """Handle the inability to contact a node to inform it of the
-        notification
-
-        In this case, we were unable to notify the node, but we've saved the
-        notification, so skip to acknowledging.
-
-        """
-        fail.trap(ConnectError, ConnectionRefusedError, UserError)
-        dead_cache.put(node_key(node_id), True)
-        self._finish_missed_store()
-
-    def _process_notif(self, response, node_id=None):
-        """Process the result of a PUT to a Connection Node's /notif/
-        handler"""
-        if response.code != 404:
-            # Client was notified fine, we're done
-            self._finish_missed_store()
-            return
-
-        # Client jumped, if they reconnected somewhere, try one more time
-        d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
-        d.addCallback(self._process_jumped_client)
-        d.addErrback(self._overload_err)
-        d.addErrback(self._response_err)
-
-    def _process_jumped_client(self, result):
-        if not result:
-            # Client got deleted too? bummer.
-            self.set_status(404)
-            self.write("Invalid")
-            self.metrics.increment("updates.client.deleted")
-            log.msg("Client deleted during delivery", **self._client_info())
-            return self.finish()
-
-        node_id = result.get("node_id")
-        if not node_id:
-            return self._finish_missed_store()
-
-        # Is this a dead node?
-        if dead_cache.get(node_key(node_id)):
-            return self._finish_missed_store()
-
-        d = self._send_notification_check(node_id)
-        # No check on response here, because if they jumped since we
-        # got this they'll definitely get the stored notification
-        # We ignore errors here too, as that's a hell of an edge case
-        d.addBoth(self._finish_missed_store)
-
-    def _finish_missed_store(self, result=None):
-        self.metrics.increment("router.broadcast.miss")
-        # since we're handing off, return 202
-        log.msg("Router miss, message stored.", **self._client_info())
-        self.set_status(202)
-        self.write("Success")
-        self.finish()
-
+    def _router_fail_err(self, fail):
+        """errBack for router failures"""
+        fail.trap(RouterException)
+        log.err(fail, **self._client_info())
+        exc = fail.value
+        self.set_status(exc.status_code)
+        self.write(exc.response_body)
+        return self.finish()
 
 
 class RegistrationHandler(cyclone.web.RequestHandler):
