@@ -27,8 +27,14 @@ def ms_time():
 
 
 def periodic_reporter(settings):
+    settings.metrics.gauge("update.client.writers",
+                           len(reactor.getWriters()))
+    settings.metrics.gauge("update.client.readers",
+                           len(reactor.getReaders()))
     settings.metrics.gauge("update.client.connections",
                            len(settings.clients))
+    settings.metrics.gauge("update.client.ws_connections",
+                           settings.factory.countConnections)
 
 
 def log_exception(func):

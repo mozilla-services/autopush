@@ -119,14 +119,15 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_reporter(self):
         from autopush.websocket import periodic_reporter
+        self.proto.ap_settings.factory = Mock()
         periodic_reporter(self.proto.ap_settings)
 
         # Verify metric increase of nothing
         calls = self.proto.ap_settings.metrics.method_calls
-        eq_(len(calls), 1)
+        eq_(len(calls), 4)
         name, args, _ = calls[0]
         eq_(name, "gauge")
-        eq_(args, ("update.client.connections", 0))
+        eq_(args, ("update.client.writers", 0))
 
     def test_handeshake_sub(self):
         self.proto.ap_settings.port = 8080
