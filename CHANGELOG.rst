@@ -2,6 +2,15 @@
 Autopush Changelog
 ==================
 
+1.2.2 (May 27, 2015)
+====================
+
+Features
+--------
+
+* Add additional metrics for writers/readers to indicate what twisted is still
+  tracking connection-wise.
+
 1.2.1 (May 20, 2015)
 ====================
 
