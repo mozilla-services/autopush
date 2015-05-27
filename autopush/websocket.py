@@ -324,12 +324,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def _check_router(self, paused=False, bridge_register=None):
         if paused:
             self.transport.resumeProducing()
-        if bridge_register is not None and bridge_register is False:
-            msg = {"messageType": "hello",
-                   "reason": "bridge registration failed",
-                   "status": 503}
-            self.sendMessage(json.dumps(msg).encode('utf8'), False)
-            return
+        # Bridge registration either succeeds and returns true,
+        # is not specified by the hello, or fails with an exception.
         router = self.ap_settings.router
         url = self.ap_settings.router_url
         self.transport.pauseProducing()
@@ -378,21 +374,20 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                 else:
                     existing.sendClose()
             if node_id != self.ap_settings.router_url:
-                url = "%s/notif/%s/%s" % (node_id, uaid, last_connect)
 
                 def _eat_connections(fail):
                     fail.trap(
                         ConnectError, ConnectionRefusedError, UserError
                     )
 
-                if not getattr(self, 'testing', False):
-                    d = self.ap_settings.agent.request(
-                        "DELETE",
-                        url.encode("utf8"),
-                    )
-                    d.addErrback(_eat_connections)
-                    d.addErrback(self.log_err,
-                                 extra="Failed to delete old node")
+                url = "%s/notif/%s/%s" % (node_id, uaid, last_connect)
+                d = self.ap_settings.agent.request(
+                    "DELETE",
+                    url.encode("utf8"),
+                )
+                d.addErrback(_eat_connections)
+                d.addErrback(self.log_err,
+                             extra="Failed to delete old node")
         self.finish_hello()
 
     def finish_hello(self, *args):
