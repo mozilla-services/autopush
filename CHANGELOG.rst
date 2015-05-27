@@ -11,6 +11,10 @@ Features
 * Add additional metrics for writers/readers to indicate what twisted is still
   tracking connection-wise.
 
+Bug Fixes
+---------
+* Correct trap for TCP connection closer
+
 1.2.1 (May 20, 2015)
 ====================
 

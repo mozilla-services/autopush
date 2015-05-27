@@ -13,6 +13,7 @@ from nose.tools import (eq_, ok_)
 from txstatsd.metrics.metrics import Metrics
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
+from twisted.internet.error import ConnectError
 from twisted.trial import unittest
 
 from autopush.settings import AutopushSettings
@@ -51,7 +52,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def _connect(self):
         # Do not call agent
-        self.proto.testing = True
+        self.proto.ap_settings.agent = Mock()
         self.proto.onConnect(None)
 
     def _send_message(self, msg):
@@ -399,6 +400,19 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_close(d)
         return d
 
+    def test_hello_bridge(self):
+        self._connect()
+        self.proto.ap_settings.bridge = Mock()
+        self.proto.ap_settings.bridge.register = Mock()
+        self.proto.ap_settings.bridge.register.return_value = (True, {})
+        self._send_message(dict(messageType="hello",
+                                connect=dict(type="test")))
+
+        def check_result(msg):
+            self.proto.ap_settings.bridge.register.assert_called()
+            eq_(msg["status"], 200)
+        return self._check_response(check_result)
+
     def test_ping(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -421,13 +435,30 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_ping_pong_delay(self):
         self._connect()
-        self.proto.last_ping = time.time()-8
+        self.proto.last_ping = time.time() - 8
         f = Deferred()
         d = self.proto.process_ping()
         # This should be a deferred
         ok_(d is not None)
         d.addBoth(lambda x: f.callback(x))
         return f
+
+    def test_deferToLater(self):
+        self._connect()
+
+        def fail():
+            raise twisted.internet.defer.CancelledError
+
+        def fail2(fail):
+            self.fail("Failed to trap error")
+
+        def check_result(result):
+            pass
+
+        d = self.proto.deferToLater(0, fail)
+        d.addCallback(check_result)
+        d.addErrback(fail2)
+        ok_(d is not None)
 
     def test_register(self):
         self._connect()
@@ -522,7 +553,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         mock_agent = Mock()
         self.proto.ap_settings.agent = mock_agent
-        nodeId = "http://localhost"
+        nodeId = "http://otherhost"
         uaid = "deadbeef-0000-0000-0000-000000000000"
         self.proto.uaid = uaid
         connected = int(time.time())
@@ -535,6 +566,77 @@ class WebsocketTestCase(unittest.TestCase):
         mock_agent.request.assert_called(
             "DELETE",
             "%s/notif/%s/%s" % (nodeId, uaid, connected))
+
+    def test_register_kill_others_fail(self):
+        self._connect()
+
+        def raiser(*args):
+            self.fail("Failed to trap for ConnectError")
+
+        d = Deferred()
+        self.proto.ap_settings.agent.request.return_value = d
+        nodeId = "http://otherhost"
+        uaid = "deadbeef-0000-0000-0000-000000000000"
+        self.proto.uaid = uaid
+        connected = int(time.time())
+        res = {"Attributes": {
+               "node_id": {"S": nodeId},
+               "uaid": {"S": uaid},
+               "connected_at": {"N": connected}},
+               }
+        self.proto._check_other_nodes((True, res))
+        d.addErrback(raiser)
+        d.errback(ConnectError())
+        return d
+
+    def test_check_kill_self(self):
+        self._connect()
+        mock_agent = Mock()
+        self.proto.ap_settings.agent = mock_agent
+        nodeId = "http://localhost"
+        uaid = "deadbeef-0000-0000-0000-000000000000"
+        # Test that the 'existing' connection is newer than the current one.
+        connected = int(time.time() * 1000)
+        ca = connected + 30000
+        ff = Mock()
+        ff.connected_at = ca
+        self.proto.ap_settings.clients = {uaid: ff}
+        self.sendClose = Mock()
+        self.proto.sendClose = Mock()
+        self.proto.uaid = uaid
+        res = {"Attributes": {
+               "node_id": {"S": nodeId},
+               "uaid": {"S": uaid},
+               "connected_at": {"N": connected}},
+               }
+        self.proto._check_other_nodes((True, res))
+        # the current one should be dropped.
+        eq_(ff.sendClose.call_count, 0)
+        eq_(self.proto.sendClose.call_count, 1)
+
+    def test_check_kill_existing(self):
+        self._connect()
+        mock_agent = Mock()
+        self.proto.ap_settings.agent = mock_agent
+        nodeId = "http://localhost"
+        uaid = "deadbeef-0000-0000-0000-000000000000"
+        # Test that the 'existing' connection is older than the current one.
+        connected = int(time.time() * 1000)
+        ca = connected - 30000
+        ff = Mock()
+        ff.connected_at = ca
+        self.proto.ap_settings.clients = {uaid: ff}
+        self.proto.sendClose = Mock()
+        self.proto.uaid = uaid
+        res = {"Attributes": {
+               "node_id": {"S": nodeId},
+               "uaid": {"S": uaid},
+               "connected_at": {"N": connected}},
+               }
+        self.proto._check_other_nodes((True, res))
+        # the existing one should be dropped.
+        eq_(ff.sendClose.call_count, 1)
+        eq_(self.proto.sendClose.call_count, 0)
 
     def test_ws_unregister(self):
         self._connect()
@@ -1132,9 +1234,9 @@ class NotificationHandlerTestCase(unittest.TestCase):
 
     def test_delete(self):
         uaid = str(uuid.uuid4())
-        now = int(time.time())
+        now = int(time.time() * 1000)
         self.ap_settings.clients[uaid] = mock_client = Mock()
-        mock_client.get.return_value = now
+        mock_client.connected_at = now
         mock_client.sendClose = Mock()
         self.handler.delete(uaid, "", now)
         mock_client.sendClose.assert_called()
