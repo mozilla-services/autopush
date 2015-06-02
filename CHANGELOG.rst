@@ -2,6 +2,14 @@
 Autopush Changelog
 ==================
 
+1.2.3 (June 2, 2015)
+====================
+
+Features
+--------
+
+* Additional logging/metrics on auto-ping and connection aborting.
+
 1.2.2 (May 27, 2015)
 ====================
 
