@@ -133,6 +133,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.sendClose()
         return WebSocketServerProtocol._sendAutoPing(self)
 
+    @log_exception
     def sendClose(self, code=None, reason=None):
         """Override to add tracker that ensures the connection is truly
         torn down"""
