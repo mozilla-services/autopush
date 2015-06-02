@@ -113,6 +113,57 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return self._paused
 
     @log_exception
+    def _connectionLost(self, reason):
+        """Make extra sure we log any exceptions in here, this shouldn't be
+        needed"""
+        return WebSocketServerProtocol._connectionLost(self, reason)
+
+    @log_exception
+    def _sendAutoPing(self):
+        """Override for sanity checking during auto-ping interval"""
+        if not self.uaid:
+            # No uaid yet, drop the connection
+            self.metrics.increment("client.autoping.no_uaid",
+                                   tags=self.base_tags)
+            self.sendClose()
+        elif self.ap_settings.clients.get(self.uaid) != self:
+            # UAID, but we're not in clients anymore for some reason
+            self.metrics.increment("client.autoping.invalid_client",
+                                   tags=self.base_tags)
+            self.sendClose()
+        return WebSocketServerProtocol._sendAutoPing(self)
+
+    def sendClose(self, code=None, reason=None):
+        """Override to add tracker that ensures the connection is truly
+        torn down"""
+        reactor.callLater(5+self.closeHandshakeTimeout, self.nukeConnection)
+        return WebSocketServerProtocol.sendClose(self, code, reason)
+
+    @log_exception
+    def nukeConnection(self):
+        # Did onClose get called? If so, we shutdown properly, no worries.
+        if hasattr(self, "_shutdown_ran"):
+            return
+
+        # Uh-oh, we have not been shut-down properly, report detailed data
+        self.metrics.increment("client.error.sendClose_failed",
+                               tags=self.base_tags)
+        log.msg("sendClose failed to result in onClose", state=str(self.state))
+
+        self.transport.abortConnection()
+        # Add a last callback to verify onClose finally was run
+        reactor.callLater(60, self.verifyNuke)
+
+    @log_exception
+    def verifyNuke(self):
+        if hasattr(self, "_shutdown_ran"):
+            return
+
+        # abortConnection still has failed to shut this down one minute later
+        self.metrics.increment("client.error.abortConnection_failed",
+                               tags=self.base_tags)
+
+    @log_exception
     def onConnect(self, request):
         # Setup ourself to handle producing the data
         self.transport.bufferSize = 2 * 1024
@@ -212,6 +263,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     @log_exception
     def onClose(self, wasClean, code, reason):
         uaid = getattr(self, "uaid", None)
+        self._shutdown_ran = True
         self._should_stop = True
         if uaid:
             self.cleanUp()
@@ -366,19 +418,19 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.sendMessage(json.dumps(msg).encode('utf8'), False)
             return
 
+        existing = self.ap_settings.clients.get(self.uaid)
+        if existing:
+            if self.connected_at <= existing.connected_at:
+                self.sendClose()
+                return
+            else:
+                existing.sendClose()
+
         if previous and previous.get("Attributes", {}).get("node_id"):
             # Get the previous information returned from dynamodb.
             attrs = previous.get("Attributes")
             node_id = self._get_aval(attrs.get("node_id", {}), 'S')
-            uaid = self._get_aval(attrs.get("uaid", {}), 'S')
             last_connect = self._get_aval(attrs.get("connected_at", {}), 'N')
-            existing = self.ap_settings.clients.get(uaid)
-            if existing:
-                if self.connected_at <= existing.connected_at:
-                    self.sendClose()
-                    return
-                else:
-                    existing.sendClose()
             if node_id != self.ap_settings.router_url:
 
                 def _eat_connections(fail):
@@ -386,7 +438,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                         ConnectError, ConnectionRefusedError, UserError
                     )
 
-                url = "%s/notif/%s/%s" % (node_id, uaid, last_connect)
+                url = "%s/notif/%s/%s" % (node_id, self.uaid, last_connect)
                 d = self.ap_settings.agent.request(
                     "DELETE",
                     url.encode("utf8"),
