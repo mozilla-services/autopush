@@ -241,6 +241,7 @@ def make_settings(args, **kwargs):
         statsd_port=args.statsd_port,
         pingConf=pingConf,
         router_tablename=args.router_tablename,
+        storage_tablename=args.storage_tablename,
         storage_read_throughput=args.storage_read_throughput,
         storage_write_throughput=args.storage_write_throughput,
         router_read_throughput=args.router_read_throughput,
