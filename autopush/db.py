@@ -16,7 +16,7 @@ import json
 
 
 def create_router_table(tablename="router", read_throughput=5,
-                        write_throughput=5):
+                        write_throughput=5, connection=None):
     return Table.create(tablename,
                         schema=[HashKey("uaid")],
                         throughput=dict(read=read_throughput,
@@ -27,11 +27,12 @@ def create_router_table(tablename="router", read_throughput=5,
                                 parts=[HashKey('last_connect',
                                                data_type=NUMBER)],
                                 throughput=dict(read=5, write=5))],
+                        connection=connection
                         )
 
 
 def create_storage_table(tablename="storage", read_throughput=5,
-                         write_throughput=5):
+                         write_throughput=5, connection=None):
     return Table.create(tablename,
                         schema=[HashKey("uaid"), RangeKey("chid")],
                         throughput=dict(read=read_throughput,
@@ -44,38 +45,47 @@ def create_storage_table(tablename="storage", read_throughput=5,
                                 'BridgeTokenIndex',
                                 parts=[HashKey('bridge_token',
                                                data_type=STRING)],
-                                throughput=dict(read=1, write=1))]
+                                throughput=dict(read=1, write=1))],
+                        connection=connection
                         )
 
 
-def router_table(tablename="router"):
-    return Table(tablename)
+def router_table(tablename="router", connection=None):
+    return Table(tablename, connection=connection)
 
 
-def storage_table(tablename="storage"):
-    return Table(tablename)
+def storage_table(tablename="storage", connection=None):
+    return Table(tablename, connection=connection)
 
+
+def db_connection(host=None, port=None, secure=True):
+    if host and port:
+        return DynamoDBConnection(host=host, port=port, is_secure=secure)
+    else:
+        return DynamoDBConnection()
 
 def get_router_table(tablename="router", read_throughput=5,
-                     write_throughput=5):
-    db = DynamoDBConnection()
+                     write_throughput=5, db_host=None, db_port=None,
+                     db_secure=None):
+    db = db_connection(host=db_host, port=db_port, secure=db_secure)
     dblist = db.list_tables()["TableNames"]
     if tablename not in dblist:
         return create_router_table(tablename, read_throughput,
-                                   write_throughput)
+                                   write_throughput, connection=db)
     else:
-        return router_table(tablename)
+        return router_table(tablename, connection=db)
 
 
 def get_storage_table(tablename="storage", read_throughput=5,
-                      write_throughput=5):
-    db = DynamoDBConnection()
+                      write_throughput=5, db_host=None, db_port=None,
+                      db_secure=None):
+    db = db_connection(host=db_host, port=db_port, secure=db_secure)
     dblist = db.list_tables()["TableNames"]
     if tablename not in dblist:
         return create_storage_table(tablename, read_throughput,
-                                    write_throughput)
+                                    write_throughput, connection=db)
     else:
-        return storage_table(tablename)
+        return storage_table(tablename, connection=db)
 
 
 def preflight_check(storage, router):

@@ -49,6 +49,15 @@ def add_shared_args(parser):
     parser.add_argument('--resolve_hostname',
                         help="Resolve the announced hostname",
                         type=bool, default=False, env_var="RESOLVE_HOSTNAME")
+    parser.add_argument('--db_host',
+                        help="DynamoDB server post", type=str,
+                        default=None, env_var="DB_HOST")
+    parser.add_argument('--db_port',
+                        help="DynamoDB server port", type=int,
+                        default=None, env_var="DB_PORT")
+    parser.add_argument('--db_no_secure',
+                        help="DynamoDB server is insecure", dest='db_secure',
+                        action='store_false', default=True, env_var="DB_SECURE")
     parser.add_argument('--statsd_host', help="Statsd Host", type=str,
                         default="localhost", env_var="STATSD_HOST")
     parser.add_argument('--statsd_port', help="Statsd Port", type=int,
@@ -225,11 +234,13 @@ def make_settings(args, **kwargs):
         datadog_app_key=args.datadog_app_key,
         datadog_flush_interval=args.datadog_flush_interval,
         hostname=args.hostname,
+        db_host=args.db_host,
+        db_port=args.db_port,
+        db_secure=args.db_secure,
         statsd_host=args.statsd_host,
         statsd_port=args.statsd_port,
         pingConf=pingConf,
         router_tablename=args.router_tablename,
-        storage_tablename=args.storage_tablename,
         storage_read_throughput=args.storage_read_throughput,
         storage_write_throughput=args.storage_write_throughput,
         router_read_throughput=args.router_read_throughput,
