@@ -10,6 +10,27 @@ Internal
 
 * Refactor proprietary ping handling for modularized dispatch. Issue #82.
 
+1.2.3 (2015-06-02)
+==================
+
+Features
+--------
+
+* Additional logging/metrics on auto-ping and connection aborting.
+
+1.2.2 (2015-05-27)
+==================
+
+Features
+--------
+
+* Add additional metrics for writers/readers to indicate what twisted is still
+  tracking connection-wise.
+
+Bug Fixes
+---------
+* Correct trap for TCP connection closer
+
 1.2.1 (2015-05-20)
 ==================
 

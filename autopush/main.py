@@ -301,6 +301,7 @@ def connection_main(sysargs=None):
         autoPingInterval=args.auto_ping_interval,
         autoPingTimeout=args.auto_ping_timeout,
     )
+    settings.factory = factory
 
     settings.metrics.start()
 
