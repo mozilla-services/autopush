@@ -1,6 +1,10 @@
-from twisted.python import log
-import apns
 import time
+
+import apns
+from twisted.python import log
+from twisted.internet.threads import deferToThread
+
+from autopush.router.interface import RouterException, RouterResponse
 
 
 # https://github.com/djacobs/PyAPNs
@@ -26,13 +30,46 @@ class APNSRouter(object):
                               key_file=self.config.get("key_file"),
                               enhanced=True)
 
-    def __init__(self, config, storage):
-        self.config = config
-        self.default_title = config.get("default_title", "SimplePush")
-        self.default_body = config.get("default_body", "New Alert")
-        self.storage = storage
+    def __init__(self, ap_settings, router_conf):
+        self.ap_settings = ap_settings
+        self.config = router_conf
+        self.default_title = router_conf.get("default_title", "SimplePush")
+        self.default_body = router_conf.get("default_body", "New Alert")
         self._connect()
         log.msg("Starting APNS bridge...")
+
+    def register(self, uaid, connect):
+        return connect
+
+    def route_notification(self, notification, uaid_data):
+        # Kick the entire notification routing off to a thread
+        return deferToThread(self._route, notification, uaid_data)
+
+    def _route(self, notification, uaid_data):
+        connect_info = uaid_data.get("router_data", {})
+        token = connect_info.get("token")
+        if token is None:
+            raise RouterException("No token registered", status_code=500,
+                                  response_body="No token registered")
+        payload = apns.Payload(alert=connect_info.get("title",
+                                                      self.default_title),
+                               content_available=1,
+                               custom={"Msg": notification.data,
+                                       "Ver": notification.version})
+        current_id = int(time.time())
+        self.messages[current_id] = {"token": token, "payload": payload}
+        # TODO: Add listener for error handling.
+        self.apns.gateway_server.register_response_listener(self._error)
+        self.apns.gateway_server.send_notification(token, payload, current_id)
+
+        # cleanup sent messages
+        if len(self.messages):
+            for id in self.messages:
+                if id < current_id - self.config.get("expry", 10):
+                    del self.messages[id]
+                else:
+                    break
+        return RouterResponse(status_code=200, response_body="Message sent")
 
     def _error(self, err):
         if err['status'] == 0:
@@ -50,34 +87,3 @@ class APNSRouter(object):
                                                        resend['payload'],
                                                        err['identifier'],
                                                        )
-            return
-
-    def ping(self, uaid, version, data, connectInfo):
-        try:
-            if connectInfo.get("type").lower() != "apns":
-                return False
-            token = connectInfo.get("token")
-            if token is None:
-                return False
-            payload = apns.Payload(alert=connectInfo.get("title",
-                                                         self.default_title),
-                                   content_available=1,
-                                   custom={"Msg": data,
-                                           "Ver": version})
-            current_id = int(time.time())
-            self.messages[current_id] = {"token": token, "payload": payload}
-            # TODO: Add listener for error handling.
-            apns.gateway_server.register_response_listener(self._error)
-            self.apns.gateway_server.send_notification(
-                token, payload, current_id)
-            # cleanup sent messages
-            if len(self.messages):
-                for id in self.messages.keys():
-                    if id < current_id - self.config.get("expry", 10):
-                        del self.messages[id]
-                    else:
-                        break
-            return True
-        except Exception, e:
-            log.err("Unhandled APNs Exception: %s", e)
-        return False

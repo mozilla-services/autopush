@@ -21,8 +21,8 @@ from twisted.internet.defer import Deferred
 from twisted.internet.threads import deferToThread
 from twisted.python import failure, log
 
-from autopush.router import available_routers
 from autopush.router.interface import RouterException
+from autopush.utils import validate_uaid
 
 
 class Notification(namedtuple("Notification", "version data channel_id")):
@@ -61,20 +61,25 @@ def parse_request_params(request):
     return version, data
 
 
-class EndpointHandler(cyclone.web.RequestHandler):
+class AutoendpointHandler(cyclone.web.RequestHandler):
+    """Common overrides for Autoendpoint handlers"""
+    cors_methods = ""
+
     #############################################################
     #                    Cyclone API Methods
     #############################################################
     def initialize(self, ap_settings):
         """Setup basic aliases and attributes"""
         self.uaid_hash = ""
+        self._uaid = ""
         self.ap_settings = ap_settings
-        self.bridge = ap_settings.bridge
         self.metrics = ap_settings.metrics
 
     def prepare(self):
         """Common request preparation"""
-        self._addCors()
+        if self.ap_settings.cors:
+            self.set_header("Access-Control-Allow-Origin", "*")
+            self.set_header("Access-Control-Allow-Methods", self.cors_methods)
 
     def write_error(self, code, **kwargs):
         """Write the error (otherwise unhandled exception when dealing with
@@ -100,6 +105,68 @@ class EndpointHandler(cyclone.web.RequestHandler):
     def head(self, token):
         """HTTP HEAD Handler"""
 
+    #############################################################
+    #                    Utility Methods
+    #############################################################
+    @property
+    def uaid(self):
+        """Return the UAID that was set"""
+        return self._uaid
+
+    @uaid.setter
+    def uaid(self, value):
+        """Set the UAID and update the uaid hash"""
+        self._uaid = value
+        self.uaid_hash = hashlib.sha224(self.uaid).hexdigest()
+
+    def _client_info(self):
+        """Returns a dict of additional client data"""
+        return {
+            "user-agent": self.request.headers.get("user-agent", ""),
+            "remote-ip": self.request.headers.get("x-forwarded-for",
+                                                  self.request.remote_ip),
+            "uaid_hash": self.uaid_hash,
+        }
+
+    #############################################################
+    #                    Error Callbacks
+    #############################################################
+    def _response_err(self, fail):
+        """errBack for all exceptions that should be logged
+
+        This traps all exceptions to prevent any further callbacks from
+        running.
+
+        """
+        log.err(fail, **self._client_info())
+        self.set_status(500)
+        self.write("Error processing request")
+        self.finish()
+
+    def _overload_err(self, fail):
+        """errBack for throughput provisioned exceptions"""
+        fail.trap(ProvisionedThroughputExceededException)
+        self.set_status(503)
+        log.msg("Throughput Exceeded", **self._client_info())
+        self.write("Server busy, try later")
+        self.finish()
+
+    def _router_fail_err(self, fail):
+        """errBack for router failures"""
+        fail.trap(RouterException)
+        log.err(fail, **self._client_info())
+        exc = fail.value
+        self.set_status(exc.status_code)
+        self.write(exc.response_body)
+        self.finish()
+
+
+class EndpointHandler(AutoendpointHandler):
+    cors_methods = "PUT"
+
+    #############################################################
+    #                    Cyclone HTTP Methods
+    #############################################################
     @cyclone.web.asynchronous
     def put(self, token):
         """HTTP PUT Handler
@@ -127,7 +194,6 @@ class EndpointHandler(cyclone.web.RequestHandler):
     #############################################################
     def _token_valid(self, result, version, data):
         self.uaid, chid = result.split(":")
-        self.uaid_hash = hashlib.sha224(self.uaid).hexdigest()
         notification = Notification(version=version, data=data,
                                     channel_id=chid)
         d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
@@ -137,9 +203,8 @@ class EndpointHandler(cyclone.web.RequestHandler):
 
     def _uaid_lookup_results(self, result, notification):
         """Process the result of the AWS UAID lookup"""
-        router_key = result.get("router", "internal_simplepush")
-        router = available_routers[router_key]()
-        router.initialize(self.ap_settings)
+        router_key = result.get("router", "simplepush")
+        router = self.ap_settings.routers[router_key]
         d = Deferred()
         d.addCallback(router.route_notification, result)
         d.addCallback(self._router_completed, result)
@@ -158,20 +223,6 @@ class EndpointHandler(cyclone.web.RequestHandler):
     #############################################################
     #                    Utility Methods
     #############################################################
-    def _client_info(self):
-        """Returns a dict of additional client data"""
-        return {
-            "user-agent": self.request.headers.get("user-agent", ""),
-            "remote-ip": self.request.headers.get("x-forwarded-for",
-                                                  self.request.remote_ip),
-            "uaid_hash": self.uaid_hash,
-        }
-
-    def _addCors(self):
-        if self.ap_settings.cors:
-            self.set_header("Access-Control-Allow-Origin", "*")
-            self.set_header("Access-Control-Allow-Methods", "PUT")
-
     def _db_error_handling(self, d):
         """Tack on the common error handling for a dynamodb request and
         uncaught exceptions"""
@@ -182,27 +233,6 @@ class EndpointHandler(cyclone.web.RequestHandler):
     #############################################################
     #                    Error Callbacks
     #############################################################
-    def _response_err(self, fail):
-        """errBack for all exceptions that should be logged
-
-        This traps all exceptions to prevent any further callbacks from
-        running.
-
-        """
-        fail.trap(Exception)
-        log.err(fail, **self._client_info())
-        self.set_status(500)
-        self.write("Error processing request")
-        self.finish()
-
-    def _overload_err(self, fail):
-        """errBack for throughput provisioned exceptions"""
-        fail.trap(ProvisionedThroughputExceededException)
-        self.set_status(503)
-        log.msg("Throughput Exceeded", **self._client_info())
-        self.write("Server busy, try later")
-        self.finish()
-
     def _token_err(self, fail):
         """errBack for token decryption fail"""
         fail.trap(InvalidToken)
@@ -219,133 +249,102 @@ class EndpointHandler(cyclone.web.RequestHandler):
         self.write("Invalid")
         return self.finish()
 
-    def _router_fail_err(self, fail):
-        """errBack for router failures"""
-        fail.trap(RouterException)
-        log.err(fail, **self._client_info())
-        exc = fail.value
-        self.set_status(exc.status_code)
-        self.write(exc.response_body)
-        return self.finish()
 
+class RegistrationHandler(AutoendpointHandler):
+    cors_methods = "GET,PUT"
 
-class RegistrationHandler(cyclone.web.RequestHandler):
-    def _client_info(self):
-        """Returns a dict of additional client data"""
-        return {
-            "user-agent": self.request.headers.get("user-agent", ""),
-            "remote-ip": self.request.headers.get("x-forwarded-for",
-                                                  self.request.remote_ip),
-            "uaid_hash": getattr(self, "uaid_hash", ""),
-        }
-
-    def _error_response(self, failure):
-        log.err(failure, **self._client_info())
-        self.set_status(500)
-        self.write("Error processing request")
-        self.finish()
-
-    def _load_params(self):
-        tags = {'chid': 'channelid',
-                'conn': 'connect',
-                }
-        chid = conn = None
-        if len(self.request.body) > 0:
-            body = urlparse.parse_qs(self.request.body, keep_blank_values=True)
-            chid = body.get(tags['chid'], [None])[0]
-            conn = body.get(tags['conn'], [None])[0]
-        if chid is None:
-            chid = self.request.arguments.get(tags['chid'], [None])[0]
-        if conn is None:
-            conn = self.request.arguments.get(tags['conn'], [None])[0]
-
-        if conn is None:
-            log.msg("Missing %s %s" % (tags['conn'], conn))
-            return False
-
-        if chid is None or len(chid) == 0:
-            chid = str(uuid.uuid4())
-
-        self.chid = chid
-        self.conn = conn
-        return True
-
-    def initialize(self):
-        self.metrics = self.ap_settings.metrics
-
-    def options(self, token):
-        self._addCors()
-
-    def head(self, token):
-        self._addCors()
-
-    def _addCors(self):
-        if self.ap_settings.cors:
-            self.set_header("Access-Control-Allow-Origin", "*")
-            self.set_header("Access-Control-Allow-Methods", "GET,PUT")
-
-    def _error(self, code, msg):
-        self.set_status(code, msg)
-        self.finish()
-        return
-
+    #############################################################
+    #                    Cyclone HTTP Methods
+    #############################################################
     @cyclone.web.asynchronous
     def get(self, uaid=None):
+        """HTTP GET Handler
+
+        Returns registered router data for the UAID.
+
+        """
         if uaid is None:
             return self._error(400, "invalid UAID")
-        try:
-            uuid.UUID(uaid)
-        except Exception, e:
-            log.msg("Improper UAID value specified %s" % e)
+        valid, new_uaid = validate_uaid(uaid)
+        if not valid:
+            log.msg("Improper UAID value specified %s" % uaid)
             return self._error(400, "invalid UAID")
-        self.uaid = uaid
+        self.uaid = new_uaid
 
         self.chid = str(uuid.uuid4())
         self._registered(True)
 
     @cyclone.web.asynchronous
     def put(self, uaid=None):
-        self.metrics = self.ap_settings.metrics
-        self.start_time = time.time()
+        """HTTP PUT Handler
 
+        Register router data for a UAID.
+
+        Example Request (for APNS router):
+
+        .. code-block:: txt
+
+            PUT /register/OPTIONAL_UAID HTTP/1.1
+            Host: endpoint.push.com
+            Content-Type: application/json
+
+            {
+            "type": "apns",
+            "channelID": "a13872c9-5cba-48ab-a8e5-955264647303",
+            "data": {
+                "token": "APNS_TOKEN_DATA",
+                ...
+                }
+            }
+
+        If a channelID is not supplied, one will be generated for this
+        endpoint URL. Data for the router must be appropriate for that
+        router type.
+
+        """
+        self.start_time = time.time()
         self.add_header("Content-Type", "application/json")
 
-        if uaid is None:
-            uaid = str(uuid.uuid4())
-        else:
-            try:
-                uuid.UUID(uaid)
-            except ValueError:
-                log.msg("Invalid UAID [%s], swapping for valid one" % uaid,
-                        **self._client_info())
-                uaid = str(uuid.uuid4())
-
+        _, uaid = validate_uaid(uaid)
         self.uaid = uaid
-        if not self._load_params():
+        params = self._load_params()
+        if not params or params.get("type") not in self.ap_settings.routers:
             log.msg("Invalid parameters", **self._client_info())
-            self.set_status(400, "Invalid arguments")
-            self.finish()
-            return
-        d = deferToThread(self.bridge.register, self.uaid, self.conn)
+            return self._error(400, "Invalid arguments")
+        d = deferToThread(self.bridge.register, uaid, params.get("data", {}))
         d.addCallback(self._registered)
-        d.addErrback(self._error_response)
+        d.addCallback(self._return_endpoint)
+        d.addErrback(self._router_fail_err)
+        d.addErrback(self._response_err)
 
+    #############################################################
+    #                    Callbacks
+    #############################################################
     def _registered(self, result):
-        if not result:
-            self.set_status(500, "Registration failure")
-            log.err("Registration failure", **self._client_info())
-            return self.finish()
-        d = deferToThread(self.ap_settings.makeEndpoint,
-                          self.uaid,
-                          self.chid)
-        d.addCallbacks(self._return_channel,
-                       self._error_response)
+        return deferToThread(self.ap_settings.make_endpoint,
+                             self.uaid, self.chid)
 
-    def _return_channel(self, endpoint):
+    def _return_endpoint(self, endpoint):
         msg = {"useragentid": self.uaid,
                "channelid": self.chid,
                "endpoint": endpoint}
-        self.set_status(200)
         self.write(json.dumps(msg))
         log.msg("Endpoint registered via HTTP", **self._client_info())
-        return self.finish()
+        self.finish()
+
+    #############################################################
+    #                    Utility Methods
+    #############################################################
+    def _error(self, code, msg):
+        self.set_status(code, msg)
+        self.finish()
+
+    def _load_params(self):
+        try:
+            params = json.loads(self.request.body)
+            chid = params.get("channelID")
+            if not chid:
+                params["channelID"] = str(uuid.uuid4())
+            return params
+        except ValueError:
+            return False

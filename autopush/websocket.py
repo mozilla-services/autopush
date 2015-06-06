@@ -20,6 +20,7 @@ from twisted.python import failure, log
 from zope.interface import implements
 
 from autopush.protocol import IgnoreBody
+from autopush.utils import validate_uaid
 
 
 def ms_time():
@@ -46,17 +47,6 @@ def log_exception(func):
             self.log_err(failure.Failure())
             raise
     return wrapper
-
-
-def validate_uaid(uaid):
-    """Validates a UAID a tuple indicating if its valid and the original
-    uaid, or a new uaid if its invalid"""
-    if uaid:
-        try:
-            return bool(uuid.UUID(uaid)), uaid
-        except ValueError:
-            pass
-    return False, str(uuid.uuid4())
 
 
 class SimplePushServerProtocol(WebSocketServerProtocol):
@@ -571,7 +561,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return self.bad_message("register")
         self.transport.pauseProducing()
 
-        d = self.deferToThread(self.ap_settings.makeEndpoint, self.uaid, chid)
+        d = self.deferToThread(self.ap_settings.make_endpoint, self.uaid, chid)
         d.addCallback(self.finish_register, chid)
         d.addErrback(self.error_register)
         return d

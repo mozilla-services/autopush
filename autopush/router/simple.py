@@ -65,7 +65,8 @@ class SimpleRouter(object):
         #       - Both: Done, return 503
         if node_id:
             try:
-                result = yield self._send_notification()
+                result = yield self._send_notification(uaid, node_id,
+                                                       notification)
             except (ConnectError, UserError, ConnectionRefusedError):
                 self.metrics.increment("updates.client.host_gone")
                 dead_cache.put(node_key(node_id), True)
@@ -119,7 +120,7 @@ class SimpleRouter(object):
             self.metrics.increment("router.broadcast.miss")
             returnValue(RouterResponse(202, "Notification Stored"))
         try:
-            result = yield self._send_notification_check()
+            result = yield self._send_notification_check(uaid, node_id)
         except (ConnectError, UserError, ConnectionRefusedError):
             self.metrics.increment("updates.client.host_gone")
             dead_cache.put(node_key(node_id), True)
@@ -139,12 +140,12 @@ class SimpleRouter(object):
     #############################################################
     #                    Blocking Helper Functions
     #############################################################
-    def _send_notification(self):
+    def _send_notification(self, uaid, node_id, notification):
         """Send a notification to a specific node_id"""
-        payload = json.dumps([{"channelID": self.notification.channel_id,
-                               "version": self.notification.version,
-                               "data": self.notification.data}])
-        url = self.node_id + "/push/" + self.uaid
+        payload = json.dumps([{"channelID": notification.channel_id,
+                               "version": notification.version,
+                               "data": notification.data}])
+        url = node_id + "/push/" + uaid
         d = self.ap_settings.agent.request(
             "PUT",
             url.encode("utf8"),
@@ -153,8 +154,8 @@ class SimpleRouter(object):
         d.addCallback(IgnoreBody.ignore)
         return d
 
-    def _send_notification_check(self):
-        url = self.node_id + "/notif/" + self.uaid
+    def _send_notification_check(self, uaid, node_id):
+        url = node_id + "/notif/" + uaid
         return self.ap_settings.agent.request(
             "PUT",
             url.encode("utf8"),

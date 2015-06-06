@@ -28,7 +28,8 @@ class IRouter(object):
         return a dict that will be stored as routing_data for this user in the
         future.
 
-        This method must perform validation of the data to store.
+        This method must perform validation of the data to store. A
+        :class:`RouterException` should be raised if the data is invalid.
 
         """
         raise NotImplementedError("register must be implemented")

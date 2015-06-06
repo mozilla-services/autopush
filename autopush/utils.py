@@ -1,4 +1,5 @@
 import socket
+import uuid
 
 default_ports = {
     "ws": 80,
@@ -26,3 +27,14 @@ def resolve_ip(hostname):
         return hostname
     addr = interfaces[0][-1]
     return addr[0]
+
+
+def validate_uaid(uaid):
+    """Validates a UAID a tuple indicating if its valid and the original
+    uaid, or a new uaid if its invalid"""
+    if uaid:
+        try:
+            return bool(uuid.UUID(uaid)), uaid
+        except ValueError:
+            pass
+    return False, str(uuid.uuid4())

@@ -344,9 +344,6 @@ def endpoint_main(sysargs=None):
     )
     mount_health_handlers(site, settings)
 
-    # No reason that the endpoint couldn't handle both...
-    register.bridge = settings.bridge
-
     settings.metrics.start()
 
     if args.ssl_key:

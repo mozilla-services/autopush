@@ -1,8 +1,11 @@
 import gcmclient
 import json
 
-from twisted.internet import reactor
 from twisted.python import log
+from twisted.internet import reactor
+from twisted.internet.threads import deferToThread
+
+from autopush.router.interface import RouterException, RouterResponse
 
 
 class GCMRouter(object):
@@ -12,53 +15,49 @@ class GCMRouter(object):
     collapseKey = "simplepush"
     messages = {}
 
-    def __init__(self, config, storage):
-        self.config = config
-        self.ttl = config.get("ttl", 60)
-        self.dryRun = config.get("dryrun", False)
-        self.collapseKey = config.get("collapseKey", "simplepush")
-        self.gcm = gcmclient.GCM(config.get("apikey"))
-        self.storage = storage
-        # self.pool = HTTPConnectionPool(reactor)
+    def __init__(self, ap_settings, router_conf):
+        self.config = router_conf
+        self.ttl = router_conf.get("ttl", 60)
+        self.dryRun = router_conf.get("dryrun", False)
+        self.collapseKey = router_conf.get("collapseKey", "simplepush")
+        self.gcm = gcmclient.GCM(router_conf.get("apikey"))
         log.msg("Starting GCM bridge...")
 
-    def ping(self, uaid, version, data, connectInfo):
-        try:
-            if connectInfo.get("type").lower() != "gcm":
-                self._error("connect info isn't gcm")
-                return False
-            if connectInfo.get("token") is None:
-                self._error("connect info missing 'token'")
-                return False
+    def register(self, uaid, connect):
+        return connect
 
-            payload = gcmclient.JSONMessage(
-                registration_ids=[connectInfo.get("token")],
-                collapse_key=self.collapseKey,
-                time_to_live=self.ttl,
-                dry_run=self.dryRun,
-                data={"Msg": data,
-                      "Ver": version}
-            )
-            return self._send(payload)
-        except ValueError, e:
-            self._error("GCM returned error %s" % e)
-        return False
+    def route_notification(self, notification, uaid_data):
+        # Kick the entire notification routing off to a thread
+        return deferToThread(self._route, notification, uaid_data)
 
-    def _error(self, err, **kwargs):
+    def _route(self, notification, uaid_data):
+        if uaid_data.get("token") is None:
+            self._error("connect info missing 'token'", status=401)
+
+        payload = gcmclient.JSONMessage(
+            registration_ids=[uaid_data.get("token")],
+            collapse_key=self.collapseKey,
+            time_to_live=self.ttl,
+            dry_run=self.dryRun,
+            data={"Msg": notification.data,
+                  "Ver": notification.version}
+        )
+        return self._send(payload)
+
+    def _error(self, err, status, **kwargs):
         log.err(err, **kwargs)
-        return
+        raise RouterException(err, status_code=status, response_body=err)
 
     def _send(self, payload, iter=0):
         try:
             result = self.gcm.send(payload)
             return self._result(result, iter)
         except gcmclient.GCMAuthenticationError, e:
-            self._error("Authentication Error: %s" % e)
+            self._error("Authentication Error: %s" % e, 500)
         except Exception, e:
-            self._error("Unhandled exception in GCM bridge: %s" % e)
-        return False
+            self._error("Unhandled exception in GCM Routing: %s" % e, 500)
 
-    def _result(self, reply, iter=0):
+    def _result(self, reply, tries=0):
         # handle reply content
         # acks:
         #  for reg_id, msg_id in reply.success.items():
@@ -81,11 +80,12 @@ class GCMRouter(object):
         # retries:
         if reply.needs_retry():
             retry = reply.retry()
-            if iter > 5:
+            if tries > 5:
                 self._error("Failed repeated attempts to send message %s" %
                             retry)
                 return False
             # include delay
-            iter = iter + 1
-            reactor.callLater(5 * iter, self._send, retry, iter)
-        return True
+            tries += 1
+            reactor.callLater(5 * tries, deferToThread, self._send, retry,
+                              tries)
+        return RouterResponse(status_code=200, response_body="Message Sent")
