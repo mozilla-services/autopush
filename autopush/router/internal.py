@@ -43,6 +43,10 @@ class InternalRouter(object):
         self.ap_settings = ap_settings
         self.metrics = ap_settings.metrics
 
+    def register(self, uaid, connect):
+        """Return no additional routing data"""
+        return {}
+
     @inlineCallbacks
     def route_notification(self, notification, uaid_data):
         """Route a notification to an internal node, and store it if the node

@@ -20,7 +20,7 @@ from twisted.python import failure, log
 from zope.interface import implements
 
 from autopush.protocol import IgnoreBody
-
+from autopush.router import available_routers
 
 def ms_time():
     return int(time.time() * 1000)
@@ -46,6 +46,17 @@ def log_exception(func):
             self.log_err(failure.Failure())
             raise
     return wrapper
+
+
+def validate_uaid(uaid):
+    """Validates a UAID a tuple indicating if its valid and the original
+    uaid, or a new uaid if its invalid"""
+    if uaid:
+        try:
+            return bool(uuid.UUID(uaid)), uaid
+        except ValueError:
+            pass
+    return False, str(uuid.uuid4())
 
 
 class SimplePushServerProtocol(WebSocketServerProtocol):
@@ -89,6 +100,21 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             except:
                 d.errback(failure.Failure())
         reactor.callLater(when, f)
+        return d
+
+    def defer(self):
+        d = Deferred()
+
+        def removeDefer(result):
+            self._callbacks.remove(d)
+            return result
+
+        def trapCancel(fail):
+            fail.trap(CancelledError)
+
+        d.addErrback(trapCancel)
+        d.addCallback(removeDefer)
+        self._callbacks.append(d)
         return d
 
     @property
@@ -352,62 +378,55 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # This must be a helo, or we kick the client
         cmd = data.get("messageType")
         if cmd != "hello":
-            self.sendClose()
-            return
+            return self.sendClose()
 
         if self.uaid:
-            self.returnError("hello", "duplicate hello", 401)
-            return
+            return self.returnError("hello", "duplicate hello", 401)
 
         uaid = data.get("uaid")
-        valid = False
-        if uaid:
-            try:
-                valid = bool(uuid.UUID(uaid))
-            except ValueError:
-                pass
-        if not uaid or not valid:
-            uaid = str(uuid.uuid4())
+        _, uaid = validate_uaid(uaid)
         self.uaid = uaid
 
-        connect = data.get("connect")
-        if connect and self.ap_settings.bridge:
-            self.transport.pauseProducing()
-            d = self.deferToThread(self.ap_settings.bridge.register, uaid,
-                                   connect)
-            d.addCallback(self._check_router, True)
-            d.addErrback(self.err_hello)
-        else:
-            self._check_router(False)
+        # Default router choice
+        connect = data.get("connect", {"type": "internal_simplepush"})
+        router_type = connect.get("type")
+        if not router_type or router_type not in available_routers:
+            return self.returnError("hello", "invalid router", "401")
+        Router = available_routers[router_type]
 
-    def _check_router(self, paused=False, bridge_register=None):
-        if paused:
-            self.transport.resumeProducing()
-        # Bridge registration either succeeds and returns true,
-        # is not specified by the hello, or fails with an exception.
+        # Pause producing while we wait for the router registration
+        self.transport.pauseProducing()
+
+        # Setup the router for registration
+        r = Router()
+        r.initialize(self.ap_settings)
+        d = self.defer()
+        d.addCallback(r.register, connect)
+        d.addCallback(self._register_router, router_type)
+        d.addErrback(self.err_hello)
+        d.addErrback(self.log_err)
+        d.callback(self.uaid)
+
+    def _register_router(self, router_data, router_type):
+        """Complete the registration of the user with the router data"""
         router = self.ap_settings.router
         url = self.ap_settings.router_url
         self.transport.pauseProducing()
-        d = self.deferToThread(router.register_user,
-                               self.uaid, url, self.connected_at)
+        user_item = dict(
+            uaid=self.uaid,
+            node_id=url,
+            connected_at=self.connected_at,
+            router_type=router_type,
+            router_data=router_data,
+        )
+        d = self.deferToThread(router.register_user, user_item)
         d.addCallback(self._check_other_nodes)
-        d.addErrback(self.err_hello)
-        d.addErrback(self.log_err)
         self._register = d
         return d
 
     def err_hello(self, failure):
         self.transport.resumeProducing()
         self.returnError("hello", "error", 503)
-
-    def _get_aval(self, val, type):
-        # Live testing shows that dynamodb returns attribute values as
-        # dicts, where moto returns them as straight values. This isolates
-        # for testing
-        try:
-            return val.get(type)
-        except AttributeError:
-            return val
 
     def _check_other_nodes(self, result):
         self.transport.resumeProducing()
@@ -427,24 +446,19 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             else:
                 existing.sendClose()
 
-        if previous and previous.get("Attributes", {}).get("node_id"):
+        if previous and "node_id" in previous:
             # Get the previous information returned from dynamodb.
-            attrs = previous.get("Attributes")
-            node_id = self._get_aval(attrs.get("node_id", {}), 'S')
-            last_connect = self._get_aval(attrs.get("connected_at", {}), 'N')
-            if node_id != self.ap_settings.router_url:
-
-                def _eat_connections(fail):
-                    fail.trap(
-                        ConnectError, ConnectionRefusedError, UserError
-                    )
-
+            node_id = previous["node_id"]
+            last_connect = previous.get("connected_at")
+            if last_connect and node_id != self.ap_settings.router_url:
                 url = "%s/notif/%s/%s" % (node_id, self.uaid, last_connect)
                 d = self.ap_settings.agent.request(
                     "DELETE",
                     url.encode("utf8"),
                 )
-                d.addErrback(_eat_connections)
+                d.addErrback(lambda f: f.trap(ConnectError,
+                                              ConnectionRefusedError,
+                                              UserError))
                 d.addErrback(self.log_err,
                              extra="Failed to delete old node")
         self.finish_hello()

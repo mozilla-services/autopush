@@ -98,7 +98,8 @@ def preflight_check(storage, router):
     storage.delete_notification(uaid, chid, version)
 
     # Store a router entry, fetch it, delete it
-    router.register_user(uaid, node_id, connected_at)
+    router.register_user(dict(uaid=uaid, node_id=node_id,
+                              connected_at=connected_at))
     item = router.get_uaid(uaid)
     assert item.get("node_id") == node_id
     router.clear_node(item)
@@ -108,6 +109,7 @@ class Storage(object):
     def __init__(self, table, metrics):
         self.table = table
         self.metrics = metrics
+        self.encode = table._encode_keys
 
     def fetch_notifications(self, uaid):
         try:
@@ -124,11 +126,7 @@ class Storage(object):
             cond = "attribute_not_exists(version) or version < :ver"
             conn.put_item(
                 self.table.table_name,
-                item={
-                    "uaid": {'S': uaid},
-                    "chid": {'S': chid},
-                    "version": {'N': str(version)}
-                },
+                item=self.encode(dict(uaid=uaid, chid=chid, version=version)),
                 condition_expression=cond,
                 expression_attribute_values={
                     ":ver": {'N': str(version)}
@@ -242,6 +240,7 @@ class Router(object):
     def __init__(self, table, metrics):
         self.table = table
         self.metrics = metrics
+        self.encode = table._encode_keys
 
     def get_uaid(self, uaid):
         try:
@@ -255,7 +254,7 @@ class Router(object):
             # correct ItemNotFound exception
             raise ItemNotFound("uaid not found")
 
-    def register_user(self, uaid, node_id, connected_at):
+    def register_user(self, item):
         """Attempt to register this user if it doesn't already exist or
         this is the latest connection"""
         conn = self.table.connection
@@ -263,17 +262,21 @@ class Router(object):
             cond = "attribute_not_exists(node_id) or (connected_at < :conn)"
             result = conn.put_item(
                 self.table.table_name,
-                item={
-                    "uaid": {'S': uaid},
-                    "node_id": {'S': node_id},
-                    "connected_at": {'N': str(connected_at)}
-                },
+                item=self.encode(item),
                 condition_expression=cond,
-                expression_attribute_values={
-                    ":conn": {'N': str(connected_at)}
-                },
+                expression_attribute_values=self.encode({
+                    ":conn": item["connected_at"]
+                }),
                 return_values="ALL_OLD",
             )
+            if "Attributes" in result:
+                r = result
+                for key, value in result["Attributes"].items():
+                    try:
+                        r[key] = self.table._dynamizer.decode(value)
+                    except AttributeError:
+                        r[key] = value
+                result = r
             return (True, result)
         except ConditionalCheckFailedException:
             return (False, {})
@@ -284,19 +287,20 @@ class Router(object):
     def clear_node(self, item):
         """Given a router item, remove the node_id from it."""
         conn = self.table.connection
+        # Pop out the node_id
+        node_id = item["node_id"]
+        del item["node_id"]
+
         try:
             cond = "(node_id = :node) and (connected_at = :conn)"
             conn.put_item(
                 self.table.table_name,
-                item={
-                    "uaid": {'S': item["uaid"]},
-                    "connected_at": {'N': str(item["connected_at"])}
-                },
+                item=item.get_raw_keys(),
                 condition_expression=cond,
-                expression_attribute_values={
-                    ":node": {'S': item["node_id"]},
-                    ":conn": {'N': str(item["connected_at"])}
-                }
+                expression_attribute_values=self.encode({
+                    ":node": node_id,
+                    ":conn": item["connected_at"],
+                }),
             )
             return True
         except ConditionalCheckFailedException:

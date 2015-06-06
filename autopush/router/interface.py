@@ -23,6 +23,16 @@ class IRouter(object):
         settings"""
         raise NotImplementedError("initialize must be implemented")
 
+    def register(self, uaid, connect):
+        """Register the uaid with the connect dict however is preferred and
+        return a dict that will be stored as routing_data for this user in the
+        future.
+
+        This method must perform validation of the data to store.
+
+        """
+        raise NotImplementedError("register must be implemented")
+
     def route_notification(self, notification, routing_data):
         """Route a notification
 
