@@ -18,10 +18,10 @@ class RouterResponse(object):
 
 
 class IRouter(object):
-    def initialize(self, settings):
-        """Initialize the Router to handle a notification with the given
-        settings"""
-        raise NotImplementedError("initialize must be implemented")
+    def __init__(self, settings, router_conf):
+        """Initialize the Router to handle notifications and registrations with
+        the given settings and router conf."""
+        raise NotImplementedError("__init__ must be implemented")
 
     def register(self, uaid, connect):
         """Register the uaid with the connect dict however is preferred and

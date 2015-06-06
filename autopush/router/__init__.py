@@ -4,9 +4,8 @@ This package contains notification routers that handle routing a notification
 through the appropriate system for a given client.
 
 """
-from autopush.router.internal import InternalRouter
+from autopush.router.apns import APNSRouter
+from autopush.router.gcm import GCMRouter
+from autopush.router.simple import SimpleRouter
 
-
-available_routers = {
-    "internal_simplepush": InternalRouter,
-}
+__all__ = ["APNSRouter", "GCMRouter", "SimpleRouter"]

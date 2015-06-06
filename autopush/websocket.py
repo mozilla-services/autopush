@@ -20,7 +20,7 @@ from twisted.python import failure, log
 from zope.interface import implements
 
 from autopush.protocol import IgnoreBody
-from autopush.router import available_routers
+
 
 def ms_time():
     return int(time.time() * 1000)
@@ -388,23 +388,20 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.uaid = uaid
 
         # Default router choice
-        connect = data.get("connect", {"type": "internal_simplepush"})
+        connect = data.get("connect", {"type": "simplepush"})
         router_type = connect.get("type")
-        if not router_type or router_type not in available_routers:
+        if not router_type or router_type not in self.ap_settings.routers:
             return self.returnError("hello", "invalid router", "401")
-        Router = available_routers[router_type]
+        router = self.ap_settings.routers[router_type]
 
         # Pause producing while we wait for the router registration
         self.transport.pauseProducing()
 
         # Setup the router for registration
-        r = Router()
-        r.initialize(self.ap_settings)
         d = self.defer()
-        d.addCallback(r.register, connect)
+        d.addCallback(router.register, connect)
         d.addCallback(self._register_router, router_type)
         d.addErrback(self.err_hello)
-        d.addErrback(self.log_err)
         d.callback(self.uaid)
 
     def _register_router(self, router_data, router_type):
@@ -426,6 +423,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def err_hello(self, failure):
         self.transport.resumeProducing()
+        self.log_err(failure)
         self.returnError("hello", "error", 503)
 
     def _check_other_nodes(self, result):

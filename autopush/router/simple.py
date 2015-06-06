@@ -1,7 +1,8 @@
-"""Interal Autopush Router
+"""Simple(Push) Style Autopush Router
 
 This router handles notifications that should be dispatched to an Autopush
-node, or stores it appropriately in DynamoDB.
+node, or stores it appropriately in DynamoDB for SimplePush style version
+based channel ID's (only newest version is stored, no data stored).
 
 """
 import json
@@ -37,9 +38,9 @@ def node_key(node_id):
     return node_id + "-%s" % int(time.time()/3600)
 
 
-class InternalRouter(object):
+class SimpleRouter(object):
     """Implements IRouter for internal routing to an Autopush node"""
-    def initialize(self, ap_settings):
+    def __init__(self, ap_settings, router_conf):
         self.ap_settings = ap_settings
         self.metrics = ap_settings.metrics
 
@@ -52,10 +53,9 @@ class InternalRouter(object):
         """Route a notification to an internal node, and store it if the node
         can't deliver immediately or is no longer a valid node"""
         # Determine if they're connected at the moment
-        self.node_id = node_id = uaid_data.get("node_id")
-        self.uaid = uaid_data["uaid"]
-        self.uaid_data = uaid_data
-        self.notification = notification
+        node_id = uaid_data.get("node_id")
+        uaid = uaid_data["uaid"]
+        router, storage = self.ap_settings.router, self.ap_settings.storage
 
         # Node_id is present, attempt delivery.
         # - Send Notification to node
@@ -69,46 +69,41 @@ class InternalRouter(object):
             except (ConnectError, UserError, ConnectionRefusedError):
                 self.metrics.increment("updates.client.host_gone")
                 dead_cache.put(node_key(node_id), True)
-                yield deferToThread(
-                    self.ap_settings.router.clear_node,
-                    self.uaid_data).addErrback(self._eat_db_err)
+                yield deferToThread(router.clear_node,
+                                    uaid_data).addErrback(self._eat_db_err)
                 raise RouterException("Node was invalid", status_code=503,
                                       response_body="Retry Request")
             if result.code == 200:
                 self.metrics.increment("router.broadcast.hit")
                 returnValue(RouterResponse(response_body="Delivered"))
 
-        # Node is not present or busy, store notification
+        # Save notification, node is not present or busy
         # - Save notification
         #   - Success (older version): Done, return 202
-        #   - Success: Lookup client
-        #       - Success (node found): Notify node of new notification
-        #           - Success: Done, return 200
-        #           - Error (no client): Done, return 202
-        #           - Error (no node): Clear node entry
-        #               - Both: Done, return 202
-        #       - Success (no node): Done, return 202
-        #       - Error (db error): Done, return 202
-        #       - Error (no client) : Done, return 404
         #   - Error (db error): Done, return 503
         try:
-            result = yield deferToThread(
-                self.ap_settings.storage.save_notification,
-                uaid=self.uaid,
-                chid=notification.channel_id,
-                version=notification.version
-            )
+            result = yield deferToThread(storage.save_notification, uaid=uaid,
+                                         chid=notification.channel_id,
+                                         version=notification.version)
             if result is False:
-                self.metrics.increment("router.broadcast.newer_stored")
+                self.metrics.increment("router.broadcast.miss")
                 returnValue(RouterResponse(202, "Notification Stored"))
         except ProvisionedThroughputExceededException:
             raise RouterException("Provisioned throughput error",
                                   status_code=503,
                                   response_body="Retry Request")
 
+        # - Lookup client
+        #   - Success (node found): Notify node of new notification
+        #     - Success: Done, return 200
+        #     - Error (no client): Done, return 202
+        #     - Error (no node): Clear node entry
+        #       - Both: Done, return 202
+        #   - Success (no node): Done, return 202
+        #   - Error (db error): Done, return 202
+        #   - Error (no client) : Done, return 404
         try:
-            self.uaid_data = yield deferToThread(
-                self.ap_settings.router.get_uaid, self.uaid)
+            uaid_data = yield deferToThread(router.get_uaid, uaid)
         except ProvisionedThroughputExceededException:
             self.metrics.increment("router.broadcast.miss")
             returnValue(RouterResponse(202, "Notification Stored"))
@@ -118,19 +113,19 @@ class InternalRouter(object):
                                   status_code=404,
                                   response_body="Invalid UAID")
 
-        self.node_id = self.uaid_data.get("node_id")
-        if not self.node_id:
+        # Verify there's a node_id in here, if not we're done
+        node_id = uaid_data.get("node_id")
+        if not node_id:
             self.metrics.increment("router.broadcast.miss")
             returnValue(RouterResponse(202, "Notification Stored"))
-
         try:
             result = yield self._send_notification_check()
         except (ConnectError, UserError, ConnectionRefusedError):
             self.metrics.increment("updates.client.host_gone")
-            dead_cache.put(node_key(self.node_id), True)
+            dead_cache.put(node_key(node_id), True)
             yield deferToThread(
-                self.ap_settings.router.clear_node,
-                self.uaid_data).addErrback(self._eat_db_err)
+                router.clear_node,
+                uaid_data).addErrback(self._eat_db_err)
             self.metrics.increment("router.broadcast.miss")
             returnValue(RouterResponse(202, "Notification Stored"))
 

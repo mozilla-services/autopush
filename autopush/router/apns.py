@@ -4,7 +4,7 @@ import time
 
 
 # https://github.com/djacobs/PyAPNs
-class APNSBridge(object):
+class APNSRouter(object):
     apns = None
     messages = {}
     errors = {0: 'No error',

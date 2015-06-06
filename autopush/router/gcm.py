@@ -5,7 +5,7 @@ from twisted.internet import reactor
 from twisted.python import log
 
 
-class GCMBridge(object):
+class GCMRouter(object):
     gcm = None
     ttl = 60
     dryRun = 0

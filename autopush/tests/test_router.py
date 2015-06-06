@@ -6,9 +6,8 @@ from unittest import TestCase
 import gcmclient
 import apns
 
-from autopush.bridge.bridge import (Bridge, BridgeUndefEx, BridgeFailEx)
-from autopush.bridge.apns_ping import (APNSBridge)
-from autopush.bridge.gcm_ping import (GCMBridge)
+from autopush.router.apns import APNSRouter
+from autopush.router.gcm import GCMRouter
 
 from twisted.internet import reactor
 
@@ -16,18 +15,22 @@ from twisted.internet import reactor
 mock_dynamodb2 = mock_dynamodb2()
 
 
-class BridgeTestCase(TestCase):
+def setUp():
+    mock_dynamodb2.start()
+
+
+def tearDown():
+    mock_dynamodb2.stop()
+
+
+class RouterTestCase(TestCase):
 
     f_gcm = Mock()
     f_apns = Mock()
 
     def setUp(self):
-        mock_dynamodb2.start()
         self.r_gcm = gcmclient.GCM
         self.s_apns = apns.APNs
-
-    def tearDown(self):
-        mock_dynamodb2.stop()
 
     @patch.object(gcmclient, 'GCM', return_value=f_gcm)
     @patch.object(gcmclient, 'JSONMessage', return_value=f_gcm)

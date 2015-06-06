@@ -80,20 +80,16 @@ def add_shared_args(parser):
                         type=int, default=5, env_var="ROUTER_WRITE_THROUGHPUT")
     parser.add_argument('--log_level', type=int, default=40,
                         env_var="LOG_LEVEL")
-    parser.add_argument(
-        '--max_data',
-        help="Max data segment length in bytes",
-        default=4096,
-        env_var='MAX_DATA')
+    parser.add_argument('--max_data', help="Max data segment length in bytes",
+                        default=4096, env_var='MAX_DATA')
 
 
-def add_bridge_args(parser):
+def add_router_args(parser):
     # GCM
     parser.add_argument('--bridge', help='enable Proprietary Ping',
                         type=bool, default=False, env_var='BRIDGE')
-    label = "Proprietary Ping: Google Cloud Messaging:"
-    parser.add_argument('--gcm_ttl',
-                        help="%s Time to Live" % label,
+    label = "GCM Router:"
+    parser.add_argument('--gcm_ttl', help="%s Time to Live" % label,
                         type=int, default=60, env_var="GCM_TTL")
     parser.add_argument('--gcm_dryrun',
                         help="%s Dry run (no message sent)" % label,
@@ -102,19 +98,16 @@ def add_bridge_args(parser):
                         help="%s string to collapse messages" % label,
                         type=str, default="simpleplush",
                         env_var="GCM_COLLAPSEKEY")
-    parser.add_argument('--gcm_apikey',
-                        help="%s API Key" % label,
+    parser.add_argument('--gcm_apikey', help="%s API Key" % label,
                         type=str, env_var="GCM_APIKEY")
     # Apple Push Notification system (APNs) for iOS
-    label = "Proprietary Ping: Apple Push Notification System:"
-    parser.add_argument('--apns_sandbox',
-                        help="%s Use Dev Sandbox",
+    label = "APNS Router:"
+    parser.add_argument('--apns_sandbox', help="%s Use Dev Sandbox",
                         type=bool, default=True, env_var="APNS_SANDBOX")
     parser.add_argument('--apns_cert_file',
                         help="%s Certificate PEM file" % label,
                         type=str, env_var="APNS_CERT_FILE")
-    parser.add_argument('--apns_key_file',
-                        help="%s Key PEM file",
+    parser.add_argument('--apns_key_file', help="%s Key PEM file",
                         type=str, env_var="APNS_KEY_FILE")
 
 
@@ -155,20 +148,14 @@ def _parse_connection(sysargs=None):
                         type=str, default=None, env_var="ENDPOINT_HOSTNAME")
     parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
                         type=int, default=8082, env_var="ENDPOINT_PORT")
-    parser.add_argument(
-        '--auto_ping_interval',
-        help="Interval between Websocket pings",
-        default=0,
-        type=float,
-        env_var="AUTO_PING_INTERVAL")
-    parser.add_argument(
-        '--auto_ping_timeout',
-        help="Timeout in seconds for Websocket ping replys",
-        default=4,
-        type=float,
-        env_var="AUTO_PING_TIMEOUT")
+    parser.add_argument('--auto_ping_interval',
+                        help="Interval between Websocket pings", default=0,
+                        type=float, env_var="AUTO_PING_INTERVAL")
+    parser.add_argument('--auto_ping_timeout',
+                        help="Timeout in seconds for Websocket ping replys",
+                        default=4, type=float, env_var="AUTO_PING_TIMEOUT")
 
-    add_bridge_args(parser)
+    add_router_args(parser)
     add_shared_args(parser)
     args = parser.parse_args(sysargs)
     return args, parser
@@ -195,29 +182,25 @@ def _parse_endpoint(sysargs=None):
     parser.add_argument('--cors', help='Allow CORS PUTs for update.',
                         type=bool, default=False, env_var='ALLOW_CORS')
     add_shared_args(parser)
-    add_bridge_args(parser)
+    add_router_args(parser)
 
     args = parser.parse_args(sysargs)
     return args, parser
 
 
 def make_settings(args, **kwargs):
-    pingConf = None
+    router_conf = {}
     if args.bridge:
-        pingConf = {}
         # if you have the critical elements for each bridge, create it
         if args.apns_cert_file is not None and args.apns_key_file is not None:
-            pingConf["apns"] = {"sandbox": args.apns_sandbox,
-                                "cert_file": args.apns_cert_file,
-                                "key_file": args.apns_key_file}
+            router_conf["apns"] = {"sandbox": args.apns_sandbox,
+                                   "cert_file": args.apns_cert_file,
+                                   "key_file": args.apns_key_file}
         if args.gcm_apikey is not None:
-            pingConf["gcm"] = {"ttl": args.gcm_ttl,
-                               "dryrun": args.gcm_dryrun,
-                               "collapsekey": args.gcm_collapsekey,
-                               "apikey": args.gcm_apikey}
-        # If you have no settings, you have no bridge.
-        if pingConf is {}:
-            pingConf = None
+            router_conf["gcm"] = {"ttl": args.gcm_ttl,
+                                  "dryrun": args.gcm_dryrun,
+                                  "collapsekey": args.gcm_collapsekey,
+                                  "apikey": args.gcm_apikey}
 
     return AutopushSettings(
         crypto_key=args.crypto_key,
@@ -227,7 +210,7 @@ def make_settings(args, **kwargs):
         hostname=args.hostname,
         statsd_host=args.statsd_host,
         statsd_port=args.statsd_port,
-        pingConf=pingConf,
+        router_conf=router_conf,
         router_tablename=args.router_tablename,
         storage_tablename=args.storage_tablename,
         storage_read_throughput=args.storage_read_throughput,
