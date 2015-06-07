@@ -331,13 +331,12 @@ def endpoint_main(sysargs=None):
     setup_logging("Autoendpoint")
 
     # Endpoint HTTP router
-    register = RegistrationHandler
-    register.ap_settings = settings
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", EndpointHandler, dict(ap_settings=settings)),
         # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint
-        (r"/register/([^\/]+)?", register),
+        (r"/register/([^\/]+)?", RegistrationHandler,
+         dict(ap_settings=settings)),
     ],
         default_host=settings.hostname, debug=args.debug,
         log_function=skip_request_logging

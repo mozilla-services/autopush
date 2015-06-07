@@ -257,7 +257,8 @@ class RouterTestCase(unittest.TestCase):
 
         router.table.get_item.side_effect = raise_error
         with self.assertRaises(ProvisionedThroughputExceededException):
-            router.get_uaid("asdf")
+            router.get_uaid(dict(uaid="asdf", node_id="me",
+                                 connected_at=1234))
 
     def test_register_user_provision_failed(self):
         r = get_router_table()
@@ -269,7 +270,8 @@ class RouterTestCase(unittest.TestCase):
 
         router.table.connection.put_item.side_effect = raise_error
         with self.assertRaises(ProvisionedThroughputExceededException):
-            router.register_user("asdf", "asdf", 12)
+            router.register_user(dict(uaid="asdf", node_id="me",
+                                 connected_at=1234))
 
     def test_clear_node_provision_failed(self):
         r = get_router_table()
@@ -288,13 +290,12 @@ class RouterTestCase(unittest.TestCase):
         uaid = str(uuid.uuid4())
         r = get_router_table()
         router = Router(r, MetricSink())
-        result = router.register_user(uaid, "me", 1234)
+        result = router.register_user(dict(uaid=uaid, node_id="me",
+                                      connected_at=1234))
         eq_(result[0], True)
-        eq_(result[1], {'Attributes':
-            {"uaid": uaid,
-             "connected_at": "1234",
-             "node_id": "me"},
-            "ConsumedCapacityUnits": 1})
+        eq_(result[1], {"uaid": uaid,
+                        "connected_at": "1234",
+                        "node_id": "me"})
         result = router.get_uaid(uaid)
         eq_(bool(result), True)
         eq_(result["node_id"], "me")
@@ -306,7 +307,8 @@ class RouterTestCase(unittest.TestCase):
         # when not updating data.
         router.table.connection = Mock()
         router.table.connection.put_item.return_value = {}
-        result = router.register_user("", "me", 1234)
+        result = router.register_user(dict(uaid="", node_id="me",
+                                           connected_at=1234))
         eq_(result[0], True)
 
     def test_save_fail(self):
@@ -318,7 +320,8 @@ class RouterTestCase(unittest.TestCase):
 
         router.table.connection = Mock()
         router.table.connection.put_item.side_effect = raise_condition
-        result = router.register_user("asdf", "asdf", 1234)
+        result = router.register_user(dict(uaid="asdf", node_id="asdf",
+                                           connected_at=1234))
         eq_(result, (False, {}))
 
     def test_node_clear(self):
@@ -326,7 +329,8 @@ class RouterTestCase(unittest.TestCase):
         router = Router(r, MetricSink())
 
         # Register a node user
-        router.register_user("asdf", "asdf", 1234)
+        router.register_user(dict(uaid="asdf", node_id="asdf",
+                                  connected_at=1234))
 
         # Verify
         user = router.get_uaid("asdf")

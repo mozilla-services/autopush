@@ -308,10 +308,13 @@ class RegistrationHandler(AutoendpointHandler):
         _, uaid = validate_uaid(uaid)
         self.uaid = uaid
         params = self._load_params()
-        if not params or params.get("type") not in self.ap_settings.routers:
+        if not params or params.get("type") not in self.ap_settings.routers \
+           or 'channelID' not in params:
             log.msg("Invalid parameters", **self._client_info())
             return self._error(400, "Invalid arguments")
-        d = deferToThread(self.bridge.register, uaid, params.get("data", {}))
+        self.chid = params["channelID"]
+        router = self.ap_settings.routers[params["type"]]
+        d = deferToThread(router.register, uaid, params.get("data", {}))
         d.addCallback(self._registered)
         d.addCallback(self._return_endpoint)
         d.addErrback(self._router_fail_err)

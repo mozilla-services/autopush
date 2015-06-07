@@ -270,7 +270,7 @@ class Router(object):
                 return_values="ALL_OLD",
             )
             if "Attributes" in result:
-                r = result
+                r = {}
                 for key, value in result["Attributes"].items():
                     try:
                         r[key] = self.table._dynamizer.decode(value)

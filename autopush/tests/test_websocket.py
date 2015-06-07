@@ -353,6 +353,8 @@ class WebsocketTestCase(unittest.TestCase):
         def check_result(msg):
             eq_(msg["status"], 503)
             eq_(msg["reason"], "error")
+            self.flushLoggedErrors()
+
         return self._check_response(check_result)
 
     def test_hello_check_fail(self):
@@ -402,14 +404,14 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_hello_bridge(self):
         self._connect()
-        self.proto.ap_settings.bridge = Mock()
-        self.proto.ap_settings.bridge.register = Mock()
-        self.proto.ap_settings.bridge.register.return_value = (True, {})
+        self.proto.ap_settings.routers["apns"] = Mock()
+        self.proto.ap_settings.routers["apns"].register = Mock()
+        self.proto.ap_settings.routers["apns"].register.return_value = {}
         self._send_message(dict(messageType="hello",
-                                connect=dict(type="test")))
+                                connect=dict(type="apns")))
 
         def check_result(msg):
-            self.proto.ap_settings.bridge.register.assert_called()
+            self.proto.ap_settings.routers["apns"].register.assert_called()
             eq_(msg["status"], 200)
         return self._check_response(check_result)
 
