@@ -8,11 +8,9 @@ from cyclone.web import Application
 from mock import Mock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
-from StringIO import StringIO
 from twisted.internet.defer import Deferred
-from twisted.python.failure import Failure
 from twisted.trial import unittest
-from twisted.web.client import Agent, Response, ResponseDone
+from twisted.web.client import Agent, Response
 from txstatsd.metrics.metrics import Metrics
 
 import autopush.endpoint as endpoint
@@ -31,7 +29,7 @@ def tearDown():
     mock_dynamodb2.stop()
 
 
-class FileConsumer(object):
+class FileConsumer(object):  # pragma: no cover
     def __init__(self, file):
         self.file = file
 
@@ -56,9 +54,6 @@ def patch_logger(test):
 
 
 class EndpointTestCase(unittest.TestCase):
-    def initialize(self):
-        self.metrics = self.ap_settings.metrics
-
     def setUp(self):
         self.timeout = 0.5
 
@@ -255,60 +250,9 @@ class EndpointTestCase(unittest.TestCase):
         self.status_mock.assert_called_with(999)
         self.assertTrue(log_mock.err.called)
 
-    def _assert_push_request(self, expected_url, expected_body=None):
-        calls = self.agent_mock.request.mock_calls
-        eq_(len(calls) >= 1, True)
-        _, (method, actual_url), params = calls[0]
-        eq_(method, 'PUT')
-        eq_(actual_url, expected_url)
-        eq_('bodyProducer' in params, True)
-
-        if not expected_body:
-            return None
-
-        request_body = StringIO()
-        consumer = FileConsumer(request_body)
-
-        producer = params.get('bodyProducer')
-        if not producer:
-            raise Exception('Missing body')
-
-        def handle_body(result):
-            eq_(json.loads(request_body.getvalue()), expected_body)
-            return None
-        d = producer.startProducing(consumer)
-        d.addCallback(handle_body)
-        return d
-
     def _assert_error_response(self, result):
         self.status_mock.assert_called_with(500)
         self.write_mock.assert_called_with("Error processing request")
-
-    def _assert_throughput_exceeded_response(self):
-        self.status_mock.assert_called_with(503)
-        self.write_mock.assert_called_with('Server busy, try later')
-
-    def _assert_miss_response(self):
-        self.metrics_mock.increment.assert_called_with('router.broadcast.miss')
-        self.write_mock.assert_called_with('Success')
-
-    def _configure_agent_mock(self, code, reason=ResponseDone()):
-        def deliver_body(protocol):
-            protocol.dataReceived('Fake response')
-            protocol.connectionLost(Failure(reason))
-
-        def handle_request(method, url, **kwargs):
-            eq_(isinstance(url, unicode), False)
-            d = Deferred()
-            self.response_mock.configure_mock(**{
-                'code': code(url) if callable(code) else code,
-                'deliverBody.side_effect': deliver_body
-            })
-            d.callback(self.response_mock)
-            return d
-        self.agent_mock.configure_mock(**{
-            'request.side_effect': handle_request
-        })
 
 
 dummy_uaid = "00000000123412341234567812345678"
@@ -316,10 +260,6 @@ dummy_chid = "11111111123412341234567812345678"
 
 
 class RegistrationTestCase(unittest.TestCase):
-
-    def initialize(self):
-        self.metrics = self.ap_settings.metrics
-
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
         settings = endpoint.RegistrationHandler.ap_settings =\
@@ -368,19 +308,13 @@ class RegistrationTestCase(unittest.TestCase):
 
     @patch('uuid.uuid4', return_value=dummy_chid)
     def test_load_params_arguments(self, u=None):
-        args = self.reg.request.arguments
-        args['channelid'] = ['']
-        args['connect'] = ['{"type":"test"}']
-        self.assertTrue(self.reg._load_params())
-        eq_(self.reg.chid, dummy_chid)
-        eq_(self.reg.conn, '{"type":"test"}')
-
-    @patch('uuid.uuid4', return_value=dummy_chid)
-    def test_load_params_body(self, u=None):
-        self.reg.request.body = b'connect={"type":"test"}'
-        self.assertTrue(self.reg._load_params())
-        eq_(self.reg.chid, dummy_chid)
-        eq_(self.reg.conn, '{"type":"test"}')
+        self.reg.request.body = json.dumps(dict(
+            channelID="",
+            type="test",
+        ))
+        result = self.reg._load_params()
+        self.assert_(isinstance(result, dict))
+        eq_(result["channelID"], dummy_chid)
 
     def test_load_params_invalid_body(self):
         self.reg.request.body = b'connect={"type":"test"}'
@@ -434,7 +368,7 @@ class RegistrationTestCase(unittest.TestCase):
         eq_(reg._headers[ch2], "GET,PUT")
 
     @patch('uuid.uuid4', return_value=dummy_chid)
-    def _get_valid(self, arg):
+    def test_get_valid(self, arg):
         # All is well check.
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
@@ -442,7 +376,6 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.ap_settings.endpoint_url = "http://localhost"
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(200)
             called_arg = dict(useragentid=dummy_uaid,
                               channelid=dummy_chid,
                               endpoint="http://localhost/push/abcd123")

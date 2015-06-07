@@ -272,7 +272,10 @@ class RegistrationHandler(AutoendpointHandler):
         self.uaid = new_uaid
 
         self.chid = str(uuid.uuid4())
-        self._registered(True)
+        d = self._registered(True)
+        d.addCallback(self._return_endpoint)
+        d.addErrback(self._response_err)
+        return d
 
     @cyclone.web.asynchronous
     def put(self, uaid=None):

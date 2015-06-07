@@ -67,7 +67,7 @@ class WebsocketTestCase(unittest.TestCase):
         args = self.send_mock.call_args_list.pop(0)
         return d.callback(args)
 
-    def _wait_for_close(self, d):
+    def _wait_for_close(self, d):  # pragma: nocover
         if self.close_mock.call_args is not None:
             d.callback(True)
             return
@@ -234,7 +234,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
 
-        def wait_for_agent_call():
+        def wait_for_agent_call():  # pragma: nocover
             if not mock_agent.mock_calls:
                 reactor.callLater(0.1, wait_for_agent_call)
 
@@ -263,7 +263,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
 
-        def wait_for_agent_call():
+        def wait_for_agent_call():  # pragma: nocover
             if not mock_metrics.mock_calls:
                 reactor.callLater(0.1, wait_for_agent_call)
 
@@ -293,7 +293,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
 
-        def wait_for_agent_call():
+        def wait_for_agent_call():  # pragma: nocover
             if not mock_node_get.mock_calls:
                 reactor.callLater(0.1, wait_for_agent_call)
 
@@ -451,7 +451,7 @@ class WebsocketTestCase(unittest.TestCase):
         def fail():
             raise twisted.internet.defer.CancelledError
 
-        def fail2(fail):
+        def fail2(fail):  # pragma: nocover
             self.fail("Failed to trap error")
 
         def check_result(result):
@@ -721,7 +721,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="unregister",
                                 channelID=chid))
 
-        def wait_for_times():
+        def wait_for_times():  # pragma: nocover
             if len(mock_log.mock_calls) > 0:
                 eq_(len(mock_log.mock_calls), 1)
                 d.callback(True)
@@ -863,7 +863,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
 
-        def wait_for_delete():
+        def wait_for_delete():  # pragma: nocover
             calls = self.transport_mock.mock_calls
             if len(calls) < 2:
                 reactor.callLater(0.1, wait_for_delete)

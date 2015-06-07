@@ -40,7 +40,7 @@ class DbCheckTestCase(unittest.TestCase):
         router_table = get_router_table()
         storage_table = get_storage_table()
 
-        def raise_exc(*args, **kwargs):
+        def raise_exc(*args, **kwargs):  # pragma: no cover
             raise Exception("Oops")
 
         router_table.clear_node = Mock()
@@ -183,6 +183,12 @@ class StorageTestCase(unittest.TestCase):
             raise ItemNotFound(None, None)
 
         storage.table.get_item.side_effect = raise_error
+        result = storage.get_connection('uaid')
+        eq_(result, False)
+
+        def raise_provision(*args, **kwargs):
+            raise ProvisionedThroughputExceededException(None, None)
+        storage.table.get_item.side_effect = raise_provision
         result = storage.get_connection('uaid')
         eq_(result, False)
 
