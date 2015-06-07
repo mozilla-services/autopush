@@ -482,14 +482,15 @@ class RegistrationTestCase(unittest.TestCase):
     @patch('uuid.uuid4', return_value=dummy_uaid)
     def test_put(self, arg):
         self.reg.ap_settings.routers["test"] = self.router_mock
-        args = self.reg.request.arguments
-        args['connect'] = ['{"type":"test"}']
+        self.reg.request.body = json.dumps(dict(
+            type="simplepush",
+            data={},
+        ))
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(200)
             called_arg = dict(useragentid=dummy_uaid,
                               channelid=dummy_uaid,
                               endpoint="http://localhost/push/abcd123")
@@ -505,14 +506,15 @@ class RegistrationTestCase(unittest.TestCase):
     @patch('uuid.uuid4', return_value=dummy_uaid)
     def test_put_bad_uaid(self, arg):
         self.reg.ap_settings.routers["test"] = self.router_mock
-        args = self.reg.request.arguments
-        args['connect'] = ['{"type":"test"}']
+        self.reg.request.body = json.dumps(dict(
+            type="simplepush",
+            data={},
+        ))
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(200)
             called_arg = dict(useragentid=dummy_uaid,
                               channelid=dummy_uaid,
                               endpoint="http://localhost/push/abcd123")
