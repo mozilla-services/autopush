@@ -203,6 +203,7 @@ class EndpointTestCase(unittest.TestCase):
         endpoint.clear_header(ch1)
         endpoint.clear_header(ch2)
         endpoint.ap_settings.cors = True
+        self.endpoint.prepare()
         eq_(endpoint._headers[ch1], "*")
         eq_(endpoint._headers[ch2], "PUT")
 
@@ -408,6 +409,7 @@ class RegistrationTestCase(unittest.TestCase):
         reg.clear_header(ch1)
         reg.clear_header(ch2)
         reg.ap_settings.cors = True
+        reg.prepare()
         eq_(reg._headers[ch1], "*")
         eq_(reg._headers[ch2], "GET,PUT")
 
@@ -416,6 +418,7 @@ class RegistrationTestCase(unittest.TestCase):
         ch2 = "Access-Control-Allow-Methods"
         reg = self.reg
         reg.ap_settings.cors = True
+        reg.prepare()
         reg.head(None)
         eq_(reg._headers[ch1], "*")
         eq_(reg._headers[ch2], "GET,PUT")
@@ -425,6 +428,7 @@ class RegistrationTestCase(unittest.TestCase):
         ch2 = "Access-Control-Allow-Methods"
         reg = self.reg
         reg.ap_settings.cors = True
+        reg.prepare()
         reg.options(None)
         eq_(reg._headers[ch1], "*")
         eq_(reg._headers[ch2], "GET,PUT")
@@ -567,30 +571,25 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_bad_put(self):
+        from autopush.router.interface import RouterException
         self.reg.ap_settings.routers["test"] = self.router_mock
-        self.router_mock.configure_mock(**{
-            'register.return_value': False,
-        })
-        args = self.reg.request.arguments
-        args['connect'] = ['{"type":"test"}']
-        args['channelid'] = [dummy_chid]
+
+        def bad_register(self, uaid, connect):
+            raise RouterException("stuff", status_code=500,
+                                  response_body="Registration badness")
+        self.router_mock.register.side_effect = bad_register
+        self.reg.request.body = json.dumps(dict(
+            type="simplepush",
+            channelID=dummy_chid,
+            data={},
+        ))
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(500, 'Registration failure')
+            self.reg.set_status.assert_called_with(500, 'Registration badness')
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.put(dummy_uaid)
-        return self.finish_deferred
-
-    def test_error_response(self):
-        def handle_finish(value):
-            self.reg.set_status.assert_called_with(
-                500,
-            )
-
-        self.finish_deferred.addCallback(handle_finish)
-        self.reg._error_response(Exception)
         return self.finish_deferred

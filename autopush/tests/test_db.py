@@ -7,6 +7,7 @@ from boto.dynamodb2.exceptions import (
     ItemNotFound,
 )
 from boto.dynamodb2.layer1 import DynamoDBConnection
+from boto.dynamodb2.items import Item
 from mock import Mock
 from moto import mock_dynamodb2
 from nose.tools import eq_
@@ -276,15 +277,15 @@ class RouterTestCase(unittest.TestCase):
     def test_clear_node_provision_failed(self):
         r = get_router_table()
         router = Router(r, MetricSink())
-        router.table.connection = Mock()
+        router.table.connection.put_item = Mock()
 
         def raise_error(*args, **kwargs):
             raise ProvisionedThroughputExceededException(None, None)
 
         router.table.connection.put_item.side_effect = raise_error
         with self.assertRaises(ProvisionedThroughputExceededException):
-            router.clear_node(dict(uaid="asdf", connected_at="1234",
-                                   node_id="asdf"))
+            router.clear_node(Item(r, dict(uaid="asdf", connected_at="1234",
+                                           node_id="asdf")))
 
     def test_save_uaid(self):
         uaid = str(uuid.uuid4())
@@ -329,8 +330,8 @@ class RouterTestCase(unittest.TestCase):
         router = Router(r, MetricSink())
 
         # Register a node user
-        router.register_user(dict(uaid="asdf", node_id="asdf",
-                                  connected_at=1234))
+        router.register_user(Item(r, dict(uaid="asdf", node_id="asdf",
+                                          connected_at=1234)))
 
         # Verify
         user = router.get_uaid("asdf")
@@ -350,8 +351,8 @@ class RouterTestCase(unittest.TestCase):
         def raise_condition(*args, **kwargs):
             raise ConditionalCheckFailedException(None, None)
 
-        router.table.connection = Mock()
+        router.table.connection.put_item = Mock()
         router.table.connection.put_item.side_effect = raise_condition
-        result = router.clear_node(dict(uaid="asdf", node_id="asdf",
-                                        connected_at=1234))
+        data = dict(uaid="asdf", node_id="asdf", connected_at=1234)
+        result = router.clear_node(Item(r, data))
         eq_(result, False)
