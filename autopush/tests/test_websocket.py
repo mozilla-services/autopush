@@ -1058,7 +1058,7 @@ class WebsocketTestCase(unittest.TestCase):
         d = Deferred()
 
         def wait_for_clear():
-            if self.proto.updates_sent:
+            if self.proto.updates_sent:  # pragma: nocover
                 reactor.callLater(0.1, wait_for_clear)
                 return
 
