@@ -574,12 +574,12 @@ class RegistrationTestCase(unittest.TestCase):
         from autopush.router.interface import RouterException
         self.reg.ap_settings.routers["test"] = self.router_mock
 
-        def bad_register(self, uaid, connect):
+        def bad_register(uaid, connect):
             raise RouterException("stuff", status_code=500,
                                   response_body="Registration badness")
         self.router_mock.register.side_effect = bad_register
         self.reg.request.body = json.dumps(dict(
-            type="simplepush",
+            type="test",
             channelID=dummy_chid,
             data={},
         ))
@@ -588,7 +588,8 @@ class RegistrationTestCase(unittest.TestCase):
         })
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(500, 'Registration badness')
+            self.reg.set_status.assert_called_with(500)
+            self.flushLoggedErrors()
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.put(dummy_uaid)
