@@ -38,35 +38,35 @@ class APNSRouter(object):
         self._connect()
         log.msg("Starting APNS bridge...")
 
-    def register(self, uaid, connect):
-        return connect
-
-    def route_notification(self, notification, uaid_data):
-        # Kick the entire notification routing off to a thread
-        return deferToThread(self._route, notification, uaid_data)
-
-    def _route(self, notification, uaid_data):
-        connect_info = uaid_data.get("router_data", {})
-        token = connect_info.get("token")
-        if token is None:
+    def register(self, uaid, router_data):
+        if not router_data.get("token"):
             raise RouterException("No token registered", status_code=500,
                                   response_body="No token registered")
-        payload = apns.Payload(alert=connect_info.get("title",
-                                                      self.default_title),
+        return router_data
+
+    def route_notification(self, notification, router_data):
+        # Kick the entire notification routing off to a thread
+        return deferToThread(self._route, notification, router_data)
+
+    def _route(self, notification, router_data):
+        token = router_data["token"]
+        payload = apns.Payload(alert=router_data.get("title",
+                                                     self.default_title),
                                content_available=1,
                                custom={"Msg": notification.data,
+                                       "Chid": notification.channel_id,
                                        "Ver": notification.version})
-        current_id = int(time.time())
-        self.messages[current_id] = {"token": token, "payload": payload}
+        now = int(time.time())
+        self.messages[now] = {"token": token, "payload": payload}
         # TODO: Add listener for error handling.
         self.apns.gateway_server.register_response_listener(self._error)
-        self.apns.gateway_server.send_notification(token, payload, current_id)
+        self.apns.gateway_server.send_notification(token, payload, now)
 
         # cleanup sent messages
         if len(self.messages):
-            for id in self.messages:
-                if id < current_id - self.config.get("expry", 10):
-                    del self.messages[id]
+            for time_sent in self.messages.keys():
+                if time_sent < now - self.config.get("expry", 10):
+                    del self.messages[time_sent]
                 else:
                     break
         return RouterResponse(status_code=200, response_body="Message sent")

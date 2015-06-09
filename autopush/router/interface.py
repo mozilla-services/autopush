@@ -39,7 +39,7 @@ class IRouter(object):
 
         :param notification: A :class:`~autopush.endpoint.Notificaiton`
                              instance.
-        :param uaid_data: A dict of the full uaid data from the db.
+        :param routing_data: A dict of the router_data from the db record.
         :returns: A :class:`RouterResponse` object upon successful routing.
         :raises: A :class:`RouterException` if routing fails.
 
