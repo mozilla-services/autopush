@@ -378,36 +378,22 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.uaid = uaid
 
         # Default router choice
-        connect = data.get("connect", {"type": "simplepush"})
-        router_type = connect.get("type")
+        router_type = data.get("router_type", "simplepush")
         if not router_type or router_type not in self.ap_settings.routers:
             return self.returnError("hello", "invalid router", "401")
-        router = self.ap_settings.routers[router_type]
 
-        # Pause producing while we wait for the router registration
-        self.transport.pauseProducing()
-
-        # Setup the router for registration
-        d = self.defer()
-        d.addCallback(router.register, connect)
-        d.addCallback(self._register_router, router_type)
-        d.addErrback(self.err_hello)
-        d.callback(self.uaid)
-
-    def _register_router(self, router_data, router_type):
-        """Complete the registration of the user with the router data"""
-        router = self.ap_settings.router
-        url = self.ap_settings.router_url
         self.transport.pauseProducing()
         user_item = dict(
             uaid=self.uaid,
-            node_id=url,
+            node_id=self.ap_settings.router_url,
             connected_at=self.connected_at,
             router_type=router_type,
-            router_data=router_data,
+            router_data={},
         )
-        d = self.deferToThread(router.register_user, user_item)
+        d = self.deferToThread(self.ap_settings.router.register_user,
+                               user_item)
         d.addCallback(self._check_other_nodes)
+        d.addErrback(self.err_hello)
         self._register = d
         return d
 

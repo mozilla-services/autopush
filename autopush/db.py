@@ -10,9 +10,6 @@ from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table
 from boto.dynamodb2.types import NUMBER, STRING
-from twisted.python import log
-
-import json
 
 
 def create_router_table(tablename="router", read_throughput=5,
@@ -150,90 +147,6 @@ class Storage(object):
         except ProvisionedThroughputExceededException:
             self.metrics.increment("error.provisioned.delete_notification")
             return False
-
-    # Proprietary Ping storage info
-    # Tempted to put this in own class.
-
-    ping_label = "proprietary_ping"
-    token_label = "bridge_token"
-    type_label = "ping_type"
-    modf_label = "modified"
-
-    def register_connect(self, uaid, connect):
-        """ Register a type of proprietary ping data"""
-        # Always overwrite.
-        if connect.get("type") is None:
-            raise ValueError('missing "type" from connection info')
-        token = connect.get("token")
-        sconnect = json.dumps(connect)
-        try:
-            self.table.connection.update_item(
-                self.table.table_name,
-                key={"uaid": {'S': uaid},
-                     "chid": {'S': " "}},
-                attribute_updates={
-                    self.ping_label: {"Action": "PUT",
-                                      "Value": {'S': sconnect}},
-                    self.token_label: {"Action": "PUT",
-                                       "Value": {'S': token}},
-                }
-            )
-        except Exception, e:
-            log.err(e)
-            raise
-        return
-
-    def get_connection(self, uaid):
-        try:
-            record = self.table.get_item(consistent=True,
-                                         uaid=uaid,
-                                         chid=' ')
-        except (ItemNotFound, JSONResponseError):
-            return False
-        except ProvisionedThroughputExceededException:
-            return False
-        return json.loads(record.get(self.ping_label))
-
-    def unregister_connect(self, uaid):
-        try:
-            self.table.connection.update_item(
-                self.table.table_name,
-                key={"uaid": {'S': uaid},
-                     "chid": {'S': ' '}},
-                attribute_updates={
-                    self.ping_label: {"Action": "DELETE"},
-                },
-            )
-        except ProvisionedThroughputExceededException:
-            return False
-        return True
-
-    def byToken(self, action, token):
-        try:
-            if action == 'DELETE':
-                self.table.connection.update_item(
-                    self.table.table_name,
-                    key={self.token_label: {'S': token}},
-                    attribute_updates={
-                        self.ping_label: {"Action": "DELETE"},
-                        self.token_label: {"Action": "DELETE"},
-                    }
-                )
-                return True
-            if action == 'UPDATE':
-                record = self.table.get_item(
-                    consistent=True,
-                    bridge_token=token
-                )
-                connect = record.get(self.ping_label)
-                if connect is not None:
-                    jcon = json.loads(connect)
-                    jcon['token'] = token
-                    self.register_connect(record.get("uaid"), jcon)
-                return True
-        except ProvisionedThroughputExceededException:
-            log.msg("Too many deletes...")
-        return False
 
 
 class Router(object):

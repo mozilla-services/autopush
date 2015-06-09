@@ -23,7 +23,7 @@ class IRouter(object):
         the given settings and router conf."""
         raise NotImplementedError("__init__ must be implemented")
 
-    def register(self, uaid, connect):
+    def register(self, uaid, routing_data):
         """Register the uaid with the connect dict however is preferred and
         return a dict that will be stored as routing_data for this user in the
         future.

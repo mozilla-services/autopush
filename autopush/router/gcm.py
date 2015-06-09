@@ -23,23 +23,23 @@ class GCMRouter(object):
         self.gcm = gcmclient.GCM(router_conf.get("apikey"))
         log.msg("Starting GCM bridge...")
 
-    def register(self, uaid, connect):
-        return connect
+    def register(self, uaid, router_data):
+        if not router_data.get("token"):
+            self._error("connect info missing 'token'", status=401)
+        return router_data
 
     def route_notification(self, notification, uaid_data):
         # Kick the entire notification routing off to a thread
         return deferToThread(self._route, notification, uaid_data)
 
     def _route(self, notification, uaid_data):
-        if uaid_data.get("token") is None:
-            self._error("connect info missing 'token'", status=401)
-
         payload = gcmclient.JSONMessage(
-            registration_ids=[uaid_data.get("token")],
+            registration_ids=[uaid_data["token"]],
             collapse_key=self.collapseKey,
             time_to_live=self.ttl,
             dry_run=self.dryRun,
             data={"Msg": notification.data,
+                  "Chid": notification.channel_id,
                   "Ver": notification.version}
         )
         return self._send(payload)

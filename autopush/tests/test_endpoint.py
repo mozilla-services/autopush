@@ -279,7 +279,6 @@ class RegistrationTestCase(unittest.TestCase):
 
         self.status_mock = self.reg.set_status = Mock()
         self.write_mock = self.reg.write = Mock()
-        self.router_mock = Mock(spec=IRouter)
 
         d = self.finish_deferred = Deferred()
         self.reg.finish = lambda: d.callback(True)
@@ -368,21 +367,25 @@ class RegistrationTestCase(unittest.TestCase):
         eq_(reg._headers[ch2], "GET,PUT")
 
     @patch('uuid.uuid4', return_value=dummy_chid)
-    def test_get_valid(self, arg):
+    @patch('autopush.endpoint.validate_uaid_hash', return_value=True)
+    def test_get_valid(self, *args):
         # All is well check.
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
+        user_item = dict(
+            type="simplepush",
+            data={},
+        )
         self.reg.ap_settings.endpoint_url = "http://localhost"
+        self.reg.request.headers["Authorization"] = "something else"
+        self.router_mock.get_uaid.return_value = user_item
 
         def handle_finish(value):
-            called_arg = dict(useragentid=dummy_uaid,
-                              channelid=dummy_chid,
-                              endpoint="http://localhost/push/abcd123")
             call_args = self.reg.write.call_args
             ok_(call_args is not None)
             args = call_args[0]
-            eq_(eval(args[0]), called_arg)
+            eq_(json.loads(args[0]), user_item)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.get(dummy_uaid)
@@ -396,10 +399,11 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.ap_settings.endpoint_url = "http://localhost"
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(400, 'invalid UAID')
+            self.reg.set_status.assert_called_with(
+                401, 'Invalid Authentication')
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.get(None)
+        self.reg.get()
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=dummy_chid)
@@ -410,14 +414,15 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.ap_settings.endpoint_url = "http://localhost"
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(400, 'invalid UAID')
+            self.reg.set_status.assert_called_with(
+                401, 'Invalid Authentication')
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.get('invalid')
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=dummy_uaid)
-    def test_put(self, arg):
+    def test_post(self, arg):
         self.reg.ap_settings.routers["test"] = self.router_mock
         self.reg.request.body = json.dumps(dict(
             type="simplepush",
@@ -428,20 +433,21 @@ class RegistrationTestCase(unittest.TestCase):
         })
 
         def handle_finish(value):
-            called_arg = dict(useragentid=dummy_uaid,
-                              channelid=dummy_uaid,
-                              endpoint="http://localhost/push/abcd123")
             call_args = self.reg.write.call_args
             ok_(call_args is not None)
             args = call_args[0]
-            eq_(eval(args[0]), called_arg)
+            call_arg = json.loads(args[0])
+            eq_(call_arg["uaid"], dummy_uaid)
+            eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
+            ok_("hash" in call_arg)
+            ok_("nonce" in call_arg)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.put(None)
+        self.reg.post()
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=dummy_uaid)
-    def test_put_bad_uaid(self, arg):
+    def test_post_bad_uaid(self, arg):
         self.reg.ap_settings.routers["test"] = self.router_mock
         self.reg.request.body = json.dumps(dict(
             type="simplepush",
@@ -452,20 +458,15 @@ class RegistrationTestCase(unittest.TestCase):
         })
 
         def handle_finish(value):
-            called_arg = dict(useragentid=dummy_uaid,
-                              channelid=dummy_uaid,
-                              endpoint="http://localhost/push/abcd123")
-            call_args = self.reg.write.call_args
-            ok_(call_args is not None)
-            args = call_args[0]
-            eq_(eval(args[0]), called_arg)
+            self.reg.set_status.assert_called_with(
+                401, 'Invalid Authentication')
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.put('invalid')
+        self.reg.post('invalid')
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=dummy_uaid)
-    def test_put_bad_params(self, arg):
+    def test_post_bad_params(self, arg):
         self.reg.ap_settings.routers["test"] = self.router_mock
         args = self.reg.request.arguments
         args['invalid_connect'] = ['{"type":"test"}']
@@ -474,13 +475,15 @@ class RegistrationTestCase(unittest.TestCase):
         })
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(400, 'Invalid arguments')
+            self.reg.set_status.assert_called_with(
+                401, 'Invalid Authentication')
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.put('')
+        self.reg.post(dummy_uaid)
         return self.finish_deferred
 
-    def test_put_uaid_chid(self):
+    @patch('uuid.uuid4', return_value=dummy_uaid)
+    def test_post_uaid_chid(self, arg):
         self.reg.request.body = json.dumps(dict(
             type="simplepush",
             channelID=dummy_chid,
@@ -491,26 +494,27 @@ class RegistrationTestCase(unittest.TestCase):
         })
 
         def handle_finish(value):
-            called_arg = dict(useragentid=dummy_uaid,
-                              channelid=dummy_chid,
-                              endpoint="http://localhost/push/abcd123")
             call_args = self.reg.write.call_args
             ok_(call_args is not None)
             args = call_args[0]
-            eq_(eval(args[0]), called_arg)
+            call_arg = json.loads(args[0])
+            eq_(call_arg["uaid"], dummy_uaid)
+            eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
+            ok_("hash" in call_arg)
+            ok_("nonce" in call_arg)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.put(dummy_uaid)
+        self.reg.post()
         return self.finish_deferred
 
-    def test_bad_put(self):
+    def test_post_bad(self):
         from autopush.router.interface import RouterException
-        self.reg.ap_settings.routers["test"] = self.router_mock
+        self.reg.ap_settings.routers["test"] = router_mock = Mock(spec=IRouter)
 
         def bad_register(uaid, connect):
             raise RouterException("stuff", status_code=500,
                                   response_body="Registration badness")
-        self.router_mock.register.side_effect = bad_register
+        router_mock.register.side_effect = bad_register
         self.reg.request.body = json.dumps(dict(
             type="test",
             channelID=dummy_chid,
@@ -525,5 +529,5 @@ class RegistrationTestCase(unittest.TestCase):
             self.flushLoggedErrors()
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.put(dummy_uaid)
+        self.reg.post()
         return self.finish_deferred

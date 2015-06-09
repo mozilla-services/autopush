@@ -74,6 +74,7 @@ class AutopushSettings(object):
 
         key = crypto_key or Fernet.generate_key()
         self.fernet = Fernet(key)
+        self.crypto_key = key
 
         self.max_data = max_data
         self.clients = {}

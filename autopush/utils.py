@@ -1,5 +1,8 @@
+import hashlib
+import hmac
 import socket
 import uuid
+
 
 default_ports = {
     "ws": 80,
@@ -38,3 +41,21 @@ def validate_uaid(uaid):
         except ValueError:
             pass
     return False, str(uuid.uuid4())
+
+
+def validate_uaid_hash(uaid, hashed, secret, nonce):
+    """Validates that a UAID matches the HMAC value using the supplied
+    secret/none"""
+    try:
+        h = hmac.new(key=secret, msg=uaid+nonce, digestmod=hashlib.sha224)
+        return hmac.compare_digest(hashed, h.hexdigest())
+    except:
+        return False
+
+
+def generate_uaid_hash(uaid, secret):
+    """Generate a HMAC for the uaid using the secret. Returns the HMAC hash
+    and the nonce used as a tuple (nonce, hash)."""
+    nonce = uuid.uuid4().hex
+    h = hmac.new(key=secret, msg=uaid+nonce, digestmod=hashlib.sha224)
+    return nonce, h.hexdigest()

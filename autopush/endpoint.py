@@ -22,7 +22,11 @@ from twisted.internet.threads import deferToThread
 from twisted.python import failure, log
 
 from autopush.router.interface import RouterException
-from autopush.utils import validate_uaid
+from autopush.utils import (
+    generate_uaid_hash,
+    validate_uaid,
+    validate_uaid_hash,
+)
 
 
 class Notification(namedtuple("Notification", "version data channel_id")):
@@ -160,6 +164,14 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         self.write(exc.response_body)
         self.finish()
 
+    def _uaid_not_found_err(self, fail):
+        """errBack for uaid lookup not finding the user"""
+        fail.trap(ItemNotFound)
+        self.set_status(404)
+        log.msg("UAID not found in AWS.", **self._client_info())
+        self.write("Invalid")
+        return self.finish()
+
 
 class EndpointHandler(AutoendpointHandler):
     cors_methods = "PUT"
@@ -241,14 +253,6 @@ class EndpointHandler(AutoendpointHandler):
         self.write("Invalid token")
         self.finish()
 
-    def _uaid_not_found_err(self, fail):
-        """errBack for uaid lookup not finding the user"""
-        fail.trap(ItemNotFound)
-        self.set_status(404)
-        log.msg("UAID not found in AWS.", **self._client_info())
-        self.write("Invalid")
-        return self.finish()
-
 
 class RegistrationHandler(AutoendpointHandler):
     cors_methods = "GET,PUT"
@@ -257,85 +261,289 @@ class RegistrationHandler(AutoendpointHandler):
     #                    Cyclone HTTP Methods
     #############################################################
     @cyclone.web.asynchronous
-    def get(self, uaid=None):
+    def get(self, uaid=""):
         """HTTP GET Handler
 
         Returns registered router data for the UAID.
 
-        """
-        if uaid is None:
-            return self._error(400, "invalid UAID")
-        valid, new_uaid = validate_uaid(uaid)
-        if not valid:
-            log.msg("Improper UAID value specified %s" % uaid)
-            return self._error(400, "invalid UAID")
-        self.uaid = new_uaid
+        Requires the nonce/hash to be included as an ``Authorization`` header.
 
+        Request:
+
+        .. code-block:: txt
+
+            GET /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
+            Host: endpoint.push.com
+            Authorization: NONCE HASH
+
+        Response:
+
+        .. code-block:: txt
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+            Content-Length: nnn
+
+            {
+                "type": "apns",
+                "data": {
+                    "token": "APNS_TOKEN_DATA",
+                    ...
+                }
+            }
+
+
+        """
+        values = self.request.headers.get("Authorization", "").strip().split()
+        if not values or len(values) != 2:
+            return self._error(401, "Invalid Authentication")
+
+        nonce, hashed = values
+        valid, uaid = validate_uaid(uaid)
+        valid = valid and validate_uaid_hash(uaid, hashed,
+                                             self.ap_settings.crypto_key,
+                                             nonce)
+        if not valid:
+            return self._error(401, "Invalid Authentication")
+        self.uaid = uaid
         self.chid = str(uuid.uuid4())
-        d = self._registered(True)
-        d.addCallback(self._return_endpoint)
+        d = deferToThread(self.ap_settings.router.get_uaid, uaid)
+        d.addCallback(self._return_router_data)
+        d.addErrback(self._overload_err)
+        d.addErrback(self._uaid_not_found_err)
         d.addErrback(self._response_err)
         return d
+
+    @cyclone.web.asynchronous
+    def post(self, uaid=None):
+        """HTTP POST Handler for endpoint generation
+
+        Create a new endpoint for a given UAID, or register a new UAID and
+        return a new endpoint.
+
+        If a channelID is not supplied then one will be generated.
+
+        For existing UAID's, the uaid must be present in the URL string and
+        the nonce/hash in the JSON body, for new registration no UAID can be
+        in the URL.
+
+        Endpoint w/New Registration
+        ---------------------------
+
+        Request (for APNS router):
+
+        .. code-block:: txt
+
+            POST /register/
+            Host: endpoint.push.com
+            Content-Type: application/json
+
+            {
+                "type": "apns",
+                "channelID": "a13872c9-5cba-48ab-a8e5-955264647303",
+                "data": {
+                    "token": "APNS_TOKEN_DATA",
+                    ...
+                }
+            }
+
+        Response:
+
+        .. code-block:: txt
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+            Content-Length: nnn
+
+            {
+                "uaid": "5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63",
+                "nonce": "2fba4e86b9c742728bcaedb53073ed04",
+                "hash": "4526e381eb6c191cf783da5d6df248e7",
+                "channelID": "a13872c9-5cba-48ab-a8e5-955264647303",
+                "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
+            }
+
+        Endpoint w/Existing UAID
+        ------------------------
+
+        Request:
+
+        .. code-block:: txt
+
+            POST /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
+            Host: endpoint.push.com
+            Content-Type: application/json
+
+            {
+                "nonce": "2fba4e86b9c742728bcaedb53073ed04",
+                "hash": "4526e381eb6c191cf783da5d6df248e7",
+                "channelID": "8a90e38a-f36c-4c77-901a-c11d02c1516f",
+            }
+
+        Response:
+
+        .. code-block:: txt
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+            Content-Length: nnn
+
+            {
+                "channelID": "8a90e38a-f36c-4c77-901a-c11d02c1516f",
+                "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
+            }
+
+        """
+        self.start_time = time.time()
+        self.add_header("Content-Type", "application/json")
+        params = self._load_params()
+
+        # If there's a UAID, ensure its valid, otherwise we ensure the hash
+        # matches up
+        new_uaid = False
+        if uaid:
+            valid = validate_uaid_hash(uaid, params.get("hash", ""),
+                                       self.ap_settings.crypto_key,
+                                       params.get("nonce", ""))
+            if not valid:
+                return self._error(401, "Invalid Authentication")
+        else:
+            # No UAID supplied, make our own
+            uaid = str(uuid.uuid4())
+            new_uaid = True
+        self.uaid = uaid
+        router_type = params.get("type")
+        if router_type not in self.ap_settings.routers \
+           or 'channelID' not in params:
+            log.msg("Invalid parameters", **self._client_info())
+            return self._error(400, "Invalid arguments")
+        self.chid = params["channelID"]
+        if new_uaid:
+            router = self.ap_settings.routers[router_type]
+            d = Deferred()
+            d.addCallback(router.register, params.get("data", {}))
+            d.addCallback(self._save_router_data, router_type)
+            d.addCallback(self._make_endpoint)
+            d.addCallback(self._return_endpoint, new_uaid)
+            d.addErrback(self._router_fail_err)
+            d.addErrback(self._response_err)
+            d.callback(uaid)
+        else:
+            d = self._make_endpoint(None)
+            d.addCallback(self._return_endpoint, new_uaid)
+            d.addErrback(self._router_fail_err)
+            d.addErrback(self._response_err)
 
     @cyclone.web.asynchronous
     def put(self, uaid=None):
         """HTTP PUT Handler
 
-        Register router data for a UAID.
+        Update router data for an existing UAID.
 
-        Example Request (for APNS router):
+        This endpoint handles updating the router data/type for an existing
+        UAID and requires the nonce/hash for the UAID given.
+
+        Update Router Data
+        ------------------
+
+        Request:
 
         .. code-block:: txt
 
-            PUT /register/OPTIONAL_UAID HTTP/1.1
+            PUT /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
             Host: endpoint.push.com
             Content-Type: application/json
 
             {
-            "type": "apns",
-            "channelID": "a13872c9-5cba-48ab-a8e5-955264647303",
-            "data": {
-                "token": "APNS_TOKEN_DATA",
-                ...
+                "nonce": "2fba4e86b9c742728bcaedb53073ed04",
+                "hash": "4526e381eb6c191cf783da5d6df248e7",
+                "type": "gcm",
+                "data": {
+                    "token": "TOKEN_DATA_FOR_ROUTER_TYPE",
+                    ...
                 }
             }
 
-        If a channelID is not supplied, one will be generated for this
-        endpoint URL. Data for the router must be appropriate for that
-        router type.
+        Response:
+
+        .. code-block:: txt
+
+            HTTP/1.1 200 OK
+            Content-Type: application/json
+            Content-Length: nnn
+
+            {}
 
         """
         self.start_time = time.time()
         self.add_header("Content-Type", "application/json")
 
-        _, uaid = validate_uaid(uaid)
-        self.uaid = uaid
+        valid, uaid = validate_uaid(uaid)
         params = self._load_params()
-        if not params or params.get("type") not in self.ap_settings.routers \
-           or 'channelID' not in params:
+        valid = valid and validate_uaid_hash(uaid, params.get("hash", ""),
+                                             self.ap_settings.crypto_key,
+                                             params.get("nonce", ""))
+        if not valid:
+            return self._error(401, "Invalid Authentication")
+
+        self.uaid = uaid
+        router_type = params.get("type")
+        router_data = params.get("data")
+        if router_type not in self.ap_settings.routers or not router_data:
             log.msg("Invalid parameters", **self._client_info())
             return self._error(400, "Invalid arguments")
-        self.chid = params["channelID"]
-        router = self.ap_settings.routers[params["type"]]
-        d = deferToThread(router.register, uaid, params.get("data", {}))
-        d.addCallback(self._registered)
-        d.addCallback(self._return_endpoint)
+        router = self.ap_settings.routers[router_type]
+
+        d = Deferred()
+        d.addCallback(router.register, router_data)
+        d.addCallback(self._save_router_data, router_type)
+        d.addCallback(self._success)
         d.addErrback(self._router_fail_err)
         d.addErrback(self._response_err)
+        d.callback(uaid)
 
     #############################################################
     #                    Callbacks
     #############################################################
-    def _registered(self, result):
+    def _return_router_data(self, user_item):
+        msg = dict(
+            type=user_item["type"],
+            data=user_item["data"],
+        )
+        self.write(json.dumps(msg))
+        self.finish()
+
+    def _save_router_data(self, router_data, router_type):
+        user_item = dict(
+            uaid=self.uaid,
+            router_type=router_type,
+            router_data=router_data,
+        )
+        return deferToThread(self.ap_settings.router.register_user, user_item)
+
+    def _make_endpoint(self, result):
         return deferToThread(self.ap_settings.make_endpoint,
                              self.uaid, self.chid)
 
-    def _return_endpoint(self, endpoint):
-        msg = {"useragentid": self.uaid,
-               "channelid": self.chid,
-               "endpoint": endpoint}
+    def _return_endpoint(self, endpoint, new_uaid):
+        if new_uaid:
+            nonce, hashed = generate_uaid_hash(self.uaid,
+                                               self.ap_settings.crypto_key)
+            msg = dict(
+                uaid=self.uaid,
+                nonce=nonce,
+                hash=hashed,
+                channelID=self.chid,
+                endpoint=endpoint,
+            )
+        else:
+            msg = dict(channelID=self.chid, endpoint=endpoint)
         self.write(json.dumps(msg))
         log.msg("Endpoint registered via HTTP", **self._client_info())
+        self.finish()
+
+    def _success(self, result):
+        self.write({})
         self.finish()
 
     #############################################################
@@ -353,4 +561,4 @@ class RegistrationHandler(AutoendpointHandler):
                 params["channelID"] = str(uuid.uuid4())
             return params
         except ValueError:
-            return False
+            return {}
