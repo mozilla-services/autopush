@@ -214,6 +214,7 @@ class EndpointHandler(AutoendpointHandler):
 
     def _uaid_lookup_results(self, result, notification):
         """Process the result of the AWS UAID lookup"""
+        # Save the whole record
         router_key = result.get("router", "simplepush")
         router = self.ap_settings.routers[router_key]
         d = Deferred()
@@ -227,9 +228,25 @@ class EndpointHandler(AutoendpointHandler):
 
     def _router_completed(self, response, uaid_data):
         # TODO: Add some custom wake logic here
-        self.set_status(response.status_code)
-        self.write(response.response_body)
-        return self.finish()
+
+        # Were we told to update the router data?
+        if response.router_data is not None:
+            if not response.router_data:
+                del uaid_data["router_data"]
+                del uaid_data["router_type"]
+            else:
+                uaid_data["router_data"] = response.router_data
+            uaid_data["connected_at"] = int(time.time()*1000)
+            d = deferToThread(self.ap_settings.router.register_user,
+                              uaid_data)
+            response.router_data = None
+            d.addCallback(lambda x: self._router_completed(response,
+                                                           uaid_data))
+            return d
+        else:
+            self.set_status(response.status_code)
+            self.write(response.response_body)
+            self.finish()
 
     #############################################################
     #                    Utility Methods
@@ -415,7 +432,6 @@ class RegistrationHandler(AutoendpointHandler):
         else:
             d = self._make_endpoint(None)
             d.addCallback(self._return_endpoint, new_uaid)
-            d.addErrback(self._router_fail_err)
             d.addErrback(self._response_err)
 
     @cyclone.web.asynchronous

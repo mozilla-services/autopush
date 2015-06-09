@@ -228,6 +228,46 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.put(dummy_uaid)
         return self.finish_deferred
 
+    def test_put_router_needs_change(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="simplepush",
+            router_data=dict(),
+        )
+        self.sp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=500,
+            router_data={},
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(500)
+            self.router_mock.register_user.assert_called()
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.put(dummy_uaid)
+        return self.finish_deferred
+
+    def test_put_router_needs_update(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="simplepush",
+            router_data=dict(),
+        )
+        self.sp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=503,
+            router_data=dict(token="new_connect"),
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(503)
+            self.router_mock.register_user.assert_called()
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.put(dummy_uaid)
+        return self.finish_deferred
+
     def test_put_db_error(self):
         self.fernet_mock.decrypt.return_value = "123:456"
         self.router_mock.get_uaid.side_effect = self._throw_provisioned_error

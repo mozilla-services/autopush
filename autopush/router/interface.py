@@ -4,17 +4,28 @@ from autopush.exceptions import AutopushException
 
 class RouterException(AutopushException):
     """Exception if routing has failed, may include a custom status_code and
-    body to write to the response"""
-    def __init__(self, message, status_code=500, response_body=""):
+    body to write to the response.
+
+    """
+    def __init__(self, message, status_code=500, response_body="",
+                 router_data=None):
         super(AutopushException, self).__init__(message)
         self.status_code = status_code
         self.response_body = response_body or message
 
 
 class RouterResponse(object):
-    def __init__(self, status_code=200, response_body=""):
+    """Router response if routing has succeeded.
+
+    If the router data needs to change as a result of this message, either the
+    router got invalidated, or needs updating, then the router_data should be
+    set.
+
+    """
+    def __init__(self, status_code=200, response_body="", router_data=None):
         self.status_code = status_code
         self.response_body = response_body
+        self.router_data = router_data
 
 
 class IRouter(object):
