@@ -14,9 +14,14 @@ from twisted.web.client import Agent, Response
 from txstatsd.metrics.metrics import Metrics
 
 import autopush.endpoint as endpoint
-from autopush.db import Router, Storage
+from autopush.db import (
+    ProvisionedThroughputExceededException,
+    Router,
+    Storage,
+    ItemNotFound
+)
 from autopush.settings import AutopushSettings
-from autopush.router.interface import IRouter
+from autopush.router.interface import IRouter, RouterResponse
 
 mock_dynamodb2 = mock_dynamodb2()
 
@@ -74,7 +79,9 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint = endpoint.EndpointHandler(Application(),
                                                  self.request_mock,
                                                  ap_settings=settings)
-
+        self.settings = settings
+        settings.routers["simplepush"] = Mock(spec=IRouter)
+        self.sp_router_mock = settings.routers["simplepush"]
         self.status_mock = self.endpoint.set_status = Mock()
         self.write_mock = self.endpoint.write = Mock()
 
@@ -185,6 +192,52 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put('')
+        return self.finish_deferred
+
+    def _throw_item_not_found(self, item):
+        raise ItemNotFound("User not found")
+
+    def _throw_provisioned_error(self, *args):
+        raise ProvisionedThroughputExceededException(None, None)
+
+    def test_process_token_client_unknown(self):
+        self.router_mock.configure_mock(**{
+            'get_uaid.side_effect': self._throw_item_not_found})
+
+        def handle_finish(result):
+            self.router_mock.get_uaid.assert_called_with('123')
+            self.status_mock.assert_called_with(404)
+            self.write_mock.assert_called_with('Invalid')
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.version, self.endpoint.data = 789, None
+
+        self.endpoint._token_valid('123:456', 789, None)
+        return self.finish_deferred
+
+    def test_put_default_router(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.router_mock.get_uaid.return_value = dict()
+        self.sp_router_mock.route_notification.return_value = RouterResponse()
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(200)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.put(dummy_uaid)
+        return self.finish_deferred
+
+    def test_put_db_error(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.router_mock.get_uaid.side_effect = self._throw_provisioned_error
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(503)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.put(dummy_uaid)
         return self.finish_deferred
 
     def test_cors(self):
@@ -447,15 +500,51 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=dummy_uaid)
+    def test_post_bad_router_type(self, arg):
+        self.reg.request.body = json.dumps(dict(
+            type="test",
+            data={},
+        ))
+        self.fernet_mock.configure_mock(**{
+            'encrypt.return_value': 'abcd123',
+        })
+
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(
+                400, 'Invalid arguments')
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.post()
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('autopush.endpoint.validate_uaid_hash', return_value=True)
+    def test_post_existing_uaid(self, *args):
+        self.reg.request.headers["Authorization"] = "Fred Smith"
+        self.reg.request.body = "{}"
+        self.fernet_mock.configure_mock(**{
+            'encrypt.return_value': 'abcd123',
+        })
+
+        def handle_finish(value):
+            call_args = self.reg.write.call_args
+            ok_(call_args is not None)
+            args = call_args[0]
+            call_arg = json.loads(args[0])
+            eq_(call_arg["channelID"], dummy_chid)
+            eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.post(dummy_uaid)
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=dummy_uaid)
     def test_post_bad_uaid(self, arg):
         self.reg.ap_settings.routers["test"] = self.router_mock
         self.reg.request.body = json.dumps(dict(
             type="simplepush",
             data={},
         ))
-        self.fernet_mock.configure_mock(**{
-            'encrypt.return_value': 'abcd123',
-        })
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(
@@ -530,4 +619,54 @@ class RegistrationTestCase(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.post()
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('autopush.endpoint.validate_uaid_hash', return_value=True)
+    def test_put(self, *args):
+        self.reg.request.headers["Authorization"] = "Fred Smith"
+        self.reg.ap_settings.routers["apns"] = mock_apns = Mock(spec=IRouter)
+        data = dict(token="some_token")
+        mock_apns.register.return_value = data
+        self.reg.request.body = json.dumps(dict(
+            type="apns",
+            data=data,
+        ))
+
+        def handle_finish(value):
+            self.reg.write.assert_called_with({})
+            mock_apns.register.assert_called_with(dummy_uaid, data)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.put(dummy_uaid)
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=dummy_chid)
+    def test_put_bad_auth(self, *args):
+        self.reg.request.headers["Authorization"] = "Fred Smith"
+
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(
+                401, "Invalid Authentication")
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.put(dummy_uaid)
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('autopush.endpoint.validate_uaid_hash', return_value=True)
+    def test_put_bad_arguments(self, *args):
+        self.reg.request.headers["Authorization"] = "Fred Smith"
+        data = dict(token="some_token")
+        self.reg.request.body = json.dumps(dict(
+            type="apns",
+            data=data,
+        ))
+
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(
+                400, "Invalid arguments")
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.put(dummy_uaid)
         return self.finish_deferred

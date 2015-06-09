@@ -24,7 +24,6 @@ from twisted.python import failure, log
 from autopush.router.interface import RouterException
 from autopush.utils import (
     generate_uaid_hash,
-    validate_uaid,
     validate_uaid_hash,
 )
 
@@ -294,17 +293,9 @@ class RegistrationHandler(AutoendpointHandler):
 
 
         """
-        values = self.request.headers.get("Authorization", "").strip().split()
-        if not values or len(values) != 2:
+        if not self._validate_auth(uaid):
             return self._error(401, "Invalid Authentication")
 
-        nonce, hashed = values
-        valid, uaid = validate_uaid(uaid)
-        valid = valid and validate_uaid_hash(uaid, hashed,
-                                             self.ap_settings.crypto_key,
-                                             nonce)
-        if not valid:
-            return self._error(401, "Invalid Authentication")
         self.uaid = uaid
         self.chid = str(uuid.uuid4())
         d = deferToThread(self.ap_settings.router.get_uaid, uaid)
@@ -315,7 +306,7 @@ class RegistrationHandler(AutoendpointHandler):
         return d
 
     @cyclone.web.asynchronous
-    def post(self, uaid=None):
+    def post(self, uaid=""):
         """HTTP POST Handler for endpoint generation
 
         Create a new endpoint for a given UAID, or register a new UAID and
@@ -372,13 +363,10 @@ class RegistrationHandler(AutoendpointHandler):
 
             POST /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
             Host: endpoint.push.com
+            Authorization: NONCE HASH
             Content-Type: application/json
 
-            {
-                "nonce": "2fba4e86b9c742728bcaedb53073ed04",
-                "hash": "4526e381eb6c191cf783da5d6df248e7",
-                "channelID": "8a90e38a-f36c-4c77-901a-c11d02c1516f",
-            }
+            {}
 
         Response:
 
@@ -402,10 +390,7 @@ class RegistrationHandler(AutoendpointHandler):
         # matches up
         new_uaid = False
         if uaid:
-            valid = validate_uaid_hash(uaid, params.get("hash", ""),
-                                       self.ap_settings.crypto_key,
-                                       params.get("nonce", ""))
-            if not valid:
+            if not self._validate_auth(uaid):
                 return self._error(401, "Invalid Authentication")
         else:
             # No UAID supplied, make our own
@@ -413,8 +398,7 @@ class RegistrationHandler(AutoendpointHandler):
             new_uaid = True
         self.uaid = uaid
         router_type = params.get("type")
-        if router_type not in self.ap_settings.routers \
-           or 'channelID' not in params:
+        if new_uaid and router_type not in self.ap_settings.routers:
             log.msg("Invalid parameters", **self._client_info())
             return self._error(400, "Invalid arguments")
         self.chid = params["channelID"]
@@ -435,7 +419,7 @@ class RegistrationHandler(AutoendpointHandler):
             d.addErrback(self._response_err)
 
     @cyclone.web.asynchronous
-    def put(self, uaid=None):
+    def put(self, uaid=""):
         """HTTP PUT Handler
 
         Update router data for an existing UAID.
@@ -452,11 +436,10 @@ class RegistrationHandler(AutoendpointHandler):
 
             PUT /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
             Host: endpoint.push.com
+            Authorization: NONCE HASH
             Content-Type: application/json
 
             {
-                "nonce": "2fba4e86b9c742728bcaedb53073ed04",
-                "hash": "4526e381eb6c191cf783da5d6df248e7",
                 "type": "gcm",
                 "data": {
                     "token": "TOKEN_DATA_FOR_ROUTER_TYPE",
@@ -476,22 +459,19 @@ class RegistrationHandler(AutoendpointHandler):
 
         """
         self.start_time = time.time()
-        self.add_header("Content-Type", "application/json")
 
-        valid, uaid = validate_uaid(uaid)
-        params = self._load_params()
-        valid = valid and validate_uaid_hash(uaid, params.get("hash", ""),
-                                             self.ap_settings.crypto_key,
-                                             params.get("nonce", ""))
-        if not valid:
+        if not self._validate_auth(uaid):
             return self._error(401, "Invalid Authentication")
 
+        params = self._load_params()
         self.uaid = uaid
         router_type = params.get("type")
         router_data = params.get("data")
         if router_type not in self.ap_settings.routers or not router_data:
             log.msg("Invalid parameters", **self._client_info())
             return self._error(400, "Invalid arguments")
+
+        self.add_header("Content-Type", "application/json")
         router = self.ap_settings.routers[router_type]
 
         d = Deferred()
@@ -518,6 +498,7 @@ class RegistrationHandler(AutoendpointHandler):
             uaid=self.uaid,
             router_type=router_type,
             router_data=router_data,
+            connected_at=int(time.time()*1000),
         )
         return deferToThread(self.ap_settings.router.register_user, user_item)
 
@@ -549,6 +530,15 @@ class RegistrationHandler(AutoendpointHandler):
     #############################################################
     #                    Utility Methods
     #############################################################
+    def _validate_auth(self, uaid):
+        values = self.request.headers.get("Authorization", "").strip().split()
+        if not values or len(values) != 2:
+            return False
+
+        nonce, hashed = values
+        return validate_uaid_hash(uaid, hashed, self.ap_settings.crypto_key,
+                                  nonce)
+
     def _error(self, code, msg):
         self.set_status(code, msg)
         self.finish()
