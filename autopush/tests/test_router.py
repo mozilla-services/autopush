@@ -12,7 +12,7 @@ import gcmclient
 
 from autopush.endpoint import Notification
 from autopush.router import APNSRouter, GCMRouter
-from autopush.router.interface import RouterException, RouterResponse
+from autopush.router.interface import RouterException, RouterResponse, IRouter
 from autopush.settings import AutopushSettings
 
 
@@ -29,6 +29,19 @@ def tearDown():
 
 class RouterTestCase(TestCase):
     pass
+
+
+class RouterInterfaceTestCase(TestCase):
+    def test_not_implemented(self):
+        self.assertRaises(NotImplementedError, IRouter, None, None)
+
+        def init(self, settings, router_conf):
+            pass
+        IRouter.__init__ = init
+        ir = IRouter(None, None)
+        self.assertRaises(NotImplementedError, ir.register, "uaid", {})
+        self.assertRaises(NotImplementedError, ir.route_notification, "uaid",
+                          {})
 
 
 dummy_chid = str(uuid.uuid4())

@@ -63,7 +63,7 @@ class APNSRouter(object):
         self.apns.gateway_server.send_notification(token, payload, now)
 
         # cleanup sent messages
-        if len(self.messages):
+        if self.messages:
             for time_sent in self.messages.keys():
                 if time_sent < now - self.config.get("expry", 10):
                     del self.messages[time_sent]
