@@ -633,9 +633,6 @@ class WebsocketTestCase(unittest.TestCase):
     def test_register_kill_others_fail(self):
         self._connect()
 
-        def raiser(*args):
-            self.fail("Failed to trap for ConnectError")
-
         d = Deferred()
         self.proto.ap_settings.agent.request.return_value = d
         nodeId = "http://otherhost"
@@ -644,7 +641,6 @@ class WebsocketTestCase(unittest.TestCase):
         connected = int(time.time())
         res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
-        d.addErrback(raiser)
         d.errback(ConnectError())
         return d
 
@@ -818,7 +814,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Check the call result
         args = self.send_mock.call_args
-        assert args is None
+        eq_(args, None)
 
     def test_notification_retains_no_dash(self):
         self._connect()

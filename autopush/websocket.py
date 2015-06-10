@@ -647,13 +647,12 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         toSend = []
         for update in updates:
             chid, version = update["channelID"], update["version"]
-            if self.updates_sent.get(chid, 0) >= version or \
-               self.direct_updates.get(chid, 0) >= version:
-                continue
-
-            # Otherwise we can record we sent this version
-            self.direct_updates[chid] = version
-            toSend.append(update)
+            older = self.updates_sent.get(chid, 0) >= version or \
+                self.direct_updates.get(chid, 0) >= version
+            if not older:
+                # Otherwise we can record we sent this version
+                self.direct_updates[chid] = version
+                toSend.append(update)
 
         if toSend:
             msg = {"messageType": "notification", "updates": toSend}
