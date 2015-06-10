@@ -27,8 +27,9 @@ class GCMRouter(object):
         return router_data
 
     def route_notification(self, notification, uaid_data):
+        router_data = uaid_data["router_data"]
         # Kick the entire notification routing off to a thread
-        return deferToThread(self._route, notification, uaid_data)
+        return deferToThread(self._route, notification, router_data)
 
     def _route(self, notification, router_data):
         payload = gcmclient.JSONMessage(

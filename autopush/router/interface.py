@@ -45,12 +45,12 @@ class IRouter(object):
         """
         raise NotImplementedError("register must be implemented")
 
-    def route_notification(self, notification, routing_data):
+    def route_notification(self, notification, uaid_data):
         """Route a notification
 
         :param notification: A :class:`~autopush.endpoint.Notificaiton`
                              instance.
-        :param routing_data: A dict of the router_data from the db record.
+        :param uaid_data: A dict of the full user item from the db record.
         :returns: A :class:`RouterResponse` object upon successful routing.
         :raises: A :class:`RouterException` if routing fails.
 

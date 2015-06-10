@@ -132,7 +132,7 @@ class SimpleRouter(object):
 
         if result.code == 200:
             self.metrics.increment("router.broadcast.save_hit")
-            returnValue(RouterResponse("Delivered"))
+            returnValue(RouterResponse(response_body="Delivered"))
         else:
             self.metrics.increment("router.broadcast.miss")
             returnValue(RouterResponse(202, "Notification Stored"))
