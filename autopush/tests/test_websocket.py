@@ -21,6 +21,7 @@ from autopush.websocket import (
     SimplePushServerProtocol,
     RouterHandler,
     NotificationHandler,
+    WebSocketServerProtocol,
 )
 
 
@@ -46,8 +47,10 @@ class WebsocketTestCase(unittest.TestCase):
         )
         self.proto.ap_settings = settings
         self.proto.sendMessage = self.send_mock = Mock()
+        self.orig_close = self.proto.sendClose
         self.proto.sendClose = self.close_mock = Mock()
         self.proto.transport = self.transport_mock = Mock()
+        self.proto.closeHandshakeTimeout = 0
         settings.metrics = Mock(spec=Metrics)
 
     def _connect(self):
@@ -97,6 +100,59 @@ class WebsocketTestCase(unittest.TestCase):
             self.proto.onConnect(req)
 
         req.headers.get.assert_called_with("user-agent")
+
+    @patch("autopush.websocket.reactor")
+    def test_autoping_no_uaid(self, mock_reactor):
+        # restore our sendClose
+        WebSocketServerProtocol.sendClose = self.proto.sendClose
+        WebSocketServerProtocol._sendAutoPing = Mock()
+        self.proto.sendClose = self.orig_close
+        self._connect()
+        self.proto._sendAutoPing()
+        mock_reactor.callLater.assert_called()
+        WebSocketServerProtocol.sendClose.assert_called()
+
+    @patch("autopush.websocket.reactor")
+    def test_autoping_uaid_not_in_clients(self, mock_reactor):
+        # restore our sendClose
+        WebSocketServerProtocol.sendClose = self.proto.sendClose
+        WebSocketServerProtocol._sendAutoPing = Mock()
+        self.proto.sendClose = self.orig_close
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto._sendAutoPing()
+        mock_reactor.callLater.assert_called()
+        WebSocketServerProtocol.sendClose.assert_called()
+
+    @patch("autopush.websocket.reactor")
+    def test_nuke_connection(self, mock_reactor):
+        self.proto.transport = Mock()
+        self._connect()
+        self.proto.state = ""
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.nukeConnection()
+        mock_reactor.callLater.assert_called_with(60, self.proto.verifyNuke)
+
+    @patch("autopush.websocket.reactor")
+    def test_nuke_connection_shutdown_ran(self, mock_reactor):
+        self.proto.transport = Mock()
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto._shutdown_ran = True
+        self.proto.nukeConnection()
+        eq_(len(mock_reactor.mock_calls), 0)
+
+    def test_verify_nuke(self):
+        self._connect()
+        self.proto.verifyNuke()
+        eq_(len(self.proto.ap_settings.metrics.mock_calls), 2)
+
+    def test_verify_nuke_shutdown_ran(self):
+        self._connect()
+        self.proto._shutdown_ran = True
+        self.proto.verifyNuke()
+        # Should be 1 from connect
+        eq_(len(self.proto.ap_settings.metrics.mock_calls), 1)
 
     def test_producer_interface(self):
         self._connect()
@@ -307,6 +363,15 @@ class WebsocketTestCase(unittest.TestCase):
 
         def check_result(msg):
             eq_(msg["status"], 200)
+        return self._check_response(check_result)
+
+    def test_hello_bad_router(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                router_type="satellite"))
+
+        def check_result(msg):
+            eq_(msg["status"], 401)
         return self._check_response(check_result)
 
     def test_hello_with_uaid(self):

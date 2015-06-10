@@ -51,6 +51,7 @@ class ConnectionMainTestCase(unittest.TestCase):
             "autopush.main.log",
             "autopush.main.task",
             "autopush.main.reactor",
+            "autopush.main.listenWS",
             "autopush.settings.TwistedMetrics",
         ]
         self.mocks = {}
@@ -67,6 +68,8 @@ class ConnectionMainTestCase(unittest.TestCase):
 
     def test_ssl(self):
         connection_main([
+            "--ssl_cert=keys/server.crt",
+            "--ssl_key=keys/server.key",
             "--router_ssl_cert=keys/server.crt",
             "--router_ssl_key=keys/server.key",
         ])

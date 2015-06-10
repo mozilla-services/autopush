@@ -92,21 +92,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         reactor.callLater(when, f)
         return d
 
-    def defer(self):
-        d = Deferred()
-
-        def removeDefer(result):
-            self._callbacks.remove(d)
-            return result
-
-        def trapCancel(fail):
-            fail.trap(CancelledError)
-
-        d.addErrback(trapCancel)
-        d.addCallback(removeDefer)
-        self._callbacks.append(d)
-        return d
-
     @property
     def base_tags(self):
         return self._base_tags if self._base_tags else None
@@ -127,12 +112,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     @property
     def paused(self):
         return self._paused
-
-    @log_exception
-    def _connectionLost(self, reason):
-        """Make extra sure we log any exceptions in here, this shouldn't be
-        needed"""
-        return WebSocketServerProtocol._connectionLost(self, reason)
 
     @log_exception
     def _sendAutoPing(self):
@@ -379,8 +358,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # Default router choice
         router_type = data.get("router_type", "simplepush")
-        if not router_type or router_type not in self.ap_settings.routers:
-            return self.returnError("hello", "invalid router", "401")
+        if router_type not in self.ap_settings.routers:
+            return self.returnError("hello", "invalid router", 401)
 
         self.transport.pauseProducing()
         user_item = dict(
