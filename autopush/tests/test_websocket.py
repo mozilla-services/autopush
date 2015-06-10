@@ -624,11 +624,7 @@ class WebsocketTestCase(unittest.TestCase):
         uaid = "deadbeef-0000-0000-0000-000000000000"
         self.proto.uaid = uaid
         connected = int(time.time())
-        res = {"Attributes": {
-               "node_id": {"S": nodeId},
-               "uaid": {"S": uaid},
-               "connected_at": {"N": connected}},
-               }
+        res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
         mock_agent.request.assert_called(
             "DELETE",
@@ -646,11 +642,7 @@ class WebsocketTestCase(unittest.TestCase):
         uaid = "deadbeef-0000-0000-0000-000000000000"
         self.proto.uaid = uaid
         connected = int(time.time())
-        res = {"Attributes": {
-               "node_id": {"S": nodeId},
-               "uaid": {"S": uaid},
-               "connected_at": {"N": connected}},
-               }
+        res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
         d.addErrback(raiser)
         d.errback(ConnectError())
@@ -671,11 +663,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.sendClose = Mock()
         self.proto.sendClose = Mock()
         self.proto.uaid = uaid
-        res = {"Attributes": {
-               "node_id": {"S": nodeId},
-               "uaid": {"S": uaid},
-               "connected_at": {"N": connected}},
-               }
+        res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
         # the current one should be dropped.
         eq_(ff.sendClose.call_count, 0)
@@ -695,11 +683,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ap_settings.clients = {uaid: ff}
         self.proto.sendClose = Mock()
         self.proto.uaid = uaid
-        res = {"Attributes": {
-               "node_id": {"S": nodeId},
-               "uaid": {"S": uaid},
-               "connected_at": {"N": connected}},
-               }
+        res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
         # the existing one should be dropped.
         eq_(ff.sendClose.call_count, 1)
