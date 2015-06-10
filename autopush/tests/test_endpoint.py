@@ -460,7 +460,7 @@ class RegistrationTestCase(unittest.TestCase):
         eq_(reg._headers[ch2], "GET,PUT")
 
     @patch('uuid.uuid4', return_value=dummy_chid)
-    @patch('autopush.endpoint.validate_uaid_hash', return_value=True)
+    @patch('autopush.endpoint.validate_hash', return_value=True)
     def test_get_valid(self, *args):
         # All is well check.
         self.fernet_mock.configure_mock(**{
@@ -532,8 +532,7 @@ class RegistrationTestCase(unittest.TestCase):
             call_arg = json.loads(args[0])
             eq_(call_arg["uaid"], dummy_uaid)
             eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
-            ok_("hash" in call_arg)
-            ok_("nonce" in call_arg)
+            ok_("secret" in call_arg)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.post()
@@ -558,7 +557,7 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=dummy_chid)
-    @patch('autopush.endpoint.validate_uaid_hash', return_value=True)
+    @patch('autopush.endpoint.validate_hash', return_value=True)
     def test_post_existing_uaid(self, *args):
         self.reg.request.headers["Authorization"] = "Fred Smith"
         self.reg.request.body = "{}"
@@ -629,8 +628,7 @@ class RegistrationTestCase(unittest.TestCase):
             call_arg = json.loads(args[0])
             eq_(call_arg["uaid"], dummy_uaid)
             eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
-            ok_("hash" in call_arg)
-            ok_("nonce" in call_arg)
+            ok_("secret" in call_arg)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.post()
@@ -662,9 +660,9 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=dummy_chid)
-    @patch('autopush.endpoint.validate_uaid_hash', return_value=True)
+    @patch('autopush.endpoint.validate_hash', return_value=True)
     def test_put(self, *args):
-        self.reg.request.headers["Authorization"] = "Fred Smith"
+        self.reg.request.headers["Authorization"] = "Fred"
         self.reg.ap_settings.routers["apns"] = mock_apns = Mock(spec=IRouter)
         data = dict(token="some_token")
         mock_apns.register.return_value = data
@@ -694,9 +692,9 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=dummy_chid)
-    @patch('autopush.endpoint.validate_uaid_hash', return_value=True)
+    @patch('autopush.endpoint.validate_hash', return_value=True)
     def test_put_bad_arguments(self, *args):
-        self.reg.request.headers["Authorization"] = "Fred Smith"
+        self.reg.request.headers["Authorization"] = "Fred"
         data = dict(token="some_token")
         self.reg.request.body = json.dumps(dict(
             type="apns",

@@ -10,8 +10,9 @@ from twisted.trial import unittest
 import apns
 import gcmclient
 
+from autopush.db import Router, Storage
 from autopush.endpoint import Notification
-from autopush.router import APNSRouter, GCMRouter
+from autopush.router import APNSRouter, GCMRouter, SimpleRouter
 from autopush.router.interface import RouterException, RouterResponse, IRouter
 from autopush.settings import AutopushSettings
 
@@ -27,8 +28,22 @@ def tearDown():
     mock_dynamodb2.stop()
 
 
-class RouterTestCase(TestCase):
-    pass
+class MockAssist(object):
+    def __init__(self, results):
+        self.cur = 0
+        self.max = len(results)
+        self.results = results
+
+    def __call__(self, *args, **kwargs):
+        try:
+            r = self.results[self.cur]
+            if callable(r):
+                return r()
+            else:
+                return r
+        finally:
+            if self.cur < (self.max-1):
+                self.cur += 1
 
 
 class RouterInterfaceTestCase(TestCase):
@@ -122,8 +137,8 @@ class GCMRouterTestCase(unittest.TestCase):
         self._old_gcm = gcmclient.GCM
         gcmclient.GCM = Mock(spec=gcmclient.GCM)
 
-        apns_config = {'cert_file': 'fake.cert', 'key_file': 'fake.key'}
-        self.router = GCMRouter(settings, apns_config)
+        gcm_config = {'apikey': '12345678abcdefg'}
+        self.router = GCMRouter(settings, gcm_config)
         self.notif = Notification(10, "data", dummy_chid)
         self.router_data = dict(token="connect_data")
         mock_result = Mock(spec=gcmclient.gcm.Result)
@@ -229,4 +244,31 @@ class GCMRouterTestCase(unittest.TestCase):
             self.router.gcm.send.assert_called()
             self.flushLoggedErrors()
         d.addBoth(check_results)
+        return d
+
+
+class SimplePushRouterTestCase(unittest.TestCase):
+    def setUp(self):
+        settings = AutopushSettings(
+            hostname="localhost",
+            statsd_host=None,
+        )
+
+        self.router = SimpleRouter(settings, {})
+        self.notif = Notification(10, "data", dummy_chid)
+        self.router_data = dict(token="connect_data")
+        mock_result = Mock(spec=gcmclient.gcm.Result)
+        mock_result.canonical = dict()
+        mock_result.failed = dict()
+        mock_result.not_registered = dict()
+        mock_result.needs_retry.return_value = False
+        self.router_mock = settings.router = Mock(spec=Router)
+        self.storage_mock = settings.storage = Mock(spec=Storage)
+
+    def test_register(self):
+        r = self.router.register(None, {})
+        eq_(r, {})
+
+    def __route(self):
+        d = self.router.route_notification(self.notif, self.router_data)
         return d

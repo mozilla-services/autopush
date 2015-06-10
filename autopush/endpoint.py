@@ -23,8 +23,8 @@ from twisted.python import failure, log
 
 from autopush.router.interface import RouterException
 from autopush.utils import (
-    generate_uaid_hash,
-    validate_uaid_hash,
+    generate_hash,
+    validate_hash,
 )
 
 
@@ -284,13 +284,18 @@ class RegistrationHandler(AutoendpointHandler):
 
         Requires the nonce/hash to be included as an ``Authorization`` header.
 
+        The ``HASH`` must be a HMAC using SHA256, with the secret sent on the
+        original post, like so::
+
+            HMAC(key=secret, message=RAW_CONTENT_PAYLOAD)
+
         Request:
 
         .. code-block:: txt
 
             GET /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
             Host: endpoint.push.com
-            Authorization: NONCE HASH
+            Authorization: HASH
 
         Response:
 
@@ -307,7 +312,6 @@ class RegistrationHandler(AutoendpointHandler):
                     ...
                 }
             }
-
 
         """
         if not self._validate_auth(uaid):
@@ -365,8 +369,7 @@ class RegistrationHandler(AutoendpointHandler):
 
             {
                 "uaid": "5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63",
-                "nonce": "2fba4e86b9c742728bcaedb53073ed04",
-                "hash": "4526e381eb6c191cf783da5d6df248e7",
+                "secret": "4526e381eb6c191cf783da5d6df248e7",
                 "channelID": "a13872c9-5cba-48ab-a8e5-955264647303",
                 "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
             }
@@ -380,7 +383,7 @@ class RegistrationHandler(AutoendpointHandler):
 
             POST /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
             Host: endpoint.push.com
-            Authorization: NONCE HASH
+            Authorization: HASH
             Content-Type: application/json
 
             {}
@@ -524,12 +527,10 @@ class RegistrationHandler(AutoendpointHandler):
 
     def _return_endpoint(self, endpoint, new_uaid):
         if new_uaid:
-            nonce, hashed = generate_uaid_hash(self.uaid,
-                                               self.ap_settings.crypto_key)
+            hashed = generate_hash(self.uaid, self.ap_settings.crypto_key)
             msg = dict(
                 uaid=self.uaid,
-                nonce=nonce,
-                hash=hashed,
+                secret=hashed,
                 channelID=self.chid,
                 endpoint=endpoint,
             )
@@ -547,13 +548,10 @@ class RegistrationHandler(AutoendpointHandler):
     #                    Utility Methods
     #############################################################
     def _validate_auth(self, uaid):
-        values = self.request.headers.get("Authorization", "").strip().split()
-        if not values or len(values) != 2:
-            return False
-
-        nonce, hashed = values
-        return validate_uaid_hash(uaid, hashed, self.ap_settings.crypto_key,
-                                  nonce)
+        secret = self.ap_settings.crypto_key
+        hashed = self.request.headers.get("Authorization", "").strip()
+        key = generate_hash(secret, uaid)
+        return validate_hash(key, self.request.body, hashed)
 
     def _error(self, code, msg):
         self.set_status(code, msg)

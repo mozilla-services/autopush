@@ -43,19 +43,18 @@ def validate_uaid(uaid):
     return False, str(uuid.uuid4())
 
 
-def validate_uaid_hash(uaid, hashed, secret, nonce):
+def validate_hash(key, payload, hashed):
     """Validates that a UAID matches the HMAC value using the supplied
-    secret/none"""
+    secret"""
     try:
-        h = hmac.new(key=secret, msg=uaid+nonce, digestmod=hashlib.sha224)
+        h = hmac.new(key=key, msg=payload, digestmod=hashlib.sha256)
         return hmac.compare_digest(hashed, h.hexdigest())
     except:
         return False
 
 
-def generate_uaid_hash(uaid, secret):
+def generate_hash(key, payload):
     """Generate a HMAC for the uaid using the secret. Returns the HMAC hash
     and the nonce used as a tuple (nonce, hash)."""
-    nonce = uuid.uuid4().hex
-    h = hmac.new(key=secret, msg=uaid+nonce, digestmod=hashlib.sha224)
-    return nonce, h.hexdigest()
+    h = hmac.new(key=key, msg=payload, digestmod=hashlib.sha256)
+    return h.hexdigest()
