@@ -9,6 +9,9 @@ from autopush.main import (
     endpoint_main,
     make_settings
 )
+from autopush.utils import str2bool, resolve_ip
+from autopush.settings import AutopushSettings
+
 
 mock_dynamodb2 = mock_dynamodb2()
 
@@ -19,6 +22,27 @@ def setUp():
 
 def tearDown():
     mock_dynamodb2.stop()
+
+
+class UtilsTestCase(unittest.TestCase):
+    def test_str2bool(self):
+        eq_(True, str2bool("t"))
+        eq_(False, str2bool("false"))
+        eq_(True, str2bool("True"))
+
+
+class SettingsTestCase(unittest.TestCase):
+    def test_resolve_host(self):
+        ip = resolve_ip("google.com")
+        settings = AutopushSettings(
+            hostname="google.com", resolve_hostname=True)
+        eq_(settings.hostname, ip)
+
+    @patch("autopush.utils.socket")
+    def test_resolve_host_no_interface(self, mock_socket):
+        mock_socket.getaddrinfo.return_value = ""
+        ip = resolve_ip("google.com")
+        eq_(ip, "google.com")
 
 
 class ConnectionMainTestCase(unittest.TestCase):
@@ -41,6 +65,12 @@ class ConnectionMainTestCase(unittest.TestCase):
     def test_basic(self):
         connection_main([])
 
+    def test_ssl(self):
+        connection_main([
+            "--router_ssl_cert=keys/server.crt",
+            "--router_ssl_key=keys/server.key",
+        ])
+
 
 class EndpointMainTestCase(unittest.TestCase):
     def setUp(self):
@@ -62,6 +92,12 @@ class EndpointMainTestCase(unittest.TestCase):
 
     def test_basic(self):
         endpoint_main([])
+
+    def test_ssl(self):
+        endpoint_main([
+            "--ssl_cert=keys/server.crt",
+            "--ssl_key=keys/server.key",
+        ])
 
     def test_ping_settings(self):
         class arg:

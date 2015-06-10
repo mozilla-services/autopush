@@ -1,6 +1,4 @@
 """autopush daemon script"""
-import sys
-
 import configargparse
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
@@ -111,10 +109,7 @@ def add_router_args(parser):
                         type=str, env_var="APNS_KEY_FILE")
 
 
-def _parse_connection(sysargs=None):
-    if sysargs is None:
-        sysargs = sys.argv[1:]
-
+def _parse_connection(sysargs):
     config_files = [
         '/etc/autopush_connection.ini',
         '~/.autopush_connection.ini',
@@ -161,10 +156,7 @@ def _parse_connection(sysargs=None):
     return args, parser
 
 
-def _parse_endpoint(sysargs=None):
-    if sysargs is None:
-        sysargs = sys.argv[1:]
-
+def _parse_endpoint(sysargs):
     config_files = [
         '/etc/autopush_endpoint.ini',
         '~/.autopush_endpoint.ini',
