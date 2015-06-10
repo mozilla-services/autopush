@@ -405,6 +405,8 @@ class RegistrationHandler(AutoendpointHandler):
         self.start_time = time.time()
         self.add_header("Content-Type", "application/json")
         params = self._load_params()
+        if "channelID" not in params:
+            return self._error(400, "Invalid arguments")
 
         # If there's a UAID, ensure its valid, otherwise we ensure the hash
         # matches up
@@ -559,10 +561,6 @@ class RegistrationHandler(AutoendpointHandler):
 
     def _load_params(self):
         try:
-            params = json.loads(self.request.body)
-            chid = params.get("channelID")
-            if not chid:
-                params["channelID"] = str(uuid.uuid4())
-            return params
+            return json.loads(self.request.body)
         except ValueError:
             return {}

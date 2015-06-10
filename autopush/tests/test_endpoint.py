@@ -401,7 +401,7 @@ class RegistrationTestCase(unittest.TestCase):
     @patch('uuid.uuid4', return_value=dummy_chid)
     def test_load_params_arguments(self, u=None):
         self.reg.request.body = json.dumps(dict(
-            channelID="",
+            channelID=dummy_chid,
             type="test",
         ))
         result = self.reg._load_params()
@@ -519,6 +519,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.ap_settings.routers["test"] = self.router_mock
         self.reg.request.body = json.dumps(dict(
             type="simplepush",
+            channelID=dummy_chid,
             data={},
         ))
         self.fernet_mock.configure_mock(**{
@@ -539,14 +540,27 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=dummy_uaid)
-    def test_post_bad_router_type(self, arg):
+    def test_post_invalid_args(self, arg):
         self.reg.request.body = json.dumps(dict(
             type="test",
             data={},
         ))
-        self.fernet_mock.configure_mock(**{
-            'encrypt.return_value': 'abcd123',
-        })
+
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(
+                400, 'Invalid arguments')
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.post()
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=dummy_uaid)
+    def test_post_bad_router_type(self, arg):
+        self.reg.request.body = json.dumps(dict(
+            type="test",
+            channelID=dummy_chid,
+            data={},
+        ))
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(
@@ -560,7 +574,9 @@ class RegistrationTestCase(unittest.TestCase):
     @patch('autopush.endpoint.validate_hash', return_value=True)
     def test_post_existing_uaid(self, *args):
         self.reg.request.headers["Authorization"] = "Fred Smith"
-        self.reg.request.body = "{}"
+        self.reg.request.body = json.dumps(dict(
+            channelID=dummy_chid,
+        ))
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
@@ -582,6 +598,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.ap_settings.routers["test"] = self.router_mock
         self.reg.request.body = json.dumps(dict(
             type="simplepush",
+            channelID=dummy_chid,
             data={},
         ))
 
@@ -596,11 +613,9 @@ class RegistrationTestCase(unittest.TestCase):
     @patch('uuid.uuid4', return_value=dummy_uaid)
     def test_post_bad_params(self, arg):
         self.reg.ap_settings.routers["test"] = self.router_mock
-        args = self.reg.request.arguments
-        args['invalid_connect'] = ['{"type":"test"}']
-        self.fernet_mock.configure_mock(**{
-            'encrypt.return_value': 'abcd123',
-        })
+        self.reg.request.body = json.dumps(dict(
+            channelID=dummy_chid,
+        ))
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(
