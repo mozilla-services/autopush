@@ -194,7 +194,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # Track notifications we don't need to delete separately
         self.direct_updates = {}
-        self.bridge = None
 
     #############################################################
     #                    Connection Methods

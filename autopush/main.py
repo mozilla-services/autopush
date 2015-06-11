@@ -82,10 +82,10 @@ def add_shared_args(parser):
                         default=4096, env_var='MAX_DATA')
 
 
-def add_router_args(parser):
+def add_external_router_args(parser):
     # GCM
-    parser.add_argument('--bridge', help='enable Proprietary Ping',
-                        type=bool, default=False, env_var='BRIDGE')
+    parser.add_argument('--external_router', help='enable external routers',
+                        type=bool, default=False, env_var='EXTERNAL_ROUTER')
     label = "GCM Router:"
     parser.add_argument('--gcm_ttl', help="%s Time to Live" % label,
                         type=int, default=60, env_var="GCM_TTL")
@@ -150,7 +150,7 @@ def _parse_connection(sysargs):
                         help="Timeout in seconds for Websocket ping replys",
                         default=4, type=float, env_var="AUTO_PING_TIMEOUT")
 
-    add_router_args(parser)
+    add_external_router_args(parser)
     add_shared_args(parser)
     args = parser.parse_args(sysargs)
     return args, parser
@@ -174,7 +174,7 @@ def _parse_endpoint(sysargs):
     parser.add_argument('--cors', help='Allow CORS PUTs for update.',
                         type=bool, default=False, env_var='ALLOW_CORS')
     add_shared_args(parser)
-    add_router_args(parser)
+    add_external_router_args(parser)
 
     args = parser.parse_args(sysargs)
     return args, parser
@@ -182,8 +182,8 @@ def _parse_endpoint(sysargs):
 
 def make_settings(args, **kwargs):
     router_conf = {}
-    if args.bridge:
-        # if you have the critical elements for each bridge, create it
+    if args.external_router:
+        # if you have the critical elements for each external router, create it
         if args.apns_cert_file is not None and args.apns_key_file is not None:
             router_conf["apns"] = {"sandbox": args.apns_sandbox,
                                    "cert_file": args.apns_cert_file,

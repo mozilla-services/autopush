@@ -19,7 +19,7 @@ class GCMRouter(object):
         self.dryRun = router_conf.get("dryrun", False)
         self.collapseKey = router_conf.get("collapseKey", "simplepush")
         self.gcm = gcmclient.GCM(router_conf.get("apikey"))
-        log.msg("Starting GCM bridge...")
+        log.msg("Starting GCM router...")
 
     def register(self, uaid, router_data):
         if not router_data.get("token"):

@@ -105,7 +105,7 @@ class EndpointMainTestCase(unittest.TestCase):
     def test_ping_settings(self):
         class arg:
             # important stuff
-            bridge = True
+            external_router = True
             gcm_apikey = "gcm.key"
             apns_cert_file = "cert.file"
             apns_key_file = "key.file"

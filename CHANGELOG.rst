@@ -10,6 +10,11 @@ Internal
 
 * Refactor proprietary ping handling for modularized dispatch. Issue #82.
 
+Backward Incompatibilities
+--------------------------
+
+* ``bridge`` option is now ``external_router``.
+
 1.2.3 (2015-06-02)
 ==================
 

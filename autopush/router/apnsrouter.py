@@ -36,7 +36,7 @@ class APNSRouter(object):
         self.default_title = router_conf.get("default_title", "SimplePush")
         self.default_body = router_conf.get("default_body", "New Alert")
         self._connect()
-        log.msg("Starting APNS bridge...")
+        log.msg("Starting APNS router...")
 
     def register(self, uaid, router_data):
         if not router_data.get("token"):

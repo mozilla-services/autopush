@@ -9,7 +9,7 @@ from boto.dynamodb2.exceptions import (
 from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table
-from boto.dynamodb2.types import NUMBER, STRING
+from boto.dynamodb2.types import NUMBER
 
 
 def create_router_table(tablename="router", read_throughput=5,
@@ -33,15 +33,6 @@ def create_storage_table(tablename="storage", read_throughput=5,
                         schema=[HashKey("uaid"), RangeKey("chid")],
                         throughput=dict(read=read_throughput,
                                         write=write_throughput),
-                        # Some bridge protocols only return tokens for things
-                        # like feedback or error reporting.
-                        # Need an index to search for records by them.
-                        global_indexes=[
-                            GlobalKeysOnlyIndex(
-                                'BridgeTokenIndex',
-                                parts=[HashKey('bridge_token',
-                                               data_type=STRING)],
-                                throughput=dict(read=1, write=1))]
                         )
 
 

@@ -467,7 +467,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_close(d)
         return d
 
-    def test_hello_bridge(self):
+    def test_hello_router(self):
         self._connect()
         self.proto.ap_settings.routers["apns"] = Mock()
         self.proto.ap_settings.routers["apns"].register = Mock()
