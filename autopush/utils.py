@@ -1,4 +1,8 @@
+import hashlib
+import hmac
 import socket
+import uuid
+
 
 default_ports = {
     "ws": 80,
@@ -26,3 +30,31 @@ def resolve_ip(hostname):
         return hostname
     addr = interfaces[0][-1]
     return addr[0]
+
+
+def validate_uaid(uaid):
+    """Validates a UAID a tuple indicating if its valid and the original
+    uaid, or a new uaid if its invalid"""
+    if uaid:
+        try:
+            return bool(uuid.UUID(uaid)), uaid
+        except ValueError:
+            pass
+    return False, str(uuid.uuid4())
+
+
+def validate_hash(key, payload, hashed):
+    """Validates that a UAID matches the HMAC value using the supplied
+    secret"""
+    try:
+        h = hmac.new(key=key, msg=payload, digestmod=hashlib.sha256)
+        return hmac.compare_digest(hashed, h.hexdigest())
+    except:
+        return False
+
+
+def generate_hash(key, payload):
+    """Generate a HMAC for the uaid using the secret. Returns the HMAC hash
+    and the nonce used as a tuple (nonce, hash)."""
+    h = hmac.new(key=key, msg=payload, digestmod=hashlib.sha256)
+    return h.hexdigest()

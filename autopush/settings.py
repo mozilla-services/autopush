@@ -12,13 +12,16 @@ from autopush.db import (
     Router
 )
 from autopush.metrics import DatadogMetrics, TwistedMetrics
+from autopush.router import (
+    APNSRouter,
+    GCMRouter,
+    SimpleRouter,
+)
 from autopush.utils import canonical_url, resolve_ip
-
-from autopush.bridge.bridge import Bridge
 
 
 class MetricSink(object):
-    """Exists to swallow metrics when metrics are not active"""
+    """Exists to ignore metrics when metrics are not active"""
     def increment(*args, **kwargs):
         pass
 
@@ -40,6 +43,7 @@ class AutopushSettings(object):
                  endpoint_scheme=None,
                  endpoint_hostname=None,
                  endpoint_port=None,
+                 router_conf={},
                  router_tablename="router",
                  router_read_throughput=5,
                  router_write_throughput=5,
@@ -48,7 +52,6 @@ class AutopushSettings(object):
                  storage_write_throughput=5,
                  statsd_host="localhost",
                  statsd_port=8125,
-                 pingConf=None,
                  resolve_hostname=False,
                  max_data=4096,
                  enable_cors=False):
@@ -71,6 +74,7 @@ class AutopushSettings(object):
 
         key = crypto_key or Fernet.generate_key()
         self.fernet = Fernet(key)
+        self.crypto_key = key
 
         self.max_data = max_data
         self.clients = {}
@@ -85,6 +89,7 @@ class AutopushSettings(object):
         self.endpoint_hostname = endpoint_hostname or self.hostname
         self.router_hostname = router_hostname or self.hostname
 
+        self.router_conf = router_conf
         self.router_url = canonical_url(
             router_scheme or 'http',
             self.router_hostname,
@@ -110,12 +115,16 @@ class AutopushSettings(object):
         # Run preflight check
         preflight_check(self.storage, self.router)
 
-        self.bridge = None
-        if pingConf is not None:
-            self.bridge = Bridge(self.storage, pingConf)
-
         # CORS
         self.cors = enable_cors
+
+        # Setup the routers
+        self.routers = {}
+        self.routers["simplepush"] = SimpleRouter(self, None)
+        if 'apns' in router_conf:
+            self.routers["apns"] = APNSRouter(self, router_conf["apns"])
+        if 'gcm' in router_conf:
+            self.routers["gcm"] = GCMRouter(self, router_conf["gcm"])
 
     def update(self, **kwargs):
         for key, val in kwargs.items():
@@ -124,7 +133,7 @@ class AutopushSettings(object):
             else:
                 setattr(self, key, val)
 
-    def makeEndpoint(self, uaid, chid):
+    def make_endpoint(self, uaid, chid):
         """ Create an endpoint from the identifiers"""
         return self.endpoint_url + '/push/' + \
             self.fernet.encrypt((uaid + ':' + chid).encode('utf8'))
