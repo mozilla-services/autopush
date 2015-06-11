@@ -1,13 +1,14 @@
 import unittest
 
-from mock import patch
+from mock import Mock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_
 
 from autopush.main import (
     connection_main,
     endpoint_main,
-    make_settings
+    make_settings,
+    skip_request_logging,
 )
 from autopush.utils import str2bool, resolve_ip
 from autopush.settings import AutopushSettings
@@ -48,7 +49,6 @@ class SettingsTestCase(unittest.TestCase):
 class ConnectionMainTestCase(unittest.TestCase):
     def setUp(self):
         patchers = [
-            "autopush.main.log",
             "autopush.main.task",
             "autopush.main.reactor",
             "autopush.main.listenWS",
@@ -68,17 +68,23 @@ class ConnectionMainTestCase(unittest.TestCase):
 
     def test_ssl(self):
         connection_main([
+            "--ssl_dh_param=keys/dhparam.pem",
             "--ssl_cert=keys/server.crt",
             "--ssl_key=keys/server.key",
             "--router_ssl_cert=keys/server.crt",
             "--router_ssl_key=keys/server.key",
         ])
 
+    def test_skip_logging(self):
+        # Should skip setting up logging on the handler
+        mock_handler = Mock()
+        skip_request_logging(mock_handler)
+        eq_(len(mock_handler.mock_calls), 0)
+
 
 class EndpointMainTestCase(unittest.TestCase):
     def setUp(self):
         patchers = [
-            "autopush.main.log",
             "autopush.main.task",
             "autopush.main.reactor",
             "autopush.settings.TwistedMetrics",
@@ -98,6 +104,7 @@ class EndpointMainTestCase(unittest.TestCase):
 
     def test_ssl(self):
         endpoint_main([
+            "--ssl_dh_param=keys/dhparam.pem",
             "--ssl_cert=keys/server.crt",
             "--ssl_key=keys/server.key",
         ])

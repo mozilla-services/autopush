@@ -3,7 +3,6 @@ import configargparse
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
 from twisted.internet import reactor, task
-from twisted.python import log
 
 from autopush.endpoint import (EndpointHandler, RegistrationHandler)
 from autopush.health import (HealthHandler, StatusHandler)
@@ -304,10 +303,7 @@ def connection_main(sysargs=None):
 
     l = task.LoopingCall(periodic_reporter, settings)
     l.start(1.0)
-    try:
-        reactor.run()
-    except KeyboardInterrupt:
-        log.debug('Bye')
+    reactor.run()
 
 
 def endpoint_main(sysargs=None):
