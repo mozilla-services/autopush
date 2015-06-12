@@ -57,6 +57,7 @@ class EliotObserver(object):
 
 
 def stdout(message):
+
     # uncomment to get concise human readable logging messages.
     """
     if message['error']:

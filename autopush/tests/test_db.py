@@ -7,7 +7,6 @@ from boto.dynamodb2.exceptions import (
     ItemNotFound,
 )
 from boto.dynamodb2.layer1 import DynamoDBConnection
-from boto.dynamodb2.items import Item
 from mock import Mock
 from moto import mock_dynamodb2
 from nose.tools import eq_
@@ -40,7 +39,7 @@ class DbCheckTestCase(unittest.TestCase):
         router_table = get_router_table()
         storage_table = get_storage_table()
 
-        def raise_exc(*args, **kwargs):  # pragma: no cover
+        def raise_exc(*args, **kwargs):
             raise Exception("Oops")
 
         router_table.clear_node = Mock()
@@ -126,6 +125,95 @@ class StorageTestCase(unittest.TestCase):
         results = storage.delete_notification("asdf", "asdf")
         eq_(results, False)
 
+    def test_register_connect(self):
+        storage = Storage(get_storage_table(), MetricSink())
+        storage.table.connection = Mock()
+
+        # try bad connect data:
+        self.assertRaises(ValueError, storage.register_connect,
+                          "uaid", {})
+
+        # try bad connect data:
+        self.assertRaises(ValueError, storage.register_connect,
+                          "uaid", {"notype": "test"})
+
+        # try minimal correct data
+        self.assertRaises(None, storage.register_connect("uaid",
+                          {"type": "test"}))
+
+    def test_register_connect_over(self):
+        storage = Storage(get_storage_table(), MetricSink())
+        storage.table.connection = Mock()
+
+        def raise_error(*args, **kwargs):
+            raise ProvisionedThroughputExceededException(None, None)
+
+        storage.table.connection.update_item.side_effect = raise_error
+        self.assertRaises(ProvisionedThroughputExceededException,
+                          storage.register_connect, "uaid", {"type": "test"})
+
+    def test_unregister_connect(self):
+        storage = Storage(get_storage_table(), MetricSink())
+        storage.table.connection = Mock()
+        result = storage.unregister_connect("uaid")
+        self.assertTrue(result)
+
+    def test_unregister_connect_over(self):
+        storage = Storage(get_storage_table(), MetricSink())
+        storage.table.connection = Mock()
+
+        def raise_error(*args, **kwargs):
+            raise ProvisionedThroughputExceededException(None, None)
+
+        storage.table.connection.update_item.side_effect = raise_error
+        results = storage.unregister_connect("uaid")
+        eq_(results, False)
+
+    def test_get_connection(self):
+        storage = Storage(get_storage_table(), MetricSink())
+        storage.table = Mock()
+        storage.table.get_item.return_value = \
+            {"proprietary_ping": '{"type":"test"}'}
+
+        result = storage.get_connection('uaid')
+        eq_(result, {'type': 'test'})
+
+        def raise_error(*args, **kwargs):
+            raise ItemNotFound(None, None)
+
+        storage.table.get_item.side_effect = raise_error
+        result = storage.get_connection('uaid')
+        eq_(result, False)
+
+    def test_get_connection_over(self):
+        storage = Storage(get_storage_table(), MetricSink())
+        storage.table.connection = Mock()
+
+        def raise_error(*args, **kwargs):
+            raise ProvisionedThroughputExceededException(None, None)
+
+        storage.table.connection.get_item.side_effect = raise_error
+        results = storage.get_connection("uaid")
+        eq_(results, False)
+
+    def test_byToken_delete(self):
+        storage = Storage(get_storage_table(), MetricSink())
+        storage.table.connection = Mock()
+        result = storage.byToken('DELETE', 'abc123')
+        eq_(result, True)
+
+    def test_byToken_update(self):
+        storage = Storage(get_storage_table(), MetricSink())
+        storage.table = Mock()
+        storage.table.connection = Mock()
+        storage.table.connection.update_item.return_value
+        storage.table.get_item.return_value = \
+            {"uaid": "test",
+             "proprietary_ping":
+             '{"type": "test", "token": "old123"}'}
+        result = storage.byToken('UPDATE', 'new456')
+        eq_(result, True)
+
 
 class RouterTestCase(unittest.TestCase):
     def setUp(self):
@@ -157,7 +245,8 @@ class RouterTestCase(unittest.TestCase):
         uaid = str(uuid.uuid4())
         r = get_router_table()
         router = Router(r, MetricSink())
-        self.assertRaises(ItemNotFound, router.get_uaid, uaid)
+        result = router.get_uaid(uaid)
+        eq_(result, False)
 
     def test_uaid_provision_failed(self):
         r = get_router_table()
@@ -169,8 +258,7 @@ class RouterTestCase(unittest.TestCase):
 
         router.table.get_item.side_effect = raise_error
         with self.assertRaises(ProvisionedThroughputExceededException):
-            router.get_uaid(dict(uaid="asdf", node_id="me",
-                                 connected_at=1234))
+            router.get_uaid("asdf")
 
     def test_register_user_provision_failed(self):
         r = get_router_table()
@@ -182,32 +270,32 @@ class RouterTestCase(unittest.TestCase):
 
         router.table.connection.put_item.side_effect = raise_error
         with self.assertRaises(ProvisionedThroughputExceededException):
-            router.register_user(dict(uaid="asdf", node_id="me",
-                                 connected_at=1234))
+            router.register_user("asdf", "asdf", 12)
 
     def test_clear_node_provision_failed(self):
         r = get_router_table()
         router = Router(r, MetricSink())
-        router.table.connection.put_item = Mock()
+        router.table.connection = Mock()
 
         def raise_error(*args, **kwargs):
             raise ProvisionedThroughputExceededException(None, None)
 
         router.table.connection.put_item.side_effect = raise_error
         with self.assertRaises(ProvisionedThroughputExceededException):
-            router.clear_node(Item(r, dict(uaid="asdf", connected_at="1234",
-                                           node_id="asdf")))
+            router.clear_node(dict(uaid="asdf", connected_at="1234",
+                                   node_id="asdf"))
 
     def test_save_uaid(self):
         uaid = str(uuid.uuid4())
         r = get_router_table()
         router = Router(r, MetricSink())
-        result = router.register_user(dict(uaid=uaid, node_id="me",
-                                      connected_at=1234))
+        result = router.register_user(uaid, "me", 1234)
         eq_(result[0], True)
-        eq_(result[1], {"uaid": uaid,
-                        "connected_at": "1234",
-                        "node_id": "me"})
+        eq_(result[1], {'Attributes':
+            {"uaid": uaid,
+             "connected_at": "1234",
+             "node_id": "me"},
+            "ConsumedCapacityUnits": 1})
         result = router.get_uaid(uaid)
         eq_(bool(result), True)
         eq_(result["node_id"], "me")
@@ -219,8 +307,7 @@ class RouterTestCase(unittest.TestCase):
         # when not updating data.
         router.table.connection = Mock()
         router.table.connection.put_item.return_value = {}
-        result = router.register_user(dict(uaid="", node_id="me",
-                                           connected_at=1234))
+        result = router.register_user("", "me", 1234)
         eq_(result[0], True)
 
     def test_save_fail(self):
@@ -232,8 +319,7 @@ class RouterTestCase(unittest.TestCase):
 
         router.table.connection = Mock()
         router.table.connection.put_item.side_effect = raise_condition
-        result = router.register_user(dict(uaid="asdf", node_id="asdf",
-                                           connected_at=1234))
+        result = router.register_user("asdf", "asdf", 1234)
         eq_(result, (False, {}))
 
     def test_node_clear(self):
@@ -241,8 +327,7 @@ class RouterTestCase(unittest.TestCase):
         router = Router(r, MetricSink())
 
         # Register a node user
-        router.register_user(Item(r, dict(uaid="asdf", node_id="asdf",
-                                          connected_at=1234)))
+        router.register_user("asdf", "asdf", 1234)
 
         # Verify
         user = router.get_uaid("asdf")
@@ -262,8 +347,8 @@ class RouterTestCase(unittest.TestCase):
         def raise_condition(*args, **kwargs):
             raise ConditionalCheckFailedException(None, None)
 
-        router.table.connection.put_item = Mock()
+        router.table.connection = Mock()
         router.table.connection.put_item.side_effect = raise_condition
-        data = dict(uaid="asdf", node_id="asdf", connected_at=1234)
-        result = router.clear_node(Item(r, data))
+        result = router.clear_node(dict(uaid="asdf", node_id="asdf",
+                                        connected_at=1234))
         eq_(result, False)

@@ -50,7 +50,6 @@ setup(name="AutoPush",
           "datadog==0.5.0",
           "eliot==0.7.1",
           "repoze.lru==0.6",
-          "httpretty==0.8.9",
       ],
       entry_points="""
       [console_scripts]

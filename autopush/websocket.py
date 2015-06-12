@@ -20,7 +20,6 @@ from twisted.python import failure, log
 from zope.interface import implements
 
 from autopush.protocol import IgnoreBody
-from autopush.utils import validate_uaid
 
 
 def ms_time():
@@ -114,6 +113,12 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return self._paused
 
     @log_exception
+    def _connectionLost(self, reason):
+        """Make extra sure we log any exceptions in here, this shouldn't be
+        needed"""
+        return WebSocketServerProtocol._connectionLost(self, reason)
+
+    @log_exception
     def _sendAutoPing(self):
         """Override for sanity checking during auto-ping interval"""
         if not self.uaid:
@@ -194,6 +199,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # Track notifications we don't need to delete separately
         self.direct_updates = {}
+        self.bridge = None
 
     #############################################################
     #                    Connection Methods
@@ -346,39 +352,62 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # This must be a helo, or we kick the client
         cmd = data.get("messageType")
         if cmd != "hello":
-            return self.sendClose()
+            self.sendClose()
+            return
 
         if self.uaid:
-            return self.returnError("hello", "duplicate hello", 401)
+            self.returnError("hello", "duplicate hello", 401)
+            return
 
         uaid = data.get("uaid")
-        _, uaid = validate_uaid(uaid)
+        valid = False
+        if uaid:
+            try:
+                valid = bool(uuid.UUID(uaid))
+            except ValueError:
+                pass
+        if not uaid or not valid:
+            uaid = str(uuid.uuid4())
         self.uaid = uaid
 
-        # Default router choice
-        router_type = data.get("router_type", "simplepush")
-        if router_type not in self.ap_settings.routers:
-            return self.returnError("hello", "invalid router", 401)
+        connect = data.get("connect")
+        if connect and self.ap_settings.bridge:
+            self.transport.pauseProducing()
+            d = self.deferToThread(self.ap_settings.bridge.register, uaid,
+                                   connect)
+            d.addCallback(self._check_router, True)
+            d.addErrback(self.err_hello)
+        else:
+            self._check_router(False)
 
+    def _check_router(self, paused=False, bridge_register=None):
+        if paused:
+            self.transport.resumeProducing()
+        # Bridge registration either succeeds and returns true,
+        # is not specified by the hello, or fails with an exception.
+        router = self.ap_settings.router
+        url = self.ap_settings.router_url
         self.transport.pauseProducing()
-        user_item = dict(
-            uaid=self.uaid,
-            node_id=self.ap_settings.router_url,
-            connected_at=self.connected_at,
-            router_type=router_type,
-            router_data={},
-        )
-        d = self.deferToThread(self.ap_settings.router.register_user,
-                               user_item)
+        d = self.deferToThread(router.register_user,
+                               self.uaid, url, self.connected_at)
         d.addCallback(self._check_other_nodes)
         d.addErrback(self.err_hello)
+        d.addErrback(self.log_err)
         self._register = d
         return d
 
     def err_hello(self, failure):
         self.transport.resumeProducing()
-        self.log_err(failure)
         self.returnError("hello", "error", 503)
+
+    def _get_aval(self, val, type):
+        # Live testing shows that dynamodb returns attribute values as
+        # dicts, where moto returns them as straight values. This isolates
+        # for testing
+        try:
+            return val.get(type)
+        except AttributeError:
+            return val
 
     def _check_other_nodes(self, result):
         self.transport.resumeProducing()
@@ -398,19 +427,24 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             else:
                 existing.sendClose()
 
-        if previous and "node_id" in previous:
+        if previous and previous.get("Attributes", {}).get("node_id"):
             # Get the previous information returned from dynamodb.
-            node_id = previous["node_id"]
-            last_connect = previous.get("connected_at")
-            if last_connect and node_id != self.ap_settings.router_url:
+            attrs = previous.get("Attributes")
+            node_id = self._get_aval(attrs.get("node_id", {}), 'S')
+            last_connect = self._get_aval(attrs.get("connected_at", {}), 'N')
+            if node_id != self.ap_settings.router_url:
+
+                def _eat_connections(fail):
+                    fail.trap(
+                        ConnectError, ConnectionRefusedError, UserError
+                    )
+
                 url = "%s/notif/%s/%s" % (node_id, self.uaid, last_connect)
                 d = self.ap_settings.agent.request(
                     "DELETE",
                     url.encode("utf8"),
                 )
-                d.addErrback(lambda f: f.trap(ConnectError,
-                                              ConnectionRefusedError,
-                                              UserError))
+                d.addErrback(_eat_connections)
                 d.addErrback(self.log_err,
                              extra="Failed to delete old node")
         self.finish_hello()
@@ -525,7 +559,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return self.bad_message("register")
         self.transport.pauseProducing()
 
-        d = self.deferToThread(self.ap_settings.make_endpoint, self.uaid, chid)
+        d = self.deferToThread(self.ap_settings.makeEndpoint, self.uaid, chid)
         d.addCallback(self.finish_register, chid)
         d.addErrback(self.error_register)
         return d
@@ -646,12 +680,13 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         toSend = []
         for update in updates:
             chid, version = update["channelID"], update["version"]
-            older = self.updates_sent.get(chid, 0) >= version or \
-                self.direct_updates.get(chid, 0) >= version
-            if not older:
-                # Otherwise we can record we sent this version
-                self.direct_updates[chid] = version
-                toSend.append(update)
+            if self.updates_sent.get(chid, 0) >= version or \
+               self.direct_updates.get(chid, 0) >= version:
+                continue
+
+            # Otherwise we can record we sent this version
+            self.direct_updates[chid] = version
+            toSend.append(update)
 
         if toSend:
             msg = {"messageType": "notification", "updates": toSend}
