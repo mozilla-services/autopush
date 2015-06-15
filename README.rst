@@ -17,7 +17,7 @@ You will first need to get pypy as appropriate for your system and put it's
 uncompressed folder in the autopush directory as ``pypy``.
 
 PyPy downloads can be found here: http://pypy.org/download.html#default-with-a-jit-compiler
-autopush requires PyPy >= 2.5.1.
+autopush requires PyPy >= 2.6.
 
 Once you have downloaded, decompressed, and renamed this to ``pypy``, you can
 run the Makefile with ``make``, which will setup the application.

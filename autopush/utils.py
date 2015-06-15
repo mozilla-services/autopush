@@ -46,11 +46,8 @@ def validate_uaid(uaid):
 def validate_hash(key, payload, hashed):
     """Validates that a UAID matches the HMAC value using the supplied
     secret"""
-    try:
-        h = hmac.new(key=key, msg=payload, digestmod=hashlib.sha256)
-        return hmac.compare_digest(hashed, h.hexdigest())
-    except:
-        return False
+    h = hmac.new(key=key, msg=payload, digestmod=hashlib.sha256)
+    return hmac.compare_digest(hashed, h.hexdigest())
 
 
 def generate_hash(key, payload):
