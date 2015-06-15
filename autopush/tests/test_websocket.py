@@ -21,6 +21,7 @@ from autopush.websocket import (
     SimplePushServerProtocol,
     RouterHandler,
     NotificationHandler,
+    WebSocketServerProtocol,
 )
 
 
@@ -46,8 +47,10 @@ class WebsocketTestCase(unittest.TestCase):
         )
         self.proto.ap_settings = settings
         self.proto.sendMessage = self.send_mock = Mock()
+        self.orig_close = self.proto.sendClose
         self.proto.sendClose = self.close_mock = Mock()
         self.proto.transport = self.transport_mock = Mock()
+        self.proto.closeHandshakeTimeout = 0
         settings.metrics = Mock(spec=Metrics)
 
     def _connect(self):
@@ -67,7 +70,7 @@ class WebsocketTestCase(unittest.TestCase):
         args = self.send_mock.call_args_list.pop(0)
         return d.callback(args)
 
-    def _wait_for_close(self, d):
+    def _wait_for_close(self, d):  # pragma: nocover
         if self.close_mock.call_args is not None:
             d.callback(True)
             return
@@ -97,6 +100,59 @@ class WebsocketTestCase(unittest.TestCase):
             self.proto.onConnect(req)
 
         req.headers.get.assert_called_with("user-agent")
+
+    @patch("autopush.websocket.reactor")
+    def test_autoping_no_uaid(self, mock_reactor):
+        # restore our sendClose
+        WebSocketServerProtocol.sendClose = self.proto.sendClose
+        WebSocketServerProtocol._sendAutoPing = Mock()
+        self.proto.sendClose = self.orig_close
+        self._connect()
+        self.proto._sendAutoPing()
+        mock_reactor.callLater.assert_called()
+        WebSocketServerProtocol.sendClose.assert_called()
+
+    @patch("autopush.websocket.reactor")
+    def test_autoping_uaid_not_in_clients(self, mock_reactor):
+        # restore our sendClose
+        WebSocketServerProtocol.sendClose = self.proto.sendClose
+        WebSocketServerProtocol._sendAutoPing = Mock()
+        self.proto.sendClose = self.orig_close
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto._sendAutoPing()
+        mock_reactor.callLater.assert_called()
+        WebSocketServerProtocol.sendClose.assert_called()
+
+    @patch("autopush.websocket.reactor")
+    def test_nuke_connection(self, mock_reactor):
+        self.proto.transport = Mock()
+        self._connect()
+        self.proto.state = ""
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.nukeConnection()
+        mock_reactor.callLater.assert_called_with(60, self.proto.verifyNuke)
+
+    @patch("autopush.websocket.reactor")
+    def test_nuke_connection_shutdown_ran(self, mock_reactor):
+        self.proto.transport = Mock()
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto._shutdown_ran = True
+        self.proto.nukeConnection()
+        eq_(len(mock_reactor.mock_calls), 0)
+
+    def test_verify_nuke(self):
+        self._connect()
+        self.proto.verifyNuke()
+        eq_(len(self.proto.ap_settings.metrics.mock_calls), 2)
+
+    def test_verify_nuke_shutdown_ran(self):
+        self._connect()
+        self.proto._shutdown_ran = True
+        self.proto.verifyNuke()
+        # Should be 1 from connect
+        eq_(len(self.proto.ap_settings.metrics.mock_calls), 1)
 
     def test_producer_interface(self):
         self._connect()
@@ -234,7 +290,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
 
-        def wait_for_agent_call():
+        def wait_for_agent_call():  # pragma: nocover
             if not mock_agent.mock_calls:
                 reactor.callLater(0.1, wait_for_agent_call)
 
@@ -263,7 +319,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
 
-        def wait_for_agent_call():
+        def wait_for_agent_call():  # pragma: nocover
             if not mock_metrics.mock_calls:
                 reactor.callLater(0.1, wait_for_agent_call)
 
@@ -293,7 +349,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
 
-        def wait_for_agent_call():
+        def wait_for_agent_call():  # pragma: nocover
             if not mock_node_get.mock_calls:
                 reactor.callLater(0.1, wait_for_agent_call)
 
@@ -307,6 +363,15 @@ class WebsocketTestCase(unittest.TestCase):
 
         def check_result(msg):
             eq_(msg["status"], 200)
+        return self._check_response(check_result)
+
+    def test_hello_bad_router(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                router_type="satellite"))
+
+        def check_result(msg):
+            eq_(msg["status"], 401)
         return self._check_response(check_result)
 
     def test_hello_with_uaid(self):
@@ -353,6 +418,8 @@ class WebsocketTestCase(unittest.TestCase):
         def check_result(msg):
             eq_(msg["status"], 503)
             eq_(msg["reason"], "error")
+            self.flushLoggedErrors()
+
         return self._check_response(check_result)
 
     def test_hello_check_fail(self):
@@ -400,16 +467,16 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_close(d)
         return d
 
-    def test_hello_bridge(self):
+    def test_hello_router(self):
         self._connect()
-        self.proto.ap_settings.bridge = Mock()
-        self.proto.ap_settings.bridge.register = Mock()
-        self.proto.ap_settings.bridge.register.return_value = (True, {})
+        self.proto.ap_settings.routers["apns"] = Mock()
+        self.proto.ap_settings.routers["apns"].register = Mock()
+        self.proto.ap_settings.routers["apns"].register.return_value = {}
         self._send_message(dict(messageType="hello",
-                                connect=dict(type="test")))
+                                connect=dict(type="apns")))
 
         def check_result(msg):
-            self.proto.ap_settings.bridge.register.assert_called()
+            self.proto.ap_settings.routers["apns"].register.assert_called()
             eq_(msg["status"], 200)
         return self._check_response(check_result)
 
@@ -449,7 +516,7 @@ class WebsocketTestCase(unittest.TestCase):
         def fail():
             raise twisted.internet.defer.CancelledError
 
-        def fail2(fail):
+        def fail2(fail):  # pragma: nocover
             self.fail("Failed to trap error")
 
         def check_result(result):
@@ -557,11 +624,7 @@ class WebsocketTestCase(unittest.TestCase):
         uaid = "deadbeef-0000-0000-0000-000000000000"
         self.proto.uaid = uaid
         connected = int(time.time())
-        res = {"Attributes": {
-               "node_id": {"S": nodeId},
-               "uaid": {"S": uaid},
-               "connected_at": {"N": connected}},
-               }
+        res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
         mock_agent.request.assert_called(
             "DELETE",
@@ -570,22 +633,14 @@ class WebsocketTestCase(unittest.TestCase):
     def test_register_kill_others_fail(self):
         self._connect()
 
-        def raiser(*args):
-            self.fail("Failed to trap for ConnectError")
-
         d = Deferred()
         self.proto.ap_settings.agent.request.return_value = d
         nodeId = "http://otherhost"
         uaid = "deadbeef-0000-0000-0000-000000000000"
         self.proto.uaid = uaid
         connected = int(time.time())
-        res = {"Attributes": {
-               "node_id": {"S": nodeId},
-               "uaid": {"S": uaid},
-               "connected_at": {"N": connected}},
-               }
+        res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
-        d.addErrback(raiser)
         d.errback(ConnectError())
         return d
 
@@ -604,11 +659,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.sendClose = Mock()
         self.proto.sendClose = Mock()
         self.proto.uaid = uaid
-        res = {"Attributes": {
-               "node_id": {"S": nodeId},
-               "uaid": {"S": uaid},
-               "connected_at": {"N": connected}},
-               }
+        res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
         # the current one should be dropped.
         eq_(ff.sendClose.call_count, 0)
@@ -628,11 +679,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ap_settings.clients = {uaid: ff}
         self.proto.sendClose = Mock()
         self.proto.uaid = uaid
-        res = {"Attributes": {
-               "node_id": {"S": nodeId},
-               "uaid": {"S": uaid},
-               "connected_at": {"N": connected}},
-               }
+        res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
         # the existing one should be dropped.
         eq_(ff.sendClose.call_count, 1)
@@ -719,7 +766,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="unregister",
                                 channelID=chid))
 
-        def wait_for_times():
+        def wait_for_times():  # pragma: nocover
             if len(mock_log.mock_calls) > 0:
                 eq_(len(mock_log.mock_calls), 1)
                 d.callback(True)
@@ -767,7 +814,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Check the call result
         args = self.send_mock.call_args
-        assert args is None
+        eq_(args, None)
 
     def test_notification_retains_no_dash(self):
         self._connect()
@@ -861,7 +908,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
 
-        def wait_for_delete():
+        def wait_for_delete():  # pragma: nocover
             calls = self.transport_mock.mock_calls
             if len(calls) < 2:
                 reactor.callLater(0.1, wait_for_delete)
@@ -1056,7 +1103,7 @@ class WebsocketTestCase(unittest.TestCase):
         d = Deferred()
 
         def wait_for_clear():
-            if self.proto.updates_sent:
+            if self.proto.updates_sent:  # pragma: nocover
                 reactor.callLater(0.1, wait_for_clear)
                 return
 
