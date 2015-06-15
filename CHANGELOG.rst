@@ -10,6 +10,77 @@ Internal
 
 * Refactor proprietary ping handling for modularized dispatch. Issue #82.
 
+  Major changes
+  ~~~~~~~~~~~~~
+
+  - RegistrationHandler endpoint is now the sole method for registering for a
+    proprietary wake / transport.
+  - ``connect`` data from websocket hello is ignored.
+  - Unit Testing has been increased to ~ 100% test coverage.
+  - Proprietary Ping and Bridge terminology has been replaced with the terms
+    router_type / router_data. Router type being one of simplepush / apns / gcm
+    and eventually webpush. Router data is an arbitrary JSON value as
+    appropriate for the router type.
+
+  db.py
+  ~~~~~
+
+  - Removed previous methods (deleteByToken/get_connection/etc) as all the
+    router data is included as a single JSON blob for DynamoDB to store.
+  - Change register_user to use UpdateItem to avoid overwriting router data
+    when connecting via websocket.
+
+  endpoint.py
+  ~~~~~~~~~~~
+
+  - EndpointHandler and RegistrationHandler now both inherit from a common
+    baseclass: AutoendpointHandler. This baseclass implements
+    OPTIONS/HEAD methods, sets the appropriate CORS headers, and has several
+    shared error handlers.
+  - A notification has been standardized into a Notification namedtuple.
+  - RegistrationHandler API has been changed to have PUT and POST methods.
+  - EndpointHandler has been refactored to use the new Router interface.
+  - EndpointHandler now uses a basic HMAC auth scheme, GET/PUT with existing
+    UAID's require an appropriate HMAC attached with the original derived
+    shared key. (Documented in the RegistrationHandler.get method)
+
+  websocket.py
+  ~~~~~~~~~~~~
+
+  - Removed use of ``connect`` data in hello message as RegistrationHandler is
+    now the sole method of registering other routers.
+
+  router/interface.py (NEW)
+  ~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  - IRouter object that all notification routers must implement. This handles
+    verifying router data during registration, and is responsible for actual
+    delivery of notifications.
+  - RouterException / RouterResponse objects for returning appropriate data
+    during register/route_notification calls.
+
+  router/apnsrouter.py
+  ~~~~~~~~~~~~~~~~~~~~
+
+  - Moved from bridge/apns.
+  - Refactored to use RouterException/RouterResponse.
+
+  router/gcm.py
+  ~~~~~~~~~~~~~
+
+  - Moved from bridge/gcm.
+  - Refactored to use RouterException/RouterResponse.
+  - Removed internal message retries, now returns a 503 in that case for the
+    Application Server to retry delivery.
+
+  router/simple.py
+  ~~~~~~~~~~~~~~~~
+
+  - Moved code out from endpoint.py.
+  - Refactored existing simplepush routing scheme to use twisted inline
+    deferreds to track the logic with less headaches.
+
+
 Backward Incompatibilities
 --------------------------
 
