@@ -365,15 +365,6 @@ class WebsocketTestCase(unittest.TestCase):
             eq_(msg["status"], 200)
         return self._check_response(check_result)
 
-    def test_hello_bad_router(self):
-        self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[],
-                                router_type="satellite"))
-
-        def check_result(msg):
-            eq_(msg["status"], 401)
-        return self._check_response(check_result)
-
     def test_hello_with_uaid(self):
         self._connect()
         uaid = str(uuid.uuid4())
@@ -411,7 +402,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         # Fail out the register_user call
         router = self.proto.ap_settings.router
-        router.table.connection.put_item = Mock(side_effect=KeyError)
+        router.table.connection.update_item = Mock(side_effect=KeyError)
 
         self._send_message(dict(messageType="hello", channelIDs=[]))
 

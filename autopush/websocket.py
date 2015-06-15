@@ -355,18 +355,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         _, uaid = validate_uaid(uaid)
         self.uaid = uaid
 
-        # Default router choice
-        router_type = data.get("router_type", "simplepush")
-        if router_type not in self.ap_settings.routers:
-            return self.returnError("hello", "invalid router", 401)
-
         self.transport.pauseProducing()
         user_item = dict(
             uaid=self.uaid,
             node_id=self.ap_settings.router_url,
             connected_at=self.connected_at,
-            router_type=router_type,
-            router_data={},
         )
         d = self.deferToThread(self.ap_settings.router.register_user,
                                user_item)

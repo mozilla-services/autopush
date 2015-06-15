@@ -158,19 +158,25 @@ class Router(object):
             # correct ItemNotFound exception
             raise ItemNotFound("uaid not found")
 
-    def register_user(self, item):
+    def register_user(self, data):
         """Attempt to register this user if it doesn't already exist or
         this is the latest connection"""
         conn = self.table.connection
+        db_key = self.encode({"uaid": data.pop("uaid")})
+        # Generate our update expression
+        expr = "SET " + ", ".join(["%s=:%s" % (x, x) for x in data.keys()])
+        expr_values = self.encode({":%s" % k: v for k, v in data.items()})
         try:
-            cond = "attribute_not_exists(node_id) or (connected_at < :conn)"
-            result = conn.put_item(
+            cond = " or ".join([
+                "attribute_not_exists(node_id)",
+                "(connected_at < :connected_at)",
+            ])
+            result = conn.update_item(
                 self.table.table_name,
-                item=self.encode(item),
+                db_key,
+                update_expression=expr,
                 condition_expression=cond,
-                expression_attribute_values=self.encode({
-                    ":conn": item["connected_at"]
-                }),
+                expression_attribute_values=expr_values,
                 return_values="ALL_OLD",
             )
             if "Attributes" in result:

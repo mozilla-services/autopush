@@ -180,7 +180,7 @@ class RouterTestCase(unittest.TestCase):
         def raise_error(*args, **kwargs):
             raise ProvisionedThroughputExceededException(None, None)
 
-        router.table.connection.put_item.side_effect = raise_error
+        router.table.connection.update_item.side_effect = raise_error
         with self.assertRaises(ProvisionedThroughputExceededException):
             router.register_user(dict(uaid="asdf", node_id="me",
                                  connected_at=1234))
@@ -218,7 +218,7 @@ class RouterTestCase(unittest.TestCase):
         # Sadly, moto currently does not return an empty value like boto
         # when not updating data.
         router.table.connection = Mock()
-        router.table.connection.put_item.return_value = {}
+        router.table.connection.update_item.return_value = {}
         result = router.register_user(dict(uaid="", node_id="me",
                                            connected_at=1234))
         eq_(result[0], True)
@@ -231,7 +231,7 @@ class RouterTestCase(unittest.TestCase):
             raise ConditionalCheckFailedException(None, None)
 
         router.table.connection = Mock()
-        router.table.connection.put_item.side_effect = raise_condition
+        router.table.connection.update_item.side_effect = raise_condition
         result = router.register_user(dict(uaid="asdf", node_id="asdf",
                                            connected_at=1234))
         eq_(result, (False, {}))
@@ -241,8 +241,8 @@ class RouterTestCase(unittest.TestCase):
         router = Router(r, MetricSink())
 
         # Register a node user
-        router.register_user(Item(r, dict(uaid="asdf", node_id="asdf",
-                                          connected_at=1234)))
+        router.register_user(dict(uaid="asdf", node_id="asdf",
+                                  connected_at=1234))
 
         # Verify
         user = router.get_uaid("asdf")
