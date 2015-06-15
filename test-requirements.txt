@@ -2,5 +2,5 @@ nose
 coverage
 mock>=1.0.1
 -e git+https://github.com/habnabit/txstatsd.git@master#egg=txStatsD
--e git+https://github.com/bbangert/moto@master#egg=moto
+-e git+https://github.com/bbangert/moto.git@master#egg=moto
 flake8
