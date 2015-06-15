@@ -1,4 +1,5 @@
 import unittest
+import uuid
 
 from mock import Mock, patch
 from moto import mock_dynamodb2
@@ -10,7 +11,12 @@ from autopush.main import (
     make_settings,
     skip_request_logging,
 )
-from autopush.utils import str2bool, resolve_ip
+from autopush.utils import (
+    str2bool,
+    resolve_ip,
+    generate_hash,
+    validate_hash,
+)
 from autopush.settings import AutopushSettings
 
 
@@ -30,6 +36,16 @@ class UtilsTestCase(unittest.TestCase):
         eq_(True, str2bool("t"))
         eq_(False, str2bool("false"))
         eq_(True, str2bool("True"))
+
+    def test_validate_hash(self):
+        key = str(uuid.uuid4())
+        payload = str(uuid.uuid4())
+        hashed = generate_hash(key, payload)
+        print hashed
+
+        eq_(validate_hash(key, payload, hashed), True)
+        eq_(validate_hash(key, payload, str(uuid.uuid4())), False)
+        eq_(validate_hash(key, payload, ""), False)
 
 
 class SettingsTestCase(unittest.TestCase):

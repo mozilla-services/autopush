@@ -5,6 +5,11 @@ Autopush Changelog
 1.3.0 (**dev**)
 ===============
 
+Bug Fixes
+---------
+
+* Increase test coverage of utils for 100% test coverage.
+
 Internal
 --------
 
