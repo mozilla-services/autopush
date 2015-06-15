@@ -2,16 +2,29 @@
 Autopush Changelog
 ==================
 
-1.2.3 (June 2, 2015)
-====================
+1.3.0 (**dev**)
+===============
+
+Internal
+--------
+
+* Refactor proprietary ping handling for modularized dispatch. Issue #82.
+
+Backward Incompatibilities
+--------------------------
+
+* ``bridge`` option is now ``external_router``.
+
+1.2.3 (2015-06-02)
+==================
 
 Features
 --------
 
 * Additional logging/metrics on auto-ping and connection aborting.
 
-1.2.2 (May 27, 2015)
-====================
+1.2.2 (2015-05-27)
+==================
 
 Features
 --------
@@ -23,15 +36,15 @@ Bug Fixes
 ---------
 * Correct trap for TCP connection closer
 
-1.2.1 (May 20, 2015)
-====================
+1.2.1 (2015-05-20)
+==================
 
 Bug Fixes
 ---------
 * Fix error with blank UAIDs being rejected as "already registered"
 
-1.2.0 (May 19, 2015)
-====================
+1.2.0 (2015-05-19)
+==================
 
 Features
 --------
@@ -56,8 +69,8 @@ Backwards Incompatibility
 * Removed min_ping_interval config option.
 * Removed pong_delay config option.
 
-1.1rc2 (May 15, 2015)
-=====================
+1.1rc2 (2015-05-15)
+===================
 
 Features
 --------
@@ -73,8 +86,8 @@ Bug Fixes
 * kill older, duplicate UAID entries that may still be connected.
 * use Websocket Pings to detect dead connections.
 
-1.0rc1 (Apr 29, 2015)
-=====================
+1.0rc1 (2015-04-29)
+===================
 
 Features
 --------
