@@ -34,6 +34,9 @@ class AutopushSettings(object):
                  datadog_flush_interval=None,
                  hostname=None,
                  port=None,
+                 db_host=None,
+                 db_port=None,
+                 db_secure=None,
                  router_scheme=None,
                  router_hostname=None,
                  router_port=None,
@@ -100,10 +103,12 @@ class AutopushSettings(object):
         # Database objects
         self.router_table = get_router_table(router_tablename,
                                              router_read_throughput,
-                                             router_write_throughput)
+                                             router_write_throughput,
+                                             db_host, db_port, db_secure)
         self.storage_table = get_storage_table(storage_tablename,
                                                storage_read_throughput,
-                                               storage_write_throughput)
+                                               storage_write_throughput,
+                                               db_host, db_port, db_secure)
         self.storage = Storage(self.storage_table, self.metrics)
         self.router = Router(self.router_table, self.metrics)
 
