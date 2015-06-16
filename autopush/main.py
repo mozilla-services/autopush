@@ -323,7 +323,7 @@ def endpoint_main(sysargs=None):
         (r"/push/([^\/]+)", EndpointHandler, dict(ap_settings=settings)),
         # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint
-        (r"/register/([^\/]+)?", RegistrationHandler,
+        (r"/register(?:/(.+))?", RegistrationHandler,
          dict(ap_settings=settings)),
     ],
         default_host=settings.hostname, debug=args.debug,
