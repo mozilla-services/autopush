@@ -88,6 +88,21 @@ class EndpointTestCase(unittest.TestCase):
         d = self.finish_deferred = Deferred()
         self.endpoint.finish = lambda: d.callback(True)
 
+    def test_uaid_lookup_results(self):
+        fresult = dict(router_type="test")
+        notification = {}
+        frouter = Mock(spec=Router)
+        frouter.route_notification = Mock()
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.ap_settings.routers["test"] = frouter
+        self.endpoint._uaid_lookup_results(fresult, notification)
+
+        def handle_finish(value):
+            frouter.route_notification.assert_called()
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
     def test_client_info(self):
         h = self.request_mock.headers
         h["user-agent"] = "myself"

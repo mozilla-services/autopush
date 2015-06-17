@@ -215,7 +215,7 @@ class EndpointHandler(AutoendpointHandler):
     def _uaid_lookup_results(self, result, notification):
         """Process the result of the AWS UAID lookup"""
         # Save the whole record
-        router_key = result.get("router", "simplepush")
+        router_key = result.get("router_type", "simplepush")
         router = self.ap_settings.routers[router_key]
         d = Deferred()
         d.addCallback(router.route_notification, result)
