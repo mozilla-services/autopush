@@ -22,6 +22,8 @@ Reference Docs
 
    install
    testing
+   running
+   architecture
    api
    Changelog <changelog>
 
