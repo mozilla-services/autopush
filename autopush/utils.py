@@ -56,7 +56,10 @@ def validate_hash(key, payload, hashed):
 
 
 def generate_hash(key, payload):
-    """Generate a HMAC for the uaid using the secret. Returns the HMAC hash
-    and the nonce used as a tuple (nonce, hash)."""
+    """Generate a HMAC for the uaid using the secret
+
+    :returns: HMAC hash and the nonce used as a tuple (nonce, hash).
+
+    """
     h = hmac.new(key=key, msg=payload, digestmod=hashlib.sha256)
     return h.hexdigest()

@@ -134,7 +134,7 @@ class AutopushSettings(object):
 
     def update(self, **kwargs):
         """Update the arguments, if a ``crypto_key`` is in kwargs then the
-        ``self.fernet`` attribute will be initialized."""
+        ``self.fernet`` attribute will be initialized"""
         for key, val in kwargs.items():
             if key == "crypto_key":
                 self.fernet = Fernet(val)

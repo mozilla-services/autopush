@@ -206,7 +206,7 @@ class Notification(namedtuple("Notification", "version data channel_id")):
 
 def parse_request_params(request):
     """Parse request params from either the body or query as needed and
-    return them.
+    return them
 
     :returns: Tuple of (version, data).
 
@@ -452,9 +452,9 @@ class RegistrationHandler(AutoendpointHandler):
     #############################################################
     @cyclone.web.asynchronous
     def get(self, uaid=""):
-        """HTTP GET Handler
+        """HTTP GET
 
-        Returns router type/data for the UAID.
+        Retrieves the router type/data for a UAID.
 
         """
         if not self._validate_auth(uaid):
@@ -471,7 +471,11 @@ class RegistrationHandler(AutoendpointHandler):
 
     @cyclone.web.asynchronous
     def post(self, uaid=""):
-        """HTTP POST Handler for endpoint generation"""
+        """HTTP POST
+
+        Endpoint generation and optionally router type/data registration.
+
+        """
         self.start_time = time.time()
         self.add_header("Content-Type", "application/json")
         params = self._load_params()
@@ -511,7 +515,11 @@ class RegistrationHandler(AutoendpointHandler):
 
     @cyclone.web.asynchronous
     def put(self, uaid=""):
-        """HTTP PUT Handler"""
+        """HTTP PUT
+
+        Update router type/data for a UAID.
+
+        """
         self.start_time = time.time()
 
         if not self._validate_auth(uaid):

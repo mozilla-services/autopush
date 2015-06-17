@@ -26,7 +26,7 @@ TWISTED_LOG_MESSAGE = MessageType("twisted:log",
 
 
 class EliotObserver(object):
-    """A Twisted log observer that logs to Eliot."""
+    """A Twisted log observer that logs to Eliot"""
     def __init__(self):
         """Create the Eliot Observer"""
         if os.environ.get("SENTRY_DSN"):

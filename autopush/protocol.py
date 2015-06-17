@@ -5,11 +5,12 @@ from twisted.web.client import ResponseDone
 
 
 class IgnoreBody(Protocol):
-    """A protocol that discards any data it receives.
+    """A protocol that discards any data it receives
 
     This is necessary to support persistent HTTP connections. If the
     response body is never read using ``Response.deliverBody``, or
     ``stopProducing()`` is called, the connection will not be reused.
+
     """
     def __init__(self, response, deferred):
         self.response = response
