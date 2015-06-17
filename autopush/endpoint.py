@@ -23,6 +23,8 @@ payload being the raw content of the body (if any).
 
 Hash: ``HMAC(key=secret, message=RAW_CONTENT_PAYLOAD)``
 
+All message bodies must be UTF-8 encoded.
+
 .. http:put:: /push/(uuid:token)
 
     Send a notification to the given endpoint `token`.
