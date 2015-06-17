@@ -1,3 +1,4 @@
+"""Custom SSL configuration"""
 from OpenSSL import SSL
 from twisted.internet import ssl
 
@@ -36,7 +37,9 @@ MOZILLA_INTERMEDIATE_CIPHERS = (
 
 
 class AutopushSSLContextFactory(ssl.DefaultOpenSSLContextFactory):
+    """A SSL context factory"""
     def cacheContext(self):
+        """Setup the main context factory with custom SSL settings."""
         if self._context is None:
             ctx = self._contextFactory(self.sslmethod)
 

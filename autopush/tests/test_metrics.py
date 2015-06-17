@@ -2,12 +2,35 @@ import unittest
 
 import twisted.internet.base
 
-from nose.tools import ok_
+from nose.tools import ok_, eq_
 from mock import Mock, patch
 
 from datadog.util.hostname import get_hostname
 
-from autopush.metrics import DatadogMetrics, TwistedMetrics
+from autopush.metrics import (
+    IMetrics,
+    DatadogMetrics,
+    TwistedMetrics,
+    SinkMetrics,
+)
+
+
+class IMetricsTestCase(unittest.TestCase):
+    def test_default(self):
+        im = IMetrics()
+        im.start()
+        self.assertRaises(NotImplementedError, im.increment, "test")
+        self.assertRaises(NotImplementedError, im.gauge, "test", 10)
+        self.assertRaises(NotImplementedError, im.timing, "test", 10)
+
+
+class SinkMetricsTestCase(unittest.TestCase):
+    def test_passing(self):
+        sm = SinkMetrics()
+        sm.start()
+        eq_(None, sm.increment("test"))
+        eq_(None, sm.gauge("test", 10))
+        eq_(None, sm.timing("test", 10))
 
 
 class TwistedMetricsTestCase(unittest.TestCase):

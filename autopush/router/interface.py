@@ -9,6 +9,7 @@ class RouterException(AutopushException):
     """
     def __init__(self, message, status_code=500, response_body="",
                  router_data=None):
+        """Create a new RouterException"""
         super(AutopushException, self).__init__(message)
         self.status_code = status_code
         self.response_body = response_body or message
@@ -23,6 +24,7 @@ class RouterResponse(object):
 
     """
     def __init__(self, status_code=200, response_body="", router_data=None):
+        """Create a new RouterResponse"""
         self.status_code = status_code
         self.response_body = response_body
         self.router_data = router_data
@@ -39,8 +41,10 @@ class IRouter(object):
         return a dict that will be stored as routing_data for this user in the
         future.
 
-        This method must perform validation of the data to store. A
-        :class:`RouterException` should be raised if the data is invalid.
+        :returns: A response object
+        :rtype: :class:`RouterResponse`
+        :raises:
+            :exc:`RouterException` if data supplied is invalid.
 
         """
         raise NotImplementedError("register must be implemented")
@@ -51,8 +55,9 @@ class IRouter(object):
         :param notification: A :class:`~autopush.endpoint.Notificaiton`
                              instance.
         :param uaid_data: A dict of the full user item from the db record.
-        :returns: A :class:`RouterResponse` object upon successful routing.
-        :raises: A :class:`RouterException` if routing fails.
+        :returns: A response object upon successful routing.
+        :rtype: :class:`RouterResponse`
+        :raises: :exc:`RouterException` if routing fails.
 
         This function runs in the main reactor, if a yield is needed then a
         deferred must be returned for the callback chain.

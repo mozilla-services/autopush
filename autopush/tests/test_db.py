@@ -21,7 +21,7 @@ from autopush.db import (
     Storage,
     Router,
 )
-from autopush.settings import MetricSink
+from autopush.metrics import SinkMetrics
 
 
 mock_db2 = mock_dynamodb2()
@@ -78,7 +78,7 @@ class StorageTestCase(unittest.TestCase):
 
     def test_dont_save_older(self):
         s = get_storage_table()
-        storage = Storage(s, MetricSink())
+        storage = Storage(s, SinkMetrics())
         # Unfortunately moto can't run condition expressions, so
         # we gotta fake it
         storage.table.connection = Mock()
@@ -92,7 +92,7 @@ class StorageTestCase(unittest.TestCase):
 
     def test_fetch_over_provisioned(self):
         s = get_storage_table()
-        storage = Storage(s, MetricSink())
+        storage = Storage(s, SinkMetrics())
         storage.table.connection = Mock()
 
         def raise_error(*args, **kwargs):
@@ -104,7 +104,7 @@ class StorageTestCase(unittest.TestCase):
 
     def test_save_over_provisioned(self):
         s = get_storage_table()
-        storage = Storage(s, MetricSink())
+        storage = Storage(s, SinkMetrics())
         storage.table = Mock()
 
         def raise_error(*args, **kwargs):
@@ -116,7 +116,7 @@ class StorageTestCase(unittest.TestCase):
 
     def test_delete_over_provisioned(self):
         s = get_storage_table()
-        storage = Storage(s, MetricSink())
+        storage = Storage(s, SinkMetrics())
         storage.table.connection = Mock()
 
         def raise_error(*args, **kwargs):
@@ -156,12 +156,12 @@ class RouterTestCase(unittest.TestCase):
     def test_no_uaid_found(self):
         uaid = str(uuid.uuid4())
         r = get_router_table()
-        router = Router(r, MetricSink())
+        router = Router(r, SinkMetrics())
         self.assertRaises(ItemNotFound, router.get_uaid, uaid)
 
     def test_uaid_provision_failed(self):
         r = get_router_table()
-        router = Router(r, MetricSink())
+        router = Router(r, SinkMetrics())
         router.table = Mock()
 
         def raise_error(*args, **kwargs):
@@ -174,7 +174,7 @@ class RouterTestCase(unittest.TestCase):
 
     def test_register_user_provision_failed(self):
         r = get_router_table()
-        router = Router(r, MetricSink())
+        router = Router(r, SinkMetrics())
         router.table.connection = Mock()
 
         def raise_error(*args, **kwargs):
@@ -187,7 +187,7 @@ class RouterTestCase(unittest.TestCase):
 
     def test_clear_node_provision_failed(self):
         r = get_router_table()
-        router = Router(r, MetricSink())
+        router = Router(r, SinkMetrics())
         router.table.connection.put_item = Mock()
 
         def raise_error(*args, **kwargs):
@@ -201,7 +201,7 @@ class RouterTestCase(unittest.TestCase):
     def test_save_uaid(self):
         uaid = str(uuid.uuid4())
         r = get_router_table()
-        router = Router(r, MetricSink())
+        router = Router(r, SinkMetrics())
         result = router.register_user(dict(uaid=uaid, node_id="me",
                                       connected_at=1234))
         eq_(result[0], True)
@@ -214,7 +214,7 @@ class RouterTestCase(unittest.TestCase):
 
     def test_save_new(self):
         r = get_router_table()
-        router = Router(r, MetricSink())
+        router = Router(r, SinkMetrics())
         # Sadly, moto currently does not return an empty value like boto
         # when not updating data.
         router.table.connection = Mock()
@@ -225,7 +225,7 @@ class RouterTestCase(unittest.TestCase):
 
     def test_save_fail(self):
         r = get_router_table()
-        router = Router(r, MetricSink())
+        router = Router(r, SinkMetrics())
 
         def raise_condition(*args, **kwargs):
             raise ConditionalCheckFailedException(None, None)
@@ -238,7 +238,7 @@ class RouterTestCase(unittest.TestCase):
 
     def test_node_clear(self):
         r = get_router_table()
-        router = Router(r, MetricSink())
+        router = Router(r, SinkMetrics())
 
         # Register a node user
         router.register_user(dict(uaid="asdf", node_id="asdf",
@@ -257,7 +257,7 @@ class RouterTestCase(unittest.TestCase):
 
     def test_node_clear_fail(self):
         r = get_router_table()
-        router = Router(r, MetricSink())
+        router = Router(r, SinkMetrics())
 
         def raise_condition(*args, **kwargs):
             raise ConditionalCheckFailedException(None, None)

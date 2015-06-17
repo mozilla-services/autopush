@@ -1,3 +1,34 @@
+"""Websocket Protocol handler and HTTP Endpoints for Connection Node
+
+Private HTTP Endpoints
+======================
+
+These HTTP endpoints are only for communication from endpoint nodes and must
+not be publicly exposed.
+
+.. http:put:: /push/(uuid:uaid)
+
+    Send a notification to a connected client with the given `uaid`.
+
+    :statuscode 200: Client is connected and delivery will be attempted.
+    :statuscode 404: Client is not connected to this node.
+    :statuscode 503: Client is connected, but currently busy.
+
+.. http:put:: /notif/(uuid:uaid)
+
+    Trigger a stored notification check for a connected client.
+
+    :statuscode 200: Client is connected, and has started checking.
+    :statuscode 202: Client is connected but busy, will check notifications
+                     when not busy.
+    :statuscode 404: Client is not connected to this node.
+
+.. http:delete:: /notif/(uuid:uaid)/(int:connected_at)
+
+    Immediately drop a client of this `uaid` if its connection time matches the
+    `connected_at` provided.
+
+"""
 import json
 import time
 import uuid
@@ -24,10 +55,13 @@ from autopush.utils import validate_uaid
 
 
 def ms_time():
+    """Return current time.time call as ms and a Python int"""
     return int(time.time() * 1000)
 
 
 def periodic_reporter(settings):
+    """Twisted Task function that runs every few seconds to emit general
+    metrics regarding twisted and client counts"""
     settings.metrics.gauge("update.client.writers",
                            len(reactor.getWriters()))
     settings.metrics.gauge("update.client.readers",
@@ -39,6 +73,7 @@ def periodic_reporter(settings):
 
 
 def log_exception(func):
+    """Exception Logger Decorator for protocol methods"""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         try:
@@ -50,6 +85,7 @@ def log_exception(func):
 
 
 class SimplePushServerProtocol(WebSocketServerProtocol):
+    """Main Websocket Connection Protocol"""
     implements(IProducer)
 
     # Testing purposes
@@ -57,6 +93,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     # Defer helpers
     def deferToThread(self, func, *args, **kwargs):
+        """deferToThread helper that tracks defers outstanding"""
         d = deferToThread(func, *args, **kwargs)
 
         def trapCancel(fail):
@@ -73,6 +110,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return d
 
     def deferToLater(self, when, func, *args, **kwargs):
+        """deferToLater helper that tracks defers outstanding"""
         d = Deferred()
 
         def trapCancel(fail):
@@ -94,23 +132,30 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     @property
     def base_tags(self):
+        """Property that uses None if there's no tags due to a DataDog library
+        bug"""
         return self._base_tags if self._base_tags else None
 
     def log_err(self, failure, **kwargs):
+        """Log a twisted failure out through twisted's log.err"""
         log.err(failure, **kwargs)
 
     def pauseProducing(self):
+        """IProducer implementation tracking if we should pause output"""
         self._paused = True
 
     def resumeProducing(self):
+        """IProducer implementation tracking when we should resume output"""
         self._paused = False
 
     def stopProducing(self):
+        """IProducer implementation tracking when we should stop"""
         self._paused = True
         self._should_stop = True
 
     @property
     def paused(self):
+        """Indicates if we are paused for output production or not"""
         return self._paused
 
     @log_exception
@@ -137,6 +182,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     @log_exception
     def nukeConnection(self):
+        """Aggressive connection shutdown using abortConnection if onClose
+        still hadn't run by this point"""
         # Did onClose get called? If so, we shutdown properly, no worries.
         if hasattr(self, "_shutdown_ran"):
             return
@@ -152,6 +199,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     @log_exception
     def verifyNuke(self):
+        """Verifies that :meth:`nukeConnection` actually worked"""
         if hasattr(self, "_shutdown_ran"):
             return
 
@@ -161,6 +209,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     @log_exception
     def onConnect(self, request):
+        """autobahn onConnect handler for when a connection has started"""
         # Setup ourself to handle producing the data
         self.transport.bufferSize = 2 * 1024
         self.transport.registerProducer(self, True)
@@ -216,6 +265,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     @log_exception
     def onMessage(self, payload, isBinary):
+        """autobahn onMessage processor for incoming messages"""
         if isBinary:
             self.sendClose()
             return
@@ -257,6 +307,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     @log_exception
     def onClose(self, wasClean, code, reason):
+        """autobahn onClose handler for shutting down the connection and any
+        outstanding deferreds related to this connection"""
         uaid = getattr(self, "uaid", None)
         self._shutdown_ran = True
         self._should_stop = True
@@ -264,6 +316,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.cleanUp()
 
     def cleanUp(self):
+        """Thorough clean-up method to cancel all remaining deferreds, and send
+        connection metrics in"""
         self.metrics.increment("client.socket.disconnect", tags=self.base_tags)
         elapsed = (ms_time() - self.connected_at) / 1000.0
         self.metrics.timing("client.socket.lifespan", duration=elapsed,
@@ -330,6 +384,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         d.addErrback(self.log_err, extra="Failed to notify node")
 
     def returnError(self, messageType, reason, statusCode, close=True):
+        """Return an error to a client, and optionally shut down the connection
+        safely"""
         self.sendJSON({"messageType": messageType,
                        "reason": reason,
                        "status": statusCode})
@@ -337,12 +393,14 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.sendClose()
 
     def sendJSON(self, body):
+        """Send a Python dict as a JSON string in a websocket message"""
         self.sendMessage(json.dumps(body).encode('utf8'), False)
 
     #############################################################
     #                Message Processing Methods
     #############################################################
     def process_hello(self, data):
+        """Process a hello message"""
         # This must be a helo, or we kick the client
         cmd = data.get("messageType")
         if cmd != "hello":
@@ -369,11 +427,14 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return d
 
     def err_hello(self, failure):
+        """errBack for hello failures"""
         self.transport.resumeProducing()
         self.log_err(failure)
         self.returnError("hello", "error", 503)
 
     def _check_other_nodes(self, result):
+        """callback to check other nodes for clients and send them a delete as
+        needed"""
         self.transport.resumeProducing()
         registered, previous = result
         if not registered:
@@ -409,6 +470,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.finish_hello()
 
     def finish_hello(self, *args):
+        """callback for successful hello message, that sends hello reply"""
         self._register = None
         msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}
         self.ap_settings.clients[self.uaid] = self
@@ -417,6 +479,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.process_notifications()
 
     def process_notifications(self):
+        """Run a notification check against storage"""
         # Bail immediately if we are closed.
         if self._should_stop:
             return
@@ -441,11 +504,13 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self._notification_fetch = d
 
     def error_notifications(self, fail):
+        """errBack for notification check failing"""
         # If we error'd out on this important check, we drop the connection
         self.log_err(fail)
         self.sendClose()
 
     def finish_notifications(self, notifs):
+        """callback for processing notifications from storage"""
         self._notification_fetch = None
 
         # Are we paused, try again later
@@ -480,6 +545,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.deferToLater(1, self.process_notifications)
 
     def _send_ping(self):
+        """Helper for ping sending that tracks when the ping was sent"""
         self.last_ping = time.time()
         self.metrics.increment("updates.client.ping", tags=self.base_tags)
         return self.sendMessage("{}", False)
@@ -509,6 +575,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return self.deferToLater(9 - last_ping_ago, self._send_ping)
 
     def process_register(self, data):
+        """Process a register message"""
         if "channelID" not in data:
             return self.bad_message("register")
         chid = data["channelID"]
@@ -524,11 +591,13 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return d
 
     def error_register(self, fail):
+        """errBack handler for registering to fail"""
         self.transport.resumeProducing()
         msg = {"messageType": "register", "status": 500}
         self.sendJSON(msg)
 
     def finish_register(self, endpoint, chid):
+        """callback for successful endpoint creation, sends register reply"""
         self.transport.resumeProducing()
         msg = {"messageType": "register",
                "channelID": chid,
@@ -539,6 +608,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.metrics.increment("updates.client.register", tags=self.base_tags)
 
     def process_unregister(self, data):
+        """Process an unregister message"""
         if "channelID" not in data:
             return self.bad_message("unregister")
         chid = data["channelID"]
@@ -553,7 +623,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Delete any record from storage, we don't wait for this
         d = self.deferToThread(self.ap_settings.storage.delete_notification,
                                self.uaid, chid)
-        d.addBoth(self.force_delete, chid)
+        d.addErrback(self.force_delete, chid)
         data["status"] = 200
         self.sendJSON(data)
 
@@ -569,6 +639,12 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return d
 
     def ack_update(self, update):
+        """Helper function for tracking ack'd updates
+
+        Returns either None, if no delete_notification call is needed, or a
+        deferred for the delete_notification call if it was needed.
+
+        """
         chid = update.get("channelID")
         version = update.get("version")
         if not chid or not version:
@@ -595,6 +671,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return d
 
     def process_ack(self, data):
+        """Process an ack message, delete notifications from storage if
+        needed"""
         updates = data.get("updates")
         if not updates or not isinstance(updates, list):
             return
@@ -610,6 +688,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.check_missed_notifications(None)
 
     def check_ack(self, result, uaid, chid, version):
+        """Check that the delete call ran ok"""
         if result:
             return None
 
@@ -621,6 +700,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return d
 
     def check_missed_notifications(self, results, resume=False):
+        """Check to see if notifications were missed"""
         if resume:
             # Resume consuming ack's
             self.transport.resumeProducing()
@@ -630,12 +710,19 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.process_notifications()
 
     def bad_message(self, typ):
+        """Error helper for sending a 401 status back"""
         msg = {"messageType": typ, "status": 401}
         self.sendJSON(msg)
 
     ####################################
     # Utility function for external use
     def send_notifications(self, updates):
+        """Utility function for external use
+
+        This function is called by the HTTP handler to deliver incoming
+        notifications from an endpoint.
+
+        """
         toSend = []
         for update in updates:
             chid, version = update["channelID"], update["version"]
@@ -652,7 +739,17 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
 
 class RouterHandler(cyclone.web.RequestHandler):
+    """Router Handler
+
+    Handles routing a notification to a connected client from an endpoint.
+
+    """
     def put(self, uaid):
+        """HTTP Put
+
+        Attempt delivery of a notification to a connected client.
+
+        """
         settings = self.ap_settings
         client = settings.clients.get(uaid)
         if not client:
@@ -673,6 +770,12 @@ class RouterHandler(cyclone.web.RequestHandler):
 
 class NotificationHandler(cyclone.web.RequestHandler):
     def put(self, uaid, *args):
+        """HTTP Put
+
+        Notify a connected client that it should check storage for new
+        notifications.
+
+        """
         client = self.ap_settings.clients.get(uaid)
         settings = self.ap_settings
         if not client:
@@ -693,6 +796,11 @@ class NotificationHandler(cyclone.web.RequestHandler):
         self.write("Notification check started")
 
     def delete(self, uaid, ignored, connectionTime):
+        """HTTP Delete
+
+        Drop a connected client as the client has connected to a new node.
+
+        """
         client = self.ap_settings.clients.get(uaid)
         if client and client.connected_at == int(connectionTime):
             client.sendClose()

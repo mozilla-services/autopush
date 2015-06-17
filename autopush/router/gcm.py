@@ -1,3 +1,4 @@
+"""GCM Router"""
 import gcmclient
 import json
 
@@ -8,12 +9,14 @@ from autopush.router.interface import RouterException, RouterResponse
 
 
 class GCMRouter(object):
+    """GCM Router Implementation"""
     gcm = None
     ttl = 60
     dryRun = 0
     collapseKey = "simplepush"
 
     def __init__(self, ap_settings, router_conf):
+        """Create a new GCM router and connect to GCM"""
         self.config = router_conf
         self.ttl = router_conf.get("ttl", 60)
         self.dryRun = router_conf.get("dryrun", False)
@@ -22,16 +25,19 @@ class GCMRouter(object):
         log.msg("Starting GCM router...")
 
     def register(self, uaid, router_data):
+        """Validate that a token is in the ``router_data``"""
         if not router_data.get("token"):
             self._error("connect info missing 'token'", status=401)
         return router_data
 
     def route_notification(self, notification, uaid_data):
+        """Start the GCM notification routing, returns a deferred"""
         router_data = uaid_data["router_data"]
         # Kick the entire notification routing off to a thread
         return deferToThread(self._route, notification, router_data)
 
     def _route(self, notification, router_data):
+        """Blocking GCM call to route the notification"""
         payload = gcmclient.JSONMessage(
             registration_ids=[router_data["token"]],
             collapse_key=self.collapseKey,
@@ -50,6 +56,7 @@ class GCMRouter(object):
         return self._process_reply(result)
 
     def _error(self, err, status, **kwargs):
+        """Error handler that raises the RouterException"""
         log.err(err, **kwargs)
         raise RouterException(err, status_code=status, response_body=err)
 
