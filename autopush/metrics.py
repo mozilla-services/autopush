@@ -36,7 +36,7 @@ class IMetrics(object):
         raise NotImplementedError("No timing implemented")
 
 
-class SinkMetrics(object):
+class SinkMetrics(IMetrics):
     """Exists to ignore metrics when metrics are not active"""
     def increment(name, count=1, **kwargs):
         pass
