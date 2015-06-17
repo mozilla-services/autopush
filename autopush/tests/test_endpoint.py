@@ -482,8 +482,8 @@ class RegistrationTestCase(unittest.TestCase):
             'encrypt.return_value': 'abcd123',
         })
         user_item = dict(
-            type="simplepush",
-            data={},
+            router_type="simplepush",
+            router_data={},
         )
         self.reg.ap_settings.endpoint_url = "http://localhost"
         self.reg.request.headers["Authorization"] = "something else"
@@ -493,7 +493,10 @@ class RegistrationTestCase(unittest.TestCase):
             call_args = self.reg.write.call_args
             ok_(call_args is not None)
             args = call_args[0]
-            eq_(json.loads(args[0]), user_item)
+            retval = dict(
+                type=user_item["router_type"],
+                data=user_item["router_data"])
+            eq_(json.loads(args[0]), retval)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.get(dummy_uaid)

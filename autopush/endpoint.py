@@ -508,8 +508,8 @@ class RegistrationHandler(AutoendpointHandler):
     #############################################################
     def _return_router_data(self, user_item):
         msg = dict(
-            type=user_item["type"],
-            data=user_item["data"],
+            type=user_item["router_type"],
+            data=user_item["router_data"],
         )
         self.write(json.dumps(msg))
         self.finish()
