@@ -5,6 +5,11 @@ Autopush Changelog
 1.3.0 (**dev**)
 ===============
 
+Features
+--------
+
+* Add Sphinx docs with ReadTheDocs publishing. Issue #98.
+
 Bug Fixes
 ---------
 
@@ -16,7 +21,6 @@ Internal
 * Refactor proprietary ping handling for modularized dispatch. Issue #82.
 
   Major changes
-  ~~~~~~~~~~~~~
 
   - RegistrationHandler endpoint is now the sole method for registering for a
     proprietary wake / transport.
@@ -28,7 +32,6 @@ Internal
     appropriate for the router type.
 
   db.py
-  ~~~~~
 
   - Removed previous methods (deleteByToken/get_connection/etc) as all the
     router data is included as a single JSON blob for DynamoDB to store.
@@ -36,7 +39,6 @@ Internal
     when connecting via websocket.
 
   endpoint.py
-  ~~~~~~~~~~~
 
   - EndpointHandler and RegistrationHandler now both inherit from a common
     baseclass: AutoendpointHandler. This baseclass implements
@@ -50,13 +52,11 @@ Internal
     shared key. (Documented in the RegistrationHandler.get method)
 
   websocket.py
-  ~~~~~~~~~~~~
 
   - Removed use of ``connect`` data in hello message as RegistrationHandler is
     now the sole method of registering other routers.
 
   router/interface.py (NEW)
-  ~~~~~~~~~~~~~~~~~~~~~~~~~
 
   - IRouter object that all notification routers must implement. This handles
     verifying router data during registration, and is responsible for actual
@@ -65,13 +65,11 @@ Internal
     during register/route_notification calls.
 
   router/apnsrouter.py
-  ~~~~~~~~~~~~~~~~~~~~
 
   - Moved from bridge/apns.
   - Refactored to use RouterException/RouterResponse.
 
   router/gcm.py
-  ~~~~~~~~~~~~~
 
   - Moved from bridge/gcm.
   - Refactored to use RouterException/RouterResponse.
@@ -79,7 +77,6 @@ Internal
     Application Server to retry delivery.
 
   router/simple.py
-  ~~~~~~~~~~~~~~~~
 
   - Moved code out from endpoint.py.
   - Refactored existing simplepush routing scheme to use twisted inline

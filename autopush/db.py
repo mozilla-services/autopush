@@ -1,3 +1,4 @@
+"""Database Interaction"""
 import uuid
 
 from boto.exception import JSONResponseError
@@ -14,6 +15,7 @@ from boto.dynamodb2.types import NUMBER
 
 def create_router_table(tablename="router", read_throughput=5,
                         write_throughput=5):
+    """Create a new router table"""
     return Table.create(tablename,
                         schema=[HashKey("uaid")],
                         throughput=dict(read=read_throughput,
@@ -29,6 +31,7 @@ def create_router_table(tablename="router", read_throughput=5,
 
 def create_storage_table(tablename="storage", read_throughput=5,
                          write_throughput=5):
+    """Create a new storage table for simplepush style notification storage"""
     return Table.create(tablename,
                         schema=[HashKey("uaid"), RangeKey("chid")],
                         throughput=dict(read=read_throughput,
@@ -36,34 +39,38 @@ def create_storage_table(tablename="storage", read_throughput=5,
                         )
 
 
-def router_table(tablename="router"):
-    return Table(tablename)
-
-
-def storage_table(tablename="storage"):
-    return Table(tablename)
-
-
 def get_router_table(tablename="router", read_throughput=5,
                      write_throughput=5):
+    """Get the main router table object
+
+    Creates the table if it doesn't already exist, otherwise returns the
+    existing table
+
+    """
     db = DynamoDBConnection()
     dblist = db.list_tables()["TableNames"]
     if tablename not in dblist:
         return create_router_table(tablename, read_throughput,
                                    write_throughput)
     else:
-        return router_table(tablename)
+        return Table(tablename)
 
 
 def get_storage_table(tablename="storage", read_throughput=5,
                       write_throughput=5):
+    """Get the main storage table object
+
+    Creates the table if it doesn't already exist, otherwise returns the
+    existing table
+
+    """
     db = DynamoDBConnection()
     dblist = db.list_tables()["TableNames"]
     if tablename not in dblist:
         return create_storage_table(tablename, read_throughput,
                                     write_throughput)
     else:
-        return storage_table(tablename)
+        return Table(tablename)
 
 
 def preflight_check(storage, router):
@@ -94,12 +101,27 @@ def preflight_check(storage, router):
 
 
 class Storage(object):
+    """Create a Storage table abstraction on top of a DynamoDB Table object"""
     def __init__(self, table, metrics):
+        """Create a new Storage object
+
+        :param table: :class:`Table` object
+        :param metrics: Metrics object that implements the
+                        :class:`autopush.metrics.IMetrics` interface.
+
+        """
         self.table = table
         self.metrics = metrics
         self.encode = table._encode_keys
 
     def fetch_notifications(self, uaid):
+        """Fetch all notifications for a UAID
+
+        :raises:
+            :exc:`ProvisionedThroughputExceededException` if dynamodb table
+            exceeds throughput.
+
+        """
         try:
             notifs = self.table.query_2(consistent=True, uaid__eq=uaid,
                                         chid__gt=" ")
@@ -109,6 +131,13 @@ class Storage(object):
             raise
 
     def save_notification(self, uaid, chid, version):
+        """Save a notification for the UAID
+
+        :raises:
+            :exc:`ProvisionedThroughputExceededException` if dynamodb table
+            exceeds throughput.
+
+        """
         conn = self.table.connection
         try:
             cond = "attribute_not_exists(version) or version < :ver"
@@ -128,6 +157,12 @@ class Storage(object):
             raise
 
     def delete_notification(self, uaid, chid, version=None):
+        """Delete a notification for a UAID
+
+        :returns: Whether or not the notification was able to be deleted.
+        :rtype: bool
+
+        """
         try:
             if version:
                 self.table.delete_item(uaid=uaid, chid=chid,
@@ -141,12 +176,30 @@ class Storage(object):
 
 
 class Router(object):
+    """Create a Router table abstraction on top of a DynamoDB Table object"""
     def __init__(self, table, metrics):
+        """Create a new Router object
+
+        :param table: :class:`Table` object
+        :param metrics: Metrics object that implements the
+                        :class:`autopush.metrics.IMetrics` interface.
+
+        """
         self.table = table
         self.metrics = metrics
         self.encode = table._encode_keys
 
     def get_uaid(self, uaid):
+        """Get the database record for the UAID
+
+        :returns: User item
+        :rtype: :class:`~boto.dynamodb2.items.Item`
+        :raises:
+            :exc:`ItemNotFound` if there is no record for this UAID.
+            :exc:`ProvisionedThroughputExceededException` if dynamodb table
+            exceeds throughput.
+
+        """
         try:
             return self.table.get_item(consistent=True, uaid=uaid)
         except ProvisionedThroughputExceededException:
@@ -160,7 +213,18 @@ class Router(object):
 
     def register_user(self, data):
         """Attempt to register this user if it doesn't already exist or
-        this is the latest connection"""
+        this is the latest connection.
+
+        If a record exists with a newer ``connected_at``, then the user will
+        not be registered.
+
+        :returns: Whether the user was registered or not.
+        :rtype: bool
+        :raises:
+            :exc:`ProvisionedThroughputExceededException` if dynamodb table
+            exceeds throughput.
+
+        """
         conn = self.table.connection
         db_key = self.encode({"uaid": data.pop("uaid")})
         # Generate our update expression
@@ -195,7 +259,18 @@ class Router(object):
             raise
 
     def clear_node(self, item):
-        """Given a router item, remove the node_id from it."""
+        """Given a router item, remove the node_id from it.
+
+        The node_id will only be cleared if the ``connected_at`` matches up
+        with the item's ``connected_at``.
+
+        :returns: Whether the node was cleared or not.
+        :rtype: bool
+        :raises:
+            :exc:`ProvisionedThroughputExceededException` if dynamodb table
+            exceeds throughput.
+
+        """
         conn = self.table.connection
         # Pop out the node_id
         node_id = item["node_id"]

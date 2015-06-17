@@ -11,19 +11,17 @@ from autopush.db import (
     Storage,
     Router
 )
-from autopush.metrics import DatadogMetrics, TwistedMetrics
+from autopush.metrics import (
+    DatadogMetrics,
+    TwistedMetrics,
+    SinkMetrics,
+)
 from autopush.router import (
     APNSRouter,
     GCMRouter,
     SimpleRouter,
 )
 from autopush.utils import canonical_url, resolve_ip
-
-
-class MetricSink(object):
-    """Exists to ignore metrics when metrics are not active"""
-    def increment(*args, **kwargs):
-        pass
 
 
 class AutopushSettings(object):
@@ -70,7 +68,7 @@ class AutopushSettings(object):
         elif statsd_host:
             self.metrics = TwistedMetrics(statsd_host, statsd_port)
         else:
-            self.metrics = MetricSink()
+            self.metrics = SinkMetrics()
 
         key = crypto_key or Fernet.generate_key()
         self.fernet = Fernet(key)

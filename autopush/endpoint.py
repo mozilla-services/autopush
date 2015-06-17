@@ -1,7 +1,177 @@
-"""HTTP Endpoint for Notifications
+"""HTTP Endpoints for Notifications
 
 This is the primary running code of the ``autoendpoint`` script that handles
 the reception of HTTP notification requests for AppServers.
+
+Two HTTP endpoints are exposed by default:
+
+1. :class:`EndpointHandler` - Handles Push notification deliveries from the
+   :term:`AppServer`.
+2. :class:`RegistrationHandler` - Handles Registration requests for registering
+   additional router type/data when not using the default notification delivery
+   scheme.
+
+If no external routers are configured then the :class:`RegistrationHandler`
+will not be able to perform any additional router data registration.
+
+HTTP API
+========
+
+API methods requiring Authorization must include a HMAC, generated with SHA256
+of the secret key sent on the original register ``POST`` and the message
+payload being the raw content of the body (if any).
+
+Hash: ``HMAC(key=secret, message=RAW_CONTENT_PAYLOAD)``
+
+.. http:put:: /push/(uuid:token)
+
+    Send a notification to the given endpoint `token`.
+
+    :form version: (*Optional*) Version of notification, defaults to current
+                   time
+    :statuscode 404: `token` is invalid.
+    :statuscode 202: Message stored for delivery to client at a later
+                     time.
+    :statuscode 200: Message delivered to node client is connected to.
+
+.. http:get:: /register/(uuid:uaid)
+
+    Returns registered router data for the UAID.
+
+    **Example Request**
+
+    .. code-block:: http
+
+        GET /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
+        Host: endpoint.push.com
+        Authorization: HASH
+
+    **Example Response**
+
+    .. code-block:: http
+
+        HTTP/1.1 200 OK
+        Content-Type: application/json
+        Content-Length: nnn
+
+        {
+            "type": "apns",
+            "data": {
+                "token": "APNS_TOKEN_DATA",
+                ...
+            }
+        }
+
+    :reqheader Authorization: Hash with message set to an empty string.
+
+.. http:post:: /register/(uuid:uaid)
+
+    Create a new endpoint for a given UAID, or register a new UAID and
+    return a new endpoint.
+
+    If a channelID is not supplied then one will be generated.
+
+    **Endpoint w/New Registration**
+
+    **Example Request (for APNS router)**:
+
+    .. code-block:: http
+
+        POST /register
+        Host: endpoint.push.com
+        Content-Type: application/json
+
+        {
+            "type": "apns",
+            "channelID": "a13872c9-5cba-48ab-a8e5-955264647303",
+            "data": {
+                "token": "APNS_TOKEN_DATA",
+                ...
+            }
+        }
+
+    **Example Response**:
+
+    .. code-block:: http
+
+        HTTP/1.1 200 OK
+        Content-Type: application/json
+        Content-Length: nnn
+
+        {
+            "uaid": "5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63",
+            "secret": "4526e381eb6c191cf783da5d6df248e7",
+            "channelID": "a13872c9-5cba-48ab-a8e5-955264647303",
+            "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
+        }
+
+    **Endpoint w/Existing UAID**
+
+    **Example Request**:
+
+    .. code-block:: http
+
+        POST /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
+        Host: endpoint.push.com
+        Authorization: HASH
+        Content-Type: application/json
+
+        {}
+
+    **Example Response**:
+
+    .. code-block:: http
+
+        HTTP/1.1 200 OK
+        Content-Type: application/json
+        Content-Length: nnn
+
+        {
+            "channelID": "8a90e38a-f36c-4c77-901a-c11d02c1516f",
+            "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
+        }
+
+    :reqheader Authorization: Hash with message set to raw body content
+                              required for existing UAID's.
+
+.. http:put:: /register/(uuid:uaid)
+
+    Update router data for an existing UAID.
+
+    This endpoint handles updating the router data/type for an existing
+    UAID and requires the nonce/hash for the UAID given.
+
+    **Update Router Data**
+
+    **Example Request**:
+
+    .. code-block:: http
+
+        PUT /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
+        Host: endpoint.push.com
+        Authorization: HASH
+        Content-Type: application/json
+
+        {
+            "type": "gcm",
+            "data": {
+                "token": "TOKEN_DATA_FOR_ROUTER_TYPE",
+                ...
+            }
+        }
+
+    **Example Response**:
+
+    .. code-block:: http
+
+        HTTP/1.1 200 OK
+        Content-Type: application/json
+        Content-Length: nnn
+
+        {}
+
+    :reqheader Authorization: Hash with message set to raw body content
+                              required for existing UAID's.
 
 """
 import hashlib
@@ -204,6 +374,7 @@ class EndpointHandler(AutoendpointHandler):
     #                    Callbacks
     #############################################################
     def _token_valid(self, result, version, data):
+        """Called after the token is decrypted successfully"""
         self.uaid, chid = result.split(":")
         notification = Notification(version=version, data=data,
                                     channel_id=chid)
@@ -227,6 +398,7 @@ class EndpointHandler(AutoendpointHandler):
         d.callback(notification)
 
     def _router_completed(self, response, uaid_data):
+        """Called after router has completed successfully"""
         # TODO: Add some custom wake logic here
 
         # Were we told to update the router data?
@@ -280,38 +452,7 @@ class RegistrationHandler(AutoendpointHandler):
     def get(self, uaid=""):
         """HTTP GET Handler
 
-        Returns registered router data for the UAID.
-
-        Requires the nonce/hash to be included as an ``Authorization`` header.
-
-        The ``HASH`` must be a HMAC using SHA256, with the secret sent on the
-        original post, like so::
-
-            HMAC(key=secret, message=RAW_CONTENT_PAYLOAD)
-
-        Request:
-
-        .. code-block:: txt
-
-            GET /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
-            Host: endpoint.push.com
-            Authorization: HASH
-
-        Response:
-
-        .. code-block:: txt
-
-            HTTP/1.1 200 OK
-            Content-Type: application/json
-            Content-Length: nnn
-
-            {
-                "type": "apns",
-                "data": {
-                    "token": "APNS_TOKEN_DATA",
-                    ...
-                }
-            }
+        Returns router type/data for the UAID.
 
         """
         if not self._validate_auth(uaid):
@@ -328,80 +469,7 @@ class RegistrationHandler(AutoendpointHandler):
 
     @cyclone.web.asynchronous
     def post(self, uaid=""):
-        """HTTP POST Handler for endpoint generation
-
-        Create a new endpoint for a given UAID, or register a new UAID and
-        return a new endpoint.
-
-        If a channelID is not supplied then one will be generated.
-
-        For existing UAID's, the uaid must be present in the URL string and
-        the nonce/hash in the JSON body, for new registration no UAID can be
-        in the URL.
-
-        Endpoint w/New Registration
-        ---------------------------
-
-        Request (for APNS router):
-
-        .. code-block:: txt
-
-            POST /register/
-            Host: endpoint.push.com
-            Content-Type: application/json
-
-            {
-                "type": "apns",
-                "channelID": "a13872c9-5cba-48ab-a8e5-955264647303",
-                "data": {
-                    "token": "APNS_TOKEN_DATA",
-                    ...
-                }
-            }
-
-        Response:
-
-        .. code-block:: txt
-
-            HTTP/1.1 200 OK
-            Content-Type: application/json
-            Content-Length: nnn
-
-            {
-                "uaid": "5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63",
-                "secret": "4526e381eb6c191cf783da5d6df248e7",
-                "channelID": "a13872c9-5cba-48ab-a8e5-955264647303",
-                "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
-            }
-
-        Endpoint w/Existing UAID
-        ------------------------
-
-        Request:
-
-        .. code-block:: txt
-
-            POST /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
-            Host: endpoint.push.com
-            Authorization: HASH
-            Content-Type: application/json
-
-            {}
-
-        Response:
-
-        .. code-block:: txt
-
-            HTTP/1.1 200 OK
-            Content-Type: application/json
-            Content-Length: nnn
-
-            {
-                "channelID": "8a90e38a-f36c-4c77-901a-c11d02c1516f",
-                "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
-            }
-
-        """
+        """HTTP POST Handler for endpoint generation"""
         self.start_time = time.time()
         self.add_header("Content-Type", "application/json")
         params = self._load_params()
@@ -441,44 +509,7 @@ class RegistrationHandler(AutoendpointHandler):
 
     @cyclone.web.asynchronous
     def put(self, uaid=""):
-        """HTTP PUT Handler
-
-        Update router data for an existing UAID.
-
-        This endpoint handles updating the router data/type for an existing
-        UAID and requires the nonce/hash for the UAID given.
-
-        Update Router Data
-        ------------------
-
-        Request:
-
-        .. code-block:: txt
-
-            PUT /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
-            Host: endpoint.push.com
-            Authorization: NONCE HASH
-            Content-Type: application/json
-
-            {
-                "type": "gcm",
-                "data": {
-                    "token": "TOKEN_DATA_FOR_ROUTER_TYPE",
-                    ...
-                }
-            }
-
-        Response:
-
-        .. code-block:: txt
-
-            HTTP/1.1 200 OK
-            Content-Type: application/json
-            Content-Length: nnn
-
-            {}
-
-        """
+        """HTTP PUT Handler"""
         self.start_time = time.time()
 
         if not self._validate_auth(uaid):
@@ -507,6 +538,7 @@ class RegistrationHandler(AutoendpointHandler):
     #                    Callbacks
     #############################################################
     def _return_router_data(self, user_item):
+        """Called after UAID data is retrieved"""
         msg = dict(
             type=user_item["type"],
             data=user_item["data"],
@@ -515,6 +547,7 @@ class RegistrationHandler(AutoendpointHandler):
         self.finish()
 
     def _save_router_data(self, router_data, router_type):
+        """Called when new data needs to be saved to a user-record"""
         user_item = dict(
             uaid=self.uaid,
             router_type=router_type,
@@ -524,10 +557,13 @@ class RegistrationHandler(AutoendpointHandler):
         return deferToThread(self.ap_settings.router.register_user, user_item)
 
     def _make_endpoint(self, result):
+        """Called to create a new endpoint"""
         return deferToThread(self.ap_settings.make_endpoint,
                              self.uaid, self.chid)
 
     def _return_endpoint(self, endpoint, new_uaid):
+        """Called after the endpoint was made and should be returned to the
+        requestor"""
         if new_uaid:
             hashed = generate_hash(self.uaid, self.ap_settings.crypto_key)
             msg = dict(
@@ -543,6 +579,7 @@ class RegistrationHandler(AutoendpointHandler):
         self.finish()
 
     def _success(self, result):
+        """Writes out empty 200 response"""
         self.write({})
         self.finish()
 
@@ -550,16 +587,20 @@ class RegistrationHandler(AutoendpointHandler):
     #                    Utility Methods
     #############################################################
     def _validate_auth(self, uaid):
+        """Validates the Authorization header in a request"""
         secret = self.ap_settings.crypto_key
         hashed = self.request.headers.get("Authorization", "").strip()
         key = generate_hash(secret, uaid)
         return validate_hash(key, self.request.body, hashed)
 
     def _error(self, code, msg):
+        """Writes out an error status code"""
         self.set_status(code, msg)
         self.finish()
 
     def _load_params(self):
+        """Load and parse a JSON body out of the request body, or return an
+        empty dict"""
         try:
             return json.loads(self.request.body)
         except ValueError:

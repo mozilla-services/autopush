@@ -39,8 +39,10 @@ class IRouter(object):
         return a dict that will be stored as routing_data for this user in the
         future.
 
-        This method must perform validation of the data to store. A
-        :class:`RouterException` should be raised if the data is invalid.
+        :returns: A response object
+        :rtype: :class:`RouterResponse`
+        :raises:
+            :exc:`RouterException` if data supplied is invalid.
 
         """
         raise NotImplementedError("register must be implemented")
@@ -51,8 +53,9 @@ class IRouter(object):
         :param notification: A :class:`~autopush.endpoint.Notificaiton`
                              instance.
         :param uaid_data: A dict of the full user item from the db record.
-        :returns: A :class:`RouterResponse` object upon successful routing.
-        :raises: A :class:`RouterException` if routing fails.
+        :returns: A response object upon successful routing.
+        :rtype: :class:`RouterResponse`
+        :raises: :exc:`RouterException` if routing fails.
 
         This function runs in the main reactor, if a yield is needed then a
         deferred must be returned for the callback chain.

@@ -7,6 +7,40 @@ from datadog import ThreadStats
 from datadog.util.hostname import get_hostname
 
 
+class IMetrics(object):
+    """Metrics interface
+
+    Each method except :meth:`__init__` and :meth:`start` must be implemented.
+
+    """
+    def __init__(self, *args, **kwargs):
+        """Setup the metrics"""
+
+    def start(self):
+        """Start any connection needed for metric transmission"""
+
+    def increment(self, *args, **kwargs):
+        raise NotImplementedError("No increment implemented")
+
+    def gauge(self, name, count, **kwargs):
+        raise NotImplementedError("No gauge implemented")
+
+    def timing(self, name, duration, **kwargs):
+        raise NotImplementedError("No timing implemented")
+
+
+class SinkMetrics(object):
+    """Exists to ignore metrics when metrics are not active"""
+    def increment(*args, **kwargs):
+        pass
+
+    def gauge(self, name, count, **kwargs):
+        pass
+
+    def timing(self, name, duration, **kwargs):
+        pass
+
+
 class TwistedMetrics(object):
     def __init__(self, statsd_host="localhost", statsd_port=8125):
         self.client = TwistedStatsDClient(statsd_host, statsd_port)
