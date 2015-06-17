@@ -39,8 +39,10 @@ def node_key(node_id):
 
 
 class SimpleRouter(object):
-    """Implements IRouter for internal routing to an Autopush node"""
+    """Implements :class:`autopush.router.interface.IRouter` for internal
+    routing to an Autopush node"""
     def __init__(self, ap_settings, router_conf):
+        """Create a new SimpleRouter"""
         self.ap_settings = ap_settings
         self.metrics = ap_settings.metrics
 
@@ -155,6 +157,7 @@ class SimpleRouter(object):
         return d
 
     def _send_notification_check(self, uaid, node_id):
+        """Send a command to the node to check for notifications"""
         url = node_id + "/notif/" + uaid
         return self.ap_settings.agent.request(
             "PUT",

@@ -1,3 +1,4 @@
+"""Metrics interface and implementations"""
 from twisted.internet import reactor
 from txstatsd.client import StatsDClientProtocol, TwistedStatsDClient
 from txstatsd.metrics.metrics import Metrics
@@ -12,6 +13,9 @@ class IMetrics(object):
 
     Each method except :meth:`__init__` and :meth:`start` must be implemented.
 
+    Additional ``kwargs`` may be recorded as additional metric tags for metric
+    systems that support it, otherwise they should be ignored.
+
     """
     def __init__(self, *args, **kwargs):
         """Setup the metrics"""
@@ -19,19 +23,22 @@ class IMetrics(object):
     def start(self):
         """Start any connection needed for metric transmission"""
 
-    def increment(self, *args, **kwargs):
+    def increment(self, name, count=1, **kwargs):
+        """Increment a counter for a metric name"""
         raise NotImplementedError("No increment implemented")
 
     def gauge(self, name, count, **kwargs):
+        """Record a gauge for a metric name"""
         raise NotImplementedError("No gauge implemented")
 
     def timing(self, name, duration, **kwargs):
+        """Record a timing in ms for a metric name"""
         raise NotImplementedError("No timing implemented")
 
 
 class SinkMetrics(object):
     """Exists to ignore metrics when metrics are not active"""
-    def increment(*args, **kwargs):
+    def increment(name, count=1, **kwargs):
         pass
 
     def gauge(self, name, count, **kwargs):
@@ -42,6 +49,7 @@ class SinkMetrics(object):
 
 
 class TwistedMetrics(object):
+    """Twisted implementation of statsd output"""
     def __init__(self, statsd_host="localhost", statsd_port=8125):
         self.client = TwistedStatsDClient(statsd_host, statsd_port)
         self._metric = Metrics(connection=self.client, namespace="autopush")
@@ -61,6 +69,7 @@ class TwistedMetrics(object):
 
 
 class DatadogMetrics(object):
+    """DataDog Metric backend"""
     def __init__(self, api_key, app_key, flush_interval=10,
                  namespace="autopush"):
 

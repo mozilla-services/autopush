@@ -1,3 +1,4 @@
+"""Basic Protocol for ignoring data"""
 from twisted.internet.defer import Deferred
 from twisted.internet.protocol import Protocol
 from twisted.web.client import ResponseDone
@@ -16,14 +17,17 @@ class IgnoreBody(Protocol):
 
     @classmethod
     def ignore(cls, response):
+        """Class method helper for ignoring the response"""
         d = Deferred()
         response.deliverBody(cls(response, d))
         return d
 
     def dataReceived(self, data):
+        """Ignore received data"""
         pass
 
     def connectionLost(self, reason):
+        """Relay back the loss of connection to the deferred"""
         if reason.check(ResponseDone):
             self.deferred.callback(self.response)
         else:

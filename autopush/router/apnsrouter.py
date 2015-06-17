@@ -1,3 +1,4 @@
+"""APNS Router"""
 import time
 
 import apns
@@ -9,6 +10,7 @@ from autopush.router.interface import RouterException, RouterResponse
 
 # https://github.com/djacobs/PyAPNs
 class APNSRouter(object):
+    """APNS Router Implementation"""
     apns = None
     messages = {}
     errors = {0: 'No error',
@@ -25,12 +27,14 @@ class APNSRouter(object):
               }
 
     def _connect(self):
+        """Connect to APNS"""
         self.apns = apns.APNs(use_sandbox=self.config.get("sandbox", False),
                               cert_file=self.config.get("cert_file"),
                               key_file=self.config.get("key_file"),
                               enhanced=True)
 
     def __init__(self, ap_settings, router_conf):
+        """Create a new APNS router and connect to APNS"""
         self.ap_settings = ap_settings
         self.config = router_conf
         self.default_title = router_conf.get("default_title", "SimplePush")
@@ -39,17 +43,20 @@ class APNSRouter(object):
         log.msg("Starting APNS router...")
 
     def register(self, uaid, router_data):
+        """Validate that a token is in the ``router_data``"""
         if not router_data.get("token"):
             raise RouterException("No token registered", status_code=500,
                                   response_body="No token registered")
         return router_data
 
     def route_notification(self, notification, uaid_data):
+        """Start the APNS notification routing, returns a deferred"""
         router_data = uaid_data["router_data"]
         # Kick the entire notification routing off to a thread
         return deferToThread(self._route, notification, router_data)
 
     def _route(self, notification, router_data):
+        """Blocking APNS call to route the notification"""
         token = router_data["token"]
         payload = apns.Payload(alert=router_data.get("title",
                                                      self.default_title),
@@ -73,6 +80,7 @@ class APNSRouter(object):
         return RouterResponse(status_code=200, response_body="Message sent")
 
     def _error(self, err):
+        """Error handler"""
         if err['status'] == 0:
             log.msg("Success")
             del self.messages[err['identifier']]

@@ -1,3 +1,4 @@
+"""Autopush Settings Object and Setup"""
 import socket
 
 from cryptography.fernet import Fernet
@@ -25,6 +26,7 @@ from autopush.utils import canonical_url, resolve_ip
 
 
 class AutopushSettings(object):
+    """Main Autopush Settings Object"""
     options = ["crypto_key", "hostname", "min_ping_interval",
                "max_data"]
 
@@ -53,7 +55,13 @@ class AutopushSettings(object):
                  resolve_hostname=False,
                  max_data=4096,
                  enable_cors=False):
+        """Initialize the Settings object
 
+        Upon creation, the HTTP agent will initialize, all configured routers
+        will be setup and started, logging will be started, and the database
+        will have a preflight check done.
+
+        """
         # Use a persistent connection pool for HTTP requests.
         pool = HTTPConnectionPool(reactor)
         self.agent = Agent(reactor, connectTimeout=5, pool=pool)
@@ -125,6 +133,8 @@ class AutopushSettings(object):
             self.routers["gcm"] = GCMRouter(self, router_conf["gcm"])
 
     def update(self, **kwargs):
+        """Update the arguments, if a ``crypto_key`` is in kwargs then the
+        ``self.fernet`` attribute will be initialized."""
         for key, val in kwargs.items():
             if key == "crypto_key":
                 self.fernet = Fernet(val)

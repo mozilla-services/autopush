@@ -1,9 +1,8 @@
-API Documentation
-=================
+Code Documentation
+==================
 
-Comprehensive reference material for every public API exposed by
-`autopush` is available within this chapter. The API documentation is
-organized alphabetically by module name.
+Comprehensive code documentation for `autopush` is available within. The code
+documentation is organized alphabetically by module name.
 
 .. toctree::
    :maxdepth: 1
@@ -16,6 +15,10 @@ organized alphabetically by module name.
    api/main
    api/metrics
    api/protocol
+   api/router/apnsrouter
+   api/router/gcm
+   api/router/interface
+   api/router/simple
    api/settings
    api/ssl
    api/utils

@@ -1,3 +1,10 @@
+"""Custom Logging Setup
+
+This module sets up eliot structured logging, intercepts stdout output from
+twisted, and pipes it through eliot for later processing into Kibana per
+Mozilla Services standard structured logging.
+
+"""
 # TWISTED_LOG_MESSAGE and EliotObserver licensed under APL 2.0 from
 # ClusterHQ/flocker
 # https://github.com/ClusterHQ/flocker/blob/master/flocker/common/script.py#L81-L106
@@ -21,6 +28,7 @@ TWISTED_LOG_MESSAGE = MessageType("twisted:log",
 class EliotObserver(object):
     """A Twisted log observer that logs to Eliot."""
     def __init__(self):
+        """Create the Eliot Observer"""
         if os.environ.get("SENTRY_DSN"):
             self.raven_client = raven.Client(
                 release=raven.fetch_package_version("autopush"))
@@ -29,11 +37,13 @@ class EliotObserver(object):
         self.logger = Logger()
 
     def raven_log(self, event):
+        """Log out twisted exception failures to Raven"""
         f = event['failure']
         self.raven_client.captureException(
             (f.type, f.value, f.getTracebackObject()))
 
     def __call__(self, msg):
+        """Called to log out messages"""
         error = bool(msg.get("isError"))
 
         if self.raven_client and 'failure' in msg:
@@ -57,6 +67,8 @@ class EliotObserver(object):
 
 
 def stdout(message):
+    """Format a message appropriately for structured logging capture of stdout
+    and then write it to stdout"""
     # uncomment to get concise human readable logging messages.
     """
     if message['error']:
@@ -89,6 +101,7 @@ def stdout(message):
 
 
 def setup_logging(logger_name):
+    """Patch in the Eliot logger and twisted log interception"""
     global LOGGER
     LOGGER = "-".join([logger_name,
                        pkg_resources.get_distribution("autopush").version])

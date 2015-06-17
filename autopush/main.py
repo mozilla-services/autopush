@@ -1,4 +1,4 @@
-"""autopush daemon script"""
+"""autopush/autoendpoint daemon scripts"""
 import configargparse
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
@@ -26,6 +26,7 @@ shared_config_files = [
 
 
 def add_shared_args(parser):
+    """Add's a large common set of shared arguments"""
     parser.add_argument('--config-shared',
                         help="Common configuration file path",
                         dest='config_file', is_config_file=True)
@@ -82,6 +83,7 @@ def add_shared_args(parser):
 
 
 def add_external_router_args(parser):
+    """Parses out external router arguments"""
     # GCM
     parser.add_argument('--external_router', help='enable external routers',
                         type=bool, default=False, env_var='EXTERNAL_ROUTER')
@@ -109,6 +111,7 @@ def add_external_router_args(parser):
 
 
 def _parse_connection(sysargs):
+    """Parse out connection node arguments for an autopush node"""
     config_files = [
         '/etc/autopush_connection.ini',
         '~/.autopush_connection.ini',
@@ -156,6 +159,7 @@ def _parse_connection(sysargs):
 
 
 def _parse_endpoint(sysargs):
+    """Parses out endpoint arguments for an autoendpoint node"""
     config_files = [
         '/etc/autopush_endpoint.ini',
         '~/.autopush_endpoint.ini',
@@ -180,6 +184,7 @@ def _parse_endpoint(sysargs):
 
 
 def make_settings(args, **kwargs):
+    """Helper function to make a :class:`AutopushSettings` object"""
     router_conf = {}
     if args.external_router:
         # if you have the critical elements for each external router, create it
@@ -219,6 +224,7 @@ def skip_request_logging(handler):
 
 
 def mount_health_handlers(site, settings):
+    """Create a health check HTTP handler on a cyclone site object"""
     status = StatusHandler
     status.ap_settings = settings
     health = HealthHandler
@@ -230,6 +236,7 @@ def mount_health_handlers(site, settings):
 
 
 def connection_main(sysargs=None):
+    """Main entry point to setup a connection node, aka the autopush script"""
     args, parser = _parse_connection(sysargs)
     settings = make_settings(
         args,
@@ -307,6 +314,8 @@ def connection_main(sysargs=None):
 
 
 def endpoint_main(sysargs=None):
+    """Main entry point to setup an endpoint node, aka the autoendpoint
+    script"""
     args, parser = _parse_endpoint(sysargs)
     settings = make_settings(
         args,
