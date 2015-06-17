@@ -9,6 +9,8 @@ Features
 --------
 
 * Add Sphinx docs with ReadTheDocs publishing. Issue #98.
+  This change also includes a slight Metrics refactoring with a IMetrics
+  interface, and renames MetricSink -> SinkMetrics for naming consistency.
 
 Bug Fixes
 ---------
