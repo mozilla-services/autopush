@@ -44,7 +44,7 @@ def get_router_table(tablename="router", read_throughput=5,
     """Get the main router table object
 
     Creates the table if it doesn't already exist, otherwise returns the
-    existing table
+    existing table.
 
     """
     db = DynamoDBConnection()
@@ -61,7 +61,7 @@ def get_storage_table(tablename="storage", read_throughput=5,
     """Get the main storage table object
 
     Creates the table if it doesn't already exist, otherwise returns the
-    existing table
+    existing table.
 
     """
     db = DynamoDBConnection()
@@ -105,7 +105,7 @@ class Storage(object):
     def __init__(self, table, metrics):
         """Create a new Storage object
 
-        :param table: :class:`Table` object
+        :param table: :class:`Table` object.
         :param metrics: Metrics object that implements the
                         :class:`autopush.metrics.IMetrics` interface.
 
@@ -180,7 +180,7 @@ class Router(object):
     def __init__(self, table, metrics):
         """Create a new Router object
 
-        :param table: :class:`Table` object
+        :param table: :class:`Table` object.
         :param metrics: Metrics object that implements the
                         :class:`autopush.metrics.IMetrics` interface.
 
@@ -212,8 +212,7 @@ class Router(object):
             raise ItemNotFound("uaid not found")
 
     def register_user(self, data):
-        """Attempt to register this user if it doesn't already exist or
-        this is the latest connection.
+        """Register this user
 
         If a record exists with a newer ``connected_at``, then the user will
         not be registered.
@@ -259,7 +258,7 @@ class Router(object):
             raise
 
     def clear_node(self, item):
-        """Given a router item, remove the node_id from it.
+        """Given a router item and remove the node_id
 
         The node_id will only be cleared if the ``connected_at`` matches up
         with the item's ``connected_at``.
