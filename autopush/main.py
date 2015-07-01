@@ -151,6 +151,9 @@ def _parse_connection(sysargs):
     parser.add_argument('--auto_ping_timeout',
                         help="Timeout in seconds for Websocket ping replys",
                         default=4, type=float, env_var="AUTO_PING_TIMEOUT")
+    parser.add_argument('--max_connections',
+                        help="The maximum number of concurrent connections.",
+                        default=0, type=int, env_var="MAX_CONNECTIONS")
 
     add_external_router_args(parser)
     add_shared_args(parser)
@@ -281,6 +284,7 @@ def connection_main(sysargs=None):
         openHandshakeTimeout=5,
         autoPingInterval=args.auto_ping_interval,
         autoPingTimeout=args.auto_ping_timeout,
+        maxConnections=args.max_connections
     )
     settings.factory = factory
 
