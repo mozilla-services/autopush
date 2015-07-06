@@ -8,9 +8,11 @@ from twisted.web.client import Agent, HTTPConnectionPool
 from autopush.db import (
     get_router_table,
     get_storage_table,
+    get_message_table,
     preflight_check,
     Storage,
-    Router
+    Router,
+    Message
 )
 from autopush.metrics import (
     DatadogMetrics,
@@ -50,6 +52,9 @@ class AutopushSettings(object):
                  storage_tablename="storage",
                  storage_read_throughput=5,
                  storage_write_throughput=5,
+                 message_tablename="message",
+                 message_read_throughput=5,
+                 message_write_throughput=5,
                  statsd_host="localhost",
                  statsd_port=8125,
                  resolve_hostname=False,
@@ -115,8 +120,12 @@ class AutopushSettings(object):
         self.storage_table = get_storage_table(storage_tablename,
                                                storage_read_throughput,
                                                storage_write_throughput)
+        self.message_table = get_message_table(message_tablename,
+                                               message_read_throughput,
+                                               message_write_throughput)
         self.storage = Storage(self.storage_table, self.metrics)
         self.router = Router(self.router_table, self.metrics)
+        self.message = Message(self.message_table, self.metrics)
 
         # Run preflight check
         preflight_check(self.storage, self.router)
