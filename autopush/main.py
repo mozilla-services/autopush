@@ -101,14 +101,22 @@ def add_external_router_args(parser):
                         type=str, env_var="GCM_APIKEY")
     # Apple Push Notification system (APNs) for iOS
     label = "APNS Router:"
-    parser.add_argument('--apns_sandbox', help="%s Use Dev Sandbox",
+    parser.add_argument('--apns_sandbox', help="%s Use Dev Sandbox" % label,
                         type=bool, default=True, env_var="APNS_SANDBOX")
     parser.add_argument('--apns_cert_file',
                         help="%s Certificate PEM file" % label,
                         type=str, env_var="APNS_CERT_FILE")
-    parser.add_argument('--apns_key_file', help="%s Key PEM file",
+    parser.add_argument('--apns_key_file', help="%s Key PEM file" % label,
                         type=str, env_var="APNS_KEY_FILE")
-
+    # UDP
+    parser.add_argument('--udp_timeout',
+        help="UDP: idle timeout before closing socket",
+        type=int, default=0,
+        env_var="UDP_TIMEOUT")
+    parser.add_argument(
+        '--udp_pem',
+        help="UDP: custom TLS PEM file for remote Wake server",
+        type=str, env_var="UDP_PEM")
 
 def _parse_connection(sysargs):
     """Parse out connection node arguments for an autopush node"""
@@ -189,6 +197,8 @@ def _parse_endpoint(sysargs):
 def make_settings(args, **kwargs):
     """Helper function to make a :class:`AutopushSettings` object"""
     router_conf = {}
+    # Some routers require a websocket to timeout on idle (e.g. UDP)
+    timeout = 0
     if args.external_router:
         # if you have the critical elements for each external router, create it
         if args.apns_cert_file is not None and args.apns_key_file is not None:
@@ -200,6 +210,10 @@ def make_settings(args, **kwargs):
                                   "dryrun": args.gcm_dryrun,
                                   "collapsekey": args.gcm_collapsekey,
                                   "apikey": args.gcm_apikey}
+        if args.udp_pem is not None and args.udp_timeout is not 0:
+            timeout = args.udp_timeout
+            router_conf["udp"] = {"idle": args.udp_timeout,
+                                  "cert": args.udp_pem}
 
     return AutopushSettings(
         crypto_key=args.crypto_key,
@@ -217,6 +231,7 @@ def make_settings(args, **kwargs):
         router_read_throughput=args.router_read_throughput,
         router_write_throughput=args.router_write_throughput,
         resolve_hostname=args.resolve_hostname,
+        idle_timeout=timeout,
         **kwargs
     )
 

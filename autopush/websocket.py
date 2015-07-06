@@ -231,6 +231,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.last_ping = 0
         self.check_storage = False
         self.connected_at = ms_time()
+        self.idleTimeout = self.ap_settings.idle_timeout
+        self.idle = ms_time()
 
         self._check_notifications = False
 
@@ -294,6 +296,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return
 
         cmd = data["messageType"]
+        self.idle = ms_time()
         if cmd == "hello":
             return self.process_hello(data)
         elif cmd == "register":
@@ -549,6 +552,16 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.last_ping = time.time()
         self.metrics.increment("updates.client.ping", tags=self.base_tags)
         return self.sendMessage("{}", False)
+
+    def checkIdle(self):
+        if self.idleTimeout is not None and self.idleTimeout > 0:
+            if self.idle >= self.idleTimeout:
+                self.sendClose(code=4774, reason='UDP Wakeup')
+
+    def setIdle(self):
+        if self.idleTimeout is not None and self.idleTimeout > 0:
+            self.idle = ms_time()
+            self.deferToLater(self.idleTimeout, self.checkIdle)
 
     def process_ping(self):
         """Adaptive ping processing

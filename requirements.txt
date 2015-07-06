@@ -1,7 +1,7 @@
 cffi==1.1.2
 enum34==1.0.4
 greenlet==0.4.5
-pyasn1==0.1.7
+pyasn1==0.1.8
 readline==6.2.4.1
 six==1.9.0
 translationstring==1.3
