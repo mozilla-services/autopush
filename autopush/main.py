@@ -109,7 +109,8 @@ def add_external_router_args(parser):
     parser.add_argument('--apns_key_file', help="%s Key PEM file" % label,
                         type=str, env_var="APNS_KEY_FILE")
     # UDP
-    parser.add_argument('--udp_timeout',
+    parser.add_argument(
+        '--udp_timeout',
         help="UDP: idle timeout before closing socket",
         type=int, default=0,
         env_var="UDP_TIMEOUT")
@@ -117,6 +118,7 @@ def add_external_router_args(parser):
         '--udp_pem',
         help="UDP: custom TLS PEM file for remote Wake server",
         type=str, env_var="UDP_PEM")
+
 
 def _parse_connection(sysargs):
     """Parse out connection node arguments for an autopush node"""

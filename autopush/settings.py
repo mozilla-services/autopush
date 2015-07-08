@@ -20,9 +20,9 @@ from autopush.metrics import (
 from autopush.router import (
     APNSRouter,
     GCMRouter,
-    UDPRouter,
     SimpleRouter,
 )
+from autopush.router.udp import UDPRouter
 from autopush.utils import canonical_url, resolve_ip
 
 
@@ -126,6 +126,9 @@ class AutopushSettings(object):
 
         # CORS
         self.cors = enable_cors
+
+        # Force timeout in idle seconds
+        self.idle_timeout = idle_timeout
 
         # Setup the routers
         self.routers = {}

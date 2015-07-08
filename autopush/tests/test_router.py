@@ -7,6 +7,7 @@ from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
 from twisted.internet.error import ConnectError
+from copy import deepcopy
 
 import apns
 import gcmclient
@@ -459,6 +460,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d.addBoth(verify_deliver)
         return d
 
+
 class UDPRouterTestCase(unittest.TestCase):
     def setUp(self):
         settings = AutopushSettings(
@@ -468,7 +470,7 @@ class UDPRouterTestCase(unittest.TestCase):
         udp_config = {'pem_file': 'fake.pem', 'timeout': 10}
         self._old_requests = requests.post
         requests.post = Mock(spec=requests.post)
-        requests.post.return_value = dict(status_code = 200)
+        requests.post.return_value = dict(status_code=200)
         self.router = UDPRouter(settings, udp_config)
 
     def tearDown(self):
@@ -476,18 +478,17 @@ class UDPRouterTestCase(unittest.TestCase):
 
     def test_register(self):
         valid_data = {"wakeup_hostport": {"ip": "127.0.0.1", "port": 0},
-                      "mobilenetwork": {"mcc":"001",
-                                        "mnc":"01",
-                                        "netid":"001-01.default"}}
+                      "mobilenetwork": {"mcc": "001",
+                                        "mnc": "01",
+                                        "netid": "001-01.default"}}
         resp = self.router.register("uaid", valid_data)
-        eq_(resp.wake_host, valid_data['wakeup_hostport'])
-        eq_(resp.mobile_net, valid_data['mobilenetwork'])
+        eq_(resp, valid_data)
+        eq_(self.router.wake_host, valid_data['wakeup_hostport'])
+        eq_(self.router.mobile_net, valid_data['mobilenetwork'])
 
-        copy = valid_data
+        copy = deepcopy(valid_data)
         del(copy['wakeup_hostport'])
         self.assertRaises(RouterException, self.router.register, "uaid", copy)
-
-        copy = valid_data
+        copy = deepcopy(valid_data)
         del(copy['mobilenetwork'])
         self.assertRaises(RouterException, self.router.register, "uaid", copy)
-

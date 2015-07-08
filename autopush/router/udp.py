@@ -25,7 +25,7 @@ class UDPRouter(object):
         self.wake_host = router_data.get("wakeup_hostport")
         if not router_data.get("mobilenetwork"):
             self._error("connect info missing 'mobilenetwork'", status=401)
-        self.mobile_net= router_data.get("mobilenetwork")
+        self.mobile_net = router_data.get("mobilenetwork")
         return router_data
 
     def route_notification(self, notification, uaid_data):
@@ -37,27 +37,27 @@ class UDPRouter(object):
     def _route(self, notification, router_data):
         """Route the message to the disconnected endpoint."""
         payload = json.dumps(self.mobile_net)
-        host = router_data.get("wakeup_hostport",{}).get("ip","")
+        host = router_data.get("wakeup_hostport", {}).get("ip", "")
         if host == "":
             return
-        port = router_data.get("wakeup_hostport",{}).get("port", None)
+        port = router_data.get("wakeup_hostport", {}).get("port", None)
         if port is not None:
             host = host + ":" + port
         try:
             response = requests.post(
-                    "https://"+host,
-                    data=payload,
-                    cert=self.config.get("pem_file")
-                    )
+                "https://" + host,
+                data=payload,
+                cert=self.config.get("pem_file")
+            )
             if response.status_code >= 200 or response.status_code < 300:
                 return RouterResponse(
-                    status_code = response.status_code,
-                    response_body = "Message sent")
+                    status_code=response.status_code,
+                    response_body="Message sent")
         except Exception, e:
             self._error("Unhandled exception in UDP Routing: %s" % e, 500)
         return RouterResponse(
-                status_code = 500,
-                response_body="Please try request later")
+            status_code=500,
+            response_body="Please try request later")
 
     def _error(self, err, status, **kwargs):
         """Error handler that raises the RouterException"""

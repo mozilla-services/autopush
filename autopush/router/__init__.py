@@ -6,6 +6,7 @@ through the appropriate system for a given client.
 """
 from autopush.router.apnsrouter import APNSRouter
 from autopush.router.gcm import GCMRouter
+from autopush.router.udp import UDPRouter
 from autopush.router.simple import SimpleRouter
 
-__all__ = ["APNSRouter", "GCMRouter", "SimpleRouter"]
+__all__ = ["APNSRouter", "GCMRouter", "SimpleRouter", "UDPRouter"]
