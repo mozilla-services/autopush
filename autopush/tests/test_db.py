@@ -169,8 +169,7 @@ class RouterTestCase(unittest.TestCase):
 
         router.table.get_item.side_effect = raise_error
         with self.assertRaises(ProvisionedThroughputExceededException):
-            router.get_uaid(dict(uaid="asdf", node_id="me",
-                                 connected_at=1234))
+            router.get_uaid(uaid="asdf")
 
     def test_register_user_provision_failed(self):
         r = get_router_table()

@@ -773,7 +773,7 @@ class WebsocketTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
 
         # Send ourself a notification
-        payload = [{"channelID": chid, "version": 10}]
+        payload = {"channelID": chid, "version": 10, "data": None}
         self.proto.send_notifications(payload)
 
         # Check the call result
@@ -800,7 +800,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.updates_sent[chid] = 14
 
         # Send ourself a notification
-        payload = [{"channelID": chid, "version": 10}]
+        payload = {"channelID": chid, "version": 10, "data": None}
         self.proto.send_notifications(payload)
 
         # Check the call result
@@ -846,7 +846,7 @@ class WebsocketTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
 
         # stick a notification to ack in
-        self.proto.direct_updates[chid] = 12
+        self.proto.direct_updates[chid] = (12, None)
         self.proto.updates_sent[chid] = 12
 
         def check_hello_result(msg):

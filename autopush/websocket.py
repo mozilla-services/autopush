@@ -141,6 +141,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             if isinstance(result, failure.Failure):
                 # This is an exception, log it
                 self.log_err(result)
+                return
 
             d = deferToThread(func, *args, **kwargs)
             d.addErrback(wrapper, *args, **kwargs)
@@ -709,7 +710,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return
 
         # If its a direct update, remove it and return
-        if self.direct_updates.get(chid)[0] == version:
+        if self.direct_updates.get(chid, [None])[0] == version:
             del self.direct_updates[chid]
             return
 

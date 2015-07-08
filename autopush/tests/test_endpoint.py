@@ -90,12 +90,12 @@ class EndpointTestCase(unittest.TestCase):
 
     def test_uaid_lookup_results(self):
         fresult = dict(router_type="test")
-        notification = {}
         frouter = Mock(spec=Router)
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
         self.endpoint.ap_settings.routers["test"] = frouter
-        self.endpoint._uaid_lookup_results(fresult, notification)
+        self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
             frouter.route_notification.assert_called()
@@ -170,6 +170,8 @@ class EndpointTestCase(unittest.TestCase):
         eq_(data, 'bai')
 
     def test_put_data_too_large(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.ap_settings.router.get_uaid.return_value = {}
         self.endpoint.ap_settings.max_data = 3
         self.endpoint.request.body = b'version=1&data=1234'
 
@@ -227,7 +229,7 @@ class EndpointTestCase(unittest.TestCase):
 
         self.endpoint.version, self.endpoint.data = 789, None
 
-        self.endpoint._token_valid('123:456', 789, None)
+        self.endpoint._token_valid('123:456')
         return self.finish_deferred
 
     def test_put_default_router(self):

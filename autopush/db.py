@@ -324,7 +324,6 @@ class Router(object):
         self.metrics = metrics
         self.encode = table._encode_keys
 
-    @track_provisioned
     def get_uaid(self, uaid):
         """Get the database record for the UAID
 
@@ -338,6 +337,12 @@ class Router(object):
         """
         try:
             return self.table.get_item(consistent=True, uaid=uaid)
+        except ProvisionedThroughputExceededException:
+            # We unfortunately have to catch this here, as track_provisioned
+            # will not see this, since JSONResponseError is a subclass and
+            # will capture it
+            self.metrics.increment("error.provisioned.get_uaid")
+            raise
         except JSONResponseError:
             # We trap JSONResponseError because Moto returns text instead of
             # JSON when looking up values in empty tables. We re-throw the
