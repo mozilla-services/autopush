@@ -1,5 +1,4 @@
 """Database Interaction"""
-import time
 import uuid
 from functools import wraps
 
@@ -45,8 +44,8 @@ def create_message_table(tablename="message", read_throughput=5,
                          write_throughput=5):
     """Create a new message table for webpush style message storage"""
     return Table.create(tablename,
-                        schema=[HashKey("uaidchid"),
-                                RangeKey("timestamp", data_type=NUMBER)],
+                        schema=[HashKey("uaid"),
+                                RangeKey("timestampchid")],
                         throughput=dict(read=read_throughput,
                                         write=write_throughput),
                         )
@@ -226,7 +225,7 @@ class Message(object):
     def register_channel(self, uaid, channel_id):
         """Register a channel for a given uaid"""
         conn = self.table.connection
-        db_key = self.encode({"uaidchid": uaid, "timestamp": 0})
+        db_key = self.encode({"uaid": uaid, "timestampchid": " "})
         # Generate our update expression
         expr = "ADD chids :channel_id"
         expr_values = self.encode({":channel_id": set([channel_id])})
@@ -242,7 +241,7 @@ class Message(object):
     def unregister_channel(self, uaid, channel_id):
         """Remove a channel registration for a given uaid"""
         conn = self.table.connection
-        db_key = self.encode({"uaidchid": uaid, "timestamp": 0})
+        db_key = self.encode({"uaid": uaid, "timestampchid": " "})
         expr = "DELETE chids :channel_id"
         expr_values = self.encode({":channel_id": set([channel_id])})
         conn.update_item(
@@ -257,20 +256,19 @@ class Message(object):
     def all_channels(self, uaid):
         """Retrieve a list of all channels for a given uaid"""
         try:
-            result = self.table.get_item(consistent=True, uaidchid=uaid,
-                                         timestamp=0)
+            result = self.table.get_item(consistent=True, uaid=uaid,
+                                         timestampchid=" ")
             return result["chids"]
         except ItemNotFound:
             return set([])
 
     @track_provisioned
-    def store_message(self, uaid, channel_id, data, timestamp=None):
+    def store_message(self, uaid, channel_id, data, timestamp):
         """Stores a message in the message table for the given uaid/channel with
         the current timestamp"""
-        timestamp = timestamp or int(time.time()*1000)
         self.table.put_item(data=dict(
-            uaidchid=uaid+channel_id,
-            timestamp=timestamp,
+            uaid=uaid,
+            timestampchid="%s:%s" % (channel_id, timestamp),
             data=data
         ))
         return True
@@ -278,13 +276,38 @@ class Message(object):
     @track_provisioned
     def delete_message(self, uaid, channel_id, timestamp):
         """Deletes a specific message"""
-        self.table.delete_item(uaidchid=uaid+channel_id, timestamp=timestamp)
+        self.table.delete_item(uaid=uaid, timestampchid="%s:%s" % (
+            channel_id, timestamp))
         return True
 
+    def delete_messages(self, uaid, channel_id, timestamps):
+        with self.table.batch_write() as batch:
+            for ts in timestamps:
+                batch.delete_item(uaidchid=uaid+channel_id, timestamp=ts)
+
     @track_provisioned
-    def fetch_messages(self, uaid, channel_id, limit=1):
-        """Fetches messages for a uaid/channel_id"""
-        return self.table.query_2(uaidchid__eq=uaid+channel_id, limit=1)
+    def delete_messages_for_channel(self, uaid, channel_id):
+        """Deletes all messages for a uaid/channel_id"""
+        results = self.table.query_2(
+            uaid__eq=uaid,
+            timestampchid__beginswith="%s:" % channel_id,
+            consistent=True,
+            atributes=("timestampchid",),
+            max_page_size=25
+        )
+        timestamps = []
+        for item in results:
+            timestamps.append(item["timestamp"])
+            if len(timestamps) == 25:
+                self.delete_messages(uaid, channel_id, timestamps)
+                timestamps = []
+        if timestamps:
+            self.delete_messages(uaid, channel_id, timestamps)
+
+    @track_provisioned
+    def fetch_messages(self, uaid, limit=1):
+        """Fetches messages for a uaid"""
+        return self.table.query_2(uaid__eq=uaid, consistent=True, limit=1)
 
 
 class Router(object):

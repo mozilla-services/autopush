@@ -57,7 +57,7 @@ class SimpleRouter(object):
         # Determine if they're connected at the moment
         node_id = uaid_data.get("node_id")
         uaid = uaid_data["uaid"]
-        router, storage = self.ap_settings.router, self.ap_settings.storage
+        router = self.ap_settings.router
 
         # Node_id is present, attempt delivery.
         # - Send Notification to node
@@ -85,9 +85,7 @@ class SimpleRouter(object):
         #   - Success (older version): Done, return 202
         #   - Error (db error): Done, return 503
         try:
-            result = yield deferToThread(storage.save_notification, uaid=uaid,
-                                         chid=notification.channel_id,
-                                         version=notification.version)
+            result = yield self._save_notification(uaid, notification)
             if result is False:
                 self.metrics.increment("router.broadcast.miss")
                 returnValue(RouterResponse(202, "Notification Stored"))
@@ -142,11 +140,22 @@ class SimpleRouter(object):
     #############################################################
     #                    Blocking Helper Functions
     #############################################################
+    def _save_notification(self, uaid, notification):
+        """Saves a notification, returns a deferred.
+
+        This function is split out for the Webpush-style individual
+        message storage to subclass and override.
+
+        """
+        return deferToThread(self.ap_settings.storage.save_notification,
+                             uaid=uaid, chid=notification.channel_id,
+                             version=notification.version)
+
     def _send_notification(self, uaid, node_id, notification):
         """Send a notification to a specific node_id"""
-        payload = json.dumps([{"channelID": notification.channel_id,
-                               "version": notification.version,
-                               "data": notification.data}])
+        payload = json.dumps({"channelID": notification.channel_id,
+                              "version": notification.version,
+                              "data": notification.data})
         url = node_id + "/push/" + uaid
         d = self.ap_settings.agent.request(
             "PUT",

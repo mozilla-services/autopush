@@ -23,6 +23,7 @@ from autopush.router import (
     APNSRouter,
     GCMRouter,
     SimpleRouter,
+    WebPushRouter,
 )
 from autopush.utils import canonical_url, resolve_ip
 
@@ -136,6 +137,7 @@ class AutopushSettings(object):
         # Setup the routers
         self.routers = {}
         self.routers["simplepush"] = SimpleRouter(self, None)
+        self.routers["webpush"] = WebPushRouter(self, None)
         if 'apns' in router_conf:
             self.routers["apns"] = APNSRouter(self, router_conf["apns"])
         if 'gcm' in router_conf:
