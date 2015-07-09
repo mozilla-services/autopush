@@ -6,6 +6,7 @@ based channel ID's (only newest version is stored, no data stored).
 
 """
 import json
+import requests
 import time
 from StringIO import StringIO
 
@@ -21,6 +22,7 @@ from twisted.internet.error import (
     ConnectionRefusedError,
     UserError
 )
+from twisted.python import log
 from twisted.web.client import FileBodyProducer
 
 from autopush.protocol import IgnoreBody
@@ -35,7 +37,7 @@ dead_cache = LRUCache(150)
 
 def node_key(node_id):
     """Generate a node key for the dead node cache"""
-    return node_id + "-%s" % int(time.time()/3600)
+    return node_id + "-%s" % int(time.time() / 3600)
 
 
 class SimpleRouter(object):
@@ -57,6 +59,12 @@ class SimpleRouter(object):
         # Determine if they're connected at the moment
         node_id = uaid_data.get("node_id")
         uaid = uaid_data["uaid"]
+        self.udp = None
+        try:
+            self.udp = json.loads(uaid_data["udp"])
+        except (TypeError, KeyError):
+            # No UDP info found, ignoring.
+            pass
         router, storage = self.ap_settings.router, self.ap_settings.storage
 
         # Node_id is present, attempt delivery.
@@ -137,9 +145,31 @@ class SimpleRouter(object):
             returnValue(RouterResponse(response_body="Delivered"))
         else:
             self.metrics.increment("router.broadcast.miss")
+            if self.udp is not None:
+                yield deferToThread(self._send_udp_wake,
+                                    self.udp).addErrBack(self._udp_fail)
             returnValue(RouterResponse(202, "Notification Stored"))
 
-    #############################################################
+    def _send_udp_wake(self, udp_info):
+        udp = json.loads(udp_info)
+        host = udp.get("wakeup_host").get("ip")
+        port = udp.get("wakeup_host").get("port")
+        data = udp.get("mobilenetwork")
+        if port is not None:
+            host = host + ":" + port
+        response = requests.post(
+            "https://" + host,
+            data=data,
+            cert=self.ap_settings.get("pem_file"))
+        if response.status_code < 200 or response.status_code >= 300:
+            raise RouterException("Could not send UDP Wakeup",
+                                  status_code=500,
+                                  response_body="Could not send UDP Wakeup")
+
+    def _udp_error(self, fail):
+        log.err("Unexpected UDP Error: %s" % fail)
+
+    ###########################################################
     #                    Blocking Helper Functions
     #############################################################
     def _send_notification(self, uaid, node_id, notification):

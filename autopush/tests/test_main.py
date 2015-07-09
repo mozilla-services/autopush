@@ -162,5 +162,3 @@ class EndpointMainTestCase(unittest.TestCase):
         eq_(ap.routers["apns"].apns.cert_file, arg.apns_cert_file)
         eq_(ap.routers["apns"].apns.key_file, arg.apns_key_file)
         eq_(ap.idle_timeout, 10)
-        eq_(ap.routers['udp'].config['idle'], 10)
-        eq_(ap.routers['udp'].config['cert'], 'test')

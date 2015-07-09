@@ -70,13 +70,13 @@ def stdout(message):
     """Format a message appropriately for structured logging capture of stdout
     and then write it to stdout"""
     # uncomment to get concise human readable logging messages.
-    """
+    #"""
     if message['error']:
         sys.stdout.write("ERROR: %s\n" % message['message'])
     else:
         sys.stdout.write("       %s\n" % message['message'])
     return
-    #"""
+    # """
     msg = {}
     ts = message.pop("timestamp")
     del message["task_level"]

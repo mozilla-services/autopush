@@ -177,7 +177,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def sendClose(self, code=None, reason=None):
         """Override to add tracker that ensures the connection is truly
         torn down"""
-        reactor.callLater(5+self.closeHandshakeTimeout, self.nukeConnection)
+        reactor.callLater(5 + self.closeHandshakeTimeout, self.nukeConnection)
         return WebSocketServerProtocol.sendClose(self, code, reason)
 
     @log_exception
@@ -231,8 +231,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.last_ping = 0
         self.check_storage = False
         self.connected_at = ms_time()
-        self.idleTimeout = self.ap_settings.idle_timeout
+        self.idle_timeout = self.ap_settings.idle_timeout
         self.idle = ms_time()
+        self.idler = None
 
         self._check_notifications = False
 
@@ -296,7 +297,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return
 
         cmd = data["messageType"]
-        self.idle = ms_time()
+        # We're no longer idle, prevent early connection closure.
+        self.set_active()
         if cmd == "hello":
             return self.process_hello(data)
         elif cmd == "register":
@@ -307,6 +309,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return self.process_ack(data)
         else:
             self.sendClose()
+        #Done processing, start idle.
+        self.set_active()
 
     @log_exception
     def onClose(self, wasClean, code, reason):
@@ -415,6 +419,15 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         uaid = data.get("uaid")
         _, uaid = validate_uaid(uaid)
         self.uaid = uaid
+        # Check for the special UDP wakeup commands
+        wakeup_host = data.get("wakeup_host")
+        mobilenetwork = data.get("mobilenetwork")
+        self.udp = None
+        # If this connection uses the UDP wakeup mechanism, add it.
+        if wakeup_host is not None and mobilenetwork is not None:
+            self.udp = dict(wakeup_host=wakeup_host,
+                            mobilenetwork=mobilenetwork,
+                            timeout=self.ap_settings.idle_timeout)
 
         self.transport.pauseProducing()
         user_item = dict(
@@ -422,6 +435,12 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             node_id=self.ap_settings.router_url,
             connected_at=self.connected_at,
         )
+        # NOTE: in tests, storing a value of None results in a corrupted
+        # return value of True. (This appears to have to do with a bug in
+        # either moto or boto in how it deals with values encoded to
+        # {"NULL": True}. For now, I'm avoiding storing values of None.
+        if self.udp is not None:
+            user_item['udp'] = self.udp
         d = self.deferToThread(self.ap_settings.router.register_user,
                                user_item)
         d.addCallback(self._check_other_nodes)
@@ -480,6 +499,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.sendJSON(msg)
         self.metrics.increment("updates.client.hello", tags=self.base_tags)
         self.process_notifications()
+        self.check_idle()
 
     def process_notifications(self):
         """Run a notification check against storage"""
@@ -543,6 +563,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.sendJSON(msg)
 
         # Were we told to check notifications again?
+        self.check_idle()
         if self._check_notifications:
             self._check_notifications = False
             self.deferToLater(1, self.process_notifications)
@@ -553,15 +574,25 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.metrics.increment("updates.client.ping", tags=self.base_tags)
         return self.sendMessage("{}", False)
 
-    def checkIdle(self):
-        if self.idleTimeout is not None and self.idleTimeout > 0:
-            if self.idle >= self.idleTimeout:
-                self.sendClose(code=4774, reason='UDP Wakeup')
+    def set_active(self):
+        self.idle = ms_time()
 
-    def setIdle(self):
-        if self.idleTimeout is not None and self.idleTimeout > 0:
-            self.idle = ms_time()
-            self.deferToLater(self.idleTimeout, self.checkIdle)
+    def check_idle(self):
+        if self.idler is not None:
+            import pdb; pdb.set_trace();
+            # cancel old idler
+            self.idler.cancel()
+        try:
+            if self.udp is not None:
+                if ms_time() - self.idle >= self.idle_timeout:
+                    self.sendClose(code=4774, reason='UDP Wakeup')
+                    return
+                self.idler = self.deferToLater(self.idle_timeout,
+                                               self.check_idle)
+        except (KeyError, AttributeError):
+            # More than likely, this isn't a UDP wake connection.
+            # log.msg("Warn: could not check idle %s" % x)
+            pass
 
     def process_ping(self):
         """Adaptive ping processing
@@ -618,6 +649,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                "status": 200
                }
         self.sendJSON(msg)
+        self.check_idle()
         self.metrics.increment("updates.client.register", tags=self.base_tags)
 
     def process_unregister(self, data):
@@ -639,6 +671,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         d.addErrback(self.force_delete, chid)
         data["status"] = 200
         self.sendJSON(data)
+        self.check_idle()
 
     def force_delete(self, result, chid):
         """Forces another delete call through until it works"""
@@ -721,6 +754,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Should we check again?
         if self._check_notifications:
             self.process_notifications()
+        self.check_idle()
 
     def bad_message(self, typ):
         """Error helper for sending a 401 status back"""

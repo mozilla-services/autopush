@@ -225,7 +225,9 @@ class Router(object):
 
         """
         conn = self.table.connection
-        db_key = self.encode({"uaid": data.pop("uaid")})
+        # when running test, this causes an unhashable dict error:
+        #db_key = self.encode({"uaid": data.pop("uaid")})
+        db_key = {"uaid": {"S": data.pop("uaid")}}
         # Generate our update expression
         expr = "SET " + ", ".join(["%s=:%s" % (x, x) for x in data.keys()])
         expr_values = self.encode({":%s" % k: v for k, v in data.items()})
@@ -234,6 +236,9 @@ class Router(object):
                 "attribute_not_exists(node_id)",
                 "(connected_at < :connected_at)",
             ])
+            if 'udp' in data.keys() and data['udp'] is None:
+                del(data['udp'])
+                import pdb; pdb.set_trace()
             result = conn.update_item(
                 self.table.table_name,
                 db_key,
@@ -249,12 +254,18 @@ class Router(object):
                         r[key] = self.table._dynamizer.decode(value)
                     except AttributeError:
                         r[key] = value
+                    except TypeError, x:
+                        import pdb; pdb.set_trace()
+                        r[key] = value
                 result = r
             return (True, result)
         except ConditionalCheckFailedException:
             return (False, {})
         except ProvisionedThroughputExceededException:
             self.metrics.increment("error.provisioned.register_user")
+            raise
+        except Exception, x:
+            print x
             raise
 
     def clear_node(self, item):
