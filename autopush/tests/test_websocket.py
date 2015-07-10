@@ -109,8 +109,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.sendClose = self.orig_close
         self._connect()
         self.proto._sendAutoPing()
-        mock_reactor.callLater.assert_called()
-        WebSocketServerProtocol.sendClose.assert_called()
+        eq_(mock_reactor.callLater.called, True)
+        eq_(WebSocketServerProtocol.sendClose.called, True)
 
     @patch("autopush.websocket.reactor")
     def test_autoping_uaid_not_in_clients(self, mock_reactor):
@@ -121,8 +121,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         self.proto.uaid = str(uuid.uuid4())
         self.proto._sendAutoPing()
-        mock_reactor.callLater.assert_called()
-        WebSocketServerProtocol.sendClose.assert_called()
+        eq_(mock_reactor.callLater.called, True)
+        eq_(WebSocketServerProtocol.sendClose.called, True)
 
     @patch("autopush.websocket.reactor")
     def test_nuke_connection(self, mock_reactor):
@@ -469,19 +469,6 @@ class WebsocketTestCase(unittest.TestCase):
         self._wait_for_close(d)
         return d
 
-    def test_hello_router(self):
-        self._connect()
-        self.proto.ap_settings.routers["apns"] = Mock()
-        self.proto.ap_settings.routers["apns"].register = Mock()
-        self.proto.ap_settings.routers["apns"].register.return_value = {}
-        self._send_message(dict(messageType="hello",
-                                connect=dict(type="apns")))
-
-        def check_result(msg):
-            self.proto.ap_settings.routers["apns"].register.assert_called()
-            eq_(msg["status"], 200)
-        return self._check_response(check_result)
-
     def test_ping(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -628,7 +615,7 @@ class WebsocketTestCase(unittest.TestCase):
         connected = int(time.time())
         res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
-        mock_agent.request.assert_called(
+        mock_agent.request.assert_called_with(
             "DELETE",
             "%s/notif/%s/%s" % (nodeId, uaid, connected))
 
@@ -1307,4 +1294,4 @@ class NotificationHandlerTestCase(unittest.TestCase):
         mock_client.connected_at = now
         mock_client.sendClose = Mock()
         self.handler.delete(uaid, "", now)
-        mock_client.sendClose.assert_called()
+        eq_(mock_client.sendClose.called, True)

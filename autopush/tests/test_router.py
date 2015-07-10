@@ -96,7 +96,7 @@ class APNSRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            self.mock_apns.gateway_server.send_notification.assert_called()
+            eq_(self.mock_apns.gateway_server.send_notification.called, True)
 
         d.addCallback(check_results)
         return d
@@ -107,7 +107,7 @@ class APNSRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            self.mock_apns.gateway_server.send_notification.assert_called()
+            eq_(self.mock_apns.gateway_server.send_notification.called, True)
             eq_(len(self.router.messages), 1)
         d.addCallback(check_results)
         return d
@@ -128,7 +128,7 @@ class APNSRouterTestCase(unittest.TestCase):
         self.router._connect = Mock()
         self.router._error(dict(status=1, identifier=1))
         eq_(len(self.router.messages), 1)
-        self.router.apns.gateway_server.send_notification.assert_called()
+        eq_(self.router.apns.gateway_server.send_notification.called, True)
 
     def test_response_listener_with_retryable_non_existing_message(self):
         self.router.messages = {1: {'token': 'dump', 'payload': {}}}
@@ -164,7 +164,7 @@ class GCMRouterTestCase(unittest.TestCase):
     def _check_error_call(self, exc, code):
         ok_(isinstance(exc, RouterException))
         eq_(exc.status_code, code)
-        self.router.gcm.send.assert_called()
+        eq_(self.router.gcm.send.called, True)
         self.flushLoggedErrors()
 
     def test_register(self):
@@ -179,7 +179,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            self.router.gcm.send.assert_called()
+            eq_(self.router.gcm.send.called, True)
         d.addCallback(check_results)
         return d
 
@@ -212,7 +212,7 @@ class GCMRouterTestCase(unittest.TestCase):
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict(token="new"))
-            self.router.gcm.send.assert_called()
+            eq_(self.router.gcm.send.called, True)
         d.addCallback(check_results)
         return d
 
@@ -223,7 +223,7 @@ class GCMRouterTestCase(unittest.TestCase):
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict())
-            self.router.gcm.send.assert_called()
+            eq_(self.router.gcm.send.called, True)
         d.addCallback(check_results)
         return d
 
@@ -390,7 +390,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         def verify_deliver(result):
             ok_(result, RouterResponse)
             eq_(result.status_code, 202)
-            self.router_mock.get_uaid.assert_called()
+            eq_(self.router_mock.get_uaid.called, True)
         d.addBoth(verify_deliver)
         return d
 
@@ -409,7 +409,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         def verify_deliver(result):
             ok_(result, RouterResponse)
             eq_(result.status_code, 202)
-            self.router_mock.clear_node.assert_called()
+            eq_(self.router_mock.clear_node.called, True)
             nk = simple.node_key(router_data["node_id"])
             eq_(simple.dead_cache.get(nk), True)
         d.addBoth(verify_deliver)
@@ -433,7 +433,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         def verify_deliver(result):
             ok_(result, RouterResponse)
             eq_(result.status_code, 202)
-            self.router_mock.clear_node.assert_called()
+            eq_(self.router_mock.clear_node.called, True)
             nk = simple.node_key(router_data["node_id"])
             eq_(simple.dead_cache.get(nk), True)
         d.addBoth(verify_deliver)

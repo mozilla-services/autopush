@@ -98,7 +98,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._uaid_lookup_results(fresult, notification)
 
         def handle_finish(value):
-            frouter.route_notification.assert_called()
+            eq_(frouter.route_notification.called, True)
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -257,7 +257,7 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.assertTrue(result)
             self.endpoint.set_status.assert_called_with(500)
-            self.router_mock.register_user.assert_called()
+            eq_(self.router_mock.register_user.called, True)
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put(dummy_uaid)
@@ -277,7 +277,7 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.assertTrue(result)
             self.endpoint.set_status.assert_called_with(503)
-            self.router_mock.register_user.assert_called()
+            eq_(self.router_mock.register_user.called, True)
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put(dummy_uaid)
