@@ -1193,6 +1193,25 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto._register.addErrback(lambda x: d.errback(x))
         return d
 
+    def test_check_idle(self):
+        # Most of this function is checked in test_router.test_route_udp
+        # there are just a few edges for full coverage.
+
+        idler = Mock()
+        idler.cancel = Mock()
+        self.proto.idler = idler
+        self.proto.deferToLater = Mock()
+        self.proto.udp = {'wakeup_host': {}, 'mobilenetwork': {}}
+        self.proto.sendClose = Mock()
+        self.proto.deferToLater = Mock()
+        self.proto.idle = int(time.time() * 1000)
+        self.proto.idle_timeout = 10
+
+        self.proto.check_idle()
+        eq_(idler.cancel.call_count, 1)
+        eq_(self.proto.sendClose.call_count, 0)
+        assert(self.proto.idler is not idler)
+
 
 class RouterHandlerTestCase(unittest.TestCase):
     def setUp(self):

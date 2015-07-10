@@ -153,7 +153,7 @@ class EndpointMainTestCase(unittest.TestCase):
             router_read_throughput = 0
             router_write_throughput = 0
             resolve_hostname = False
-            #UDP
+            # UDP
             udp_pem = "test"
             udp_timeout = 10
 

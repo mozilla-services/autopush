@@ -309,7 +309,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return self.process_ack(data)
         else:
             self.sendClose()
-        #Done processing, start idle.
+        # Done processing, start idle.
         self.set_active()
 
     @log_exception
@@ -583,7 +583,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.idler.cancel()
         try:
             if self.udp is not None:
-                if ms_time() - self.idle >= self.idle_timeout:
+                if ms_time() - self.idle >= self.idle_timeout * 1000:
                     self.sendClose(code=4774, reason='UDP Wakeup')
                     return
                 self.idler = self.deferToLater(self.idle_timeout,

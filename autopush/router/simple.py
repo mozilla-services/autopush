@@ -22,7 +22,6 @@ from twisted.internet.error import (
     ConnectionRefusedError,
     UserError
 )
-from twisted.python import log
 from twisted.web.client import FileBodyProducer
 
 from autopush.protocol import IgnoreBody
@@ -94,10 +93,9 @@ class SimpleRouter(object):
         #   - Success (older version): Done, return 202
         #   - Error (db error): Done, return 503
         try:
-            #result = yield deferToThread(storage.save_notification, uaid=uaid,
-            result = storage.save_notification(uaid=uaid,
-                                               chid=notification.channel_id,
-                                               version=notification.version)
+            result = yield deferToThread(storage.save_notification, uaid=uaid,
+                                         chid=notification.channel_id,
+                                         version=notification.version)
             if result is False:
                 self.metrics.increment("router.broadcast.miss")
                 returnValue(RouterResponse(202, "Notification Stored"))

@@ -225,9 +225,7 @@ class Router(object):
 
         """
         conn = self.table.connection
-        # when running test, this causes an unhashable dict error:
-        #db_key = self.encode({"uaid": data.pop("uaid")})
-        db_key = {"uaid": {"S": data.pop("uaid")}}
+        db_key = self.encode({"uaid": data.pop("uaid")})
         # Generate our update expression
         expr = "SET " + ", ".join(["%s=:%s" % (x, x) for x in data.keys()])
         expr_values = self.encode({":%s" % k: v for k, v in data.items()})
