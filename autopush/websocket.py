@@ -579,7 +579,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def check_idle(self):
         if self.idler is not None:
-            import pdb; pdb.set_trace();
             # cancel old idler
             self.idler.cancel()
         try:

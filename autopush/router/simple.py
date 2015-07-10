@@ -47,6 +47,7 @@ class SimpleRouter(object):
         """Create a new SimpleRouter"""
         self.ap_settings = ap_settings
         self.metrics = ap_settings.metrics
+        self.conf = router_conf
 
     def register(self, uaid, connect):
         """Return no additional routing data"""
@@ -93,9 +94,10 @@ class SimpleRouter(object):
         #   - Success (older version): Done, return 202
         #   - Error (db error): Done, return 503
         try:
-            result = yield deferToThread(storage.save_notification, uaid=uaid,
-                                         chid=notification.channel_id,
-                                         version=notification.version)
+            #result = yield deferToThread(storage.save_notification, uaid=uaid,
+            result = storage.save_notification(uaid=uaid,
+                                               chid=notification.channel_id,
+                                               version=notification.version)
             if result is False:
                 self.metrics.increment("router.broadcast.miss")
                 returnValue(RouterResponse(202, "Notification Stored"))
@@ -147,27 +149,23 @@ class SimpleRouter(object):
             self.metrics.increment("router.broadcast.miss")
             if self.udp is not None:
                 yield deferToThread(self._send_udp_wake,
-                                    self.udp).addErrBack(self._udp_fail)
+                                    self.udp)
             returnValue(RouterResponse(202, "Notification Stored"))
 
     def _send_udp_wake(self, udp_info):
-        udp = json.loads(udp_info)
-        host = udp.get("wakeup_host").get("ip")
-        port = udp.get("wakeup_host").get("port")
-        data = udp.get("mobilenetwork")
+        host = udp_info.get("wakeup_host").get("ip")
+        port = udp_info.get("wakeup_host").get("port")
+        data = json.dumps(udp_info.get("mobilenetwork", {}))
         if port is not None:
-            host = host + ":" + port
+            host = "%s:%d" % (host, port)
         response = requests.post(
             "https://" + host,
             data=data,
-            cert=self.ap_settings.get("pem_file"))
+            cert=self.conf.get("cert"))
         if response.status_code < 200 or response.status_code >= 300:
             raise RouterException("Could not send UDP Wakeup",
                                   status_code=500,
                                   response_body="Could not send UDP Wakeup")
-
-    def _udp_error(self, fail):
-        log.err("Unexpected UDP Error: %s" % fail)
 
     ###########################################################
     #                    Blocking Helper Functions

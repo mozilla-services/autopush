@@ -131,7 +131,10 @@ class AutopushSettings(object):
 
         # Setup the routers
         self.routers = {}
-        self.routers["simplepush"] = SimpleRouter(self, None)
+        self.routers["simplepush"] = SimpleRouter(
+            self,
+            router_conf.get("simplepush")
+        )
         if 'apns' in router_conf:
             self.routers["apns"] = APNSRouter(self, router_conf["apns"])
         if 'gcm' in router_conf:

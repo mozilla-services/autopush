@@ -1,17 +1,16 @@
 # -*- coding: utf-8 -*-
 from unittest import TestCase
+import json
 import uuid
 
-from mock import Mock, PropertyMock
+from mock import Mock, PropertyMock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
 from twisted.internet.error import ConnectError
-from copy import deepcopy
 
 import apns
 import gcmclient
-import requests
 
 from autopush.db import (
     Router,
@@ -51,7 +50,7 @@ class MockAssist(object):
             else:
                 return r
         finally:
-            if self.cur < (self.max-1):
+            if self.cur < (self.max - 1):
                 self.cur += 1
 
 
@@ -459,3 +458,42 @@ class SimplePushRouterTestCase(unittest.TestCase):
             )
         d.addBoth(verify_deliver)
         return d
+
+    def test_route_udp(self):
+        self.agent_mock.request.return_value = response_mock = Mock()
+        response_mock.code = 202
+        self.storage_mock.save_notification.return_value = True
+        udp_data = {"wakeup_host": {"ip": "127.0.0.1", "port": 9999},
+                    "mobilenetwork": {"mcc": "hammer"}}
+        udp = json.dumps(udp_data)
+        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
+                           udp=udp)
+        self.router_mock.get_uaid.return_value = router_data
+        self.router._send_udp_wake = Mock()
+        self.router.conf = {"idle": 1, "cert": "test.pem"}
+
+        d = self.router.route_notification(self.notif, router_data)
+
+        def check_deliver(result):
+            eq_(result.status_code, 202)
+
+        d.addBoth(check_deliver)
+        eq_(self.router.udp, udp_data)
+        return d
+
+    @patch("requests.post")
+    def test_send_udp_wake(self, mock_request):
+        self.router.conf = {"idle": 1, "cert": "test.pem"}
+        reply = Mock()
+        reply.status_code = 200
+        mock_request.return_value = reply
+        udp_info = {"wakeup_host": {"ip": "host", "port": 9999},
+                    "mobilenetwork": {"mc": "hammer"}}
+        self.router._send_udp_wake(udp_info)
+        mock_request.assert_called_with('https://host:9999',
+                                        data='{"mc": "hammer"}',
+                                        cert="test.pem")
+        reply.status_code = 500
+        self.assertRaises(RouterException,
+                          self.router._send_udp_wake, udp_info)
+        return

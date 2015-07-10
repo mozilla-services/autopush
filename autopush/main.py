@@ -201,6 +201,10 @@ def make_settings(args, **kwargs):
     router_conf = {}
     # Some routers require a websocket to timeout on idle (e.g. UDP)
     timeout = 0
+    if args.udp_pem is not None and args.udp_timeout is not 0:
+        timeout = args.udp_timeout
+        router_conf["simplepush"] = {"idle": args.udp_timeout,
+                                     "cert": args.udp_pem}
     if args.external_router:
         # if you have the critical elements for each external router, create it
         if args.apns_cert_file is not None and args.apns_key_file is not None:
@@ -212,10 +216,6 @@ def make_settings(args, **kwargs):
                                   "dryrun": args.gcm_dryrun,
                                   "collapsekey": args.gcm_collapsekey,
                                   "apikey": args.gcm_apikey}
-        if args.udp_pem is not None and args.udp_timeout is not 0:
-            timeout = args.udp_timeout
-            router_conf["udp"] = {"idle": args.udp_timeout,
-                                  "cert": args.udp_pem}
 
     return AutopushSettings(
         crypto_key=args.crypto_key,

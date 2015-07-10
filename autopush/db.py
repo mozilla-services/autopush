@@ -236,9 +236,6 @@ class Router(object):
                 "attribute_not_exists(node_id)",
                 "(connected_at < :connected_at)",
             ])
-            if 'udp' in data.keys() and data['udp'] is None:
-                del(data['udp'])
-                import pdb; pdb.set_trace()
             result = conn.update_item(
                 self.table.table_name,
                 db_key,
@@ -252,10 +249,7 @@ class Router(object):
                 for key, value in result["Attributes"].items():
                     try:
                         r[key] = self.table._dynamizer.decode(value)
-                    except AttributeError:
-                        r[key] = value
-                    except TypeError, x:
-                        import pdb; pdb.set_trace()
+                    except (TypeError, AttributeError):
                         r[key] = value
                 result = r
             return (True, result)
@@ -263,9 +257,6 @@ class Router(object):
             return (False, {})
         except ProvisionedThroughputExceededException:
             self.metrics.increment("error.provisioned.register_user")
-            raise
-        except Exception, x:
-            print x
             raise
 
     def clear_node(self, item):

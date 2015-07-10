@@ -447,6 +447,17 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
+    def test_hello_udp(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                wakeup_host={"ip": "127.0.0.1",
+                                             "port": 9999},
+                                mobilenetwork={"mcc": "data"}))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+        return self._check_response(check_result)
+
     def test_not_hello(self):
         self._connect()
         self._send_message(dict(messageType="wooooo"))
