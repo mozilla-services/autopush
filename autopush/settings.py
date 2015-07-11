@@ -62,6 +62,7 @@ class AutopushSettings(object):
                  max_data=4096,
                  # Reflected up from UDP Router
                  wake_timeout=0,
+                 env='development',
                  enable_cors=False):
         """Initialize the Settings object
 
@@ -150,6 +151,9 @@ class AutopushSettings(object):
             self.routers["apns"] = APNSRouter(self, router_conf["apns"])
         if 'gcm' in router_conf:
             self.routers["gcm"] = GCMRouter(self, router_conf["gcm"])
+
+        # Env
+        self.env = env
 
     def update(self, **kwargs):
         """Update the arguments, if a ``crypto_key`` is in kwargs then the
