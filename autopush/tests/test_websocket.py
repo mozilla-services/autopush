@@ -48,6 +48,7 @@ class WebsocketTestCase(unittest.TestCase):
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
+            env="test",
         )
         self.proto.ap_settings = settings
         self.proto.sendMessage = self.send_mock = Mock()
@@ -556,6 +557,14 @@ class WebsocketTestCase(unittest.TestCase):
         d.addCallback(check_result)
         self._wait_for_close(d)
         return d
+
+    def test_hello_env(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        def check_result(msg):
+            eq_(msg["env"], "test")
+        return self._check_response(check_result)
 
     def test_ping(self):
         self._connect()
