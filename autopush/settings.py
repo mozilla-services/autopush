@@ -55,7 +55,7 @@ class AutopushSettings(object):
                  resolve_hostname=False,
                  max_data=4096,
                  # Reflected up from UDP Router
-                 idle_timeout=0,
+                 udp_timeout=0,
                  enable_cors=False):
         """Initialize the Settings object
 
@@ -127,7 +127,7 @@ class AutopushSettings(object):
         self.cors = enable_cors
 
         # Force timeout in idle seconds
-        self.idle_timeout = idle_timeout
+        self.udp_timeout = udp_timeout
 
         # Setup the routers
         self.routers = {}

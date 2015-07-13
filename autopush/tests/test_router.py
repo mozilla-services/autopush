@@ -483,16 +483,18 @@ class SimplePushRouterTestCase(unittest.TestCase):
 
     @patch("requests.post")
     def test_send_udp_wake(self, mock_request):
-        self.router.conf = {"idle": 1, "cert": "test.pem"}
+        self.router.conf = {"idle": 1,
+                            "cert": "test.pem",
+                            "udp_server": "http://example.com"}
         reply = Mock()
         reply.status_code = 200
         mock_request.return_value = reply
-        udp_info = {"wakeup_host": {"ip": "host", "port": 9999},
-                    "mobilenetwork": {"mc": "hammer"}}
+        udp_info = dict(data="udpdata", timeout=1)
         self.router._send_udp_wake(udp_info)
-        mock_request.assert_called_with('https://host:9999',
-                                        data='{"mc": "hammer"}',
-                                        cert="test.pem")
+        mock_request.assert_called_with(
+            'http://example.com',
+            data='udpdata',
+            cert="test.pem")
         reply.status_code = 500
         self.assertRaises(RouterException,
                           self.router._send_udp_wake, udp_info)

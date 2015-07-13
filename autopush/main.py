@@ -112,12 +112,14 @@ def add_external_router_args(parser):
     parser.add_argument(
         '--udp_timeout',
         help="UDP: idle timeout before closing socket",
-        type=int, default=0,
-        env_var="UDP_TIMEOUT")
+        type=int, default=0, env_var="UDP_TIMEOUT")
     parser.add_argument(
         '--udp_pem',
         help="UDP: custom TLS PEM file for remote Wake server",
         type=str, env_var="UDP_PEM")
+    parser.add_argument(
+        '--udp_server', help="UDP: endpoint for UDP wake-up calls",
+        type=str, default='http://example.com', env_var="UDP_SERVER")
 
 
 def _parse_connection(sysargs):
@@ -204,6 +206,7 @@ def make_settings(args, **kwargs):
     if args.udp_pem is not None and args.udp_timeout is not 0:
         timeout = args.udp_timeout
         router_conf["simplepush"] = {"idle": args.udp_timeout,
+                                     "server": args.udp_server,
                                      "cert": args.udp_pem}
     if args.external_router:
         # if you have the critical elements for each external router, create it
@@ -233,7 +236,7 @@ def make_settings(args, **kwargs):
         router_read_throughput=args.router_read_throughput,
         router_write_throughput=args.router_write_throughput,
         resolve_hostname=args.resolve_hostname,
-        idle_timeout=timeout,
+        udp_timeout=timeout,
         **kwargs
     )
 

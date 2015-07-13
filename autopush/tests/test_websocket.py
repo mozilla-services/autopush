@@ -452,10 +452,18 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 wakeup_host={"ip": "127.0.0.1",
                                              "port": 9999},
-                                mobilenetwork={"mcc": "data"}))
+                                mobilenetwork={"mcc": "hammer",
+                                               "mnc": "banana",
+                                               "netid": "gorp",
+                                               "ignored": "ok"}))
 
         def check_result(msg):
             eq_(msg["status"], 200)
+            eq_(self.proto.udp, {
+                'data': "ip=127.0.0.1&port=9999&mcc=hammer" +
+                "&mnc=banana&netid=gorp",
+                'timeout': 0})
+
         return self._check_response(check_result)
 
     def test_not_hello(self):
@@ -1192,7 +1200,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.sendClose = Mock()
         self.proto.deferToLater = Mock()
         self.proto.idle = int(time.time() * 1000)
-        self.proto.idle_timeout = 10
+        self.proto.udp_timeout = 10
 
         self.proto.check_idle()
         eq_(idler.cancel.call_count, 1)

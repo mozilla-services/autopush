@@ -151,14 +151,10 @@ class SimpleRouter(object):
             returnValue(RouterResponse(202, "Notification Stored"))
 
     def _send_udp_wake(self, udp_info):
-        host = udp_info.get("wakeup_host").get("ip")
-        port = udp_info.get("wakeup_host").get("port")
-        data = json.dumps(udp_info.get("mobilenetwork", {}))
-        if port is not None:
-            host = "%s:%d" % (host, port)
+        host = self.conf["udp_server"]
         response = requests.post(
-            "https://" + host,
-            data=data,
+            host,
+            data=udp_info["data"],
             cert=self.conf.get("cert"))
         if response.status_code < 200 or response.status_code >= 300:
             raise RouterException("Could not send UDP Wakeup",

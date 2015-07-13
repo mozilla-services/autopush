@@ -33,6 +33,8 @@ import json
 import time
 import uuid
 from functools import wraps
+from urllib import urlencode
+
 
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
@@ -231,7 +233,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.last_ping = 0
         self.check_storage = False
         self.connected_at = ms_time()
-        self.idle_timeout = self.ap_settings.idle_timeout
+        self.udp_timeout = self.ap_settings.udp_timeout
         self.idle = ms_time()
         self.idler = None
 
@@ -424,11 +426,18 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         mobilenetwork = data.get("mobilenetwork")
         self.udp = None
         # If this connection uses the UDP wakeup mechanism, add it.
-        if wakeup_host is not None and mobilenetwork is not None:
-            self.udp = dict(wakeup_host=wakeup_host,
-                            mobilenetwork=mobilenetwork,
-                            timeout=self.ap_settings.idle_timeout)
-
+        try:
+            # Normalize the UDP wake info to a single object.
+            udp_data = dict(ip=wakeup_host.get("ip"),
+                            port=wakeup_host.get("port"),
+                            mcc=mobilenetwork.get("mcc", ''),
+                            mnc=mobilenetwork.get("mnc", ''),
+                            netid=mobilenetwork.get("netid", ''))
+            self.udp = dict(data=urlencode(udp_data),
+                            timeout=self.ap_settings.udp_timeout)
+        except (AttributeError, KeyError):
+            # Some UDP value is missing, toss it all.
+            pass
         self.transport.pauseProducing()
         user_item = dict(
             uaid=self.uaid,
@@ -583,10 +592,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.idler.cancel()
         try:
             if self.udp is not None:
-                if ms_time() - self.idle >= self.idle_timeout * 1000:
+                if ms_time() - self.idle >= self.udp_timeout * 1000:
                     self.sendClose(code=4774, reason='UDP Wakeup')
                     return
-                self.idler = self.deferToLater(self.idle_timeout,
+                self.idler = self.deferToLater(self.udp_timeout,
                                                self.check_idle)
         except (KeyError, AttributeError):
             # More than likely, this isn't a UDP wake connection.
