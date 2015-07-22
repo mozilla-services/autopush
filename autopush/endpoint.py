@@ -392,6 +392,14 @@ class EndpointHandler(AutoendpointHandler):
         if router_key == "simplepush":
             version, data = parse_request_params(self.request)
         else:
+            # We need crypto headers
+            req_fields = ["content-encoding", "encryption"]
+            if not all([x in self.request.headers for x in req_fields]):
+                self.set_status(401)
+                log.msg("Missing Crypto headers", **self._client_info())
+                self.write("Missing crypto headers.")
+                return self.finish()
+
             version = int(time.time()*1000)
             data = self.request.body
 

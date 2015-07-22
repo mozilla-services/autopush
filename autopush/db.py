@@ -263,13 +263,14 @@ class Message(object):
             return set([])
 
     @track_provisioned
-    def store_message(self, uaid, channel_id, data, timestamp):
+    def store_message(self, uaid, channel_id, data, headers, timestamp):
         """Stores a message in the message table for the given uaid/channel with
         the current timestamp"""
         self.table.put_item(data=dict(
             uaid=uaid,
             timestampchid="%s:%s" % (channel_id, timestamp),
-            data=data
+            data=data,
+            headers=headers,
         ))
         return True
 

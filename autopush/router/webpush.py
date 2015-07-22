@@ -16,13 +16,20 @@ class WebPushRouter(SimpleRouter):
         """Saves a notification, returns a deferred.
 
         This version of the overridden method saves each individual message
-        to the message table.
+        to the message table along with relevant request headers if
+        available.
 
         """
+        request_headers = dict(
+            encoding=self.request.headers["content-encoding"],
+            encryption=self.request.headers["encryption"],
+            encryption_key=self.request.headers.get("encryption-key", ""),
+        )
         return deferToThread(
             self.ap_settings.message_table.store_message,
-            uaid,
-            notification.channel_id,
-            notification.data,
-            notification.timestamp,
+            uaid=uaid,
+            channel_id=notification.channel_id,
+            data=notification.data,
+            headers=request_headers,
+            timestamp=notification.timestamp,
         )
