@@ -8,8 +8,10 @@ import time
 
 """ Client disconnect and remote wake. """
 
+
 class WakeException(Exception):
     pass
+
 
 class IWake(object):
     """ Wake interface
@@ -83,7 +85,7 @@ class UDPWake(IWake):
                     self.kill_func(**self.kill_args)
                     return
                 self.idler = self.protocol.deferToLater(self.timeout,
-                                                        self.check_idle);
+                                                        self.check_idle)
         except (KeyError, AttributeError):
             # More than likely, this isn't a UDP wake connection.
             pass
@@ -92,9 +94,8 @@ class UDPWake(IWake):
         """Send a wake request to the external endpoint."""
         if wake_info is None:
             wake_info = self.info
-        response = requests.post(
-                self.endpoint,
-                data=urlencode(wake_info["data"]),
-                cert=self.cert)
+        response = requests.post(self.endpoint,
+                                 data=urlencode(wake_info["data"]),
+                                 cert=self.cert)
         if response.status_code < 200 or response.status_code >= 300:
             raise WakeException()

@@ -436,16 +436,16 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             mobilenetwork = data.get("mobilenetwork")
             # Normalize the wake info to a single object.
             wake_data = dict(ip=wakeup_host.get("ip"),
-                            port=wakeup_host.get("port"),
-                            mcc=mobilenetwork.get("mcc", ''),
-                            mnc=mobilenetwork.get("mnc", ''),
-                            netid=mobilenetwork.get("netid", ''))
+                             port=wakeup_host.get("port"),
+                             mcc=mobilenetwork.get("mcc", ''),
+                             mnc=mobilenetwork.get("mnc", ''),
+                             netid=mobilenetwork.get("netid", ''))
             # set this so we can store it for the endpoint to call.
             self.wake_data = dict(data=wake_data)
             self.waker = UDPWake(protocol=self,
                                  timeout=self.ap_settings.wake_timeout,
                                  kill_func=self.sendClose, code=4774,
-                                                    reason="UDP Idle")
+                                 reason="UDP Idle")
         except (AttributeError, KeyError):
             # Some wake value is missing, toss it all.
             pass
@@ -650,7 +650,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                }
         self.sendJSON(msg)
         if self.waker is not None:
-           self.waker.check_idle()
+            self.waker.check_idle()
         self.metrics.increment("updates.client.register", tags=self.base_tags)
 
     def process_unregister(self, data):

@@ -19,7 +19,7 @@ class WakerTestCase(unittest.TestCase):
 
         self.assertRaises(ValueError, UDPWake, protocol=None, timeout=123)
 
-        #endpoint
+        # endpoint
         host = "http://example.com"
         cert = "test.pem"
         t2 = UDPWake(host=host, cert=cert)
@@ -34,7 +34,7 @@ class WakerTestCase(unittest.TestCase):
 
     def test_register(self):
         t1 = UDPWake()
-        #Yep, purely for coverage
+        # Yep, purely for coverage
         t1.register(None)
 
     @patch('time.time', return_value=1234567890)
@@ -44,7 +44,7 @@ class WakerTestCase(unittest.TestCase):
         t1.idler.cancel = Mock()
         t1.protocol = Mock()
         t1.protocol.deferToLater = Mock()
-        t1.timeout=10
+        t1.timeout = 10
         t1.idle = 1234567790000
         t1.kill_func = Mock()
         t1.kill_args = dict(arg1='foo', arg2='bar')
@@ -75,6 +75,3 @@ class WakerTestCase(unittest.TestCase):
                                  cert='example.pem')
         resp.status_code = 500
         self.assertRaises(WakeException, t1.send_wake)
-
-
-
