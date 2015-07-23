@@ -459,11 +459,9 @@ class WebsocketTestCase(unittest.TestCase):
 
         def check_result(msg):
             eq_(msg["status"], 200)
-            eq_(self.proto.udp, {
-                'data': "ip=127.0.0.1&port=9999&mcc=hammer" +
-                "&mnc=banana&netid=gorp",
-                'timeout': 0})
-
+            eq_(self.proto.wake_data, {
+                'data': {"ip": "127.0.0.1", "port": 9999, "mcc": "hammer",
+                         "mnc": "banana", "netid": "gorp"}})
         return self._check_response(check_result)
 
     def test_not_hello(self):
@@ -530,6 +528,10 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
         d.addCallback(lambda x: True)
+
+        self.proto.waker = Mock()
+        self.proto.waker.check_active = Mock()
+        self.proto.waker.set_active = Mock()
 
         def check_register_result(msg):
             eq_(msg["status"], 200)
@@ -1187,25 +1189,6 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto._register.addCallback(after_hello)
         self.proto._register.addErrback(lambda x: d.errback(x))
         return d
-
-    def test_check_idle(self):
-        # Most of this function is checked in test_router.test_route_udp
-        # there are just a few edges for full coverage.
-
-        idler = Mock()
-        idler.cancel = Mock()
-        self.proto.idler = idler
-        self.proto.deferToLater = Mock()
-        self.proto.udp = {'wakeup_host': {}, 'mobilenetwork': {}}
-        self.proto.sendClose = Mock()
-        self.proto.deferToLater = Mock()
-        self.proto.idle = int(time.time() * 1000)
-        self.proto.udp_timeout = 10
-
-        self.proto.check_idle()
-        eq_(idler.cancel.call_count, 1)
-        eq_(self.proto.sendClose.call_count, 0)
-        assert(self.proto.idler is not idler)
 
 
 class RouterHandlerTestCase(unittest.TestCase):

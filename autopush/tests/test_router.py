@@ -3,7 +3,7 @@ from unittest import TestCase
 import json
 import uuid
 
-from mock import Mock, PropertyMock, patch
+from mock import Mock, PropertyMock
 from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
@@ -22,6 +22,7 @@ from autopush.endpoint import Notification
 from autopush.router import APNSRouter, GCMRouter, SimpleRouter
 from autopush.router.interface import RouterException, RouterResponse, IRouter
 from autopush.settings import AutopushSettings
+from autopush.waker import WakeException
 
 
 mock_dynamodb2 = mock_dynamodb2()
@@ -469,7 +470,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
                            udp=udp)
         self.router_mock.get_uaid.return_value = router_data
-        self.router._send_udp_wake = Mock()
+        self.router._send_wake = Mock()
         self.router.conf = {"idle": 1, "cert": "test.pem"}
 
         d = self.router.route_notification(self.notif, router_data)
@@ -481,21 +482,16 @@ class SimplePushRouterTestCase(unittest.TestCase):
         eq_(self.router.udp, udp_data)
         return d
 
-    @patch("requests.post")
-    def test_send_udp_wake(self, mock_request):
-        self.router.conf = {"idle": 1,
-                            "cert": "test.pem",
-                            "udp_server": "http://example.com"}
-        reply = Mock()
-        reply.status_code = 200
-        mock_request.return_value = reply
-        udp_info = dict(data="udpdata", timeout=1)
-        self.router._send_udp_wake(udp_info)
-        mock_request.assert_called_with(
-            'http://example.com',
-            data='udpdata',
-            cert="test.pem")
-        reply.status_code = 500
+    def test_send_udp_wake(self):
+        self.router.waker = Mock()
+        self.router.waker.send_wake = Mock()
+        wake_data = {"wake": "data"}
+        self.router._send_wake(wake_data)
+        self.router.waker.send_wake.assert_called_with(wake_data)
+
+        def fail(arg):
+            raise WakeException()
+        self.router.waker.send_wake.side_effect = fail
         self.assertRaises(RouterException,
-                          self.router._send_udp_wake, udp_info)
+                          self.router._send_wake, wake_data)
         return

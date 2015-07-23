@@ -6,7 +6,6 @@ based channel ID's (only newest version is stored, no data stored).
 
 """
 import json
-import requests
 import time
 from StringIO import StringIO
 
@@ -29,6 +28,7 @@ from autopush.router.interface import (
     RouterException,
     RouterResponse,
 )
+from autopush.waker import WakeException, UDPWake
 
 
 dead_cache = LRUCache(150)
@@ -47,6 +47,12 @@ class SimpleRouter(object):
         self.ap_settings = ap_settings
         self.metrics = ap_settings.metrics
         self.conf = router_conf
+        self.waker = None
+        if self.conf is not None and self.conf.get("server") is not None:
+            # This should use a Wake resolver dict, but there's only one
+            # right now, so skip a few instructions.
+            self.waker = UDPWake(host=self.conf.get("server"),
+                                 cert=self.conf.get("cert"))
 
     def register(self, uaid, connect):
         """Return no additional routing data"""
@@ -146,20 +152,18 @@ class SimpleRouter(object):
         else:
             self.metrics.increment("router.broadcast.miss")
             if self.udp is not None:
-                yield deferToThread(self._send_udp_wake,
+                yield deferToThread(self._send_wake,
                                     self.udp)
             returnValue(RouterResponse(202, "Notification Stored"))
 
-    def _send_udp_wake(self, udp_info):
-        host = self.conf["udp_server"]
-        response = requests.post(
-            host,
-            data=udp_info["data"],
-            cert=self.conf.get("cert"))
-        if response.status_code < 200 or response.status_code >= 300:
-            raise RouterException("Could not send UDP Wakeup",
-                                  status_code=500,
-                                  response_body="Could not send UDP Wakeup")
+    def _send_wake(self, wake_info):
+        if self.waker is not None:
+            try:
+                self.waker.send_wake(wake_info)
+            except WakeException:
+                raise RouterException("Could not send wakeup",
+                                      status_code=500,
+                                      response_body="Could not send Wakeup")
 
     ###########################################################
     #                    Blocking Helper Functions
