@@ -16,6 +16,7 @@ Bug Fixes
 ---------
 
 * Increase test coverage of utils for 100% test coverage.
+* Move all dependencies into requirements.txt and freeze them all explicitly.
 
 Internal
 --------
