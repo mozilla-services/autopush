@@ -95,7 +95,7 @@ def add_external_router_args(parser):
                         type=bool, default=False, env_var="GCM_DRYRUN")
     parser.add_argument('--gcm_collapsekey',
                         help="%s string to collapse messages" % label,
-                        type=str, default="simpleplush",
+                        type=str, default="simplepush",
                         env_var="GCM_COLLAPSEKEY")
     parser.add_argument('--gcm_apikey', help="%s API Key" % label,
                         type=str, env_var="GCM_APIKEY")
@@ -109,14 +109,17 @@ def add_external_router_args(parser):
     parser.add_argument('--apns_key_file', help="%s Key PEM file" % label,
                         type=str, env_var="APNS_KEY_FILE")
     # UDP
-    parser.add_argument('--udp_timeout',
-        help="UDP: idle timeout before closing socket",
-        type=int, default=0,
-        env_var="UDP_TIMEOUT")
-    parser.add_argument(
-        '--udp_pem',
-        help="UDP: custom TLS PEM file for remote Wake server",
-        type=str, env_var="UDP_PEM")
+    parser.add_argument('--wake_timeout',
+                        help="UDP: idle timeout before closing socket",
+                        type=int, default=0, env_var="wake_TIMEOUT")
+    parser.add_argument('--wake_pem',
+                        help="custom TLS PEM file for remote Wake server",
+                        type=str, env_var="WAKE_PEM")
+    parser.add_argument('--wake_server',
+                        help="remote endpoint for wake-up calls",
+                        type=str, default='http://example.com',
+                        env_var="WAKE_SERVER")
+
 
 def _parse_connection(sysargs):
     """Parse out connection node arguments for an autopush node"""
@@ -198,7 +201,10 @@ def make_settings(args, **kwargs):
     """Helper function to make a :class:`AutopushSettings` object"""
     router_conf = {}
     # Some routers require a websocket to timeout on idle (e.g. UDP)
-    timeout = 0
+    if args.wake_pem is not None and args.wake_timeout != 0:
+        router_conf["simplepush"] = {"idle": args.wake_timeout,
+                                     "server": args.wake_server,
+                                     "cert": args.wake_pem}
     if args.external_router:
         # if you have the critical elements for each external router, create it
         if args.apns_cert_file is not None and args.apns_key_file is not None:
@@ -210,10 +216,6 @@ def make_settings(args, **kwargs):
                                   "dryrun": args.gcm_dryrun,
                                   "collapsekey": args.gcm_collapsekey,
                                   "apikey": args.gcm_apikey}
-        if args.udp_pem is not None and args.udp_timeout is not 0:
-            timeout = args.udp_timeout
-            router_conf["udp"] = {"idle": args.udp_timeout,
-                                  "cert": args.udp_pem}
 
     return AutopushSettings(
         crypto_key=args.crypto_key,
@@ -231,7 +233,7 @@ def make_settings(args, **kwargs):
         router_read_throughput=args.router_read_throughput,
         router_write_throughput=args.router_write_throughput,
         resolve_hostname=args.resolve_hostname,
-        idle_timeout=timeout,
+        wake_timeout=args.wake_timeout,
         **kwargs
     )
 

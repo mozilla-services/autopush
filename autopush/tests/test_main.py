@@ -153,8 +153,13 @@ class EndpointMainTestCase(unittest.TestCase):
             router_read_throughput = 0
             router_write_throughput = 0
             resolve_hostname = False
+            # UDP
+            wake_pem = "test"
+            wake_timeout = 10
+            wake_server = "http://example.com"
 
         ap = make_settings(arg)
         eq_(ap.routers["gcm"].gcm.api_key, arg.gcm_apikey)
         eq_(ap.routers["apns"].apns.cert_file, arg.apns_cert_file)
         eq_(ap.routers["apns"].apns.key_file, arg.apns_key_file)
+        eq_(ap.wake_timeout, 10)

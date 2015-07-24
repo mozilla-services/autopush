@@ -410,7 +410,7 @@ class EndpointHandler(AutoendpointHandler):
                 del uaid_data["router_type"]
             else:
                 uaid_data["router_data"] = response.router_data
-            uaid_data["connected_at"] = int(time.time()*1000)
+            uaid_data["connected_at"] = int(time.time() * 1000)
             d = deferToThread(self.ap_settings.router.register_user,
                               uaid_data)
             response.router_data = None
@@ -562,7 +562,7 @@ class RegistrationHandler(AutoendpointHandler):
             uaid=self.uaid,
             router_type=router_type,
             router_data=router_data,
-            connected_at=int(time.time()*1000),
+            connected_at=int(time.time() * 1000),
         )
         return deferToThread(self.ap_settings.router.register_user, user_item)
 

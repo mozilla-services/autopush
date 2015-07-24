@@ -247,7 +247,7 @@ class Router(object):
                 for key, value in result["Attributes"].items():
                     try:
                         r[key] = self.table._dynamizer.decode(value)
-                    except AttributeError:
+                    except (TypeError, AttributeError):
                         r[key] = value
                 result = r
             return (True, result)

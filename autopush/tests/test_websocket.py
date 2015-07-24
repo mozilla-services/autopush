@@ -447,6 +447,23 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
+    def test_hello_udp(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                wakeup_host={"ip": "127.0.0.1",
+                                             "port": 9999},
+                                mobilenetwork={"mcc": "hammer",
+                                               "mnc": "banana",
+                                               "netid": "gorp",
+                                               "ignored": "ok"}))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            eq_(self.proto.wake_data, {
+                'data': {"ip": "127.0.0.1", "port": 9999, "mcc": "hammer",
+                         "mnc": "banana", "netid": "gorp"}})
+        return self._check_response(check_result)
+
     def test_not_hello(self):
         self._connect()
         self._send_message(dict(messageType="wooooo"))
@@ -511,6 +528,10 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
         d.addCallback(lambda x: True)
+
+        self.proto.waker = Mock()
+        self.proto.waker.check_active = Mock()
+        self.proto.waker.set_active = Mock()
 
         def check_register_result(msg):
             eq_(msg["status"], 200)

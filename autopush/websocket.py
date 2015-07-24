@@ -52,6 +52,7 @@ from zope.interface import implements
 
 from autopush.protocol import IgnoreBody
 from autopush.utils import validate_uaid
+from autopush.waker import UDPWake
 
 
 def ms_time():
@@ -90,6 +91,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     # Testing purposes
     parent_class = WebSocketServerProtocol
+
+    waker = None
 
     # Defer helpers
     def deferToThread(self, func, *args, **kwargs):
@@ -177,7 +180,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def sendClose(self, code=None, reason=None):
         """Override to add tracker that ensures the connection is truly
         torn down"""
-        reactor.callLater(5+self.closeHandshakeTimeout, self.nukeConnection)
+        reactor.callLater(5 + self.closeHandshakeTimeout, self.nukeConnection)
         return WebSocketServerProtocol.sendClose(self, code, reason)
 
     @log_exception
@@ -231,8 +234,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.last_ping = 0
         self.check_storage = False
         self.connected_at = ms_time()
-        self.idleTimeout = self.ap_settings.idle_timeout
+        self.wake_timeout = self.ap_settings.wake_timeout
         self.idle = ms_time()
+        self.idler = None
 
         self._check_notifications = False
 
@@ -296,17 +300,26 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return
 
         cmd = data["messageType"]
-        self.idle = ms_time()
-        if cmd == "hello":
-            return self.process_hello(data)
-        elif cmd == "register":
-            return self.process_register(data)
-        elif cmd == "unregister":
-            return self.process_unregister(data)
-        elif cmd == "ack":
-            return self.process_ack(data)
-        else:
-            self.sendClose()
+        # We're no longer idle, prevent early connection closure.
+        if self.waker is not None:
+            self.waker.set_active()
+        try:
+            if cmd == "hello":
+                return self.process_hello(data)
+            elif cmd == "register":
+                return self.process_register(data)
+            elif cmd == "unregister":
+                return self.process_unregister(data)
+            elif cmd == "ack":
+                return self.process_ack(data)
+            else:
+                self.sendClose()
+        finally:
+            # Done processing, start idle.
+            if self.waker is not None:
+                self.waker.set_active()
+                # and start the timer on the connection
+                self.waker.check_active()
 
     @log_exception
     def onClose(self, wasClean, code, reason):
@@ -415,13 +428,39 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         uaid = data.get("uaid")
         _, uaid = validate_uaid(uaid)
         self.uaid = uaid
-
+        # Check for the special wakeup commands
+        self.wake_data = None
+        # If this connection uses the wakeup mechanism, add it.
+        try:
+            wakeup_host = data.get("wakeup_host")
+            mobilenetwork = data.get("mobilenetwork")
+            # Normalize the wake info to a single object.
+            wake_data = dict(ip=wakeup_host.get("ip"),
+                             port=wakeup_host.get("port"),
+                             mcc=mobilenetwork.get("mcc", ''),
+                             mnc=mobilenetwork.get("mnc", ''),
+                             netid=mobilenetwork.get("netid", ''))
+            # set this so we can store it for the endpoint to call.
+            self.wake_data = dict(data=wake_data)
+            self.waker = UDPWake(protocol=self,
+                                 timeout=self.ap_settings.wake_timeout,
+                                 kill_func=self.sendClose, code=4774,
+                                 reason="UDP Idle")
+        except (AttributeError, KeyError):
+            # Some wake value is missing, toss it all.
+            pass
         self.transport.pauseProducing()
         user_item = dict(
             uaid=self.uaid,
             node_id=self.ap_settings.router_url,
             connected_at=self.connected_at,
         )
+        # NOTE: in tests, storing a value of None results in a corrupted
+        # return value of True. (This appears to have to do with a bug in
+        # either moto or boto in how it deals with values encoded to
+        # {"NULL": True}. For now, I'm avoiding storing values of None.
+        if self.wake_data is not None:
+            user_item['wake_data'] = self.wake_data
         d = self.deferToThread(self.ap_settings.router.register_user,
                                user_item)
         d.addCallback(self._check_other_nodes)
@@ -542,6 +581,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             msg = {"messageType": "notification", "updates": updates}
             self.sendJSON(msg)
 
+        if self.waker is not None:
+            self.waker.check_idle()
         # Were we told to check notifications again?
         if self._check_notifications:
             self._check_notifications = False
@@ -552,16 +593,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.last_ping = time.time()
         self.metrics.increment("updates.client.ping", tags=self.base_tags)
         return self.sendMessage("{}", False)
-
-    def checkIdle(self):
-        if self.idleTimeout is not None and self.idleTimeout > 0:
-            if self.idle >= self.idleTimeout:
-                self.sendClose(code=4774, reason='UDP Wakeup')
-
-    def setIdle(self):
-        if self.idleTimeout is not None and self.idleTimeout > 0:
-            self.idle = ms_time()
-            self.deferToLater(self.idleTimeout, self.checkIdle)
 
     def process_ping(self):
         """Adaptive ping processing
@@ -618,6 +649,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                "status": 200
                }
         self.sendJSON(msg)
+        if self.waker is not None:
+            self.waker.check_idle()
         self.metrics.increment("updates.client.register", tags=self.base_tags)
 
     def process_unregister(self, data):

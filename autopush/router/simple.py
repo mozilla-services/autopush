@@ -28,6 +28,7 @@ from autopush.router.interface import (
     RouterException,
     RouterResponse,
 )
+from autopush.waker import WakeException, UDPWake
 
 
 dead_cache = LRUCache(150)
@@ -35,7 +36,7 @@ dead_cache = LRUCache(150)
 
 def node_key(node_id):
     """Generate a node key for the dead node cache"""
-    return node_id + "-%s" % int(time.time()/3600)
+    return node_id + "-%s" % int(time.time() / 3600)
 
 
 class SimpleRouter(object):
@@ -45,6 +46,13 @@ class SimpleRouter(object):
         """Create a new SimpleRouter"""
         self.ap_settings = ap_settings
         self.metrics = ap_settings.metrics
+        self.conf = router_conf
+        self.waker = None
+        if self.conf is not None and self.conf.get("server") is not None:
+            # This should use a Wake resolver dict, but there's only one
+            # right now, so skip a few instructions.
+            self.waker = UDPWake(host=self.conf.get("server"),
+                                 cert=self.conf.get("cert"))
 
     def register(self, uaid, connect):
         """Return no additional routing data"""
@@ -57,6 +65,12 @@ class SimpleRouter(object):
         # Determine if they're connected at the moment
         node_id = uaid_data.get("node_id")
         uaid = uaid_data["uaid"]
+        self.udp = None
+        try:
+            self.udp = json.loads(uaid_data["udp"])
+        except (TypeError, KeyError):
+            # No UDP info found, ignoring.
+            pass
         router, storage = self.ap_settings.router, self.ap_settings.storage
 
         # Node_id is present, attempt delivery.
@@ -137,9 +151,21 @@ class SimpleRouter(object):
             returnValue(RouterResponse(response_body="Delivered"))
         else:
             self.metrics.increment("router.broadcast.miss")
+            if self.udp is not None:
+                yield deferToThread(self._send_wake,
+                                    self.udp)
             returnValue(RouterResponse(202, "Notification Stored"))
 
-    #############################################################
+    def _send_wake(self, wake_info):
+        if self.waker is not None:
+            try:
+                self.waker.send_wake(wake_info)
+            except WakeException:
+                raise RouterException("Could not send wakeup",
+                                      status_code=500,
+                                      response_body="Could not send Wakeup")
+
+    ###########################################################
     #                    Blocking Helper Functions
     #############################################################
     def _send_notification(self, uaid, node_id, notification):

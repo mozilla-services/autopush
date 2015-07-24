@@ -73,8 +73,8 @@ class StorageTestCase(unittest.TestCase):
         db_name = "storage_%s" % uuid.uuid4()
 
         s = create_storage_table(db_name, 8, 11)
-        assert s.throughput["read"] is 8
-        assert s.throughput["write"] is 11
+        assert s.throughput["read"] == 8
+        assert s.throughput["write"] == 11
 
     def test_dont_save_older(self):
         s = get_storage_table()
@@ -150,8 +150,8 @@ class RouterTestCase(unittest.TestCase):
         db_name = "router_%s" % uuid.uuid4()
 
         r = create_router_table(db_name, 3, 17)
-        assert r.throughput["read"] is 3
-        assert r.throughput["write"] is 17
+        assert r.throughput["read"] == 3
+        assert r.throughput["write"] == 17
 
     def test_no_uaid_found(self):
         uaid = str(uuid.uuid4())

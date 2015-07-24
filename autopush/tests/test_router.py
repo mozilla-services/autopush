@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 from unittest import TestCase
+import json
 import uuid
 
 from mock import Mock, PropertyMock
@@ -10,7 +11,6 @@ from twisted.internet.error import ConnectError
 
 import apns
 import gcmclient
-import requests
 
 from autopush.db import (
     Router,
@@ -19,9 +19,10 @@ from autopush.db import (
     ItemNotFound,
 )
 from autopush.endpoint import Notification
-from autopush.router import APNSRouter, GCMRouter, SimpleRouter, UDPRouter
+from autopush.router import APNSRouter, GCMRouter, SimpleRouter
 from autopush.router.interface import RouterException, RouterResponse, IRouter
 from autopush.settings import AutopushSettings
+from autopush.waker import WakeException
 
 
 mock_dynamodb2 = mock_dynamodb2()
@@ -50,7 +51,7 @@ class MockAssist(object):
             else:
                 return r
         finally:
-            if self.cur < (self.max-1):
+            if self.cur < (self.max - 1):
                 self.cur += 1
 
 
@@ -459,35 +460,38 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d.addBoth(verify_deliver)
         return d
 
-class UDPRouterTestCase(unittest.TestCase):
-    def setUp(self):
-        settings = AutopushSettings(
-            hostname="localhost",
-            statsd_host=None,
-        )
-        udp_config = {'pem_file': 'fake.pem', 'timeout': 10}
-        self._old_requests = requests.post
-        requests.post = Mock(spec=requests.post)
-        requests.post.return_value = dict(status_code = 200)
-        self.router = UDPRouter(settings, udp_config)
+    def test_route_udp(self):
+        self.agent_mock.request.return_value = response_mock = Mock()
+        response_mock.code = 202
+        self.storage_mock.save_notification.return_value = True
+        udp_data = {"wakeup_host": {"ip": "127.0.0.1", "port": 9999},
+                    "mobilenetwork": {"mcc": "hammer"}}
+        udp = json.dumps(udp_data)
+        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
+                           udp=udp)
+        self.router_mock.get_uaid.return_value = router_data
+        self.router._send_wake = Mock()
+        self.router.conf = {"idle": 1, "cert": "test.pem"}
 
-    def tearDown(self):
-        requests.post = self._old_requests
+        d = self.router.route_notification(self.notif, router_data)
 
-    def test_register(self):
-        valid_data = {"wakeup_hostport": {"ip": "127.0.0.1", "port": 0},
-                      "mobilenetwork": {"mcc":"001",
-                                        "mnc":"01",
-                                        "netid":"001-01.default"}}
-        resp = self.router.register("uaid", valid_data)
-        eq_(resp.wake_host, valid_data['wakeup_hostport'])
-        eq_(resp.mobile_net, valid_data['mobilenetwork'])
+        def check_deliver(result):
+            eq_(result.status_code, 202)
 
-        copy = valid_data
-        del(copy['wakeup_hostport'])
-        self.assertRaises(RouterException, self.router.register, "uaid", copy)
+        d.addBoth(check_deliver)
+        eq_(self.router.udp, udp_data)
+        return d
 
-        copy = valid_data
-        del(copy['mobilenetwork'])
-        self.assertRaises(RouterException, self.router.register, "uaid", copy)
+    def test_send_udp_wake(self):
+        self.router.waker = Mock()
+        self.router.waker.send_wake = Mock()
+        wake_data = {"wake": "data"}
+        self.router._send_wake(wake_data)
+        self.router.waker.send_wake.assert_called_with(wake_data)
 
+        def fail(arg):
+            raise WakeException()
+        self.router.waker.send_wake.side_effect = fail
+        self.assertRaises(RouterException,
+                          self.router._send_wake, wake_data)
+        return

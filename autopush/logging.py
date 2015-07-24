@@ -76,7 +76,7 @@ def stdout(message):
     else:
         sys.stdout.write("       %s\n" % message['message'])
     return
-    """
+    # """
     msg = {}
     ts = message.pop("timestamp")
     del message["task_level"]

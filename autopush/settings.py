@@ -20,7 +20,6 @@ from autopush.metrics import (
 from autopush.router import (
     APNSRouter,
     GCMRouter,
-    UDPRouter,
     SimpleRouter,
 )
 from autopush.utils import canonical_url, resolve_ip
@@ -56,7 +55,7 @@ class AutopushSettings(object):
                  resolve_hostname=False,
                  max_data=4096,
                  # Reflected up from UDP Router
-                 idle_timeout=0,
+                 wake_timeout=0,
                  enable_cors=False):
         """Initialize the Settings object
 
@@ -127,15 +126,19 @@ class AutopushSettings(object):
         # CORS
         self.cors = enable_cors
 
+        # Force timeout in idle seconds
+        self.wake_timeout = wake_timeout
+
         # Setup the routers
         self.routers = {}
-        self.routers["simplepush"] = SimpleRouter(self, None)
+        self.routers["simplepush"] = SimpleRouter(
+            self,
+            router_conf.get("simplepush")
+        )
         if 'apns' in router_conf:
             self.routers["apns"] = APNSRouter(self, router_conf["apns"])
         if 'gcm' in router_conf:
             self.routers["gcm"] = GCMRouter(self, router_conf["gcm"])
-        if 'udp' in router_conf:
-            self.routers["udp"] = UDPRouter(self, router_conf["udp"])
 
     def update(self, **kwargs):
         """Update the arguments, if a ``crypto_key`` is in kwargs then the
