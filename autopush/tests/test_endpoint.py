@@ -94,6 +94,8 @@ class EndpointTestCase(unittest.TestCase):
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
         self.endpoint.chid = "fred"
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
         self.endpoint.ap_settings.routers["test"] = frouter
         self.endpoint._uaid_lookup_results(fresult)
 
