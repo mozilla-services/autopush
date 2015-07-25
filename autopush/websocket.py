@@ -781,7 +781,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                 # Too old to deliver, we're done
                 return
 
-        self.direct_updates[chid] = (version, data, update["headers"])
+        self.direct_updates[chid] = (version, data, update.get("headers", ""))
         msg = {"messageType": "notification", "updates": [update]}
         self.sendJSON(msg)
 
