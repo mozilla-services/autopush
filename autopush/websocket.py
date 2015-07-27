@@ -524,7 +524,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def finish_hello(self, *args):
         """callback for successful hello message, that sends hello reply"""
         self._register = None
-        msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}
+        if self.use_webpush:
+            msg = {"messageType": "hello", "uaid": self.uaid, "status": 200,
+                   "use_webpush": True}
+        else:
+            msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}
         self.ap_settings.clients[self.uaid] = self
         self.sendJSON(msg)
         self.metrics.increment("updates.client.hello", tags=self.base_tags)
@@ -620,7 +624,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Send out all the notifications
         for notif in notifs:
             # Split off the chid and timestamp
-            chid, version = notifs["timestampchid"].split(":")
+            print notif.items()
+            chid, version = notif["timestampchid"].split(":")
             msg = dict(
                 messageType="notification",
                 channelID=chid,
@@ -722,6 +727,14 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.metrics.increment("updates.client.unregister",
                                tags=self.base_tags)
 
+        # Clear out any existing tracked messages for this channel
+        if self.use_webpush:
+            self.direct_updates[chid] = []
+            self.updates_sent[chid] = []
+        else:
+            self.direct_updates.pop(chid, None)
+            self.updates_sent.pop(chid, None)
+
         if self.use_webpush:
             # Unregister the channel, delete all messages stored
             self.force_retry(self.ap_settings.message.unregister_channel,
@@ -734,15 +747,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.force_retry(self.ap_settings.storage.delete_notification,
                              self.uaid, chid)
 
-        # Clear out any existing tracked messages for this channel
-        if self.use_webpush:
-            self.direct_updates[chid] = []
-            self.updates_sent[chid] = []
-        else:
-            if chid in self.direct_updates:
-                del self.direct_updates[chid]
-            if chid in self.updates_sent:
-                del self.direct_updates[chid]
         data["status"] = 200
         self.sendJSON(data)
 
@@ -779,7 +783,19 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             # This is because we don't use range queries on dynamodb and we
             # need to make sure this notification is deleted from the db before
             # we query it again (to avoid dupes).
-            d.addBoth(lambda x: self.updates_sent[chid].remove(found))
+            d.addBoth(self._handle_webpush_update_remove, chid, found[0])
+
+    def _handle_webpush_update_remove(self, result, chid, notif):
+        """Handle clearing out the updates_sent
+
+        It's possible the client may leave before this runs, so this is
+        wrapped in a try/except in case the tear-down of self has started.
+
+        """
+        try:
+            self.updates_sent[chid].remove(notif)
+        except AttributeError:
+            pass
 
     def _handle_simple_ack(self, chid, version):
         """Handle clearing out a simple ack"""
@@ -846,7 +862,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return
 
         if self.use_webpush:
-            self.direct_updates.append(
+            self.direct_updates[chid].append(
                 Notification(channel_id=chid, version=version,
                              data=update["data"], headers=update["headers"])
             )

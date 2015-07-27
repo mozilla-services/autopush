@@ -281,10 +281,13 @@ class Message(object):
             channel_id, timestamp))
         return True
 
-    def delete_messages(self, uaid, channel_id, timestamps):
+    def delete_messages(self, uaid, timestampchids):
         with self.table.batch_write() as batch:
-            for ts in timestamps:
-                batch.delete_item(uaidchid=uaid+channel_id, timestamp=ts)
+            for timestampchid in timestampchids:
+                batch.delete_item(
+                    uaid=uaid,
+                    timestampchid=timestampchid
+                )
 
     @track_provisioned
     def delete_messages_for_channel(self, uaid, channel_id):
@@ -293,22 +296,23 @@ class Message(object):
             uaid__eq=uaid,
             timestampchid__beginswith="%s:" % channel_id,
             consistent=True,
-            atributes=("timestampchid",),
+            attributes=("timestampchid",),
             max_page_size=25
         )
-        timestamps = []
+        timestampchids = []
         for item in results:
-            timestamps.append(item["timestamp"])
-            if len(timestamps) == 25:
-                self.delete_messages(uaid, channel_id, timestamps)
-                timestamps = []
-        if timestamps:
-            self.delete_messages(uaid, channel_id, timestamps)
+            timestampchids.append(item["timestampchid"])
+            if len(timestampchids) == 25:
+                self.delete_messages(uaid, timestampchids)
+                timestampchids = []
+        if timestampchids:
+            self.delete_messages(uaid, timestampchids)
 
     @track_provisioned
-    def fetch_messages(self, uaid, limit=1):
+    def fetch_messages(self, uaid, limit=10):
         """Fetches messages for a uaid"""
-        return self.table.query_2(uaid__eq=uaid, consistent=True, limit=10)
+        return self.table.query_2(uaid__eq=uaid, timestampchid__gt=" ",
+                                  consistent=True, limit=limit)
 
 
 class Router(object):

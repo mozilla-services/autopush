@@ -205,7 +205,8 @@ from autopush.utils import (
 )
 
 
-class Notification(namedtuple("Notification", "version data channel_id")):
+class Notification(namedtuple("Notification",
+                   "version data channel_id headers")):
     """Parsed notification from the request"""
 
 
@@ -400,7 +401,7 @@ class EndpointHandler(AutoendpointHandler):
                 self.write("Missing crypto headers.")
                 return self.finish()
 
-            version = int(time.time()*1000)
+            version = int(time.time()*1000*1000)
             data = self.request.body
 
         if data and len(data) > self.ap_settings.max_data:
@@ -410,7 +411,8 @@ class EndpointHandler(AutoendpointHandler):
             return self.finish()
 
         notification = Notification(version=version, data=data,
-                                    channel_id=self.chid)
+                                    channel_id=self.chid,
+                                    headers=self.request.headers)
 
         d = Deferred()
         d.addCallback(router.route_notification, result)

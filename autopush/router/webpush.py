@@ -17,13 +17,18 @@ from autopush.router.simple import SimpleRouter
 
 class WebPushRouter(SimpleRouter):
     """SimpleRouter subclass to store individual messages appropriately"""
-    def _crypto_headers(self):
+    def _crypto_headers(self, notification):
         """Creates a dict of the crypto headers for this request."""
-        return dict(
-            encoding=self.request.headers["content-encoding"],
-            encryption=self.request.headers["encryption"],
-            encryption_key=self.request.headers.get("encryption-key", ""),
+        headers = notification.headers
+        data = dict(
+            encoding=headers["content-encoding"],
+            encryption=headers["encryption"],
         )
+        # AWS cannot store empty strings, so we only add the encryption-key if
+        # its present to avoid empty strings.
+        if "encryption-key" in headers:
+            data["encryption_key"] = headers["encryption-key"]
+        return data
 
     def _send_notification(self, uaid, node_id, notification):
         """Send a notification to a specific node_id
@@ -35,7 +40,7 @@ class WebPushRouter(SimpleRouter):
         payload = json.dumps({"channelID": notification.channel_id,
                               "version": notification.version,
                               "data": notification.data,
-                              "headers": self._crypto_headers(),
+                              "headers": self._crypto_headers(notification),
                               })
         url = node_id + "/push/" + uaid
         d = self.ap_settings.agent.request(
@@ -55,10 +60,10 @@ class WebPushRouter(SimpleRouter):
 
         """
         return deferToThread(
-            self.ap_settings.message_table.store_message,
+            self.ap_settings.message.store_message,
             uaid=uaid,
             channel_id=notification.channel_id,
             data=notification.data,
-            headers=self._crypto_headers(),
-            timestamp=notification.timestamp,
+            headers=self._crypto_headers(notification),
+            timestamp=notification.version,
         )

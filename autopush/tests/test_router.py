@@ -80,7 +80,7 @@ class APNSRouterTestCase(unittest.TestCase):
         self.mock_apns = Mock(spec=apns.APNs)
         self.router = APNSRouter(settings, apns_config)
         self.router.apns = self.mock_apns
-        self.notif = Notification(10, "data", dummy_chid)
+        self.notif = Notification(10, "data", dummy_chid, None)
         self.router_data = dict(router_data=dict(token="connect_data"))
 
     def test_register(self):
@@ -147,7 +147,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
         gcm_config = {'apikey': '12345678abcdefg'}
         self.router = GCMRouter(settings, gcm_config)
-        self.notif = Notification(10, "data", dummy_chid)
+        self.notif = Notification(10, "data", dummy_chid, None)
         self.router_data = dict(router_data=dict(token="connect_data"))
         mock_result = Mock(spec=gcmclient.gcm.Result)
         mock_result.canonical = dict()
@@ -253,7 +253,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         )
 
         self.router = SimpleRouter(settings, {})
-        self.notif = Notification(10, "data", dummy_chid)
+        self.notif = Notification(10, "data", dummy_chid, None)
         mock_result = Mock(spec=gcmclient.gcm.Result)
         mock_result.canonical = dict()
         mock_result.failed = dict()
