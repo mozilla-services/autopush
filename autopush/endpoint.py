@@ -370,6 +370,7 @@ class EndpointHandler(AutoendpointHandler):
         d.addCallback(self._token_valid)
         d.addErrback(self._token_err)
         d.addErrback(self._response_err)
+    post = put
 
     #############################################################
     #                    Callbacks
