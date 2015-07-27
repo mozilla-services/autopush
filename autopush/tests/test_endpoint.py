@@ -671,7 +671,8 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.post()
         return self.finish_deferred
 
-    def test_post_bad(self):
+    @patch('autopush.endpoint.log')
+    def test_post_bad(self, mock_log):
         from autopush.router.interface import RouterException
         self.reg.ap_settings.routers["test"] = router_mock = Mock(spec=IRouter)
 
