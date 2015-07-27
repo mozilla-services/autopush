@@ -85,7 +85,7 @@ def get_storage_table(tablename="storage", read_throughput=5,
                        write_throughput)
 
 
-def get_message_table(tablename="storage", read_throughput=5,
+def get_message_table(tablename="message", read_throughput=5,
                       write_throughput=5):
     """Get the main message table object
 

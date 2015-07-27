@@ -13,12 +13,14 @@ from moto import mock_dynamodb2
 from nose.tools import eq_
 
 from autopush.db import (
+    get_message_table,
     get_router_table,
     get_storage_table,
     create_router_table,
     create_storage_table,
     preflight_check,
     Storage,
+    Message,
     Router,
 )
 from autopush.metrics import SinkMetrics
@@ -127,6 +129,33 @@ class StorageTestCase(unittest.TestCase):
         eq_(results, False)
 
 
+class MessageTestCase(unittest.TestCase):
+    def setUp(self):
+        table = get_message_table()
+        self.real_table = table
+        self.real_connection = table.connection
+        self.uaid = str(uuid.uuid4())
+
+    def tearDown(self):
+        self.real_table.connection = self.real_connection
+
+    def test_register(self):
+        chid = str(uuid.uuid4())
+        m = get_message_table()
+        message = Message(m, SinkMetrics())
+        message.register_channel(self.uaid, chid)
+
+        # Verify its in the db
+        rows = m.query_2(uaid__eq=self.uaid, timestampchid__eq=" ")
+        results = list(rows)
+        assert(len(results) == 1)
+        print results[0].items()
+
+        # Verify that all_channels sees it
+        chans = message.all_channels(self.uaid)
+        assert(chid in chans)
+
+
 class RouterTestCase(unittest.TestCase):
     def setUp(self):
         table = get_router_table()
@@ -205,7 +234,7 @@ class RouterTestCase(unittest.TestCase):
                                       connected_at=1234))
         eq_(result[0], True)
         eq_(result[1], {"uaid": uaid,
-                        "connected_at": "1234",
+                        "connected_at": 1234,
                         "node_id": "me"})
         result = router.get_uaid(uaid)
         eq_(bool(result), True)
