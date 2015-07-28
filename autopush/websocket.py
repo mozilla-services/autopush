@@ -523,11 +523,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def finish_hello(self, *args):
         """callback for successful hello message, that sends hello reply"""
         self._register = None
+        msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}
         if self.use_webpush:
-            msg = {"messageType": "hello", "uaid": self.uaid, "status": 200,
-                   "use_webpush": True}
-        else:
-            msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}
+            msg["use_webpush"] = True
         self.ap_settings.clients[self.uaid] = self
         self.sendJSON(msg)
         self.metrics.increment("updates.client.hello", tags=self.base_tags)
