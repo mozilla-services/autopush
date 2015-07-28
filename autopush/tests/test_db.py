@@ -1,5 +1,6 @@
 import unittest
 import uuid
+import time
 
 from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
@@ -139,6 +140,9 @@ class MessageTestCase(unittest.TestCase):
     def tearDown(self):
         self.real_table.connection = self.real_connection
 
+    def _nstime(self):
+        return int(time.time() * 1000 * 1000)
+
     def test_register(self):
         chid = str(uuid.uuid4())
         m = get_message_table()
@@ -149,11 +153,104 @@ class MessageTestCase(unittest.TestCase):
         rows = m.query_2(uaid__eq=self.uaid, timestampchid__eq=" ")
         results = list(rows)
         assert(len(results) == 1)
-        print results[0].items()
 
-        # Verify that all_channels sees it
+    def test_unregister(self):
+        chid = str(uuid.uuid4())
+        m = get_message_table()
+        message = Message(m, SinkMetrics())
+        message.register_channel(self.uaid, chid)
+
+        # Verify its in the db
+        rows = m.query_2(uaid__eq=self.uaid, timestampchid__eq=" ")
+        results = list(rows)
+        assert(len(results) == 1)
+        eq_(results[0]["chids"], set([chid]))
+
+        message.unregister_channel(self.uaid, chid)
+
+        # Verify its not in the db
+        rows = m.query_2(uaid__eq=self.uaid, timestampchid__eq=" ")
+        results = list(rows)
+        assert(len(results) == 1)
+        eq_(results[0]["chids"], set([]))
+
+    def test_all_channels(self):
+        chid = str(uuid.uuid4())
+        chid2 = str(uuid.uuid4())
+        m = get_message_table()
+        message = Message(m, SinkMetrics())
+        message.register_channel(self.uaid, chid)
+        message.register_channel(self.uaid, chid2)
+
         chans = message.all_channels(self.uaid)
         assert(chid in chans)
+        assert(chid2 in chans)
+
+        message.unregister_channel(self.uaid, chid2)
+        chans = message.all_channels(self.uaid)
+        assert(chid2 not in chans)
+        assert(chid in chans)
+
+    def test_all_channels_no_uaid(self):
+        m = get_message_table()
+        message = Message(m, SinkMetrics())
+        assert(message.all_channels("asdf") == set([]))
+
+    def test_message_storage(self):
+        chid = str(uuid.uuid4())
+        chid2 = str(uuid.uuid4())
+        m = get_message_table()
+        message = Message(m, SinkMetrics())
+        message.register_channel(self.uaid, chid)
+        message.register_channel(self.uaid, chid2)
+
+        data1 = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        time1, time2, time3 = self._nstime(), self._nstime(), self._nstime()+1
+        message.store_message(self.uaid, chid, data1, {}, time1)
+        message.store_message(self.uaid, chid2, data2, {}, time2)
+        message.store_message(self.uaid, chid2, data1, {}, time3)
+
+        all_messages = list(message.fetch_messages(self.uaid))
+        eq_(len(all_messages), 3)
+
+        message.delete_messages_for_channel(self.uaid, chid2)
+        all_messages = list(message.fetch_messages(self.uaid))
+        eq_(len(all_messages), 1)
+
+        message.delete_message(self.uaid, chid, time1)
+        all_messages = list(message.fetch_messages(self.uaid))
+        eq_(len(all_messages), 0)
+
+    def test_message_delete_pagination(self):
+        def make_messages(channel_id, count):
+            m = []
+            t = self._nstime()
+            for i in range(count):
+                m.append(
+                    (self.uaid, channel_id, str(uuid.uuid4()), {}, t+i)
+                )
+            return m
+
+        chid = str(uuid.uuid4())
+        m = get_message_table()
+        message = Message(m, SinkMetrics())
+        message.register_channel(self.uaid, chid)
+
+        # Shove 80 messages in
+        for message_args in make_messages(chid, 80):
+            message.store_message(*message_args)
+
+        # Verify we can see them all
+        all_messages = list(message.fetch_messages(self.uaid, limit=100))
+        eq_(len(all_messages), 80)
+
+        # Delete them all
+        message.delete_messages_for_channel(self.uaid, chid)
+
+        # Verify they're gone
+        all_messages = list(message.fetch_messages(self.uaid, limit=100))
+        eq_(len(all_messages), 0)
 
 
 class RouterTestCase(unittest.TestCase):

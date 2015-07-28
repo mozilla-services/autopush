@@ -297,7 +297,6 @@ class Message(object):
             timestampchid__beginswith="%s:" % channel_id,
             consistent=True,
             attributes=("timestampchid",),
-            max_page_size=25
         )
         timestampchids = []
         for item in results:
@@ -348,7 +347,7 @@ class Router(object):
             # will capture it
             self.metrics.increment("error.provisioned.get_uaid")
             raise
-        except JSONResponseError:
+        except JSONResponseError:  # pragma: nocover
             # We trap JSONResponseError because Moto returns text instead of
             # JSON when looking up values in empty tables. We re-throw the
             # correct ItemNotFound exception
@@ -391,7 +390,9 @@ class Router(object):
                 for key, value in result["Attributes"].items():
                     try:
                         r[key] = self.table._dynamizer.decode(value)
-                    except AttributeError:
+                    except AttributeError:  # pragma: nocover
+                        # Included for safety as moto has occasionally made
+                        # this not work
                         r[key] = value
                 result = r
             return (True, result)
