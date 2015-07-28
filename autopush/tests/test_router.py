@@ -14,11 +14,12 @@ import gcmclient
 from autopush.db import (
     Router,
     Storage,
+    Message,
     ProvisionedThroughputExceededException,
     ItemNotFound,
 )
 from autopush.endpoint import Notification
-from autopush.router import APNSRouter, GCMRouter, SimpleRouter
+from autopush.router import APNSRouter, GCMRouter, SimpleRouter, WebPushRouter
 from autopush.router.interface import RouterException, RouterResponse, IRouter
 from autopush.settings import AutopushSettings
 
@@ -456,4 +457,50 @@ class SimplePushRouterTestCase(unittest.TestCase):
                 "router.broadcast.save_hit"
             )
         d.addBoth(verify_deliver)
+        return d
+
+
+class WebPushRouterTestCase(unittest.TestCase):
+    def setUp(self):
+        settings = AutopushSettings(
+            hostname="localhost",
+            statsd_host=None,
+        )
+
+        headers = {
+            "content-encoding": "aes128",
+            "encryption": "awesomecrypto",
+            "encryption-key": "niftykey"
+        }
+        self.router = WebPushRouter(settings, {})
+        self.notif = Notification(10, "data", dummy_chid, headers)
+        mock_result = Mock(spec=gcmclient.gcm.Result)
+        mock_result.canonical = dict()
+        mock_result.failed = dict()
+        mock_result.not_registered = dict()
+        mock_result.needs_retry.return_value = False
+        self.router_mock = settings.router = Mock(spec=Router)
+        self.message_mock = settings.message = Mock(spec=Message)
+        self.agent_mock = Mock(spec=settings.agent)
+        settings.agent = self.agent_mock
+        self.router.metrics = Mock()
+
+    def test_route_to_busy_node_saves_looks_up_and_sends_check_200(self):
+        self.agent_mock.request.return_value = response_mock = Mock()
+        response_mock.addCallback.return_value = response_mock
+        type(response_mock).code = PropertyMock(
+            side_effect=MockAssist([202, 200]))
+        self.message_mock.store_message.return_value = True
+        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
+        self.router_mock.get_uaid.return_value = router_data
+
+        d = self.router.route_notification(self.notif, router_data)
+
+        def verify_deliver(result):
+            ok_(result, RouterResponse)
+            eq_(result.status_code, 200)
+            self.router.metrics.increment.assert_called_with(
+                "router.broadcast.save_hit"
+            )
+        d.addCallback(verify_deliver)
         return d

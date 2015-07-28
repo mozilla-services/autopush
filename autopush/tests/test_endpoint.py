@@ -105,6 +105,21 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
 
+    def test_uaid_lookup_no_crypto_headers(self):
+        fresult = dict(router_type="test")
+        frouter = Mock(spec=Router)
+        frouter.route_notification = Mock()
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.endpoint.ap_settings.routers["test"] = frouter
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            self.endpoint.set_status.assert_called_with(401)
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
     def test_client_info(self):
         h = self.request_mock.headers
         h["user-agent"] = "myself"
