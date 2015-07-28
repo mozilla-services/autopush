@@ -404,7 +404,6 @@ class EndpointHandler(AutoendpointHandler):
 
             version = uuid.uuid4().hex
             data = self.request.body
-            router.message_id = version
 
         if data and len(data) > self.ap_settings.max_data:
             self.set_status(401)

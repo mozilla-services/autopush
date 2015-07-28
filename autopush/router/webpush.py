@@ -19,13 +19,12 @@ from autopush.router.simple import SimpleRouter
 class WebPushRouter(SimpleRouter):
     """SimpleRouter subclass to store individual messages appropriately"""
 
-    @property
-    def delivered_response(self):
+    def delivered_response(self, notification):
         return RouterResponse(
             status_code=201,
             response_body="",
-            headers={"Location":
-                     self.ap_settings.endpoint_url + '/m/' + self.message_id}
+            headers={"Location": "%s/m/%s" % (self.ap_settings.endpoint_url,
+                                              notification.version)}
         )
     stored_response = delivered_response
 
