@@ -300,6 +300,7 @@ class WebsocketTestCase(unittest.TestCase):
         def wait_for_agent_call():  # pragma: nocover
             if not mock_agent.mock_calls:
                 reactor.callLater(0.1, wait_for_agent_call)
+                return
 
             self.flushLoggedErrors()
             d.callback(True)
@@ -333,6 +334,7 @@ class WebsocketTestCase(unittest.TestCase):
         def wait_for_agent_call():  # pragma: nocover
             if not mock_agent.mock_calls:
                 reactor.callLater(0.1, wait_for_agent_call)
+                return
 
             self.flushLoggedErrors()
             d.callback(True)
