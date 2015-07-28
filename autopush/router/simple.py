@@ -39,6 +39,9 @@ def node_key(node_id):
 
 
 class SimpleRouter(object):
+    stored_response = RouterResponse(202, "Notification Stored")
+    delivered_response = RouterResponse(200, "Delivered")
+
     """Implements :class:`autopush.router.interface.IRouter` for internal
     routing to an Autopush node"""
     def __init__(self, ap_settings, router_conf):
@@ -78,7 +81,7 @@ class SimpleRouter(object):
                                       response_body="Retry Request")
             if result.code == 200:
                 self.metrics.increment("router.broadcast.hit")
-                returnValue(RouterResponse(response_body="Delivered"))
+                returnValue(self.delivered_response)
 
         # Save notification, node is not present or busy
         # - Save notification
@@ -88,7 +91,7 @@ class SimpleRouter(object):
             result = yield self._save_notification(uaid, notification)
             if result is False:
                 self.metrics.increment("router.broadcast.miss")
-                returnValue(RouterResponse(202, "Notification Stored"))
+                returnValue(self.stored_response)
         except ProvisionedThroughputExceededException:
             raise RouterException("Provisioned throughput error",
                                   status_code=503,
@@ -107,7 +110,7 @@ class SimpleRouter(object):
             uaid_data = yield deferToThread(router.get_uaid, uaid)
         except ProvisionedThroughputExceededException:
             self.metrics.increment("router.broadcast.miss")
-            returnValue(RouterResponse(202, "Notification Stored"))
+            returnValue(self.stored_response)
         except ItemNotFound:
             self.metrics.increment("updates.client.deleted")
             raise RouterException("User was deleted",
@@ -118,7 +121,7 @@ class SimpleRouter(object):
         node_id = uaid_data.get("node_id")
         if not node_id:
             self.metrics.increment("router.broadcast.miss")
-            returnValue(RouterResponse(202, "Notification Stored"))
+            returnValue(self.stored_response)
         try:
             result = yield self._send_notification_check(uaid, node_id)
         except (ConnectError, UserError, ConnectionRefusedError):
@@ -128,14 +131,14 @@ class SimpleRouter(object):
                 router.clear_node,
                 uaid_data).addErrback(self._eat_db_err)
             self.metrics.increment("router.broadcast.miss")
-            returnValue(RouterResponse(202, "Notification Stored"))
+            returnValue(self.stored_response)
 
         if result.code == 200:
             self.metrics.increment("router.broadcast.save_hit")
-            returnValue(RouterResponse(response_body="Delivered"))
+            returnValue(self.delivered_response)
         else:
             self.metrics.increment("router.broadcast.miss")
-            returnValue(RouterResponse(202, "Notification Stored"))
+            returnValue(self.stored_response)
 
     #############################################################
     #                    Blocking Helper Functions

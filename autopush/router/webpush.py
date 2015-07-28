@@ -12,11 +12,23 @@ from twisted.internet.threads import deferToThread
 from twisted.web.client import FileBodyProducer
 
 from autopush.protocol import IgnoreBody
+from autopush.router.interface import RouterResponse
 from autopush.router.simple import SimpleRouter
 
 
 class WebPushRouter(SimpleRouter):
     """SimpleRouter subclass to store individual messages appropriately"""
+
+    @property
+    def delivered_response(self):
+        return RouterResponse(
+            status_code=201,
+            response_body="",
+            headers={"Location":
+                     self.ap_settings.endpoint_url + '/m/' + self.message_id}
+        )
+    stored_response = delivered_response
+
     def _crypto_headers(self, notification):
         """Creates a dict of the crypto headers for this request."""
         headers = notification.headers

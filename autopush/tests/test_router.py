@@ -485,7 +485,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         settings.agent = self.agent_mock
         self.router.metrics = Mock()
 
-    def test_route_to_busy_node_saves_looks_up_and_sends_check_200(self):
+    def test_route_to_busy_node_saves_looks_up_and_sends_check_201(self):
         self.agent_mock.request.return_value = response_mock = Mock()
         response_mock.addCallback.return_value = response_mock
         type(response_mock).code = PropertyMock(
@@ -493,14 +493,16 @@ class WebPushRouterTestCase(unittest.TestCase):
         self.message_mock.store_message.return_value = True
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
         self.router_mock.get_uaid.return_value = router_data
+        self.router.message_id = uuid.uuid4().hex
 
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
             ok_(result, RouterResponse)
-            eq_(result.status_code, 200)
+            eq_(result.status_code, 201)
             self.router.metrics.increment.assert_called_with(
                 "router.broadcast.save_hit"
             )
+            ok_("Location" in result.headers)
         d.addCallback(verify_deliver)
         return d

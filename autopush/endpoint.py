@@ -402,8 +402,9 @@ class EndpointHandler(AutoendpointHandler):
                 self.write("Missing crypto headers.")
                 return self.finish()
 
-            version = int(time.time()*1000*1000)
+            version = uuid.uuid4().hex
             data = self.request.body
+            router.message_id = version
 
         if data and len(data) > self.ap_settings.max_data:
             self.set_status(401)
@@ -445,6 +446,8 @@ class EndpointHandler(AutoendpointHandler):
         else:
             self.set_status(response.status_code)
             self.write(response.response_body)
+            for name, val in response.headers.items():
+                self.set_header(name, val)
             self.finish()
 
     #############################################################

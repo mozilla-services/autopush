@@ -81,7 +81,9 @@ class EndpointTestCase(unittest.TestCase):
                                                  ap_settings=settings)
         self.settings = settings
         settings.routers["simplepush"] = Mock(spec=IRouter)
+        settings.routers["webpush"] = Mock(spec=IRouter)
         self.sp_router_mock = settings.routers["simplepush"]
+        self.wp_router_mock = settings.routers["webpush"]
         self.status_mock = self.endpoint.set_status = Mock()
         self.write_mock = self.endpoint.write = Mock()
 
@@ -300,6 +302,30 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put(dummy_uaid)
+        return self.finish_deferred
+
+    def test_post_webpush_with_headers_in_response(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=201,
+            headers={"Location": "Somewhere"}
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(201)
+            self.endpoint.set_header.assert_called_with(
+                "Location", "Somewhere")
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.post(dummy_uaid)
         return self.finish_deferred
 
     def test_put_db_error(self):
