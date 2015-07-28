@@ -210,7 +210,7 @@ class Storage(object):
 class Message(object):
     """Create a Message table abstraction on top of a DynamoDB Table object"""
     def __init__(self, table, metrics):
-        """Create a new Router object
+        """Create a new Message object
 
         :param table: :class:`Table` object.
         :param metrics: Metrics object that implements the
@@ -298,12 +298,7 @@ class Message(object):
             consistent=True,
             attributes=("chidmessageid",),
         )
-        chidmessageids = []
-        for item in results:
-            chidmessageids.append(item["chidmessageid"])
-            if len(chidmessageids) == 25:
-                self.delete_messages(uaid, chidmessageids)
-                chidmessageids = []
+        chidmessageids = [x["chidmessageid"] for x in results]
         if chidmessageids:
             self.delete_messages(uaid, chidmessageids)
 
