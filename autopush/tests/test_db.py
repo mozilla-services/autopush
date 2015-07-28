@@ -150,7 +150,7 @@ class MessageTestCase(unittest.TestCase):
         message.register_channel(self.uaid, chid)
 
         # Verify its in the db
-        rows = m.query_2(uaid__eq=self.uaid, timestampchid__eq=" ")
+        rows = m.query_2(uaid__eq=self.uaid, chidmessageid__eq=" ")
         results = list(rows)
         assert(len(results) == 1)
 
@@ -161,7 +161,7 @@ class MessageTestCase(unittest.TestCase):
         message.register_channel(self.uaid, chid)
 
         # Verify its in the db
-        rows = m.query_2(uaid__eq=self.uaid, timestampchid__eq=" ")
+        rows = m.query_2(uaid__eq=self.uaid, chidmessageid__eq=" ")
         results = list(rows)
         assert(len(results) == 1)
         eq_(results[0]["chids"], set([chid]))
@@ -169,7 +169,7 @@ class MessageTestCase(unittest.TestCase):
         message.unregister_channel(self.uaid, chid)
 
         # Verify its not in the db
-        rows = m.query_2(uaid__eq=self.uaid, timestampchid__eq=" ")
+        rows = m.query_2(uaid__eq=self.uaid, chidmessageid__eq=" ")
         results = list(rows)
         assert(len(results) == 1)
         eq_(results[0]["chids"], set([]))

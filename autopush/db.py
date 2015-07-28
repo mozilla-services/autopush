@@ -45,7 +45,7 @@ def create_message_table(tablename="message", read_throughput=5,
     """Create a new message table for webpush style message storage"""
     return Table.create(tablename,
                         schema=[HashKey("uaid"),
-                                RangeKey("timestampchid")],
+                                RangeKey("chidmessageid")],
                         throughput=dict(read=read_throughput,
                                         write=write_throughput),
                         )
@@ -225,7 +225,7 @@ class Message(object):
     def register_channel(self, uaid, channel_id):
         """Register a channel for a given uaid"""
         conn = self.table.connection
-        db_key = self.encode({"uaid": uaid, "timestampchid": " "})
+        db_key = self.encode({"uaid": uaid, "chidmessageid": " "})
         # Generate our update expression
         expr = "ADD chids :channel_id"
         expr_values = self.encode({":channel_id": set([channel_id])})
@@ -241,7 +241,7 @@ class Message(object):
     def unregister_channel(self, uaid, channel_id):
         """Remove a channel registration for a given uaid"""
         conn = self.table.connection
-        db_key = self.encode({"uaid": uaid, "timestampchid": " "})
+        db_key = self.encode({"uaid": uaid, "chidmessageid": " "})
         expr = "DELETE chids :channel_id"
         expr_values = self.encode({":channel_id": set([channel_id])})
         conn.update_item(
@@ -257,36 +257,36 @@ class Message(object):
         """Retrieve a list of all channels for a given uaid"""
         try:
             result = self.table.get_item(consistent=True, uaid=uaid,
-                                         timestampchid=" ")
+                                         chidmessageid=" ")
             return result["chids"]
         except ItemNotFound:
             return set([])
 
     @track_provisioned
-    def store_message(self, uaid, channel_id, data, headers, timestamp):
+    def store_message(self, uaid, channel_id, data, headers, message_id):
         """Stores a message in the message table for the given uaid/channel with
-        the current timestamp"""
+        the message id"""
         self.table.put_item(data=dict(
             uaid=uaid,
-            timestampchid="%s:%s" % (channel_id, timestamp),
+            chidmessageid="%s:%s" % (channel_id, message_id),
             data=data,
             headers=headers,
         ))
         return True
 
     @track_provisioned
-    def delete_message(self, uaid, channel_id, timestamp):
+    def delete_message(self, uaid, channel_id, message_id):
         """Deletes a specific message"""
-        self.table.delete_item(uaid=uaid, timestampchid="%s:%s" % (
-            channel_id, timestamp))
+        self.table.delete_item(uaid=uaid, chidmessageid="%s:%s" % (
+            channel_id, message_id))
         return True
 
-    def delete_messages(self, uaid, timestampchids):
+    def delete_messages(self, uaid, chidmessageids):
         with self.table.batch_write() as batch:
-            for timestampchid in timestampchids:
+            for chidmessageid in chidmessageids:
                 batch.delete_item(
                     uaid=uaid,
-                    timestampchid=timestampchid
+                    chidmessageid=chidmessageid
                 )
 
     @track_provisioned
@@ -294,23 +294,23 @@ class Message(object):
         """Deletes all messages for a uaid/channel_id"""
         results = self.table.query_2(
             uaid__eq=uaid,
-            timestampchid__beginswith="%s:" % channel_id,
+            chidmessageid__beginswith="%s:" % channel_id,
             consistent=True,
-            attributes=("timestampchid",),
+            attributes=("chidmessageid",),
         )
-        timestampchids = []
+        chidmessageids = []
         for item in results:
-            timestampchids.append(item["timestampchid"])
-            if len(timestampchids) == 25:
-                self.delete_messages(uaid, timestampchids)
-                timestampchids = []
-        if timestampchids:
-            self.delete_messages(uaid, timestampchids)
+            chidmessageids.append(item["chidmessageid"])
+            if len(chidmessageids) == 25:
+                self.delete_messages(uaid, chidmessageids)
+                chidmessageids = []
+        if chidmessageids:
+            self.delete_messages(uaid, chidmessageids)
 
     @track_provisioned
     def fetch_messages(self, uaid, limit=10):
         """Fetches messages for a uaid"""
-        return self.table.query_2(uaid__eq=uaid, timestampchid__gt=" ",
+        return self.table.query_2(uaid__eq=uaid, chidmessageid__gt=" ",
                                   consistent=True, limit=limit)
 
 

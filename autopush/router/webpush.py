@@ -77,5 +77,5 @@ class WebPushRouter(SimpleRouter):
             channel_id=notification.channel_id,
             data=notification.data,
             headers=self._crypto_headers(notification),
-            timestamp=notification.version,
+            message_id=notification.version,
         )

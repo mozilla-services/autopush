@@ -384,7 +384,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             channel_id=notif.channel_id,
             data=notif.data,
             headers=notif.headers,
-            timestamp=notif.version,
+            message_id=notif.version,
         ).addErrback(self.log_err)
 
     def _save_simple_notif(self, channel_id, version):
@@ -622,9 +622,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # Send out all the notifications
         for notif in notifs:
-            # Split off the chid and timestamp
-            print notif.items()
-            chid, version = notif["timestampchid"].split(":")
+            # Split off the chid and message id
+            chid, version = notif["chidmessageid"].split(":")
             msg = dict(
                 messageType="notification",
                 channelID=chid,
