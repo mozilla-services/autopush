@@ -153,6 +153,9 @@ class EndpointMainTestCase(unittest.TestCase):
             router_read_throughput = 0
             router_write_throughput = 0
             resolve_hostname = False
+            message_tablename = "None"
+            message_read_throughput = 0
+            message_write_throughput = 0
 
         ap = make_settings(arg)
         eq_(ap.routers["gcm"].gcm.api_key, arg.gcm_apikey)

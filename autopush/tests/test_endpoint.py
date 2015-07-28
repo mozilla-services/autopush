@@ -81,7 +81,9 @@ class EndpointTestCase(unittest.TestCase):
                                                  ap_settings=settings)
         self.settings = settings
         settings.routers["simplepush"] = Mock(spec=IRouter)
+        settings.routers["webpush"] = Mock(spec=IRouter)
         self.sp_router_mock = settings.routers["simplepush"]
+        self.wp_router_mock = settings.routers["webpush"]
         self.status_mock = self.endpoint.set_status = Mock()
         self.write_mock = self.endpoint.write = Mock()
 
@@ -90,15 +92,32 @@ class EndpointTestCase(unittest.TestCase):
 
     def test_uaid_lookup_results(self):
         fresult = dict(router_type="test")
-        notification = {}
         frouter = Mock(spec=Router)
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
         self.endpoint.ap_settings.routers["test"] = frouter
-        self.endpoint._uaid_lookup_results(fresult, notification)
+        self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
             assert(frouter.route_notification.called)
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    def test_uaid_lookup_no_crypto_headers(self):
+        fresult = dict(router_type="test")
+        frouter = Mock(spec=Router)
+        frouter.route_notification = Mock()
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.endpoint.ap_settings.routers["test"] = frouter
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            self.endpoint.set_status.assert_called_with(401)
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -170,6 +189,8 @@ class EndpointTestCase(unittest.TestCase):
         eq_(data, 'bai')
 
     def test_put_data_too_large(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.ap_settings.router.get_uaid.return_value = {}
         self.endpoint.ap_settings.max_data = 3
         self.endpoint.request.body = b'version=1&data=1234'
 
@@ -227,7 +248,7 @@ class EndpointTestCase(unittest.TestCase):
 
         self.endpoint.version, self.endpoint.data = 789, None
 
-        self.endpoint._token_valid('123:456', 789, None)
+        self.endpoint._token_valid('123:456')
         return self.finish_deferred
 
     def test_put_default_router(self):
@@ -281,6 +302,30 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put(dummy_uaid)
+        return self.finish_deferred
+
+    def test_post_webpush_with_headers_in_response(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=201,
+            headers={"Location": "Somewhere"}
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(201)
+            self.endpoint.set_header.assert_called_with(
+                "Location", "Somewhere")
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.post(dummy_uaid)
         return self.finish_deferred
 
     def test_put_db_error(self):
@@ -667,7 +712,8 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.post()
         return self.finish_deferred
 
-    def test_post_bad(self):
+    @patch('autopush.endpoint.log')
+    def test_post_bad(self, mock_log):
         from autopush.router.interface import RouterException
         self.reg.ap_settings.routers["test"] = router_mock = Mock(spec=IRouter)
 

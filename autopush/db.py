@@ -1,5 +1,6 @@
 """Database Interaction"""
 import uuid
+from functools import wraps
 
 from boto.exception import JSONResponseError
 from boto.dynamodb2.exceptions import (
@@ -39,6 +40,27 @@ def create_storage_table(tablename="storage", read_throughput=5,
                         )
 
 
+def create_message_table(tablename="message", read_throughput=5,
+                         write_throughput=5):
+    """Create a new message table for webpush style message storage"""
+    return Table.create(tablename,
+                        schema=[HashKey("uaid"),
+                                RangeKey("chidmessageid")],
+                        throughput=dict(read=read_throughput,
+                                        write=write_throughput),
+                        )
+
+
+def _make_table(table_func, tablename, read_throughput, write_throughput):
+    """Private common function to make a table with a table func"""
+    db = DynamoDBConnection()
+    dblist = db.list_tables()["TableNames"]
+    if tablename not in dblist:
+        return table_func(tablename, read_throughput, write_throughput)
+    else:
+        return Table(tablename)
+
+
 def get_router_table(tablename="router", read_throughput=5,
                      write_throughput=5):
     """Get the main router table object
@@ -47,13 +69,8 @@ def get_router_table(tablename="router", read_throughput=5,
     existing table.
 
     """
-    db = DynamoDBConnection()
-    dblist = db.list_tables()["TableNames"]
-    if tablename not in dblist:
-        return create_router_table(tablename, read_throughput,
-                                   write_throughput)
-    else:
-        return Table(tablename)
+    return _make_table(create_router_table, tablename, read_throughput,
+                       write_throughput)
 
 
 def get_storage_table(tablename="storage", read_throughput=5,
@@ -64,18 +81,25 @@ def get_storage_table(tablename="storage", read_throughput=5,
     existing table.
 
     """
-    db = DynamoDBConnection()
-    dblist = db.list_tables()["TableNames"]
-    if tablename not in dblist:
-        return create_storage_table(tablename, read_throughput,
-                                    write_throughput)
-    else:
-        return Table(tablename)
+    return _make_table(create_storage_table, tablename, read_throughput,
+                       write_throughput)
+
+
+def get_message_table(tablename="message", read_throughput=5,
+                      write_throughput=5):
+    """Get the main message table object
+
+    Creates the table if it doesn't already exist, otherwise returns the
+    existing table.
+
+    """
+    return _make_table(create_message_table, tablename, read_throughput,
+                       write_throughput)
 
 
 def preflight_check(storage, router):
-    """Performs a pre-flight check of the storage/router to ensure appropriate
-    permissions for operation.
+    """Performs a pre-flight check of the storage/router/message to ensure
+    appropriate permissions for operation.
 
     Failure to run correctly will raise an exception.
 
@@ -100,6 +124,19 @@ def preflight_check(storage, router):
     router.clear_node(item)
 
 
+def track_provisioned(func):
+    """Tracks provisioned exceptions and increments a metric for them named
+    after the function decorated"""
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        try:
+            return func(self, *args, **kwargs)
+        except ProvisionedThroughputExceededException:
+            self.metrics.increment("error.provisioned.%s" % func.__name__)
+            raise
+    return wrapper
+
+
 class Storage(object):
     """Create a Storage table abstraction on top of a DynamoDB Table object"""
     def __init__(self, table, metrics):
@@ -114,6 +151,7 @@ class Storage(object):
         self.metrics = metrics
         self.encode = table._encode_keys
 
+    @track_provisioned
     def fetch_notifications(self, uaid):
         """Fetch all notifications for a UAID
 
@@ -122,14 +160,11 @@ class Storage(object):
             exceeds throughput.
 
         """
-        try:
-            notifs = self.table.query_2(consistent=True, uaid__eq=uaid,
-                                        chid__gt=" ")
-            return list(notifs)
-        except ProvisionedThroughputExceededException:
-            self.metrics.increment("error.provisioned.fetch_notifications")
-            raise
+        notifs = self.table.query_2(consistent=True, uaid__eq=uaid,
+                                    chid__gt=" ")
+        return list(notifs)
 
+    @track_provisioned
     def save_notification(self, uaid, chid, version):
         """Save a notification for the UAID
 
@@ -152,9 +187,6 @@ class Storage(object):
             return True
         except ConditionalCheckFailedException:
             return False
-        except ProvisionedThroughputExceededException:
-            self.metrics.increment("error.provisioned.save_notification")
-            raise
 
     def delete_notification(self, uaid, chid, version=None):
         """Delete a notification for a UAID
@@ -173,6 +205,108 @@ class Storage(object):
         except ProvisionedThroughputExceededException:
             self.metrics.increment("error.provisioned.delete_notification")
             return False
+
+
+class Message(object):
+    """Create a Message table abstraction on top of a DynamoDB Table object"""
+    def __init__(self, table, metrics):
+        """Create a new Message object
+
+        :param table: :class:`Table` object.
+        :param metrics: Metrics object that implements the
+                        :class:`autopush.metrics.IMetrics` interface.
+
+        """
+        self.table = table
+        self.metrics = metrics
+        self.encode = table._encode_keys
+
+    @track_provisioned
+    def register_channel(self, uaid, channel_id):
+        """Register a channel for a given uaid"""
+        conn = self.table.connection
+        db_key = self.encode({"uaid": uaid, "chidmessageid": " "})
+        # Generate our update expression
+        expr = "ADD chids :channel_id"
+        expr_values = self.encode({":channel_id": set([channel_id])})
+        conn.update_item(
+            self.table.table_name,
+            db_key,
+            update_expression=expr,
+            expression_attribute_values=expr_values,
+        )
+        return True
+
+    @track_provisioned
+    def unregister_channel(self, uaid, channel_id):
+        """Remove a channel registration for a given uaid"""
+        conn = self.table.connection
+        db_key = self.encode({"uaid": uaid, "chidmessageid": " "})
+        expr = "DELETE chids :channel_id"
+        expr_values = self.encode({":channel_id": set([channel_id])})
+        conn.update_item(
+            self.table.table_name,
+            db_key,
+            update_expression=expr,
+            expression_attribute_values=expr_values,
+        )
+        return True
+
+    @track_provisioned
+    def all_channels(self, uaid):
+        """Retrieve a list of all channels for a given uaid"""
+        try:
+            result = self.table.get_item(consistent=True, uaid=uaid,
+                                         chidmessageid=" ")
+            return result["chids"]
+        except ItemNotFound:
+            return set([])
+
+    @track_provisioned
+    def store_message(self, uaid, channel_id, data, headers, message_id):
+        """Stores a message in the message table for the given uaid/channel with
+        the message id"""
+        self.table.put_item(data=dict(
+            uaid=uaid,
+            chidmessageid="%s:%s" % (channel_id, message_id),
+            data=data,
+            headers=headers,
+        ))
+        return True
+
+    @track_provisioned
+    def delete_message(self, uaid, channel_id, message_id):
+        """Deletes a specific message"""
+        self.table.delete_item(uaid=uaid, chidmessageid="%s:%s" % (
+            channel_id, message_id))
+        return True
+
+    def delete_messages(self, uaid, chidmessageids):
+        with self.table.batch_write() as batch:
+            for chidmessageid in chidmessageids:
+                batch.delete_item(
+                    uaid=uaid,
+                    chidmessageid=chidmessageid
+                )
+
+    @track_provisioned
+    def delete_messages_for_channel(self, uaid, channel_id):
+        """Deletes all messages for a uaid/channel_id"""
+        results = self.table.query_2(
+            uaid__eq=uaid,
+            chidmessageid__beginswith="%s:" % channel_id,
+            consistent=True,
+            attributes=("chidmessageid",),
+        )
+        chidmessageids = [x["chidmessageid"] for x in results]
+        if chidmessageids:
+            self.delete_messages(uaid, chidmessageids)
+
+    @track_provisioned
+    def fetch_messages(self, uaid, limit=10):
+        """Fetches messages for a uaid"""
+        return self.table.query_2(uaid__eq=uaid, chidmessageid__gt=" ",
+                                  consistent=True, limit=limit)
 
 
 class Router(object):
@@ -203,14 +337,18 @@ class Router(object):
         try:
             return self.table.get_item(consistent=True, uaid=uaid)
         except ProvisionedThroughputExceededException:
+            # We unfortunately have to catch this here, as track_provisioned
+            # will not see this, since JSONResponseError is a subclass and
+            # will capture it
             self.metrics.increment("error.provisioned.get_uaid")
             raise
-        except JSONResponseError:
+        except JSONResponseError:  # pragma: nocover
             # We trap JSONResponseError because Moto returns text instead of
             # JSON when looking up values in empty tables. We re-throw the
             # correct ItemNotFound exception
             raise ItemNotFound("uaid not found")
 
+    @track_provisioned
     def register_user(self, data):
         """Register this user
 
@@ -247,16 +385,16 @@ class Router(object):
                 for key, value in result["Attributes"].items():
                     try:
                         r[key] = self.table._dynamizer.decode(value)
-                    except AttributeError:
+                    except AttributeError:  # pragma: nocover
+                        # Included for safety as moto has occasionally made
+                        # this not work
                         r[key] = value
                 result = r
             return (True, result)
         except ConditionalCheckFailedException:
             return (False, {})
-        except ProvisionedThroughputExceededException:
-            self.metrics.increment("error.provisioned.register_user")
-            raise
 
+    @track_provisioned
     def clear_node(self, item):
         """Given a router item and remove the node_id
 
@@ -289,6 +427,3 @@ class Router(object):
             return True
         except ConditionalCheckFailedException:
             return False
-        except ProvisionedThroughputExceededException:
-            self.metrics.increment("error.provisioned.clear_node")
-            raise

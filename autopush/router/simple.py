@@ -50,6 +50,16 @@ class SimpleRouter(object):
         """Return no additional routing data"""
         return {}
 
+    def preflight_check(self, uaid, channel_id):
+        """Verifies this routing call can be done successfully"""
+        return True
+
+    def stored_response(self, notification):
+        return RouterResponse(202, "Notification Stored")
+
+    def delivered_response(self, notification):
+        return RouterResponse(200, "Delivered")
+
     @inlineCallbacks
     def route_notification(self, notification, uaid_data):
         """Route a notification to an internal node, and store it if the node
@@ -57,7 +67,10 @@ class SimpleRouter(object):
         # Determine if they're connected at the moment
         node_id = uaid_data.get("node_id")
         uaid = uaid_data["uaid"]
-        router, storage = self.ap_settings.router, self.ap_settings.storage
+        router = self.ap_settings.router
+
+        # Preflight check, hook used by webpush to verify channel id
+        yield self.preflight_check(uaid, notification.channel_id)
 
         # Node_id is present, attempt delivery.
         # - Send Notification to node
@@ -78,19 +91,17 @@ class SimpleRouter(object):
                                       response_body="Retry Request")
             if result.code == 200:
                 self.metrics.increment("router.broadcast.hit")
-                returnValue(RouterResponse(response_body="Delivered"))
+                returnValue(self.delivered_response(notification))
 
         # Save notification, node is not present or busy
         # - Save notification
         #   - Success (older version): Done, return 202
         #   - Error (db error): Done, return 503
         try:
-            result = yield deferToThread(storage.save_notification, uaid=uaid,
-                                         chid=notification.channel_id,
-                                         version=notification.version)
+            result = yield self._save_notification(uaid, notification)
             if result is False:
                 self.metrics.increment("router.broadcast.miss")
-                returnValue(RouterResponse(202, "Notification Stored"))
+                returnValue(self.stored_response(notification))
         except ProvisionedThroughputExceededException:
             raise RouterException("Provisioned throughput error",
                                   status_code=503,
@@ -109,7 +120,7 @@ class SimpleRouter(object):
             uaid_data = yield deferToThread(router.get_uaid, uaid)
         except ProvisionedThroughputExceededException:
             self.metrics.increment("router.broadcast.miss")
-            returnValue(RouterResponse(202, "Notification Stored"))
+            returnValue(self.stored_response(notification))
         except ItemNotFound:
             self.metrics.increment("updates.client.deleted")
             raise RouterException("User was deleted",
@@ -120,7 +131,7 @@ class SimpleRouter(object):
         node_id = uaid_data.get("node_id")
         if not node_id:
             self.metrics.increment("router.broadcast.miss")
-            returnValue(RouterResponse(202, "Notification Stored"))
+            returnValue(self.stored_response(notification))
         try:
             result = yield self._send_notification_check(uaid, node_id)
         except (ConnectError, UserError, ConnectionRefusedError):
@@ -130,23 +141,34 @@ class SimpleRouter(object):
                 router.clear_node,
                 uaid_data).addErrback(self._eat_db_err)
             self.metrics.increment("router.broadcast.miss")
-            returnValue(RouterResponse(202, "Notification Stored"))
+            returnValue(self.stored_response(notification))
 
         if result.code == 200:
             self.metrics.increment("router.broadcast.save_hit")
-            returnValue(RouterResponse(response_body="Delivered"))
+            returnValue(self.delivered_response(notification))
         else:
             self.metrics.increment("router.broadcast.miss")
-            returnValue(RouterResponse(202, "Notification Stored"))
+            returnValue(self.stored_response(notification))
 
     #############################################################
     #                    Blocking Helper Functions
     #############################################################
+    def _save_notification(self, uaid, notification):
+        """Saves a notification, returns a deferred.
+
+        This function is split out for the Webpush-style individual
+        message storage to subclass and override.
+
+        """
+        return deferToThread(self.ap_settings.storage.save_notification,
+                             uaid=uaid, chid=notification.channel_id,
+                             version=notification.version)
+
     def _send_notification(self, uaid, node_id, notification):
         """Send a notification to a specific node_id"""
-        payload = json.dumps([{"channelID": notification.channel_id,
-                               "version": notification.version,
-                               "data": notification.data}])
+        payload = json.dumps({"channelID": notification.channel_id,
+                              "version": notification.version,
+                              "data": notification.data})
         url = node_id + "/push/" + uaid
         d = self.ap_settings.agent.request(
             "PUT",

@@ -29,6 +29,11 @@ All message bodies must be UTF-8 encoded.
 
     Send a notification to the given endpoint `token`.
 
+    If the client is using webpush style data delivery, then the body in its
+    entirety will be regarded as the data payload for the message per
+    `the WebPush spec
+    <https://tools.ietf.org/html/draft-thomson-webpush-http2-02#section-5>`_.
+
     :form version: (*Optional*) Version of notification, defaults to current
                    time
     :statuscode 404: `token` is invalid.
@@ -200,7 +205,8 @@ from autopush.utils import (
 )
 
 
-class Notification(namedtuple("Notification", "version data channel_id")):
+class Notification(namedtuple("Notification",
+                   "version data channel_id headers")):
     """Parsed notification from the request"""
 
 
@@ -360,36 +366,55 @@ class EndpointHandler(AutoendpointHandler):
         self.start_time = time.time()
         fernet = self.ap_settings.fernet
 
-        version, data = parse_request_params(self.request)
+        d = deferToThread(fernet.decrypt, token.encode('utf8'))
+        d.addCallback(self._token_valid)
+        d.addErrback(self._token_err)
+        d.addErrback(self._response_err)
+    post = put
+
+    #############################################################
+    #                    Callbacks
+    #############################################################
+    def _token_valid(self, result):
+        """Called after the token is decrypted successfully"""
+        self.uaid, self.chid = result.split(":")
+        d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
+        d.addCallback(self._uaid_lookup_results)
+        d.addErrback(self._uaid_not_found_err)
+        self._db_error_handling(d)
+
+    def _uaid_lookup_results(self, result):
+        """Process the result of the AWS UAID lookup"""
+        # Save the whole record
+        router_key = result.get("router_type", "simplepush")
+        router = self.ap_settings.routers[router_key]
+
+        # Only simplepush uses version/data out of body/query, GCM/APNS will
+        # use data out of the request body 'WebPush' style.
+        if router_key == "simplepush":
+            version, data = parse_request_params(self.request)
+        else:
+            # We need crypto headers
+            req_fields = ["content-encoding", "encryption"]
+            if not all([x in self.request.headers for x in req_fields]):
+                self.set_status(401)
+                log.msg("Missing Crypto headers", **self._client_info())
+                self.write("Missing crypto headers.")
+                return self.finish()
+
+            version = uuid.uuid4().hex
+            data = self.request.body
+
         if data and len(data) > self.ap_settings.max_data:
             self.set_status(401)
             log.msg("Data too large", **self._client_info())
             self.write("Data too large")
             return self.finish()
 
-        d = deferToThread(fernet.decrypt, token.encode('utf8'))
-        d.addCallback(self._token_valid, version, data)
-        d.addErrback(self._token_err)
-        d.addErrback(self._response_err)
-
-    #############################################################
-    #                    Callbacks
-    #############################################################
-    def _token_valid(self, result, version, data):
-        """Called after the token is decrypted successfully"""
-        self.uaid, chid = result.split(":")
         notification = Notification(version=version, data=data,
-                                    channel_id=chid)
-        d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
-        d.addCallback(self._uaid_lookup_results, notification)
-        d.addErrback(self._uaid_not_found_err)
-        self._db_error_handling(d)
+                                    channel_id=self.chid,
+                                    headers=self.request.headers)
 
-    def _uaid_lookup_results(self, result, notification):
-        """Process the result of the AWS UAID lookup"""
-        # Save the whole record
-        router_key = result.get("router_type", "simplepush")
-        router = self.ap_settings.routers[router_key]
         d = Deferred()
         d.addCallback(router.route_notification, result)
         d.addCallback(self._router_completed, result)
@@ -420,6 +445,8 @@ class EndpointHandler(AutoendpointHandler):
         else:
             self.set_status(response.status_code)
             self.write(response.response_body)
+            for name, val in response.headers.items():
+                self.set_header(name, val)
             self.finish()
 
     #############################################################
