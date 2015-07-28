@@ -491,6 +491,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         type(response_mock).code = PropertyMock(
             side_effect=MockAssist([202, 200]))
         self.message_mock.store_message.return_value = True
+        self.message_mock.all_channels.return_value = [dummy_chid]
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
         self.router_mock.get_uaid.return_value = router_data
         self.router.message_id = uuid.uuid4().hex
@@ -505,4 +506,25 @@ class WebPushRouterTestCase(unittest.TestCase):
             )
             ok_("Location" in result.headers)
         d.addCallback(verify_deliver)
+        return d
+
+    def test_route_with_invalid_channel_id(self):
+        self.agent_mock.request.return_value = response_mock = Mock()
+        response_mock.addCallback.return_value = response_mock
+        type(response_mock).code = PropertyMock(
+            side_effect=MockAssist([202, 200]))
+        self.message_mock.store_message.return_value = True
+        self.message_mock.all_channels.return_value = []
+        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
+        self.router_mock.get_uaid.return_value = router_data
+        self.router.message_id = uuid.uuid4().hex
+
+        d = self.router.route_notification(self.notif, router_data)
+
+        def verify_deliver(fail):
+            exc = fail.value
+            ok_(exc, RouterException)
+            eq_(exc.status_code, 404)
+            self.flushLoggedErrors()
+        d.addBoth(verify_deliver)
         return d

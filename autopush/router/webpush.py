@@ -12,7 +12,7 @@ from twisted.internet.threads import deferToThread
 from twisted.web.client import FileBodyProducer
 
 from autopush.protocol import IgnoreBody
-from autopush.router.interface import RouterResponse
+from autopush.router.interface import RouterException, RouterResponse
 from autopush.router.simple import SimpleRouter
 
 
@@ -41,6 +41,16 @@ class WebPushRouter(SimpleRouter):
         if "encryption-key" in headers:
             data["encryption_key"] = headers["encryption-key"]
         return data
+
+    def _verify_channel(self, result, channel_id):
+        if channel_id not in result:
+            raise RouterException("No such subscription", status_code=404)
+
+    def preflight_check(self, uaid, channel_id):
+        """Verifies this routing call can be done successfully"""
+        d = deferToThread(self.ap_settings.message.all_channels, uaid=uaid)
+        d.addCallback(self._verify_channel, channel_id)
+        return d
 
     def _send_notification(self, uaid, node_id, notification):
         """Send a notification to a specific node_id

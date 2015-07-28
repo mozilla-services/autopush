@@ -1214,7 +1214,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.updates_sent["asdf"] = []
 
         self.proto.finish_webpush_notifications([
-            dict(timestampchid="asdf:fdsa", headers={}, data="bleh")
+            dict(chidmessageid="asdf:fdsa", headers={}, data="bleh")
         ])
         assert self.proto.process_notifications.called
 
