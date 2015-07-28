@@ -143,14 +143,13 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         continue to retry even if the client drops.
 
         """
-        def wrapper(result, *args, **kwargs):
+        def wrapper(result, *w_args, **w_kwargs):
             if isinstance(result, failure.Failure):
                 # This is an exception, log it
                 self.log_err(result)
-                return
 
             d = deferToThread(func, *args, **kwargs)
-            d.addErrback(wrapper, *args, **kwargs)
+            d.addErrback(wrapper)
             return d
         d = deferToThread(func, *args, **kwargs)
         d.addErrback(wrapper)
