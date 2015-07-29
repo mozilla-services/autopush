@@ -1215,9 +1215,27 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.process_notifications = Mock()
         self.proto.updates_sent["asdf"] = []
 
+        ttl = int(time.time()) + 100
         self.proto.finish_webpush_notifications([
-            dict(chidmessageid="asdf:fdsa", headers={}, data="bleh", ttl=20)
+            dict(chidmessageid="asdf:fdsa", headers={}, data="bleh", ttl=ttl)
         ])
+        assert self.send_mock.called
+        assert self.proto.process_notifications.called
+
+    def test_notif_finished_with_webpush_with_old_notifications(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.use_webpush = True
+        self.proto._check_notifications = True
+        self.proto.process_notifications = Mock()
+        self.proto.updates_sent["asdf"] = []
+
+        self.proto.force_retry = Mock()
+        self.proto.finish_webpush_notifications([
+            dict(chidmessageid="asdf:fdsa", headers={}, data="bleh", ttl=10)
+        ])
+        assert self.proto.force_retry.called
+        assert not self.send_mock.called
         assert self.proto.process_notifications.called
 
     def test_notification_results(self):

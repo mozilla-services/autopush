@@ -620,9 +620,17 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return
 
         # Send out all the notifications
+        now = int(time.time())
         for notif in notifs:
             # Split off the chid and message id
             chid, version = notif["chidmessageid"].split(":")
+
+            # If the TTL is too old, don't deliver and fire a delete off
+            if now >= notif["ttl"]:
+                self.force_retry(
+                    self.ap_settings.message.delete_message, self.uaid, chid,
+                    version)
+                continue
             msg = dict(
                 messageType="notification",
                 channelID=chid,
@@ -637,8 +645,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             )
             self.sendJSON(msg)
 
-            # Trigger for another fetch (won't run till notifs are cleared)
-            self.process_notifications()
+        # Trigger for another fetch (won't run till notifs are cleared)
+        self.process_notifications()
 
     def _send_ping(self):
         """Helper for ping sending that tracks when the ping was sent"""
