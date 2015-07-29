@@ -1,4 +1,5 @@
 """Database Interaction"""
+import time
 import uuid
 from functools import wraps
 
@@ -263,7 +264,7 @@ class Message(object):
             return set([])
 
     @track_provisioned
-    def store_message(self, uaid, channel_id, data, headers, message_id):
+    def store_message(self, uaid, channel_id, data, headers, message_id, ttl):
         """Stores a message in the message table for the given uaid/channel with
         the message id"""
         self.table.put_item(data=dict(
@@ -271,6 +272,7 @@ class Message(object):
             chidmessageid="%s:%s" % (channel_id, message_id),
             data=data,
             headers=headers,
+            ttl=ttl+int(time.time()),
         ))
         return True
 

@@ -206,7 +206,7 @@ from autopush.utils import (
 
 
 class Notification(namedtuple("Notification",
-                   "version data channel_id headers")):
+                   "version data channel_id headers ttl")):
     """Parsed notification from the request"""
 
 
@@ -335,8 +335,11 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
     def _router_fail_err(self, fail):
         """errBack for router failures"""
         fail.trap(RouterException)
-        log.err(fail, **self._client_info())
         exc = fail.value
+        if not str(exc.status_code).startswith('2'):
+            # Only log non-2XX responses, we sometimes have to throw one to
+            # stop processing even though its a 2XX response
+            log.err(fail, **self._client_info())
         self.set_status(exc.status_code)
         self.write(exc.response_body)
         self.finish()
@@ -405,6 +408,7 @@ class EndpointHandler(AutoendpointHandler):
             version = uuid.uuid4().hex
             data = self.request.body
 
+        ttl = self.request.headers.get("TTL", 0)
         if data and len(data) > self.ap_settings.max_data:
             self.set_status(401)
             log.msg("Data too large", **self._client_info())
@@ -413,7 +417,8 @@ class EndpointHandler(AutoendpointHandler):
 
         notification = Notification(version=version, data=data,
                                     channel_id=self.chid,
-                                    headers=self.request.headers)
+                                    headers=self.request.headers,
+                                    ttl=ttl)
 
         d = Deferred()
         d.addCallback(router.route_notification, result)

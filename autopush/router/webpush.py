@@ -6,6 +6,7 @@ table for retrieval by the client.
 
 """
 import json
+import time
 from StringIO import StringIO
 
 from twisted.internet.threads import deferToThread
@@ -62,6 +63,7 @@ class WebPushRouter(SimpleRouter):
                               "version": notification.version,
                               "data": notification.data,
                               "headers": self._crypto_headers(notification),
+                              "ttl": notification.ttl+int(time.time()),
                               })
         url = node_id + "/push/" + uaid
         d = self.ap_settings.agent.request(
@@ -80,6 +82,8 @@ class WebPushRouter(SimpleRouter):
         available.
 
         """
+        if notification.ttl == 0:
+            raise RouterException("Finished Routing", status_code=201)
         return deferToThread(
             self.ap_settings.message.store_message,
             uaid=uaid,
@@ -87,4 +91,5 @@ class WebPushRouter(SimpleRouter):
             data=notification.data,
             headers=self._crypto_headers(notification),
             message_id=notification.version,
+            ttl=notification.ttl,
         )
