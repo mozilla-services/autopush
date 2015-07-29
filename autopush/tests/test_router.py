@@ -15,11 +15,12 @@ import gcmclient
 from autopush.db import (
     Router,
     Storage,
+    Message,
     ProvisionedThroughputExceededException,
     ItemNotFound,
 )
 from autopush.endpoint import Notification
-from autopush.router import APNSRouter, GCMRouter, SimpleRouter
+from autopush.router import APNSRouter, GCMRouter, SimpleRouter, WebPushRouter
 from autopush.router.interface import RouterException, RouterResponse, IRouter
 from autopush.settings import AutopushSettings
 from autopush.waker import WakeException
@@ -82,7 +83,7 @@ class APNSRouterTestCase(unittest.TestCase):
         self.mock_apns = Mock(spec=apns.APNs)
         self.router = APNSRouter(settings, apns_config)
         self.router.apns = self.mock_apns
-        self.notif = Notification(10, "data", dummy_chid)
+        self.notif = Notification(10, "data", dummy_chid, None)
         self.router_data = dict(router_data=dict(token="connect_data"))
 
     def test_register(self):
@@ -97,7 +98,7 @@ class APNSRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            eq_(self.mock_apns.gateway_server.send_notification.called, True)
+            assert(self.mock_apns.gateway_server.send_notification.called)
 
         d.addCallback(check_results)
         return d
@@ -108,7 +109,7 @@ class APNSRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            eq_(self.mock_apns.gateway_server.send_notification.called, True)
+            assert(self.mock_apns.gateway_server.send_notification.called)
             eq_(len(self.router.messages), 1)
         d.addCallback(check_results)
         return d
@@ -129,7 +130,7 @@ class APNSRouterTestCase(unittest.TestCase):
         self.router._connect = Mock()
         self.router._error(dict(status=1, identifier=1))
         eq_(len(self.router.messages), 1)
-        eq_(self.router.apns.gateway_server.send_notification.called, True)
+        assert(self.router.apns.gateway_server.send_notification.called)
 
     def test_response_listener_with_retryable_non_existing_message(self):
         self.router.messages = {1: {'token': 'dump', 'payload': {}}}
@@ -149,7 +150,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
         gcm_config = {'apikey': '12345678abcdefg'}
         self.router = GCMRouter(settings, gcm_config)
-        self.notif = Notification(10, "data", dummy_chid)
+        self.notif = Notification(10, "data", dummy_chid, None)
         self.router_data = dict(router_data=dict(token="connect_data"))
         mock_result = Mock(spec=gcmclient.gcm.Result)
         mock_result.canonical = dict()
@@ -165,7 +166,7 @@ class GCMRouterTestCase(unittest.TestCase):
     def _check_error_call(self, exc, code):
         ok_(isinstance(exc, RouterException))
         eq_(exc.status_code, code)
-        eq_(self.router.gcm.send.called, True)
+        assert(self.router.gcm.send.called)
         self.flushLoggedErrors()
 
     def test_register(self):
@@ -180,7 +181,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            eq_(self.router.gcm.send.called, True)
+            assert(self.router.gcm.send.called)
         d.addCallback(check_results)
         return d
 
@@ -213,7 +214,7 @@ class GCMRouterTestCase(unittest.TestCase):
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict(token="new"))
-            eq_(self.router.gcm.send.called, True)
+            assert(self.router.gcm.send.called)
         d.addCallback(check_results)
         return d
 
@@ -224,7 +225,7 @@ class GCMRouterTestCase(unittest.TestCase):
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict())
-            eq_(self.router.gcm.send.called, True)
+            assert(self.router.gcm.send.called)
         d.addCallback(check_results)
         return d
 
@@ -255,7 +256,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         )
 
         self.router = SimpleRouter(settings, {})
-        self.notif = Notification(10, "data", dummy_chid)
+        self.notif = Notification(10, "data", dummy_chid, None)
         mock_result = Mock(spec=gcmclient.gcm.Result)
         mock_result.canonical = dict()
         mock_result.failed = dict()
@@ -391,7 +392,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         def verify_deliver(result):
             ok_(result, RouterResponse)
             eq_(result.status_code, 202)
-            eq_(self.router_mock.get_uaid.called, True)
+            assert(self.router_mock.get_uaid.called)
         d.addBoth(verify_deliver)
         return d
 
@@ -410,7 +411,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         def verify_deliver(result):
             ok_(result, RouterResponse)
             eq_(result.status_code, 202)
-            eq_(self.router_mock.clear_node.called, True)
+            assert(self.router_mock.clear_node.called)
             nk = simple.node_key(router_data["node_id"])
             eq_(simple.dead_cache.get(nk), True)
         d.addBoth(verify_deliver)
@@ -434,7 +435,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         def verify_deliver(result):
             ok_(result, RouterResponse)
             eq_(result.status_code, 202)
-            eq_(self.router_mock.clear_node.called, True)
+            assert(self.router_mock.clear_node.called)
             nk = simple.node_key(router_data["node_id"])
             eq_(simple.dead_cache.get(nk), True)
         d.addBoth(verify_deliver)
@@ -495,3 +496,72 @@ class SimplePushRouterTestCase(unittest.TestCase):
         self.assertRaises(RouterException,
                           self.router._send_wake, wake_data)
         return
+
+class WebPushRouterTestCase(unittest.TestCase):
+    def setUp(self):
+        settings = AutopushSettings(
+            hostname="localhost",
+            statsd_host=None,
+        )
+
+        headers = {
+            "content-encoding": "aes128",
+            "encryption": "awesomecrypto",
+            "encryption-key": "niftykey"
+        }
+        self.router = WebPushRouter(settings, {})
+        self.notif = Notification(10, "data", dummy_chid, headers)
+        mock_result = Mock(spec=gcmclient.gcm.Result)
+        mock_result.canonical = dict()
+        mock_result.failed = dict()
+        mock_result.not_registered = dict()
+        mock_result.needs_retry.return_value = False
+        self.router_mock = settings.router = Mock(spec=Router)
+        self.message_mock = settings.message = Mock(spec=Message)
+        self.agent_mock = Mock(spec=settings.agent)
+        settings.agent = self.agent_mock
+        self.router.metrics = Mock()
+
+    def test_route_to_busy_node_saves_looks_up_and_sends_check_201(self):
+        self.agent_mock.request.return_value = response_mock = Mock()
+        response_mock.addCallback.return_value = response_mock
+        type(response_mock).code = PropertyMock(
+            side_effect=MockAssist([202, 200]))
+        self.message_mock.store_message.return_value = True
+        self.message_mock.all_channels.return_value = [dummy_chid]
+        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
+        self.router_mock.get_uaid.return_value = router_data
+        self.router.message_id = uuid.uuid4().hex
+
+        d = self.router.route_notification(self.notif, router_data)
+
+        def verify_deliver(result):
+            ok_(result, RouterResponse)
+            eq_(result.status_code, 201)
+            self.router.metrics.increment.assert_called_with(
+                "router.broadcast.save_hit"
+            )
+            ok_("Location" in result.headers)
+        d.addCallback(verify_deliver)
+        return d
+
+    def test_route_with_invalid_channel_id(self):
+        self.agent_mock.request.return_value = response_mock = Mock()
+        response_mock.addCallback.return_value = response_mock
+        type(response_mock).code = PropertyMock(
+            side_effect=MockAssist([202, 200]))
+        self.message_mock.store_message.return_value = True
+        self.message_mock.all_channels.return_value = []
+        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
+        self.router_mock.get_uaid.return_value = router_data
+        self.router.message_id = uuid.uuid4().hex
+
+        d = self.router.route_notification(self.notif, router_data)
+
+        def verify_deliver(fail):
+            exc = fail.value
+            ok_(exc, RouterException)
+            eq_(exc.status_code, 404)
+            self.flushLoggedErrors()
+        d.addBoth(verify_deliver)
+        return d

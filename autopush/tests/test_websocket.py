@@ -20,9 +20,12 @@ from autopush.settings import AutopushSettings
 from autopush.websocket import (
     SimplePushServerProtocol,
     RouterHandler,
+    Notification,
     NotificationHandler,
     WebSocketServerProtocol,
 )
+
+from .test_router import MockAssist
 
 
 mock_dynamodb2 = mock_dynamodb2()
@@ -51,7 +54,11 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.sendClose = self.close_mock = Mock()
         self.proto.transport = self.transport_mock = Mock()
         self.proto.closeHandshakeTimeout = 0
+        self.proto._force_retry = self.proto.force_retry
         settings.metrics = Mock(spec=Metrics)
+
+    def tearDown(self):
+        self.proto.force_retry = self.proto._force_retry
 
     def _connect(self):
         # Do not call agent
@@ -109,8 +116,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.sendClose = self.orig_close
         self._connect()
         self.proto._sendAutoPing()
-        eq_(mock_reactor.callLater.called, True)
-        eq_(WebSocketServerProtocol.sendClose.called, True)
+        assert(mock_reactor.callLater.called)
+        assert(WebSocketServerProtocol.sendClose.called)
 
     @patch("autopush.websocket.reactor")
     def test_autoping_uaid_not_in_clients(self, mock_reactor):
@@ -121,8 +128,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         self.proto.uaid = str(uuid.uuid4())
         self.proto._sendAutoPing()
-        eq_(mock_reactor.callLater.called, True)
-        eq_(WebSocketServerProtocol.sendClose.called, True)
+        assert(mock_reactor.callLater.called)
+        assert(WebSocketServerProtocol.sendClose.called)
 
     @patch("autopush.websocket.reactor")
     def test_nuke_connection(self, mock_reactor):
@@ -293,6 +300,41 @@ class WebsocketTestCase(unittest.TestCase):
         def wait_for_agent_call():  # pragma: nocover
             if not mock_agent.mock_calls:
                 reactor.callLater(0.1, wait_for_agent_call)
+                return
+
+            self.flushLoggedErrors()
+            d.callback(True)
+        reactor.callLater(0.1, wait_for_agent_call)
+        return d
+
+    def test_close_with_delivery_cleanup_using_webpush(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.ap_settings.clients["asdf"] = self.proto
+        self.proto.use_webpush = True
+        chid = str(uuid.uuid4())
+
+        # Stick an un-acked direct notification in
+        self.proto.direct_updates[chid] = [
+            Notification(channel_id=chid, version=str(uuid.uuid4()),
+                         headers={}, data="blah")
+        ]
+
+        # Apply some mocks
+        self.proto.ap_settings.message.store_message = Mock()
+        self.proto.ap_settings.router.get_uaid = mock_get = Mock()
+        self.proto.ap_settings.agent = mock_agent = Mock()
+        mock_get.return_value = dict(node_id="localhost:2000")
+
+        # Close the connection
+        self.proto.onClose(True, None, None)
+
+        d = Deferred()
+
+        def wait_for_agent_call():  # pragma: nocover
+            if not mock_agent.mock_calls:
+                reactor.callLater(0.1, wait_for_agent_call)
+                return
 
             self.flushLoggedErrors()
             d.callback(True)
@@ -363,6 +405,16 @@ class WebsocketTestCase(unittest.TestCase):
 
         def check_result(msg):
             eq_(msg["status"], 200)
+        return self._check_response(check_result)
+
+    def test_hello_with_webpush(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            assert("use_webpush" in msg)
         return self._check_response(check_result)
 
     def test_hello_with_uaid(self):
@@ -522,6 +574,29 @@ class WebsocketTestCase(unittest.TestCase):
         d.addErrback(fail2)
         ok_(d is not None)
 
+    def test_force_retry(self):
+        self._connect()
+
+        class Fail(object):
+            def __init__(self):
+                self.tries = 0
+
+            def __call__(self):
+                if self.tries == 0:
+                    self.tries += 1
+                    raise Exception("oops")
+                else:
+                    return True
+
+        def check_result(result):
+            eq_(result, True)
+            self.flushLoggedErrors()
+
+        d = self.proto.force_retry(Fail())
+        d.addCallback(check_result)
+        ok_(d is not None)
+        return d
+
     def test_register(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -547,6 +622,23 @@ class WebsocketTestCase(unittest.TestCase):
 
         f = self._check_response(check_hello_result)
         f.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_register_webpush(self):
+        self._connect()
+        self.proto.use_webpush = True
+        chid = str(uuid.uuid4())
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.ap_settings.message.register_channel = Mock()
+
+        d = Deferred()
+
+        def check_register_result(msg):
+            assert self.proto.ap_settings.message.register_channel.called
+            d.callback(True)
+
+        res = self.proto.process_register(dict(channelID=chid))
+        res.addCallback(check_register_result)
         return d
 
     def test_register_no_chid(self):
@@ -684,6 +776,14 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(ff.sendClose.call_count, 1)
         eq_(self.proto.sendClose.call_count, 0)
 
+    def test_unregister_with_webpush(self):
+        chid = str(uuid.uuid4())
+        self._connect()
+        self.proto.use_webpush = True
+        self.proto.force_retry = Mock()
+        self.proto.process_unregister(dict(channelID=chid))
+        assert self.proto.force_retry.called
+
     def test_ws_unregister(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -761,15 +861,17 @@ class WebsocketTestCase(unittest.TestCase):
             table.delete_item = delete
             raise Exception("Connection problem?")
 
-        table.delete_item = Mock(side_effect=raise_exception)
+        table.delete_item = MockAssist([raise_exception, True])
         self._send_message(dict(messageType="unregister",
                                 channelID=chid))
 
         def wait_for_times():  # pragma: nocover
             if len(mock_log.mock_calls) > 0:
-                eq_(len(mock_log.mock_calls), 1)
-                d.callback(True)
-                return
+                try:
+                    eq_(len(mock_log.mock_calls), 1)
+                finally:
+                    d.callback(True)
+                    return
             reactor.callLater(0.1, wait_for_times)
 
         reactor.callLater(0.1, wait_for_times)
@@ -781,7 +883,7 @@ class WebsocketTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
 
         # Send ourself a notification
-        payload = [{"channelID": chid, "version": 10}]
+        payload = {"channelID": chid, "version": 10}
         self.proto.send_notifications(payload)
 
         # Check the call result
@@ -800,6 +902,24 @@ class WebsocketTestCase(unittest.TestCase):
         # Verify outgoing queue in sent directly
         eq_(len(self.proto.direct_updates), 1)
 
+    def test_notification_with_webpush(self):
+        self._connect()
+        self.proto.use_webpush = True
+        self.proto.uaid = str(uuid.uuid4())
+
+        chid = str(uuid.uuid4())
+        self.proto.direct_updates[chid] = []
+
+        # Send ourself a notification
+        payload = {"channelID": chid, "version": 10, "data": "bleh",
+                   "headers": {}}
+        self.proto.send_notifications(payload)
+
+        # Check the call result
+        args = json.loads(self.send_mock.call_args[0][0])
+        eq_(args, {"messageType": "notification", "channelID": chid,
+                   "data": "bleh", "version": 10, "headers": {}})
+
     def test_notification_avoid_newer_delivery(self):
         self._connect()
         self.proto.uaid = str(uuid.uuid4())
@@ -808,7 +928,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.updates_sent[chid] = 14
 
         # Send ourself a notification
-        payload = [{"channelID": chid, "version": 10}]
+        payload = {"channelID": chid, "version": 10}
         self.proto.send_notifications(payload)
 
         # Check the call result
@@ -855,7 +975,6 @@ class WebsocketTestCase(unittest.TestCase):
 
         # stick a notification to ack in
         self.proto.direct_updates[chid] = 12
-        self.proto.updates_sent[chid] = 12
 
         def check_hello_result(msg):
             eq_(msg["status"], 200)
@@ -873,6 +992,56 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
+    def test_ack_with_webpush_direct(self):
+        self._connect()
+        chid = str(uuid.uuid4())
+        self.proto.use_webpush = True
+        self.proto.direct_updates[chid] = [
+            Notification(version="bleh", headers={}, data="meh",
+                         channel_id=chid)
+        ]
+
+        self.proto.ack_update(dict(
+            channelID=chid,
+            version="bleh"
+        ))
+
+    def test_ack_with_webpush_from_storage(self):
+        self._connect()
+        chid = str(uuid.uuid4())
+        self.proto.use_webpush = True
+        self.proto.direct_updates[chid] = []
+        self.proto.updates_sent[chid] = [
+            Notification(version="bleh", headers={}, data="meh",
+                         channel_id=chid)
+        ]
+
+        mock_defer = Mock()
+        self.proto.force_retry = Mock(return_value=mock_defer)
+        self.proto.ack_update(dict(
+            channelID=chid,
+            version="bleh"
+        ))
+        assert self.proto.force_retry.called
+        assert mock_defer.addBoth.called
+
+    def test_ack_remove(self):
+        self._connect()
+        chid = str(uuid.uuid4())
+        notif = Notification(version="bleh", headers={}, data="meh",
+                             channel_id=chid)
+        self.proto.updates_sent[chid] = [notif]
+        self.proto._handle_webpush_update_remove(None, chid, notif)
+        eq_(self.proto.updates_sent[chid], [])
+
+    def test_ack_remove_not_set(self):
+        self._connect()
+        chid = str(uuid.uuid4())
+        notif = Notification(version="bleh", headers={}, data="meh",
+                             channel_id=chid)
+        self.proto.updates_sent[chid] = None
+        self.proto._handle_webpush_update_remove(None, chid, notif)
+
     def test_ack_fails_first_time(self):
         self._connect()
         self.proto.uaid = str(uuid.uuid4())
@@ -882,11 +1051,7 @@ class WebsocketTestCase(unittest.TestCase):
                 self.tries = 0
 
             def __call__(self, *args, **kwargs):
-                if self.tries == 0:
-                    self.tries += 1
-                    return False
-                else:
-                    return True
+                return self.tries != 0
 
         self.proto.ap_settings.storage = Mock(
             **{"delete_notification.side_effect": FailFirst()})
@@ -1018,6 +1183,19 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto._notification_fetch.addBoth(check_error)
         return d
 
+    def test_process_notif_doesnt_run_with_webpush_outstanding(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.use_webpush = True
+        self.proto.updates_sent["chid"] = [
+            Notification(channel_id="chid", data="bleh", headers={},
+                         version="now")
+        ]
+        self.proto.deferToLater = Mock()
+        self.proto.process_notifications()
+        assert self.proto.deferToLater.called
+        eq_(self.proto._notification_fetch, None)
+
     def test_process_notif_doesnt_run_when_paused(self):
         self._connect()
         self.proto.uaid = str(uuid.uuid4())
@@ -1040,6 +1218,28 @@ class WebsocketTestCase(unittest.TestCase):
         with patch("autopush.websocket.reactor") as mr:
             self.proto.finish_notifications(None)
             ok_(mr.callLater.mock_calls > 0)
+
+    def test_notif_finished_with_webpush(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.use_webpush = True
+        self.proto.deferToLater = Mock()
+        self.proto._check_notifications = True
+        self.proto.finish_notifications(None)
+        assert self.proto.deferToLater.called
+
+    def test_notif_finished_with_webpush_with_notifications(self):
+        self._connect()
+        self.proto.uaid = str(uuid.uuid4())
+        self.proto.use_webpush = True
+        self.proto._check_notifications = True
+        self.proto.process_notifications = Mock()
+        self.proto.updates_sent["asdf"] = []
+
+        self.proto.finish_webpush_notifications([
+            dict(chidmessageid="asdf:fdsa", headers={}, data="bleh")
+        ])
+        assert self.proto.process_notifications.called
 
     def test_notification_results(self):
         # Populate the database for ourself
@@ -1285,4 +1485,4 @@ class NotificationHandlerTestCase(unittest.TestCase):
         mock_client.connected_at = now
         mock_client.sendClose = Mock()
         self.handler.delete(uaid, "", now)
-        eq_(mock_client.sendClose.called, True)
+        assert(mock_client.sendClose.called)

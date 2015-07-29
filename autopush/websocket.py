@@ -32,6 +32,7 @@ not be publicly exposed.
 import json
 import time
 import uuid
+from collections import defaultdict, namedtuple
 from functools import wraps
 
 import cyclone.web
@@ -85,6 +86,11 @@ def log_exception(func):
     return wrapper
 
 
+class Notification(namedtuple("Notification",
+                              "channel_id data headers version")):
+    """Parsed notification from the request"""
+
+
 class SimplePushServerProtocol(WebSocketServerProtocol):
     """Main Websocket Connection Protocol"""
     implements(IProducer)
@@ -131,6 +137,25 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             except:
                 d.errback(failure.Failure())
         reactor.callLater(when, f)
+        return d
+
+    def force_retry(self, func, *args, **kwargs):
+        """Forcefully retry a function in a thread until it doesn't error
+
+        Note that this does not use ``self.deferToThread``, so this will
+        continue to retry even if the client drops.
+
+        """
+        def wrapper(result, *w_args, **w_kwargs):
+            if isinstance(result, failure.Failure):
+                # This is an exception, log it
+                self.log_err(result)
+
+            d = deferToThread(func, *args, **kwargs)
+            d.addErrback(wrapper)
+            return d
+        d = deferToThread(func, *args, **kwargs)
+        d.addErrback(wrapper)
         return d
 
     @property
@@ -233,21 +258,23 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.uaid = None
         self.last_ping = 0
         self.check_storage = False
+        self.use_webpush = False
         self.connected_at = ms_time()
         self.wake_timeout = self.ap_settings.wake_timeout
         self.idle = ms_time()
         self.idler = None
 
         self._check_notifications = False
+        self._more_notifications = False
 
         # Hanger for common actions we defer
         self._notification_fetch = None
         self._register = None
 
-        # Reflects updates sent that haven't been ack'd
+        # Reflects Notification's sent that haven't been ack'd
         self.updates_sent = {}
 
-        # Track notifications we don't need to delete separately
+        # Track Notification's we don't need to delete separately
         self.direct_updates = {}
 
     #############################################################
@@ -350,15 +377,12 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Attempt to deliver any notifications not originating from storage
         if self.direct_updates:
             defers = []
-            for chid, version in self.direct_updates.items():
-                d = deferToThread(
-                    self.ap_settings.storage.save_notification,
-                    self.uaid,
-                    chid,
-                    version
-                )
-                d.addErrback(self.log_err)
-                defers.append(d)
+            if self.use_webpush:
+                for notifs in self.direct_updates.values():
+                    defers.extend(map(self._save_webpush_notif, notifs))
+            else:
+                for chid, version in self.direct_updates.items():
+                    defers.append(self._save_simple_notif(chid, version))
 
             # Tag on the notifier once everything has been stored
             dl = DeferredList(defers)
@@ -367,6 +391,26 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Delete and remove remaining dicts and lists
         del self.direct_updates
         del self.updates_sent
+
+    def _save_webpush_notif(self, notif):
+        """Save a direct_update webpush style notification"""
+        return deferToThread(
+            self.ap_settings.message.store_message,
+            uaid=self.uaid,
+            channel_id=notif.channel_id,
+            data=notif.data,
+            headers=notif.headers,
+            message_id=notif.version,
+        ).addErrback(self.log_err)
+
+    def _save_simple_notif(self, channel_id, version):
+        """Save a simplepush notification"""
+        return deferToThread(
+            self.ap_settings.storage.save_notification,
+            uaid=self.uaid,
+            chid=channel_id,
+            version=version,
+        ).addErrback(self.log_err)
 
     def _lookup_node(self, results):
         """Looks up the node to send a notify for it to check storage if
@@ -426,6 +470,12 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return self.returnError("hello", "duplicate hello", 401)
 
         uaid = data.get("uaid")
+        self.use_webpush = data.get("use_webpush", False)
+        router_type = "webpush" if self.use_webpush else "simplepush"
+        if self.use_webpush:
+            self.updates_sent = defaultdict(lambda: [])
+            self.direct_updates = defaultdict(lambda: [])
+
         _, uaid = validate_uaid(uaid)
         self.uaid = uaid
         # Check for the special wakeup commands
@@ -454,6 +504,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             uaid=self.uaid,
             node_id=self.ap_settings.router_url,
             connected_at=self.connected_at,
+            router_type=router_type,
         )
         # NOTE: in tests, storing a value of None results in a corrupted
         # return value of True. (This appears to have to do with a bug in
@@ -515,6 +566,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         """callback for successful hello message, that sends hello reply"""
         self._register = None
         msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}
+        if self.use_webpush:
+            msg["use_webpush"] = True
         self.ap_settings.clients[self.uaid] = self
         self.sendJSON(msg)
         self.metrics.increment("updates.client.hello", tags=self.base_tags)
@@ -531,16 +584,26 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.deferToLater(1, self.process_notifications)
             return
 
+        # Webpush with any outstanding storage-based must all be cleared
+        if self.use_webpush and any(self.updates_sent.values()):
+            self.deferToLater(1, self.process_notifications)
+            return
+
         # Are we already running?
         if self._notification_fetch:
             # Cancel the prior, last one wins
             self._notification_fetch.cancel()
 
         self._check_notifications = False
+        self._more_notifications = True
 
         # Prevent repeat calls
-        d = self.deferToThread(self.ap_settings.storage.fetch_notifications,
-                               self.uaid)
+        if self.use_webpush:
+            d = self.deferToThread(self.ap_settings.message.fetch_messages,
+                                   self.uaid)
+        else:
+            d = self.deferToThread(
+                self.ap_settings.storage.fetch_notifications, self.uaid)
         d.addErrback(self.error_notifications)
         d.addCallback(self.finish_notifications)
         self._notification_fetch = d
@@ -559,6 +622,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if self.paused:
             self.deferToLater(1, self.process_notifications)
 
+        # Process notifications differently based on webpush style or not
+        if self.use_webpush:
+            return self.finish_webpush_notifications(notifs)
+
         updates = []
         notifs = notifs or []
         # Track outgoing, screen out things we've seen that weren't
@@ -566,12 +633,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         for s in notifs:
             chid = s['chid']
             version = int(s['version'])
-            if self.updates_sent.get(chid, 0) >= version:
+            if self._newer_notification_sent(chid, version):
                 continue
-            direct_notif = self.direct_updates.get(chid)
-            if direct_notif and direct_notif >= version:
-                continue
-            elif direct_notif:
+            if chid in self.direct_updates:
                 # We're going to send a newer one, ignore the direct older
                 # one for acks
                 del self.direct_updates[chid]
@@ -587,6 +651,36 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if self._check_notifications:
             self._check_notifications = False
             self.deferToLater(1, self.process_notifications)
+
+    def finish_webpush_notifications(self, notifs):
+        """webpush notification processor"""
+        if not notifs:
+            # No more notifications, we can stop.
+            self._more_notifications = False
+            if self._check_notifications:
+                self._check_notifications = False
+                self.deferToLater(1, self.process_notifications)
+            return
+
+        # Send out all the notifications
+        for notif in notifs:
+            # Split off the chid and message id
+            chid, version = notif["chidmessageid"].split(":")
+            msg = dict(
+                messageType="notification",
+                channelID=chid,
+                version=version,
+                data=notif["data"],
+                headers=notif["headers"],
+            )
+            self.updates_sent[chid].append(
+                Notification(channel_id=chid, version=version,
+                             data=notif["data"], headers=notif["headers"])
+            )
+            self.sendJSON(msg)
+
+            # Trigger for another fetch (won't run till notifs are cleared)
+            self.process_notifications()
 
     def _send_ping(self):
         """Helper for ping sending that tracks when the ping was sent"""
@@ -642,6 +736,15 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def finish_register(self, endpoint, chid):
         """callback for successful endpoint creation, sends register reply"""
+        if self.use_webpush:
+            d = self.deferToThread(self.ap_settings.message.register_channel,
+                                   self.uaid, chid)
+            d.addCallback(self.send_register_finish, endpoint, chid)
+            return d
+        else:
+            self.send_register_finish(None, endpoint, chid)
+
+    def send_register_finish(self, result, endpoint, chid):
         self.transport.resumeProducing()
         msg = {"messageType": "register",
                "channelID": chid,
@@ -666,23 +769,28 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.metrics.increment("updates.client.unregister",
                                tags=self.base_tags)
 
-        # Delete any record from storage, we don't wait for this
-        d = self.deferToThread(self.ap_settings.storage.delete_notification,
-                               self.uaid, chid)
-        d.addErrback(self.force_delete, chid)
+        # Clear out any existing tracked messages for this channel
+        if self.use_webpush:
+            self.direct_updates[chid] = []
+            self.updates_sent[chid] = []
+        else:
+            self.direct_updates.pop(chid, None)
+            self.updates_sent.pop(chid, None)
+
+        if self.use_webpush:
+            # Unregister the channel, delete all messages stored
+            self.force_retry(self.ap_settings.message.unregister_channel,
+                             self.uaid, chid)
+            self.force_retry(
+                self.ap_settings.message.delete_messages_for_channel,
+                self.uaid, chid)
+        else:
+            # Delete any record from storage, we don't wait for this
+            self.force_retry(self.ap_settings.storage.delete_notification,
+                             self.uaid, chid)
+
         data["status"] = 200
         self.sendJSON(data)
-
-    def force_delete(self, result, chid):
-        """Forces another delete call through until it works"""
-        if isinstance(result, failure.Failure):
-            # This is an exception, log it
-            self.log_err(result)
-
-        d = self.deferToThread(self.ap_settings.storage.delete_notification,
-                               self.uaid, chid)
-        d.addErrback(self.force_delete, chid)
-        return d
 
     def ack_update(self, update):
         """Helper function for tracking ack'd updates
@@ -696,25 +804,53 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if not chid or not version:
             return
 
-        # If its a direct update, remove it and return
-        if self.direct_updates.get(chid) == version:
-            del self.direct_updates[chid]
+        if self.use_webpush:
+            return self._handle_webpush_ack(chid, version)
+        else:
+            return self._handle_simple_ack(chid, version)
+
+    def _handle_webpush_ack(self, chid, version):
+        """Handle clearing out a webpush ack"""
+        ver_filter = lambda x: x.version == version
+        found = filter(ver_filter, self.direct_updates[chid])
+        if found:
+            self.direct_updates[chid].remove(found[0])
             return
 
-        # Remove the update if version matches
-        if self.updates_sent.get(chid) == version:
+        found = filter(ver_filter, self.updates_sent[chid])
+        if found:
+            d = self.force_retry(self.ap_settings.message.delete_message,
+                                 self.uaid, chid, version)
+            # We don't remove the update until we know the delete ran
+            # This is because we don't use range queries on dynamodb and we
+            # need to make sure this notification is deleted from the db before
+            # we query it again (to avoid dupes).
+            d.addBoth(self._handle_webpush_update_remove, chid, found[0])
+
+    def _handle_webpush_update_remove(self, result, chid, notif):
+        """Handle clearing out the updates_sent
+
+        It's possible the client may leave before this runs, so this is
+        wrapped in a try/except in case the tear-down of self has started.
+
+        """
+        try:
+            self.updates_sent[chid].remove(notif)
+        except AttributeError:
+            pass
+
+    def _handle_simple_ack(self, chid, version):
+        """Handle clearing out a simple ack"""
+        if chid in self.direct_updates and \
+           self.direct_updates[chid] <= version:
+            del self.direct_updates[chid]
+            return
+        if chid in self.updates_sent and self.updates_sent[chid] <= version:
             del self.updates_sent[chid]
         else:
             return
-
-        # If we ack'd a notification that wasn't direct, delete it
-        # Note: Not using self.deferToThread because this should run even if
-        # the client dropped
-        d = deferToThread(self.ap_settings.storage.delete_notification,
-                          self.uaid, chid, version)
-        d.addCallback(self.check_ack, self.uaid, chid, version)
-        d.addErrback(self.log_err)
-        return d
+        return self.force_retry(self.ap_settings.storage.delete_notification,
+                                self.uaid, chid, version)
 
     def process_ack(self, data):
         """Process an ack message, delete notifications from storage if
@@ -733,18 +869,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         else:
             self.check_missed_notifications(None)
 
-    def check_ack(self, result, uaid, chid, version):
-        """Check that the delete call ran ok"""
-        if result:
-            return None
-
-        # Retry the operation and return its new deferred
-        d = deferToThread(self.ap_settings.storage.delete_notification, uaid,
-                          chid, version)
-        d.addCallback(self.check_ack, uaid, chid, version)
-        d.addErrback(self.log_err)
-        return d
-
     def check_missed_notifications(self, results, resume=False):
         """Check to see if notifications were missed"""
         if resume:
@@ -752,7 +876,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.transport.resumeProducing()
 
         # Should we check again?
-        if self._check_notifications:
+        if self._check_notifications or self._more_notifications:
             self.process_notifications()
 
     def bad_message(self, typ):
@@ -760,27 +884,40 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         msg = {"messageType": typ, "status": 401}
         self.sendJSON(msg)
 
+    def _newer_notification_sent(self, channel_id, version):
+        """Returns whether a newer channel_id/version has already been sent"""
+        return self.updates_sent.get(channel_id, 0) > version or \
+            self.direct_updates.get(channel_id, 0) > version
+
     ####################################
     # Utility function for external use
-    def send_notifications(self, updates):
+    def send_notifications(self, update):
         """Utility function for external use
 
         This function is called by the HTTP handler to deliver incoming
         notifications from an endpoint.
 
         """
-        toSend = []
-        for update in updates:
-            chid, version = update["channelID"], update["version"]
-            older = self.updates_sent.get(chid, 0) >= version or \
-                self.direct_updates.get(chid, 0) >= version
-            if not older:
-                # Otherwise we can record we sent this version
-                self.direct_updates[chid] = version
-                toSend.append(update)
+        chid, version = (update["channelID"], update["version"])
+        if not self.use_webpush and \
+           self._newer_notification_sent(chid, version):
+            return
 
-        if toSend:
-            msg = {"messageType": "notification", "updates": toSend}
+        if self.use_webpush:
+            self.direct_updates[chid].append(
+                Notification(channel_id=chid, version=version,
+                             data=update["data"], headers=update["headers"])
+            )
+            self.sendJSON(dict(
+                messageType="notification",
+                channelID=chid,
+                version=version,
+                data=update["data"],
+                headers=update["headers"],
+            ))
+        else:
+            self.direct_updates[chid] = version
+            msg = {"messageType": "notification", "updates": [update]}
             self.sendJSON(msg)
 
 
@@ -808,8 +945,8 @@ class RouterHandler(cyclone.web.RequestHandler):
             settings.metrics.increment("updates.router.busy")
             return self.write("Client busy.")
 
-        updates = json.loads(self.request.body)
-        client.send_notifications(updates)
+        update = json.loads(self.request.body)
+        client.send_notifications(update)
         settings.metrics.increment("updates.router.received")
         return self.write("Client accepted for delivery")
 

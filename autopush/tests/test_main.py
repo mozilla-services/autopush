@@ -157,6 +157,9 @@ class EndpointMainTestCase(unittest.TestCase):
             wake_pem = "test"
             wake_timeout = 10
             wake_server = "http://example.com"
+            message_tablename = "None"
+            message_read_throughput = 0
+            message_write_throughput = 0
 
         ap = make_settings(arg)
         eq_(ap.routers["gcm"].gcm.api_key, arg.gcm_apikey)

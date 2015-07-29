@@ -23,11 +23,13 @@ class RouterResponse(object):
     set.
 
     """
-    def __init__(self, status_code=200, response_body="", router_data=None):
+    def __init__(self, status_code=200, response_body="", router_data=None,
+                 headers={}):
         """Create a new RouterResponse"""
         self.status_code = status_code
         self.response_body = response_body
         self.router_data = router_data
+        self.headers = headers
 
 
 class IRouter(object):

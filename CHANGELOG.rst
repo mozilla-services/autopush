@@ -8,6 +8,11 @@ Autopush Changelog
 Features
 --------
 
+* Add WebPush style data delivery with crypto headers to connected clients.
+  Each message is stored independently in a new message table, with the version
+  and channel id still required to ack a message. The version is a UUID4 hex
+  which is also echo'd back to the AppServer as a Location URL per the current
+  WebPush spec (as of July 28th 2015).
 * Add Sphinx docs with ReadTheDocs publishing. Issue #98.
   This change also includes a slight Metrics refactoring with a IMetrics
   interface, and renames MetricSink -> SinkMetrics for naming consistency.
@@ -19,6 +24,7 @@ Bug Fixes
 ---------
 
 * Increase test coverage of utils for 100% test coverage.
+* Move all dependencies into requirements.txt and freeze them all explicitly.
 
 Internal
 --------

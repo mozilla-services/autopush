@@ -70,6 +70,16 @@ def add_shared_args(parser):
                         help="DynamoDB storage write throughput",
                         type=int, default=5,
                         env_var="STORAGE_WRITE_THROUGHPUT")
+    parser.add_argument('--message_tablename',
+                        help="DynamoDB Message Tablename", type=str,
+                        default="message", env_var="MESSAGE_TABLENAME")
+    parser.add_argument('--message_read_throughput',
+                        help="DynamoDB message read throughput",
+                        type=int, default=5, env_var="MESSAGE_READ_THROUGHPUT")
+    parser.add_argument('--message_write_throughput',
+                        help="DynamoDB message write throughput",
+                        type=int, default=5,
+                        env_var="MESSAGE_WRITE_THROUGHPUT")
     parser.add_argument('--router_read_throughput',
                         help="DynamoDB router read throughput",
                         type=int, default=5, env_var="ROUTER_READ_THROUGHPUT")
@@ -230,6 +240,9 @@ def make_settings(args, **kwargs):
         storage_tablename=args.storage_tablename,
         storage_read_throughput=args.storage_read_throughput,
         storage_write_throughput=args.storage_write_throughput,
+        message_tablename=args.message_tablename,
+        message_read_throughput=args.message_read_throughput,
+        message_write_throughput=args.message_write_throughput,
         router_read_throughput=args.router_read_throughput,
         router_write_throughput=args.router_write_throughput,
         resolve_hostname=args.resolve_hostname,
