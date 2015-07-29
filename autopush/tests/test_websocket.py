@@ -317,7 +317,7 @@ class WebsocketTestCase(unittest.TestCase):
         # Stick an un-acked direct notification in
         self.proto.direct_updates[chid] = [
             Notification(channel_id=chid, version=str(uuid.uuid4()),
-                         headers={}, data="blah")
+                         headers={}, data="blah", ttl=200)
         ]
 
         # Apply some mocks
@@ -891,7 +891,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Send ourself a notification
         payload = {"channelID": chid, "version": 10, "data": "bleh",
-                   "headers": {}}
+                   "headers": {}, "ttl": 20}
         self.proto.send_notifications(payload)
 
         # Check the call result
@@ -977,7 +977,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.use_webpush = True
         self.proto.direct_updates[chid] = [
             Notification(version="bleh", headers={}, data="meh",
-                         channel_id=chid)
+                         channel_id=chid, ttl=200)
         ]
 
         self.proto.ack_update(dict(
@@ -992,7 +992,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.direct_updates[chid] = []
         self.proto.updates_sent[chid] = [
             Notification(version="bleh", headers={}, data="meh",
-                         channel_id=chid)
+                         channel_id=chid, ttl=200)
         ]
 
         mock_defer = Mock()
@@ -1008,7 +1008,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         chid = str(uuid.uuid4())
         notif = Notification(version="bleh", headers={}, data="meh",
-                             channel_id=chid)
+                             channel_id=chid, ttl=200)
         self.proto.updates_sent[chid] = [notif]
         self.proto._handle_webpush_update_remove(None, chid, notif)
         eq_(self.proto.updates_sent[chid], [])
@@ -1017,7 +1017,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         chid = str(uuid.uuid4())
         notif = Notification(version="bleh", headers={}, data="meh",
-                             channel_id=chid)
+                             channel_id=chid, ttl=200)
         self.proto.updates_sent[chid] = None
         self.proto._handle_webpush_update_remove(None, chid, notif)
 
@@ -1168,7 +1168,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.use_webpush = True
         self.proto.updates_sent["chid"] = [
             Notification(channel_id="chid", data="bleh", headers={},
-                         version="now")
+                         version="now", ttl=200)
         ]
         self.proto.deferToLater = Mock()
         self.proto.process_notifications()
@@ -1216,7 +1216,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.updates_sent["asdf"] = []
 
         self.proto.finish_webpush_notifications([
-            dict(chidmessageid="asdf:fdsa", headers={}, data="bleh")
+            dict(chidmessageid="asdf:fdsa", headers={}, data="bleh", ttl=20)
         ])
         assert self.proto.process_notifications.called
 

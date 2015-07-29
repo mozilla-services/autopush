@@ -86,7 +86,7 @@ def log_exception(func):
 
 
 class Notification(namedtuple("Notification",
-                              "channel_id data headers version")):
+                              "channel_id data headers version ttl")):
     """Parsed notification from the request"""
 
 
@@ -385,6 +385,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             data=notif.data,
             headers=notif.headers,
             message_id=notif.version,
+            ttl=notif.ttl,
         ).addErrback(self.log_err)
 
     def _save_simple_notif(self, channel_id, version):
@@ -631,7 +632,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             )
             self.updates_sent[chid].append(
                 Notification(channel_id=chid, version=version,
-                             data=notif["data"], headers=notif["headers"])
+                             data=notif["data"], headers=notif["headers"],
+                             ttl=notif["ttl"])
             )
             self.sendJSON(msg)
 
@@ -860,7 +862,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if self.use_webpush:
             self.direct_updates[chid].append(
                 Notification(channel_id=chid, version=version,
-                             data=update["data"], headers=update["headers"])
+                             data=update["data"], headers=update["headers"],
+                             ttl=update["ttl"])
             )
             self.sendJSON(dict(
                 messageType="notification",
