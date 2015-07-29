@@ -497,6 +497,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
                           self.router._send_wake, wake_data)
         return
 
+
 class WebPushRouterTestCase(unittest.TestCase):
     def setUp(self):
         settings = AutopushSettings(

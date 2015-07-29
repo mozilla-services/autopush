@@ -81,7 +81,7 @@ class SimpleRouter(object):
         except (TypeError, KeyError):
             # No UDP info found, ignoring.
             pass
-        router, storage = self.ap_settings.router, self.ap_settings.storage
+        router = self.ap_settings.router
 
         # Preflight check, hook used by webpush to verify channel id
         yield self.preflight_check(uaid, notification.channel_id)
