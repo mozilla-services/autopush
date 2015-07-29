@@ -107,6 +107,27 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
 
+    def test_uaid_lookup_results_bad_ttl(self):
+        fresult = dict(router_type="test")
+        frouter = Mock(spec=Router)
+        frouter.route_notification = Mock()
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.request_mock.headers["ttl"] = "woops"
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.endpoint.ap_settings.routers["test"] = frouter
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            assert(frouter.route_notification.called)
+            args, kwargs = frouter.route_notification.call_args
+            notif = args[0]
+            assert(notif.ttl, 0)
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
     def test_uaid_lookup_no_crypto_headers(self):
         fresult = dict(router_type="test")
         frouter = Mock(spec=Router)

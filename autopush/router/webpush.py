@@ -91,5 +91,5 @@ class WebPushRouter(SimpleRouter):
             data=notification.data,
             headers=self._crypto_headers(notification),
             message_id=notification.version,
-            ttl=notification.ttl,
+            ttl=notification.ttl+int(time.time()),
         )

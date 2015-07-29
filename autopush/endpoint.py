@@ -408,7 +408,10 @@ class EndpointHandler(AutoendpointHandler):
             version = uuid.uuid4().hex
             data = self.request.body
 
-        ttl = self.request.headers.get("TTL", 0)
+        try:
+            ttl = int(self.request.headers.get("ttl", "0"))
+        except ValueError:
+            ttl = 0
         if data and len(data) > self.ap_settings.max_data:
             self.set_status(401)
             log.msg("Data too large", **self._client_info())

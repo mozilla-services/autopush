@@ -1,5 +1,4 @@
 """Database Interaction"""
-import time
 import uuid
 from functools import wraps
 
@@ -272,7 +271,7 @@ class Message(object):
             chidmessageid="%s:%s" % (channel_id, message_id),
             data=data,
             headers=headers,
-            ttl=ttl+int(time.time()),
+            ttl=ttl,
         ))
         return True
 
