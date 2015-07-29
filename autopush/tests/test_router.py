@@ -467,7 +467,7 @@ class WebPushRouterTestCase(unittest.TestCase):
             statsd_host=None,
         )
 
-        headers = {
+        self.headers = headers = {
             "content-encoding": "aes128",
             "encryption": "awesomecrypto",
             "encryption-key": "niftykey"
@@ -506,6 +506,29 @@ class WebPushRouterTestCase(unittest.TestCase):
             )
             ok_("Location" in result.headers)
         d.addCallback(verify_deliver)
+        return d
+
+    def test_route_to_busy_node_with_ttl_zero(self):
+        notif = Notification(10, "data", dummy_chid, self.headers, 0)
+        self.agent_mock.request.return_value = response_mock = Mock()
+        response_mock.addCallback.return_value = response_mock
+        type(response_mock).code = PropertyMock(
+            side_effect=MockAssist([202, 200]))
+        self.message_mock.store_message.return_value = True
+        self.message_mock.all_channels.return_value = [dummy_chid]
+        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
+        self.router_mock.get_uaid.return_value = router_data
+        self.router.message_id = uuid.uuid4().hex
+
+        d = self.router.route_notification(notif, router_data)
+
+        def verify_deliver(fail):
+            exc = fail.value
+            ok_(exc, RouterResponse)
+            eq_(exc.status_code, 201)
+            eq_(len(self.router.metrics.increment.mock_calls), 0)
+            ok_("Location" not in exc.headers)
+        d.addBoth(verify_deliver)
         return d
 
     def test_route_with_invalid_channel_id(self):
