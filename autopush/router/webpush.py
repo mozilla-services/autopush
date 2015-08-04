@@ -44,7 +44,8 @@ class WebPushRouter(SimpleRouter):
 
     def _verify_channel(self, result, channel_id):
         if channel_id not in result:
-            raise RouterException("No such subscription", status_code=404)
+            raise RouterException("No such subscription", status_code=404,
+                                  log_exception=False)
 
     def preflight_check(self, uaid, channel_id):
         """Verifies this routing call can be done successfully"""
@@ -83,7 +84,8 @@ class WebPushRouter(SimpleRouter):
 
         """
         if notification.ttl == 0:
-            raise RouterException("Finished Routing", status_code=201)
+            raise RouterException("Finished Routing", status_code=201,
+                                  log_exception=False)
         return deferToThread(
             self.ap_settings.message.store_message,
             uaid=uaid,
