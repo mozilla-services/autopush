@@ -2,6 +2,15 @@
 Autopush Changelog
 ==================
 
+1.4.0 (**dev**)
+===============
+
+Features
+--------
+
+* Integrate simplepush_test smoke-test client with the main autopush test-suite
+  into the test-runner. Issue #119.
+
 1.3.1 (2015-08-04)
 ==================
 
