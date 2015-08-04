@@ -2,6 +2,16 @@
 Autopush Changelog
 ==================
 
+1.3.1 (**dev**)
+===============
+
+Bug Fixes
+---------
+
+* Fix RouterException to allow for non-logged responses. Change
+  RouterException's to only log actual exceptions that should be address in
+  bug-fixes. Issue #125.
+
 1.3.0 (2015-07-29)
 ==================
 

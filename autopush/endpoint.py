@@ -336,9 +336,7 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         """errBack for router failures"""
         fail.trap(RouterException)
         exc = fail.value
-        if exc.status_code < 200 or exc.status_code >= 300:
-            # Only log non-2XX responses, we sometimes have to throw one to
-            # stop processing even though its a 2XX response
+        if exc.log_exception:
             log.err(fail, **self._client_info())
         self.set_status(exc.status_code)
         self.write(exc.response_body)
