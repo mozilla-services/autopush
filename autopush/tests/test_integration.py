@@ -1,16 +1,31 @@
+import httplib
+import json
+import logging
 import os
+import random
 import signal
 import subprocess
+import time
+import urlparse
+import uuid
 from unittest.case import SkipTest
 
 import boto
 import psutil
+import websocket
+from nose.tools import eq_, ok_
 from twisted.trial import unittest
 from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.threads import deferToThread
 
+log = logging.getLogger(__name__)
 here_dir = os.path.abspath(os.path.dirname(__file__))
 root_dir = os.path.dirname(os.path.dirname(here_dir))
 moto_process = None
+
+import twisted.internet.base
+twisted.internet.base.DelayedCall.debug = True
 
 
 def setUp():
@@ -38,15 +53,179 @@ def tearDown():
         boto.config.remove_section(section)
 
 
-class TestIntegration(unittest.TestCase):
+class Client(object):
+    """Test Client"""
+    def __init__(self, url, use_webpush=False):
+        self.url = url
+        self.uaid = None
+        self.ws = None
+        self.use_webpush = use_webpush
+        self.channels = {}
+        self._crypto_key = """\
+keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
+"""
+
+    def __getattribute__(self, name):
+        # Python fun to turn all functions into deferToThread functions
+        f = object.__getattribute__(self, name)
+        if name.startswith("__"):
+            return f
+
+        if callable(f):
+            return lambda *args, **kwargs: deferToThread(f, *args, **kwargs)
+        else:
+            return f
+
+    def connect(self):
+        self.ws = websocket.create_connection(self.url)
+        return self.ws.connected
+
+    def hello(self):
+        if self.channels:
+            chans = self.channels.keys()
+        else:
+            chans = []
+        hello_dict = dict(messageType="hello", uaid=self.uaid or "",
+                          channelIDs=chans)
+        if self.use_webpush:
+            hello_dict["use_webpush"] = True
+        msg = json.dumps(hello_dict)
+        log.debug("Send: %s", msg)
+        self.ws.send(msg)
+        result = json.loads(self.ws.recv())
+        log.debug("Recv: %s", result)
+        if self.uaid and self.uaid != result["uaid"]:
+            log.debug("Mismatch on re-using uaid. Old: %s, New: %s",
+                      self.uaid, result["uaid"])
+            self.channels = {}
+        self.uaid = result["uaid"]
+        eq_(result["status"], 200)
+        return result
+
+    def register(self, chid=None):
+        chid = chid or str(uuid.uuid4())
+        msg = json.dumps(dict(messageType="register", channelID=chid))
+        log.debug("Send: %s", msg)
+        self.ws.send(msg)
+        result = json.loads(self.ws.recv())
+        log.debug("Recv: %s", result)
+        eq_(result["status"], 200)
+        eq_(result["channelID"], chid)
+        self.channels[chid] = result["pushEndpoint"]
+        return result
+
+    def unregister(self, chid):
+        msg = json.dumps(dict(messageType="unregister", channelID=chid))
+        log.debug("Send: %s", msg)
+        self.ws.send(msg)
+        result = json.loads(self.ws.recv())
+        log.debug("Recv: %s", result)
+        return result
+
+    def send_notification(self, channel=None, version=None, data=None,
+                          use_header=True, status=200, ttl=200):
+        if not self.channels:
+            raise Exception("No channels registered.")
+
+        if not channel:
+            channel = random.choice(self.channels.keys())
+
+        if channel not in self.channels:
+            raise Exception("Channel not present.")
+
+        endpoint = self.channels[channel]
+        url = urlparse.urlparse(endpoint)
+        http = None
+        if url.scheme == "https":
+            http = httplib.HTTPSConnection(url.netloc)
+        else:
+            http = httplib.HTTPConnection(url.netloc)
+
+        if self.use_webpush:
+            headers = {
+                "Content-Type": "application/octet-stream",
+                "Content-Encoding": "aesgcm-128",
+                "Encryption": self._crypto_key,
+                "Encryption-Key": 'keyid="a1"; key="JcqK-OLkJZlJ3sJJWstJCA"',
+                "TTL": str(ttl),
+            }
+            body = data or ""
+            method = "POST"
+            status = 201
+        else:
+            if data:
+                body = "version=%s&data=%s" % (version or "", data)
+            else:
+                body = "version=%s" % (version or "")
+            if use_header:
+                headers = {"Content-Type": "application/x-www-form-urlencoded"}
+            else:
+                headers = {}
+            method = "PUT"
+
+        log.debug("%s body: %s", method, body)
+        http.request(method, url.path, body, headers)
+        resp = http.getresponse()
+        log.debug("%s Response: %s", method, resp.read())
+        eq_(resp.status, status)
+        if self.use_webpush and ttl != 0:
+            assert(resp.getheader("Location", None) is not None)
+
+        # Pull the notification if connected
+        if self.ws and self.ws.connected:
+            result = json.loads(self.ws.recv())
+            return result
+
+    def get_notification(self, timeout=0.2):
+        self.ws.settimeout(timeout)
+        try:
+            d = self.ws.recv()
+            log.debug("Recv: %s", d)
+            return json.loads(d)
+        except:
+            return None
+
+    def ping(self):
+        log.debug("Send: %s", "{}")
+        self.ws.send("{}")
+        result = self.ws.recv()
+        log.debug("Recv: %s", result)
+        eq_(result, "{}")
+        return result
+
+    def ack(self, channel, version):
+        msg = json.dumps(dict(messageType="ack",
+                              updates=[dict(channelID=channel,
+                                            version=version)]))
+        log.debug("Send: %s", msg)
+        self.ws.send(msg)
+
+    def disconnect(self):
+        self.ws.send_close()
+        self.ws.close()
+        self.ws = None
+
+
+class IntegrationBase(unittest.TestCase):
     def setUp(self):
+        import cyclone.web
         from autobahn.twisted.websocket import WebSocketServerFactory
+        from autopush.main import skip_request_logging
+        from autopush.endpoint import (EndpointHandler, RegistrationHandler)
         from autopush.settings import AutopushSettings
-        from autopush.websocket import SimplePushServerProtocol
+        from autopush.websocket import (
+            SimplePushServerProtocol,
+            RouterHandler,
+            NotificationHandler,
+        )
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
+            endpoint_port="9020",
+            router_port="9030"
         )
+
+        # Websocket server
         factory = WebSocketServerFactory("ws://localhost:9010/")
         factory.protocol = SimplePushServerProtocol
         factory.protocol.ap_settings = settings
@@ -59,8 +238,161 @@ class TestIntegration(unittest.TestCase):
         settings.factory = factory
         self.websocket = reactor.listenTCP(9010, factory)
 
+        # Websocket HTTP router
+        # Internal HTTP notification router
+        r = RouterHandler
+        r.ap_settings = settings
+        n = NotificationHandler
+        n.ap_settings = settings
+        ws_site = cyclone.web.Application([
+            (r"/push/([^\/]+)", r),
+            (r"/notif/([^\/]+)(/([^\/]+))?", n),
+        ],
+            default_host=settings.router_hostname,
+            log_function=skip_request_logging
+        )
+        self.ws_website = reactor.listenTCP(9030, ws_site)
+
+        # Endpoint HTTP router
+        site = cyclone.web.Application([
+            (r"/push/([^\/]+)", EndpointHandler, dict(ap_settings=settings)),
+            # PUT /register/ => connect info
+            # GET /register/uaid => chid + endpoint
+            (r"/register(?:/(.+))?", RegistrationHandler,
+             dict(ap_settings=settings)),
+        ],
+            default_host=settings.hostname,
+            log_function=skip_request_logging
+        )
+        self.website = reactor.listenTCP(9020, site)
+        self._settings = settings
+
     def tearDown(self):
         self.websocket.stopListening()
+        self.website.stopListening()
+        self.ws_website.stopListening()
 
-    def test_basic(self):
-        pass
+        # Dirty reactor unless we shut down the cached connections
+        return self._settings.agent._pool.closeCachedConnections()
+
+    @inlineCallbacks
+    def quick_register(self, use_webpush=False):
+        client = Client("ws://localhost:9010/", use_webpush=use_webpush)
+        yield client.connect()
+        yield client.hello()
+        yield client.register()
+        returnValue(client)
+
+
+class TestSimple(IntegrationBase):
+    @inlineCallbacks
+    def test_delivery_while_disconnected(self):
+        client = yield self.quick_register()
+        yield client.disconnect()
+        self.assertTrue(client.channels)
+        chan = client.channels.keys()[0]
+        yield client.send_notification(status=202)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        self.assertTrue(result != {})
+        self.assertTrue(len(result["updates"]) == 1)
+        self.assertEquals(result["updates"][0]["channelID"], chan)
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_delivery_repeat_without_ack(self):
+        client = yield self.quick_register()
+        yield client.disconnect()
+        self.assertTrue(client.channels)
+        chan = client.channels.keys()[0]
+        yield client.send_notification(status=202)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        self.assertTrue(result != {})
+        self.assertTrue(len(result["updates"]) == 1)
+        self.assertEquals(result["updates"][0]["channelID"], chan)
+
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        self.assertTrue(result != {})
+        self.assertTrue(result["updates"] > 0)
+        self.assertEquals(result["updates"][0]["channelID"], chan)
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_direct_delivery_without_ack(self):
+        client = yield self.quick_register()
+        result = yield client.send_notification()
+        ok_(result != {})
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result2 = yield client.get_notification(timeout=5)
+        ok_(result2 != {})
+        update1 = result["updates"][0]
+        if 'data' in update1:
+            del update1["data"]
+        update2 = result2["updates"][0]
+        eq_(update1, update2)
+
+    @inlineCallbacks
+    def test_dont_deliver_acked(self):
+        client = yield self.quick_register()
+        yield client.disconnect()
+        self.assertTrue(client.channels)
+        chan = client.channels.keys()[0]
+        yield client.send_notification(status=202)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        update = result["updates"][0]
+        self.assertEquals(update["channelID"], chan)
+        yield client.ack(chan, update["version"])
+        yield client.disconnect()
+        time.sleep(0.2)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        eq_(result, None)
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_no_delivery_to_unregistered(self):
+        client = yield self.quick_register()
+        yield client.disconnect()
+        self.assertTrue(client.channels)
+        chan = client.channels.keys()[0]
+        yield client.send_notification(status=202)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        update = result["updates"][0]
+        self.assertEquals(update["channelID"], chan)
+
+        yield client.unregister(chan)
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        eq_(result, None)
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_deliver_version(self):
+        client = yield self.quick_register()
+        result = yield client.send_notification(version=12)
+        ok_(result is not None)
+        eq_(result["updates"][0]["version"], 12)
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_deliver_version_without_header(self):
+        client = yield self.quick_register()
+        result = yield client.send_notification(version=12, use_header=False)
+        ok_(result is not None)
+        eq_(result["updates"][0]["version"], 12)
+        yield client.disconnect()
