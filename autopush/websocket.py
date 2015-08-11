@@ -125,7 +125,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
             # Don't run if the deferred was cancelled already
             if d._cancelled:
-                d.errback(CancelledError)
                 return
             try:
                 result = func(*args, **kwargs)

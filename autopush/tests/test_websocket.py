@@ -557,6 +557,27 @@ class WebsocketTestCase(unittest.TestCase):
         d.addErrback(fail2)
         ok_(d is not None)
 
+    def test_deferToLater_cancel(self):
+        self._connect()
+
+        f = Deferred()
+
+        def dont_run():  # pragma: nocover
+            self.fail("This shouldn't run")
+
+        def trap_cancel(fail):
+            fail.trap(twisted.internet.defer.CancelledError)
+
+        def dont_run_callback(result):  # pragma: nocover
+            self.fail("Callback shouldn't run")
+
+        d = self.proto.deferToLater(0.2, dont_run)
+        d.addCallback(dont_run_callback)
+        d.addErrback(trap_cancel)
+        d.cancel()
+        reactor.callLater(0.2, lambda: f.callback(True))
+        return f
+
     def test_force_retry(self):
         self._connect()
 
