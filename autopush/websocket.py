@@ -101,10 +101,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def deferToThread(self, func, *args, **kwargs):
         """deferToThread helper that tracks defers outstanding"""
         d = deferToThread(func, *args, **kwargs)
-
-        def trapCancel(fail):
-            fail.trap(CancelledError)
-
         self._callbacks.append(d)
 
         def f(result):
@@ -112,17 +108,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                 self._callbacks.remove(d)
             return result
         d.addBoth(f)
-        d.addErrback(trapCancel)
         return d
 
     def deferToLater(self, when, func, *args, **kwargs):
         """deferToLater helper that tracks defers outstanding"""
         d = Deferred()
-
-        def trapCancel(fail):
-            fail.trap(CancelledError)
-
-        d.addErrback(trapCancel)
         self._callbacks.append(d)
 
         def f():
@@ -135,6 +125,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                 d.errback(failure.Failure())
         reactor.callLater(when, f)
         return d
+
+    def trap_cancel(self, fail):
+        fail.trap(CancelledError)
 
     def force_retry(self, func, *args, **kwargs):
         """Forcefully retry a function in a thread until it doesn't error
@@ -556,15 +549,15 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self._check_notifications = False
         self._more_notifications = True
 
-        # Prevent repeat calls
         if self.use_webpush:
             d = self.deferToThread(self.ap_settings.message.fetch_messages,
                                    self.uaid)
         else:
             d = self.deferToThread(
                 self.ap_settings.storage.fetch_notifications, self.uaid)
-        d.addErrback(self.error_notifications)
         d.addCallback(self.finish_notifications)
+        d.addErrback(self.trap_cancel)
+        d.addErrback(self.error_notifications)
         self._notification_fetch = d
 
     def error_notifications(self, fail):
@@ -580,6 +573,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         # Are we paused, try again later
         if self.paused:
             self.deferToLater(1, self.process_notifications)
+            return
 
         # Process notifications differently based on webpush style or not
         if self.use_webpush:

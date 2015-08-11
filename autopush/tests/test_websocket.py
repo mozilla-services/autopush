@@ -546,10 +546,10 @@ class WebsocketTestCase(unittest.TestCase):
         def fail():
             raise twisted.internet.defer.CancelledError
 
-        def fail2(fail):  # pragma: nocover
-            self.fail("Failed to trap error")
+        def fail2(fail):
+            self.assertTrue(fail)
 
-        def check_result(result):
+        def check_result(result):  # pragma: nocover
             pass
 
         d = self.proto.deferToLater(0, fail)
@@ -1136,28 +1136,16 @@ class WebsocketTestCase(unittest.TestCase):
 
         self.proto.ap_settings.storage = Mock(
             **{"fetch_notifications.side_effect": throw_error})
-        self.proto.process_notifications()
         self.proto._check_notifications = True
+        self.proto.log_err = Mock()
+        self.proto.process_notifications()
 
-        # Now replace process_notifications so it won't be
-        # run again
-        self.proto.process_notifications = Mock()
         d = Deferred()
-
-        def wait_for_process():
-            calls = self.proto.process_notifications.mock_calls
-            if len(calls) > 0:
-                self.flushLoggedErrors()
-                d.callback(True)
-            else:
-                reactor.callLater(0.1, wait_for_process)
 
         def check_error(result):
             eq_(self.proto._check_notifications, False)
-
-            # Now schedule the checker to wait for the next
-            # process_notifications call
-            reactor.callLater(0.1, wait_for_process)
+            ok_(self.proto.log_err.called)
+            d.callback(True)
 
         self.proto._notification_fetch.addBoth(check_error)
         return d
