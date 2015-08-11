@@ -841,8 +841,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             # Resume consuming ack's
             self.transport.resumeProducing()
 
-        # When using webpush, we don't check again unless we have no
-        # outstanding notifications
+        # When using webpush, we don't check again if we have outstanding
+        # notifications
         if self.use_webpush and any(self.updates_sent.values()):
                 return
 
