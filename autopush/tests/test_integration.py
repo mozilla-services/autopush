@@ -94,7 +94,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         self.ws.send(msg)
         result = json.loads(self.ws.recv())
         log.debug("Recv: %s", result)
-        if self.uaid and self.uaid != result["uaid"]:  # pragme: nocover
+        if self.uaid and self.uaid != result["uaid"]:  # pragma: nocover
             log.debug("Mismatch on re-using uaid. Old: %s, New: %s",
                       self.uaid, result["uaid"])
             self.channels = {}
@@ -130,7 +130,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         endpoint = self.channels[channel]
         url = urlparse.urlparse(endpoint)
         http = None
-        if url.scheme == "https":
+        if url.scheme == "https":  # pragma: nocover
             http = httplib.HTTPSConnection(url.netloc)
         else:
             http = httplib.HTTPConnection(url.netloc)
