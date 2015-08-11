@@ -267,9 +267,6 @@ class IntegrationBase(unittest.TestCase):
         self.website.stopListening()
         self.ws_website.stopListening()
 
-        # Dirty reactor unless we shut down the cached connections
-        return self._settings.agent._pool.closeCachedConnections()
-
     @inlineCallbacks
     def quick_register(self, use_webpush=False):
         client = Client("ws://localhost:9010/", use_webpush=use_webpush)
@@ -277,6 +274,13 @@ class IntegrationBase(unittest.TestCase):
         yield client.hello()
         yield client.register()
         returnValue(client)
+
+    @inlineCallbacks
+    def shut_down(self, client=None):
+        if client:
+            yield client.disconnect()
+        # Dirty reactor unless we shut down the cached connections
+        yield self._settings.agent._pool.closeCachedConnections()
 
 
 class TestSimple(IntegrationBase):
@@ -293,7 +297,7 @@ class TestSimple(IntegrationBase):
         self.assertTrue(result != {})
         self.assertTrue(len(result["updates"]) == 1)
         self.assertEquals(result["updates"][0]["channelID"], chan)
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_delivery_repeat_without_ack(self):
@@ -316,7 +320,7 @@ class TestSimple(IntegrationBase):
         self.assertTrue(result != {})
         self.assertTrue(result["updates"] > 0)
         self.assertEquals(result["updates"][0]["channelID"], chan)
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_direct_delivery_without_ack(self):
@@ -333,6 +337,7 @@ class TestSimple(IntegrationBase):
             del update1["data"]
         update2 = result2["updates"][0]
         eq_(update1, update2)
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_dont_deliver_acked(self):
@@ -353,7 +358,7 @@ class TestSimple(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         eq_(result, None)
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_no_delivery_to_unregistered(self):
@@ -374,7 +379,7 @@ class TestSimple(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         eq_(result, None)
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_deliver_version(self):
@@ -382,7 +387,7 @@ class TestSimple(IntegrationBase):
         result = yield client.send_notification(version=12)
         ok_(result is not None)
         eq_(result["updates"][0]["version"], 12)
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_deliver_version_without_header(self):
@@ -390,7 +395,7 @@ class TestSimple(IntegrationBase):
         result = yield client.send_notification(version=12, use_header=False)
         ok_(result is not None)
         eq_(result["updates"][0]["version"], 12)
-        yield client.disconnect()
+        yield self.shut_down(client)
 
 
 class TestData(IntegrationBase):
@@ -400,7 +405,7 @@ class TestData(IntegrationBase):
         result = yield client.send_notification(data="howdythere")
         ok_(result is not None)
         eq_(result["updates"][0]["data"], "howdythere")
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_data_delivery_without_header(self):
@@ -409,7 +414,7 @@ class TestData(IntegrationBase):
                                                 use_header=False)
         ok_(result is not None)
         eq_(result["updates"][0]["data"], "howdythere")
-        yield client.disconnect()
+        yield self.shut_down(client)
 
 
 class TestLoop(IntegrationBase):
@@ -418,13 +423,13 @@ class TestLoop(IntegrationBase):
         client = yield self.quick_register()
         result = yield client.send_notification()
         ok_(result != {})
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_can_ping(self):
         client = yield self.quick_register()
         yield client.ping()
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_uaid_resumption_on_reconnect(self):
@@ -437,7 +442,7 @@ class TestLoop(IntegrationBase):
         ok_(result != {})
         ok_(result["updates"] > 0)
         eq_(result["updates"][0]["channelID"], chan)
-        yield client.disconnect()
+        yield self.shut_down(client)
 
 
 class TestWebPush(IntegrationBase):
@@ -448,7 +453,7 @@ class TestWebPush(IntegrationBase):
         result = yield client.hello()
         ok_(result != {})
         eq_(result["use_webpush"], True)
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_basic_delivery(self):
@@ -458,7 +463,7 @@ class TestWebPush(IntegrationBase):
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], data)
         eq_(result["messageType"], "notification")
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_delivery_repeat_without_ack(self):
@@ -479,7 +484,7 @@ class TestWebPush(IntegrationBase):
         result = yield client.get_notification()
         ok_(result != {})
         eq_(result["data"], data)
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_multiple_delivery_repeat_without_ack(self):
@@ -508,7 +513,7 @@ class TestWebPush(IntegrationBase):
         result = yield client.get_notification()
         ok_(result != {})
         ok_(result["data"] in [data, data2])
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_multiple_delivery_with_single_ack(self):
@@ -538,7 +543,7 @@ class TestWebPush(IntegrationBase):
         ok_(result["messageType"], "notification")
         result = yield client.get_notification()
         eq_(result, None)
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_multiple_delivery_with_multiple_ack(self):
@@ -565,7 +570,7 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         eq_(result, None)
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_no_delivery_to_unregistered(self):
@@ -588,7 +593,7 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         eq_(result, None)
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_ttl_0_connected(self):
@@ -598,7 +603,7 @@ class TestWebPush(IntegrationBase):
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], data)
         eq_(result["messageType"], "notification")
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_ttl_0_not_connected(self):
@@ -610,7 +615,7 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         eq_(result, None)
-        yield client.disconnect()
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_ttl_expired(self):
@@ -623,4 +628,4 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         eq_(result, None)
-        yield client.disconnect()
+        yield self.shut_down(client)
