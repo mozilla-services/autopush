@@ -94,7 +94,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         self.ws.send(msg)
         result = json.loads(self.ws.recv())
         log.debug("Recv: %s", result)
-        if self.uaid and self.uaid != result["uaid"]:
+        if self.uaid and self.uaid != result["uaid"]:  # pragme: nocover
             log.debug("Mismatch on re-using uaid. Old: %s, New: %s",
                       self.uaid, result["uaid"])
             self.channels = {}
@@ -124,14 +124,8 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 
     def send_notification(self, channel=None, version=None, data=None,
                           use_header=True, status=200, ttl=200):
-        if not self.channels:
-            raise Exception("No channels registered.")
-
         if not channel:
             channel = random.choice(self.channels.keys())
-
-        if channel not in self.channels:
-            raise Exception("Channel not present.")
 
         endpoint = self.channels[channel]
         url = urlparse.urlparse(endpoint)
@@ -226,7 +220,8 @@ class IntegrationBase(unittest.TestCase):
         )
 
         # Websocket server
-        factory = WebSocketServerFactory("ws://localhost:9010/")
+        self._ws_url = "ws://localhost:9010/"
+        factory = WebSocketServerFactory(self._ws_url)
         factory.protocol = SimplePushServerProtocol
         factory.protocol.ap_settings = settings
         factory.setProtocolOptions(
@@ -395,4 +390,237 @@ class TestSimple(IntegrationBase):
         result = yield client.send_notification(version=12, use_header=False)
         ok_(result is not None)
         eq_(result["updates"][0]["version"], 12)
+        yield client.disconnect()
+
+
+class TestData(IntegrationBase):
+    @inlineCallbacks
+    def test_data_delivery(self):
+        client = yield self.quick_register()
+        result = yield client.send_notification(data="howdythere")
+        ok_(result is not None)
+        eq_(result["updates"][0]["data"], "howdythere")
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_data_delivery_without_header(self):
+        client = yield self.quick_register()
+        result = yield client.send_notification(data="howdythere",
+                                                use_header=False)
+        ok_(result is not None)
+        eq_(result["updates"][0]["data"], "howdythere")
+        yield client.disconnect()
+
+
+class TestLoop(IntegrationBase):
+    @inlineCallbacks
+    def test_basic_deliver(self):
+        client = yield self.quick_register()
+        result = yield client.send_notification()
+        ok_(result != {})
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_can_ping(self):
+        client = yield self.quick_register()
+        yield client.ping()
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_uaid_resumption_on_reconnect(self):
+        client = yield self.quick_register()
+        chan = client.channels.keys()[0]
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.send_notification()
+        ok_(result != {})
+        ok_(result["updates"] > 0)
+        eq_(result["updates"][0]["channelID"], chan)
+        yield client.disconnect()
+
+
+class TestWebPush(IntegrationBase):
+    @inlineCallbacks
+    def test_hello_echo(self):
+        client = Client(self._ws_url, use_webpush=True)
+        yield client.connect()
+        result = yield client.hello()
+        ok_(result != {})
+        eq_(result["use_webpush"], True)
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_basic_delivery(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        result = yield client.send_notification(data=data)
+        eq_(result["headers"]["encryption"], client._crypto_key)
+        eq_(result["data"], data)
+        eq_(result["messageType"], "notification")
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_delivery_repeat_without_ack(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        ok_(client.channels)
+        yield client.send_notification(data=data, status=202)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result != {})
+        eq_(result["data"], data)
+
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result != {})
+        eq_(result["data"], data)
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_multiple_delivery_repeat_without_ack(self):
+        data = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        ok_(client.channels)
+        yield client.send_notification(data=data, status=202)
+        yield client.send_notification(data=data2, status=202)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result != {})
+        ok_(result["data"] in [data, data2])
+        result = yield client.get_notification()
+        ok_(result != {})
+        ok_(result["data"] in [data, data2])
+
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result != {})
+        ok_(result["data"] in [data, data2])
+        result = yield client.get_notification()
+        ok_(result != {})
+        ok_(result["data"] in [data, data2])
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_multiple_delivery_with_single_ack(self):
+        data = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        ok_(client.channels)
+        yield client.send_notification(data=data, status=202)
+        yield client.send_notification(data=data2, status=202)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result != {})
+        ok_(result["data"] in [data, data2])
+        result = yield client.get_notification()
+        ok_(result != {})
+        ok_(result["data"] in [data, data2])
+        yield client.ack(result["channelID"], result["version"])
+
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result != {})
+        ok_(result["data"] in [data, data2])
+        ok_(result["messageType"], "notification")
+        result = yield client.get_notification()
+        eq_(result, None)
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_multiple_delivery_with_multiple_ack(self):
+        data = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        ok_(client.channels)
+        yield client.send_notification(data=data, status=202)
+        yield client.send_notification(data=data2, status=202)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result != {})
+        ok_(result["data"] in [data, data2])
+        result2 = yield client.get_notification()
+        ok_(result2 != {})
+        ok_(result2["data"] in [data, data2])
+        yield client.ack(result2["channelID"], result2["version"])
+        yield client.ack(result["channelID"], result["version"])
+
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        eq_(result, None)
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_no_delivery_to_unregistered(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        ok_(client.channels)
+        chan = client.channels.keys()[0]
+        yield client.send_notification(data=data, status=202)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        eq_(result["channelID"], chan)
+        eq_(result["data"], data)
+
+        yield client.unregister(chan)
+        yield client.disconnect()
+        time.sleep(1)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        eq_(result, None)
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_ttl_0_connected(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        result = yield client.send_notification(data=data, ttl=0)
+        eq_(result["headers"]["encryption"], client._crypto_key)
+        eq_(result["data"], data)
+        eq_(result["messageType"], "notification")
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_ttl_0_not_connected(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        yield client.send_notification(data=data, ttl=0)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        eq_(result, None)
+        yield client.disconnect()
+
+    @inlineCallbacks
+    def test_ttl_expired(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        yield client.send_notification(data=data, ttl=1)
+        time.sleep(1.5)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        eq_(result, None)
         yield client.disconnect()
