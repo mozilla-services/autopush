@@ -1208,7 +1208,6 @@ class WebsocketTestCase(unittest.TestCase):
             dict(chidmessageid="asdf:fdsa", headers={}, data="bleh", ttl=ttl)
         ])
         assert self.send_mock.called
-        assert self.proto.process_notifications.called
 
     def test_notif_finished_with_webpush_with_old_notifications(self):
         self._connect()
@@ -1224,7 +1223,6 @@ class WebsocketTestCase(unittest.TestCase):
         ])
         assert self.proto.force_retry.called
         assert not self.send_mock.called
-        assert self.proto.process_notifications.called
 
     def test_notification_results(self):
         # Populate the database for ourself

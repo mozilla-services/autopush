@@ -112,12 +112,21 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
     def deferToLater(self, when, func, *args, **kwargs):
         """deferToLater helper that tracks defers outstanding"""
-        d = Deferred()
+        def cancel(d):
+            d._cancelled = True
+
+        d = Deferred(canceller=cancel)
+        d._cancelled = False
         self._callbacks.append(d)
 
         def f():
             if d in self._callbacks:
                 self._callbacks.remove(d)
+
+            # Don't run if the deferred was cancelled already
+            if d._cancelled:
+                d.errback(CancelledError)
+                return
             try:
                 result = func(*args, **kwargs)
                 d.callback(result)
@@ -332,6 +341,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         uaid = getattr(self, "uaid", None)
         self._shutdown_ran = True
         self._should_stop = True
+        self._check_notifications = False
         if uaid:
             self.cleanUp()
 
@@ -533,12 +543,14 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # Are we paused? Try again later.
         if self.paused:
-            self.deferToLater(1, self.process_notifications)
+            d = self.deferToLater(1, self.process_notifications)
+            d.addErrback(self.trap_cancel)
             return
 
         # Webpush with any outstanding storage-based must all be cleared
         if self.use_webpush and any(self.updates_sent.values()):
-            self.deferToLater(1, self.process_notifications)
+            d = self.deferToLater(1, self.process_notifications)
+            d.addErrback(self.trap_cancel)
             return
 
         # Are we already running?
@@ -638,9 +650,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                              ttl=notif["ttl"])
             )
             self.sendJSON(msg)
-
-        # Trigger for another fetch (won't run till notifs are cleared)
-        self.process_notifications()
 
     def _send_ping(self):
         """Helper for ping sending that tracks when the ping was sent"""
@@ -832,6 +841,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if resume:
             # Resume consuming ack's
             self.transport.resumeProducing()
+
+        # When using webpush, we don't check again unless we have no
+        # outstanding notifications
+        if self.use_webpush and any(self.updates_sent.values()):
+                return
 
         # Should we check again?
         if self._check_notifications or self._more_notifications:
