@@ -195,9 +195,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         self.ws.send(msg)
 
     def disconnect(self):
-        self.ws.send_close()
         self.ws.close()
-        self.ws = None
 
 
 class IntegrationBase(unittest.TestCase):
