@@ -260,10 +260,15 @@ class IntegrationBase(unittest.TestCase):
         self.website = reactor.listenTCP(9020, site)
         self._settings = settings
 
+    @inlineCallbacks
     def tearDown(self):
-        self.websocket.stopListening()
-        self.website.stopListening()
-        self.ws_website.stopListening()
+        dones = [self.websocket.stopListening(), self.website.stopListening(),
+                 self.ws_website.stopListening()]
+        for d in filter(None, dones):
+            yield d
+
+        # Dirty reactor unless we shut down the cached connections
+        yield self._settings.agent._pool.closeCachedConnections()
 
     @inlineCallbacks
     def quick_register(self, use_webpush=False):
@@ -277,8 +282,6 @@ class IntegrationBase(unittest.TestCase):
     def shut_down(self, client=None):
         if client:
             yield client.disconnect()
-        # Dirty reactor unless we shut down the cached connections
-        yield self._settings.agent._pool.closeCachedConnections()
 
 
 class TestSimple(IntegrationBase):
