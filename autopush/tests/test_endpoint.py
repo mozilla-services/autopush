@@ -123,7 +123,7 @@ class EndpointTestCase(unittest.TestCase):
             assert(frouter.route_notification.called)
             args, kwargs = frouter.route_notification.call_args
             notif = args[0]
-            assert(notif.ttl, 0)
+            assert(notif.ttl == 0)
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred

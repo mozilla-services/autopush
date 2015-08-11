@@ -546,16 +546,37 @@ class WebsocketTestCase(unittest.TestCase):
         def fail():
             raise twisted.internet.defer.CancelledError
 
-        def fail2(fail):  # pragma: nocover
-            self.fail("Failed to trap error")
+        def fail2(fail):
+            self.assertTrue(fail)
 
-        def check_result(result):
+        def check_result(result):  # pragma: nocover
             pass
 
         d = self.proto.deferToLater(0, fail)
         d.addCallback(check_result)
         d.addErrback(fail2)
         ok_(d is not None)
+
+    def test_deferToLater_cancel(self):
+        self._connect()
+
+        f = Deferred()
+
+        def dont_run():  # pragma: nocover
+            self.fail("This shouldn't run")
+
+        def trap_cancel(fail):
+            fail.trap(twisted.internet.defer.CancelledError)
+
+        def dont_run_callback(result):  # pragma: nocover
+            self.fail("Callback shouldn't run")
+
+        d = self.proto.deferToLater(0.2, dont_run)
+        d.addCallback(dont_run_callback)
+        d.addErrback(trap_cancel)
+        d.cancel()
+        reactor.callLater(0.2, lambda: f.callback(True))
+        return f
 
     def test_force_retry(self):
         self._connect()
@@ -1136,28 +1157,16 @@ class WebsocketTestCase(unittest.TestCase):
 
         self.proto.ap_settings.storage = Mock(
             **{"fetch_notifications.side_effect": throw_error})
-        self.proto.process_notifications()
         self.proto._check_notifications = True
+        self.proto.log_err = Mock()
+        self.proto.process_notifications()
 
-        # Now replace process_notifications so it won't be
-        # run again
-        self.proto.process_notifications = Mock()
         d = Deferred()
-
-        def wait_for_process():
-            calls = self.proto.process_notifications.mock_calls
-            if len(calls) > 0:
-                self.flushLoggedErrors()
-                d.callback(True)
-            else:
-                reactor.callLater(0.1, wait_for_process)
 
         def check_error(result):
             eq_(self.proto._check_notifications, False)
-
-            # Now schedule the checker to wait for the next
-            # process_notifications call
-            reactor.callLater(0.1, wait_for_process)
+            ok_(self.proto.log_err.called)
+            d.callback(True)
 
         self.proto._notification_fetch.addBoth(check_error)
         return d
@@ -1220,7 +1229,6 @@ class WebsocketTestCase(unittest.TestCase):
             dict(chidmessageid="asdf:fdsa", headers={}, data="bleh", ttl=ttl)
         ])
         assert self.send_mock.called
-        assert self.proto.process_notifications.called
 
     def test_notif_finished_with_webpush_with_old_notifications(self):
         self._connect()
@@ -1236,7 +1244,6 @@ class WebsocketTestCase(unittest.TestCase):
         ])
         assert self.proto.force_retry.called
         assert not self.send_mock.called
-        assert self.proto.process_notifications.called
 
     def test_notification_results(self):
         # Populate the database for ourself

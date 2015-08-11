@@ -2,6 +2,26 @@
 Autopush Changelog
 ==================
 
+1.3.2 (**dev**)
+===============
+
+Bug Fixes
+---------
+
+* Fix deferToLater to not call the function if it was cancelled using a
+  canceller function.
+* Fix finish_webpush_notifications to not immediately call
+  process_notifications as that will be called as needed after ack's have been
+  completed.
+* Fix process_ack to not call process_notifications when using webpush if there
+  are still remaining notifications to ack.
+
+Features
+--------
+
+* Integrate simplepush_test smoke-test client with the main autopush test-suite
+  into the test-runner. Issue #119.
+
 1.3.1 (2015-08-04)
 ==================
 
