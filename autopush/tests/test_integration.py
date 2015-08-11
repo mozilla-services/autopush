@@ -160,6 +160,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         log.debug("%s body: %s", method, body)
         http.request(method, url.path, body, headers)
         resp = http.getresponse()
+        http.close()
         log.debug("%s Response: %s", method, resp.read())
         eq_(resp.status, status)
         if self.use_webpush and ttl != 0:
