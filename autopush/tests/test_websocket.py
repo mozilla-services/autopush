@@ -549,6 +549,14 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
+    def test_auto_ping(self):
+        self.proto.ping_time_out = False
+        self.proto.dropConnection = Mock()
+        self.proto.debugCodePaths = False
+        self.proto.onAutoPingTimeout()
+        ok_(self.proto.ping_time_out, True)
+        ok_(self.proto.dropConnection.called)
+
     def test_deferToLater(self):
         self._connect()
 
