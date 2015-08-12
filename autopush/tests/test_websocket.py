@@ -54,6 +54,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.sendClose = self.close_mock = Mock()
         self.proto.transport = self.transport_mock = Mock()
         self.proto.closeHandshakeTimeout = 0
+        self.proto.autoPingInterval = 300
         self.proto._force_retry = self.proto.force_retry
         settings.metrics = Mock(spec=Metrics)
 
@@ -530,15 +531,23 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
-    def test_ping_pong_delay(self):
+    def test_ping_too_much(self):
         self._connect()
-        self.proto.last_ping = time.time() - 8
-        f = Deferred()
-        d = self.proto.process_ping()
-        # This should be a deferred
-        ok_(d is not None)
-        d.addBoth(lambda x: f.callback(x))
-        return f
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        d = Deferred()
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            self.proto.last_ping = time.time() - 30
+            self.proto.sendClose = Mock()
+            self._send_message({})
+            ok_(self.proto.sendClose.called)
+            d.callback(True)
+
+        f = self._check_response(check_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
 
     def test_deferToLater(self):
         self._connect()
