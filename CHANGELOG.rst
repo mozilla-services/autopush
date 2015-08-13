@@ -2,6 +2,22 @@
 Autopush Changelog
 ==================
 
+1.4.0 (**dev**)
+===============
+
+Bug Fixes
+---------
+
+* Remove adaptive ping entirely. Send special close code and drop clients that
+  ping more frequently than 55 seconds (approx 1 min). This will result in
+  clients that ping too much being turned away for awhile, but will alleviate
+  data/battery issues in buggy mobile clients. Issue #103.
+
+Features
+--------
+
+* Log all disconnects, whether they were clean, the code, and the reason.
+
 1.3.2 (2015-08-11)
 ==================
 

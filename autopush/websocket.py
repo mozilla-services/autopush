@@ -258,6 +258,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.check_storage = False
         self.use_webpush = False
         self.connected_at = ms_time()
+        self.ping_time_out = False
 
         self._check_notifications = False
         self._more_notifications = False
@@ -333,6 +334,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         else:
             self.sendClose()
 
+    def onAutoPingTimeout(self):
+        """Override to track that this shut-down is from a ping timeout"""
+        self.ping_time_out = True
+        WebSocketServerProtocol.onAutoPingTimeout(self)
+
     @log_exception
     def onClose(self, wasClean, code, reason):
         """autobahn onClose handler for shutting down the connection and any
@@ -341,16 +347,23 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self._shutdown_ran = True
         self._should_stop = True
         self._check_notifications = False
-        if uaid:
-            self.cleanUp()
 
-    def cleanUp(self):
+        # Log out the disconnect reason
+        if uaid:
+            self.cleanUp(wasClean, code, reason)
+
+    def cleanUp(self, wasClean, code, reason):
         """Thorough clean-up method to cancel all remaining deferreds, and send
         connection metrics in"""
         self.metrics.increment("client.socket.disconnect", tags=self.base_tags)
         elapsed = (ms_time() - self.connected_at) / 1000.0
         self.metrics.timing("client.socket.lifespan", duration=elapsed,
                             tags=self.base_tags)
+
+        # Log out the connection close and info
+        log.msg("Connection Close", code=code, reason=reason,
+                was_clean=wasClean, lifespan=elapsed,
+                ping_time_out=self.ping_time_out)
 
         # Cleanup our client entry
         if self.uaid and self.ap_settings.clients.get(self.uaid) == self:
@@ -527,6 +540,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         """callback for successful hello message, that sends hello reply"""
         self._register = None
         msg = {"messageType": "hello", "uaid": self.uaid, "status": 200}
+        if self.autoPingInterval:
+            msg["ping"] = self.autoPingInterval
         if self.use_webpush:
             msg["use_webpush"] = True
         self.ap_settings.clients[self.uaid] = self
@@ -657,28 +672,24 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         return self.sendMessage("{}", False)
 
     def process_ping(self):
-        """Adaptive ping processing
+        """Ping Handling
 
         Clients in the wild have a bug that lowers their ping interval to 0. It
-        will never increase for them, but if we disconnect them, then they will
-        reconnect in 5 seconds. As such, its beneficial for us and the client
-        to delay a response to a client pinging fast, but not such that its
-        worse than the alternative, reconnecting.
+        will never increase for them, as there is no way to remedy this without
+        causing the client to use drastically more battery/data-usage we send
+        them a code 4774 close to signify that they should stop until network
+        change.
 
-        Therefore we will attempt to send this ping within the 10 second
-        timeout many clients already have, based on guesstimating latency from
-        the last ping. The last ping is not necessarilly latency, but it will
-        allow us to avoid sending too fast, but not waiting too long. The
-        practical result is that we will respond to each ping within 0-9 sec
-        depending on when we last got a ping.
+        No other client should ping more than once per minute, or we tell them
+        to go away.
 
         """
         now = time.time()
         last_ping_ago = now - self.last_ping
-        if last_ping_ago >= 9:
+        if last_ping_ago >= 55:
             self._send_ping()
         else:
-            return self.deferToLater(9 - last_ping_ago, self._send_ping)
+            self.sendClose(code=4774)
 
     def process_register(self, data):
         """Process a register message"""
