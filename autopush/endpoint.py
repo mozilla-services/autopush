@@ -342,6 +342,13 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         self.write("Server busy, try later")
         self.finish()
 
+    def _router_response(self, response):
+        self.set_status(response.status_code)
+        for name, val in response.headers.items():
+            self.set_header(name, val)
+        self.write(response.response_body)
+        self.finish()
+
     def _router_fail_err(self, fail):
         """errBack for router failures"""
         fail.trap(RouterException)
@@ -351,9 +358,7 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         if 200 <= exc.status_code < 300:
             log.msg("Success", status_code=exc.status_code,
                     **self._client_info())
-        self.set_status(exc.status_code)
-        self.write(exc.response_body)
-        self.finish()
+        self._router_response(exc)
 
     def _uaid_not_found_err(self, fail):
         """errBack for uaid lookup not finding the user"""
@@ -362,6 +367,60 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         log.msg("UAID not found in AWS.", **self._client_info())
         self.write("Invalid")
         return self.finish()
+
+    def _token_err(self, fail):
+        """errBack for token decryption fail"""
+        fail.trap(InvalidToken, ValueError)
+        self.set_status(401)
+        log.msg("Invalid token", **self._client_info())
+        self.write("Invalid token")
+        self.finish()
+
+    #############################################################
+    #                    Utility Methods
+    #############################################################
+    def _db_error_handling(self, d):
+        """Tack on the common error handling for a dynamodb request and
+        uncaught exceptions"""
+        d.addErrback(self._overload_err)
+        d.addErrback(self._response_err)
+        return d
+
+
+class MessageHandler(AutoendpointHandler):
+    cors_methods = "DELETE"
+
+    @cyclone.web.asynchronous
+    def delete(self, token):
+        """Drops a pending message.
+
+        The message will only be removed from DynamoDB. Messages that were
+        successfully routed to a client as direct updates, but not delivered
+        yet, will not be dropped.
+        """
+        d = deferToThread(self.ap_settings.fernet.decrypt,
+                          token.encode('utf8'))
+        d.addCallback(self._token_valid)
+        d.addErrback(self._token_err)
+        d.addErrback(self._response_err)
+        return d
+
+    def _token_valid(self, result):
+        info = result.split(":")
+        if len(info) != 3:
+            raise ValueError("Invalid message token")
+
+        uaid, chid, version = info
+        d = deferToThread(self.ap_settings.message.delete_message, uaid,
+                          chid, version)
+        d.addCallback(self._delete_completed)
+        self._db_error_handling(d)
+        d.addErrback(self._response_err)
+        return d
+
+    def _delete_completed(self, response):
+        self.set_status(204)
+        self.finish()
 
 
 class EndpointHandler(AutoendpointHandler):
@@ -394,7 +453,11 @@ class EndpointHandler(AutoendpointHandler):
     #############################################################
     def _token_valid(self, result):
         """Called after the token is decrypted successfully"""
-        self.uaid, self.chid = result.split(":")
+        info = result.split(":")
+        if len(info) != 2:
+            raise ValueError("Invalid subscription token")
+
+        self.uaid, self.chid = info
         d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
         d.addCallback(self._uaid_lookup_results)
         d.addErrback(self._uaid_not_found_err)
@@ -478,32 +541,7 @@ class EndpointHandler(AutoendpointHandler):
                 log.msg("Router miss, message stored.", **self._client_info())
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
-            self.set_status(response.status_code)
-            self.write(response.response_body)
-            for name, val in response.headers.items():
-                self.set_header(name, val)
-            self.finish()
-
-    #############################################################
-    #                    Utility Methods
-    #############################################################
-    def _db_error_handling(self, d):
-        """Tack on the common error handling for a dynamodb request and
-        uncaught exceptions"""
-        d.addErrback(self._overload_err)
-        d.addErrback(self._response_err)
-        return d
-
-    #############################################################
-    #                    Error Callbacks
-    #############################################################
-    def _token_err(self, fail):
-        """errBack for token decryption fail"""
-        fail.trap(InvalidToken)
-        self.set_status(401)
-        log.msg("Invalid token", **self._client_info())
-        self.write("Invalid token")
-        self.finish()
+            self._router_response(response)
 
 
 class RegistrationHandler(AutoendpointHandler):

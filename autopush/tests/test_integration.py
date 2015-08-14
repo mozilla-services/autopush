@@ -68,6 +68,7 @@ class Client(object):
         self.ws = None
         self.use_webpush = use_webpush
         self.channels = {}
+        self.messages = {}
         self._crypto_key = """\
 keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 """
@@ -129,6 +130,24 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         log.debug("Recv: %s", result)
         return result
 
+    def delete_notification(self, channel, message=None, status=204):
+        messages = self.messages[channel]
+        if not message:
+            message = random.choice(messages)
+
+        log.debug("Delete: %s", message)
+        url = urlparse.urlparse(message)
+        http = None
+        if url.scheme == "https":  # pragma: nocover
+            http = httplib.HTTPSConnection(url.netloc)
+        else:
+            http = httplib.HTTPConnection(url.netloc)
+
+        http.request("DELETE", url.path)
+        resp = http.getresponse()
+        http.close()
+        eq_(resp.status, status)
+
     def send_notification(self, channel=None, version=None, data=None,
                           use_header=True, status=None, ttl=200,
                           timeout=0.2):
@@ -176,8 +195,17 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         http.close()
         log.debug("%s Response: %s", method, resp.read())
         eq_(resp.status, status)
-        if self.use_webpush and ttl != 0 and status == 201:
-            assert(resp.getheader("Location", None) is not None)
+        location = resp.getheader("Location", None)
+        if self.use_webpush:
+            if ttl != 0 and status == 201:
+                assert(location is not None)
+                if channel in self.messages:
+                    self.messages[channel].append(location)
+                else:
+                    self.messages[channel] = [location]
+        else:
+            # Simple Push messages are not individually addressable.
+            assert(location is None)
 
         # Pull the notification if connected
         if self.ws and self.ws.connected:
@@ -220,7 +248,11 @@ class IntegrationBase(unittest.TestCase):
         from autobahn.twisted.websocket import WebSocketServerFactory
         from autobahn.twisted.resource import WebSocketResource
         from autopush.main import skip_request_logging
-        from autopush.endpoint import (EndpointHandler, RegistrationHandler)
+        from autopush.endpoint import (
+            EndpointHandler,
+            MessageHandler,
+            RegistrationHandler,
+        )
         from autopush.settings import AutopushSettings
         from autopush.websocket import (
             SimplePushServerProtocol,
@@ -273,6 +305,7 @@ class IntegrationBase(unittest.TestCase):
         # Endpoint HTTP router
         site = cyclone.web.Application([
             (r"/push/([^\/]+)", EndpointHandler, dict(ap_settings=settings)),
+            (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
             # PUT /register/ => connect info
             # GET /register/uaid => chid + endpoint
             (r"/register(?:/(.+))?", RegistrationHandler,
@@ -770,6 +803,20 @@ class TestWebPush(IntegrationBase):
         ok_("data" not in result3)
         yield client.ack(result3["channelID"], result3["version"])
 
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_delete_saved_notification(self):
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        self.assertTrue(client.channels)
+        chan = client.channels.keys()[0]
+        yield client.send_notification()
+        yield client.delete_notification(chan)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        eq_(result, None)
         yield self.shut_down(client)
 
 

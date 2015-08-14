@@ -6,7 +6,11 @@ from autobahn.twisted.resource import WebSocketResource
 from twisted.internet import reactor, task
 from twisted.web.server import Site
 
-from autopush.endpoint import (EndpointHandler, RegistrationHandler)
+from autopush.endpoint import (
+    EndpointHandler,
+    MessageHandler,
+    RegistrationHandler,
+)
 from autopush.health import (HealthHandler, StatusHandler)
 from autopush.logging import setup_logging
 from autopush.settings import AutopushSettings
@@ -368,6 +372,7 @@ def endpoint_main(sysargs=None):
     # Endpoint HTTP router
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", EndpointHandler, dict(ap_settings=settings)),
+        (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
         # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint
         (r"/register(?:/(.+))?", RegistrationHandler,

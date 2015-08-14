@@ -286,7 +286,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 200)
         d.addBoth(verify_deliver)
         return d
@@ -314,7 +314,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
         d.addBoth(verify_deliver)
         return d
@@ -344,7 +344,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
         d.addBoth(verify_deliver)
         return d
@@ -373,7 +373,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
         d.addBoth(verify_deliver)
         return d
@@ -388,7 +388,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
             assert(self.router_mock.get_uaid.called)
         d.addBoth(verify_deliver)
@@ -407,7 +407,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
             assert(self.router_mock.clear_node.called)
             nk = simple.node_key(router_data["node_id"])
@@ -431,7 +431,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
             assert(self.router_mock.clear_node.called)
             nk = simple.node_key(router_data["node_id"])
@@ -451,7 +451,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 200)
             self.router.metrics.increment.assert_called_with(
                 "router.broadcast.save_hit"
@@ -499,7 +499,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 201)
             self.router.metrics.increment.assert_called_with(
                 "router.broadcast.save_hit"
