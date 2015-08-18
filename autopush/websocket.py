@@ -765,6 +765,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         deferred for the delete_notification call if it was needed.
 
         """
+        if not update:
+            return
+
         chid = update.get("channelID")
         version = update.get("version")
         if not chid or not version:

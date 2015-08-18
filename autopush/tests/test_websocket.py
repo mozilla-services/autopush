@@ -992,6 +992,10 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
+    def test_ack_with_bad_input(self):
+        self._connect()
+        eq_(self.proto.ack_update(None), None)
+
     def test_ack_with_webpush_direct(self):
         self._connect()
         chid = str(uuid.uuid4())
@@ -1005,6 +1009,7 @@ class WebsocketTestCase(unittest.TestCase):
             channelID=chid,
             version="bleh"
         ))
+        eq_(self.proto.direct_updates[chid], [])
 
     def test_ack_with_webpush_from_storage(self):
         self._connect()

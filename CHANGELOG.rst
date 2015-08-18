@@ -2,6 +2,14 @@
 Autopush Changelog
 ==================
 
+1.3.3 (2015-08-18)
+==================
+
+Bug Fixes
+---------
+
+* Handle None values in ack updates.
+
 1.3.2 (2015-08-11)
 ==================
 
