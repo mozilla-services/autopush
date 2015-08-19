@@ -187,6 +187,7 @@ import time
 import urlparse
 import uuid
 from collections import namedtuple
+from base64 import urlsafe_b64encode
 
 import cyclone.web
 from boto.dynamodb2.exceptions import (
@@ -392,7 +393,8 @@ class EndpointHandler(AutoendpointHandler):
 
         # Only simplepush uses version/data out of body/query, GCM/APNS will
         # use data out of the request body 'WebPush' style.
-        if router_key == "simplepush":
+        use_simplepush = router_key == "simplepush"
+        if use_simplepush:
             version, data = parse_request_params(self.request)
         else:
             # We need crypto headers
@@ -415,6 +417,11 @@ class EndpointHandler(AutoendpointHandler):
             log.msg("Data too large", **self._client_info())
             self.write("Data too large")
             return self.finish()
+
+        # Web Push messages are encrypted binary blobs. We store and deliver
+        # these messages as Base64-encoded strings.
+        if not use_simplepush:
+            data = urlsafe_b64encode(self.request.body)
 
         notification = Notification(version=version, data=data,
                                     channel_id=self.chid,
