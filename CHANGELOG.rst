@@ -22,6 +22,7 @@ Features
 
 * Add /status HTTP endpoint for autopush. Issue #136.
 * Log all disconnects, whether they were clean, the code, and the reason.
+* Allow encryption headers to be omitted for blank messages. Issue #132.
 
 1.3.3 (2015-08-18)
 ==================

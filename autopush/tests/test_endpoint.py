@@ -129,11 +129,12 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     # Crypto headers should be required for Web Push...
-    def test_webpush_uaid_lookup_no_crypto_headers(self):
+    def test_webpush_uaid_lookup_no_crypto_headers_with_data(self):
         fresult = dict(router_type="webpush")
         frouter = self.settings.routers["webpush"]
         frouter.route_notification.return_value = RouterResponse()
         self.endpoint.chid = "fred"
+        self.request_mock.body = b"stuff"
         self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
@@ -142,7 +143,21 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
 
-    # ...But can be omitted for other router types.
+    # ...But can be omitted for blank messages...
+    def test_webpush_uaid_lookup_no_crypto_headers_without_data(self):
+        fresult = dict(router_type="webpush")
+        frouter = self.settings.routers["webpush"]
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            assert(frouter.route_notification.called)
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    # ...And for other router types.
     def test_other_uaid_lookup_no_crypto_headers(self):
         fresult = dict(router_type="test")
         frouter = Mock(spec=Router)

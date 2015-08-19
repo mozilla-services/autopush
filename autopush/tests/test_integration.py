@@ -127,7 +127,8 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         return result
 
     def send_notification(self, channel=None, version=None, data=None,
-                          use_header=True, status=200, ttl=200):
+                          use_header=True, status=None, ttl=200,
+                          timeout=0.2):
         if not channel:
             channel = random.choice(self.channels.keys())
 
@@ -140,16 +141,19 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
             http = httplib.HTTPConnection(url.netloc)
 
         if self.use_webpush:
-            headers = {
-                "Content-Type": "application/octet-stream",
-                "Content-Encoding": "aesgcm-128",
-                "Encryption": self._crypto_key,
-                "Encryption-Key": 'keyid="a1"; key="JcqK-OLkJZlJ3sJJWstJCA"',
-                "TTL": str(ttl),
-            }
+            headers = {"TTL": str(ttl)}
+            if use_header:
+                headers.update({
+                    "Content-Type": "application/octet-stream",
+                    "Content-Encoding": "aesgcm-128",
+                    "Encryption": self._crypto_key,
+                    "Encryption-Key":
+                        'keyid="a1"; key="JcqK-OLkJZlJ3sJJWstJCA"',
+                })
             body = data or ""
             method = "POST"
-            status = 201
+            if not status:
+                status = 201
         else:
             if data:
                 body = "version=%s&data=%s" % (version or "", data)
@@ -160,6 +164,8 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
             else:
                 headers = {}
             method = "PUT"
+            if not status:
+                status = 200
 
         log.debug("%s body: %s", method, body)
         http.request(method, url.path.encode("utf-8"), body, headers)
@@ -167,13 +173,12 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         http.close()
         log.debug("%s Response: %s", method, resp.read())
         eq_(resp.status, status)
-        if self.use_webpush and ttl != 0:
+        if self.use_webpush and ttl != 0 and status == 201:
             assert(resp.getheader("Location", None) is not None)
 
         # Pull the notification if connected
         if self.ws and self.ws.connected:
-            result = json.loads(self.ws.recv())
-            return result
+            return object.__getattribute__(self, "get_notification")(timeout)
 
     def get_notification(self, timeout=0.2):
         self.ws.settimeout(timeout)
@@ -537,7 +542,7 @@ class TestWebPush(IntegrationBase):
         client = yield self.quick_register(use_webpush=True)
         yield client.disconnect()
         ok_(client.channels)
-        yield client.send_notification(data=data, status=202)
+        yield client.send_notification(data=data)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
@@ -559,8 +564,8 @@ class TestWebPush(IntegrationBase):
         client = yield self.quick_register(use_webpush=True)
         yield client.disconnect()
         ok_(client.channels)
-        yield client.send_notification(data=data, status=202)
-        yield client.send_notification(data=data2, status=202)
+        yield client.send_notification(data=data)
+        yield client.send_notification(data=data2)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
@@ -588,8 +593,8 @@ class TestWebPush(IntegrationBase):
         client = yield self.quick_register(use_webpush=True)
         yield client.disconnect()
         ok_(client.channels)
-        yield client.send_notification(data=data, status=202)
-        yield client.send_notification(data=data2, status=202)
+        yield client.send_notification(data=data)
+        yield client.send_notification(data=data2)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
@@ -618,8 +623,8 @@ class TestWebPush(IntegrationBase):
         client = yield self.quick_register(use_webpush=True)
         yield client.disconnect()
         ok_(client.channels)
-        yield client.send_notification(data=data, status=202)
-        yield client.send_notification(data=data2, status=202)
+        yield client.send_notification(data=data)
+        yield client.send_notification(data=data2)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
@@ -645,7 +650,7 @@ class TestWebPush(IntegrationBase):
         yield client.disconnect()
         ok_(client.channels)
         chan = client.channels.keys()[0]
-        yield client.send_notification(data=data, status=202)
+        yield client.send_notification(data=data)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
@@ -694,6 +699,35 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         eq_(result, None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_message_without_crypto_headers(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        result = yield client.send_notification(data=data, use_header=False,
+                                                status=401)
+        eq_(result, None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_empty_message_without_crypto_headers(self):
+        client = yield self.quick_register(use_webpush=True)
+        result = yield client.send_notification(use_header=False)
+        ok_(result is not None)
+        eq_(result["messageType"], "notification")
+        ok_("headers" not in result)
+        ok_("data" not in result)
+        yield client.ack(result["channelID"], result["version"])
+
+        yield client.disconnect()
+        yield client.send_notification(use_header=False)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result is not None)
+        yield client.ack(result["channelID"], result["version"])
+
         yield self.shut_down(client)
 
 

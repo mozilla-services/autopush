@@ -657,16 +657,18 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                     self.ap_settings.message.delete_message, self.uaid, chid,
                     version)
                 continue
+            data = notif.get("data")
             msg = dict(
                 messageType="notification",
                 channelID=chid,
                 version=version,
-                data=notif["data"],
-                headers=notif["headers"],
             )
+            if data:
+                msg["data"] = data
+                msg["headers"] = notif["headers"]
             self.updates_sent[chid].append(
                 Notification(channel_id=chid, version=version,
-                             data=notif["data"], headers=notif["headers"],
+                             data=notif["data"], headers=notif.get("headers"),
                              ttl=notif["ttl"])
             )
             self.sendJSON(msg)
