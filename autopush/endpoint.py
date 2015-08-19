@@ -393,17 +393,17 @@ class EndpointHandler(AutoendpointHandler):
 
         # Only simplepush uses version/data out of body/query, GCM/APNS will
         # use data out of the request body 'WebPush' style.
-        use_simplepush = router_key == "simplepush"
-        if use_simplepush:
+        if router_key == "simplepush":
             version, data = parse_request_params(self.request)
         else:
-            # We need crypto headers
-            req_fields = ["content-encoding", "encryption"]
-            if not all([x in self.request.headers for x in req_fields]):
-                self.set_status(401)
-                log.msg("Missing Crypto headers", **self._client_info())
-                self.write("Missing crypto headers.")
-                return self.finish()
+            if router_key == "webpush":
+                # We need crypto headers
+                req_fields = ["content-encoding", "encryption"]
+                if not all([x in self.request.headers for x in req_fields]):
+                    self.set_status(401)
+                    log.msg("Missing Crypto headers", **self._client_info())
+                    self.write("Missing crypto headers.")
+                    return self.finish()
 
             version = uuid.uuid4().hex
             data = self.request.body
@@ -420,7 +420,7 @@ class EndpointHandler(AutoendpointHandler):
 
         # Web Push messages are encrypted binary blobs. We store and deliver
         # these messages as Base64-encoded strings.
-        if not use_simplepush:
+        if router_key == "webpush":
             data = urlsafe_b64encode(self.request.body)
 
         notification = Notification(version=version, data=data,
