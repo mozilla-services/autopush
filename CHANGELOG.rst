@@ -18,6 +18,11 @@ Features
 
 * Log all disconnects, whether they were clean, the code, and the reason.
 
+1.3.3 (2015-08-18)
+==================
+
+* Handle None values in ack updates.
+
 1.3.2 (2015-08-11)
 ==================
 
