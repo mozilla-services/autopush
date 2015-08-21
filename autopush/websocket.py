@@ -50,7 +50,9 @@ from twisted.internet.interfaces import IProducer
 from twisted.internet.threads import deferToThread
 from twisted.python import failure, log
 from zope.interface import implements
+from twisted.web.resource import Resource
 
+from autopush import __version__
 from autopush.protocol import IgnoreBody
 from autopush.utils import validate_uaid
 
@@ -974,3 +976,28 @@ class NotificationHandler(cyclone.web.RequestHandler):
         if client and client.connected_at == int(connectionTime):
             client.sendClose()
             return self.write("Terminated duplicate")
+
+
+class DefaultResource(Resource):
+    """Delegates rendering to a default resource."""
+    def __init__(self, resource):
+        Resource.__init__(self)
+        self.resource = resource
+
+    def getChild(self, path, request):
+        return self.resource
+
+    def render(self, request):
+        return self.resource.render(request)
+
+
+class StatusResource(Resource):
+    isLeaf = True
+
+    def render(self, request):
+        request.setResponseCode(200)
+        request.setHeader("content-type", "application/json")
+        return json.dumps({
+            "status": "OK",
+            "version": __version__,
+        })

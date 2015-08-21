@@ -1,8 +1,10 @@
 """autopush/autoendpoint daemon scripts"""
 import configargparse
 import cyclone.web
-from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
+from autobahn.twisted.websocket import WebSocketServerFactory
+from autobahn.twisted.resource import WebSocketResource
 from twisted.internet import reactor, task
+from twisted.web.server import Site
 
 from autopush.endpoint import (EndpointHandler, RegistrationHandler)
 from autopush.health import (HealthHandler, StatusHandler)
@@ -14,7 +16,9 @@ from autopush.websocket import (
     SimplePushServerProtocol,
     RouterHandler,
     NotificationHandler,
-    periodic_reporter
+    periodic_reporter,
+    DefaultResource,
+    StatusResource,
 )
 
 
@@ -303,15 +307,23 @@ def connection_main(sysargs=None):
 
     settings.metrics.start()
 
+    # Wrap the WebSocket server in a default resource that exposes the
+    # `/status` handler, and delegates to the WebSocket resource for all
+    # other requests.
+    resource = DefaultResource(WebSocketResource(factory))
+    resource.putChild("status", StatusResource())
+    siteFactory = Site(resource)
+
     # Start the WebSocket listener.
     if args.ssl_key:
         contextFactory = AutopushSSLContextFactory(args.ssl_key,
                                                    args.ssl_cert)
         if args.ssl_dh_param:
             contextFactory.getContext().load_tmp_dh(args.ssl_dh_param)
-        listenWS(factory, contextFactory)
+
+        reactor.listenSSL(args.port, siteFactory, contextFactory)
     else:
-        reactor.listenTCP(args.port, factory)
+        reactor.listenTCP(args.port, siteFactory)
 
     # Start the internal routing listener.
     if args.router_ssl_key:
