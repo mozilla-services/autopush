@@ -16,8 +16,11 @@ import websocket
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
 from twisted.internet import reactor
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.threads import deferToThread
+from twisted.web.client import Agent
+from twisted.test.proto_helpers import AccumulatingProtocol
+from autopush import __version__
 
 log = logging.getLogger(__name__)
 here_dir = os.path.abspath(os.path.dirname(__file__))
@@ -203,6 +206,7 @@ class IntegrationBase(unittest.TestCase):
     def setUp(self):
         import cyclone.web
         from autobahn.twisted.websocket import WebSocketServerFactory
+        from autobahn.twisted.resource import WebSocketResource
         from autopush.main import skip_request_logging
         from autopush.endpoint import (EndpointHandler, RegistrationHandler)
         from autopush.settings import AutopushSettings
@@ -210,7 +214,10 @@ class IntegrationBase(unittest.TestCase):
             SimplePushServerProtocol,
             RouterHandler,
             NotificationHandler,
+            DefaultResource,
+            StatusResource,
         )
+        from twisted.web.server import Site
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
@@ -230,7 +237,9 @@ class IntegrationBase(unittest.TestCase):
             openHandshakeTimeout=5,
         )
         settings.factory = factory
-        self.websocket = reactor.listenTCP(9010, factory)
+        resource = DefaultResource(WebSocketResource(factory))
+        resource.putChild("status", StatusResource())
+        self.websocket = reactor.listenTCP(9010, Site(resource))
 
         # Websocket HTTP router
         # Internal HTTP notification router
@@ -631,3 +640,21 @@ class TestWebPush(IntegrationBase):
         result = yield client.get_notification()
         eq_(result, None)
         yield self.shut_down(client)
+
+
+class TestHealth(IntegrationBase):
+    @inlineCallbacks
+    def test_status(self):
+        agent = Agent(reactor)
+        response = yield agent.request(
+            "GET",
+            b"http://localhost:9010/status"
+        )
+
+        proto = AccumulatingProtocol()
+        proto.closedDeferred = Deferred()
+        response.deliverBody(proto)
+        yield proto.closedDeferred
+
+        payload = json.loads(proto.data)
+        eq_(payload, {"status": "OK", "version": __version__})
