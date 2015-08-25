@@ -18,6 +18,7 @@ Bug Fixes
 Features
 --------
 
+* Add /status HTTP endpoint for autopush. Issue #136.
 * Log all disconnects, whether they were clean, the code, and the reason.
 
 1.3.3 (2015-08-18)
@@ -232,7 +233,7 @@ Features
   disconnected without ack'ing them. Resolves Issue #36.
 * Use IProducer to more precisely monitor when the client has drained the data
   to immediately resume sending more data. Resolves Issue #28.
-* Add /status HTTP endpoint for autopush/autoendpoint. Resolves Issue #27.
+* Add /status HTTP endpoint for autoendpoint. Resolves Issue #27.
 * Add example stage/prod config files. Resolves Issue #22.
 * Switch internal routing from requests to twisted http-client. Resolves Issue
   #21.
