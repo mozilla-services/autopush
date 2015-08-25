@@ -437,6 +437,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if not node_id:
             return
 
+        # If it's ourselves, we can stop
+        if result.get("connected_at") == self.connected_at:
+            return
+
         # Send the notify to the node
         url = node_id + "/notif/" + self.uaid
         d = self.ap_settings.agent.request(
