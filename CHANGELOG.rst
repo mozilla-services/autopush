@@ -8,6 +8,8 @@ Autopush Changelog
 Bug Fixes
 ---------
 
+* Fix _notify_node to not attempt delivering to ourselves at the end of the
+  client connection.
 * Remove adaptive ping entirely. Send special close code and drop clients that
   ping more frequently than 55 seconds (approx 1 min). This will result in
   clients that ping too much being turned away for awhile, but will alleviate
