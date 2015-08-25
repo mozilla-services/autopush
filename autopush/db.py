@@ -1,7 +1,6 @@
 """Database Interaction"""
 import uuid
 from functools import wraps
-from base64 import urlsafe_b64decode, urlsafe_b64encode
 
 from boto.exception import JSONResponseError
 from boto.dynamodb2.exceptions import (
@@ -13,7 +12,6 @@ from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table
 from boto.dynamodb2.types import NUMBER
-from boto.dynamodb.types import Binary
 
 
 def create_router_table(tablename="router", read_throughput=5,
@@ -268,12 +266,6 @@ class Message(object):
     def store_message(self, uaid, channel_id, data, headers, message_id, ttl):
         """Stores a message in the message table for the given uaid/channel with
         the message id"""
-        if data:
-            # Store Base64-encoded payloads as binary fields.
-            if not isinstance(data, bytes):
-                data = data.encode('utf-8')
-            data = Binary(urlsafe_b64decode(data))
-
         self.table.put_item(data=dict(
             uaid=uaid,
             chidmessageid="%s:%s" % (channel_id, message_id),
@@ -315,12 +307,8 @@ class Message(object):
     def fetch_messages(self, uaid, limit=10):
         """Fetches messages for a uaid"""
         # Eagerly fetches all results in the result set.
-        messages = list(self.table.query_2(uaid__eq=uaid,
-                        chidmessageid__gt=" ", consistent=True, limit=limit))
-        for message in messages:
-            message["data"] = urlsafe_b64encode(message["data"].value)
-            message.mark_clean()
-        return messages
+        return list(self.table.query_2(uaid__eq=uaid, chidmessageid__gt=" ",
+                                       consistent=True, limit=limit))
 
 
 class Router(object):
