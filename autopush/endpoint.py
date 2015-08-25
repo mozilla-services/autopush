@@ -187,6 +187,7 @@ import time
 import urlparse
 import uuid
 from collections import namedtuple
+from base64 import urlsafe_b64encode
 
 import cyclone.web
 from boto.dynamodb2.exceptions import (
@@ -395,13 +396,14 @@ class EndpointHandler(AutoendpointHandler):
         if router_key == "simplepush":
             version, data = parse_request_params(self.request)
         else:
-            # We need crypto headers
-            req_fields = ["content-encoding", "encryption"]
-            if not all([x in self.request.headers for x in req_fields]):
-                self.set_status(401)
-                log.msg("Missing Crypto headers", **self._client_info())
-                self.write("Missing crypto headers.")
-                return self.finish()
+            if router_key == "webpush":
+                # We need crypto headers
+                req_fields = ["content-encoding", "encryption"]
+                if not all([x in self.request.headers for x in req_fields]):
+                    self.set_status(401)
+                    log.msg("Missing Crypto headers", **self._client_info())
+                    self.write("Missing crypto headers.")
+                    return self.finish()
 
             version = uuid.uuid4().hex
             data = self.request.body
@@ -415,6 +417,11 @@ class EndpointHandler(AutoendpointHandler):
             log.msg("Data too large", **self._client_info())
             self.write("Data too large")
             return self.finish()
+
+        # Web Push messages are encrypted binary blobs. We store and deliver
+        # these messages as Base64-encoded strings.
+        if router_key == "webpush":
+            data = urlsafe_b64encode(self.request.body)
 
         notification = Notification(version=version, data=data,
                                     channel_id=self.chid,

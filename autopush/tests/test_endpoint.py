@@ -128,7 +128,22 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
 
-    def test_uaid_lookup_no_crypto_headers(self):
+    # Crypto headers should be required for Web Push...
+    def test_webpush_uaid_lookup_no_crypto_headers(self):
+        fresult = dict(router_type="webpush")
+        frouter = self.settings.routers["webpush"]
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            self.endpoint.set_status.assert_called_with(401)
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    # ...But can be omitted for other router types.
+    def test_other_uaid_lookup_no_crypto_headers(self):
         fresult = dict(router_type="test")
         frouter = Mock(spec=Router)
         frouter.route_notification = Mock()
@@ -138,7 +153,48 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
-            self.endpoint.set_status.assert_called_with(401)
+            assert(frouter.route_notification.called)
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    def test_webpush_payload_encoding(self):
+        fresult = dict(router_type="webpush")
+        frouter = self.settings.routers["webpush"]
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.request_mock.body = b"\xc3\x28\xa0\xa1"
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            calls = frouter.route_notification.mock_calls
+            eq_(len(calls), 1)
+            (_, (notification, _), _) = calls[0]
+            eq_(notification.channel_id, "fred")
+            eq_(notification.data, b"wyigoQ==")
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    def test_other_payload_encoding(self):
+        fresult = dict(router_type="test")
+        frouter = Mock(spec=Router)
+        frouter.route_notification = Mock()
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.endpoint.ap_settings.routers["test"] = frouter
+
+        self.request_mock.body = b"stuff"
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            calls = frouter.route_notification.mock_calls
+            eq_(len(calls), 1)
+            (_, (notification, _), _) = calls[0]
+            eq_(notification.channel_id, "fred")
+            eq_(notification.data, b"stuff")
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred

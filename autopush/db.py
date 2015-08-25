@@ -306,8 +306,9 @@ class Message(object):
     @track_provisioned
     def fetch_messages(self, uaid, limit=10):
         """Fetches messages for a uaid"""
-        return self.table.query_2(uaid__eq=uaid, chidmessageid__gt=" ",
-                                  consistent=True, limit=limit)
+        # Eagerly fetches all results in the result set.
+        return list(self.table.query_2(uaid__eq=uaid, chidmessageid__gt=" ",
+                                       consistent=True, limit=limit))
 
 
 class Router(object):

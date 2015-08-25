@@ -14,6 +14,8 @@ Bug Fixes
   ping more frequently than 55 seconds (approx 1 min). This will result in
   clients that ping too much being turned away for awhile, but will alleviate
   data/battery issues in buggy mobile clients. Issue #103.
+* Store and transmit encrypted Web Push messages as Base64-encoded strings.
+  PR #135.
 
 Features
 --------
