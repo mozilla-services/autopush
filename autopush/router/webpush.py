@@ -60,17 +60,18 @@ class WebPushRouter(SimpleRouter):
         headers for the notification.
 
         """
-        payload = json.dumps({"channelID": notification.channel_id,
-                              "version": notification.version,
-                              "data": notification.data,
-                              "headers": self._crypto_headers(notification),
-                              "ttl": notification.ttl+int(time.time()),
-                              })
+        payload = {"channelID": notification.channel_id,
+                   "version": notification.version,
+                   "ttl": notification.ttl+int(time.time()),
+                   }
+        if notification.data:
+            payload["headers"] = self._crypto_headers(notification)
+            payload["data"] = notification.data
         url = node_id + "/push/" + uaid
         d = self.ap_settings.agent.request(
             "PUT",
             url.encode("utf8"),
-            bodyProducer=FileBodyProducer(StringIO(payload)),
+            bodyProducer=FileBodyProducer(StringIO(json.dumps(payload))),
         )
         d.addCallback(IgnoreBody.ignore)
         return d
@@ -86,12 +87,15 @@ class WebPushRouter(SimpleRouter):
         if notification.ttl == 0:
             raise RouterException("Finished Routing", status_code=201,
                                   log_exception=False)
+        headers = None
+        if notification.data:
+            headers = self._crypto_headers(notification)
         return deferToThread(
             self.ap_settings.message.store_message,
             uaid=uaid,
             channel_id=notification.channel_id,
             data=notification.data,
-            headers=self._crypto_headers(notification),
+            headers=headers,
             message_id=notification.version,
             ttl=notification.ttl+int(time.time()),
         )

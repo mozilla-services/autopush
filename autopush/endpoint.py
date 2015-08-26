@@ -396,17 +396,18 @@ class EndpointHandler(AutoendpointHandler):
         if router_key == "simplepush":
             version, data = parse_request_params(self.request)
         else:
+            data = self.request.body
             if router_key == "webpush":
-                # We need crypto headers
+                # We need crypto headers for messages with payloads.
                 req_fields = ["content-encoding", "encryption"]
-                if not all([x in self.request.headers for x in req_fields]):
+                if data and not all([x in self.request.headers
+                                     for x in req_fields]):
                     self.set_status(401)
                     log.msg("Missing Crypto headers", **self._client_info())
                     self.write("Missing crypto headers.")
                     return self.finish()
 
             version = uuid.uuid4().hex
-            data = self.request.body
 
         try:
             ttl = int(self.request.headers.get("ttl", "0"))

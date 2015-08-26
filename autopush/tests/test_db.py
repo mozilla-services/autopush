@@ -208,9 +208,9 @@ class MessageTestCase(unittest.TestCase):
         data2 = str(uuid.uuid4())
         ttl = int(time.time())+100
         time1, time2, time3 = self._nstime(), self._nstime(), self._nstime()+1
-        message.store_message(self.uaid, chid, data1, {}, time1, ttl)
-        message.store_message(self.uaid, chid2, data2, {}, time2, ttl)
-        message.store_message(self.uaid, chid2, data1, {}, time3, ttl)
+        message.store_message(self.uaid, chid, time1, ttl, data1, {})
+        message.store_message(self.uaid, chid2, time2, ttl, data2, {})
+        message.store_message(self.uaid, chid2, time3, ttl, data1, {})
 
         all_messages = list(message.fetch_messages(self.uaid))
         eq_(len(all_messages), 3)
@@ -230,7 +230,7 @@ class MessageTestCase(unittest.TestCase):
             ttl = int(time.time())+200
             for i in range(count):
                 m.append(
-                    (self.uaid, channel_id, str(uuid.uuid4()), {}, t+i, ttl)
+                    (self.uaid, channel_id, str(uuid.uuid4()), ttl, {}, t+i)
                 )
             return m
 

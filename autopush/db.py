@@ -263,16 +263,21 @@ class Message(object):
             return set([])
 
     @track_provisioned
-    def store_message(self, uaid, channel_id, data, headers, message_id, ttl):
+    def store_message(self, uaid, channel_id, message_id, ttl, data=None,
+                      headers=None):
         """Stores a message in the message table for the given uaid/channel with
         the message id"""
-        self.table.put_item(data=dict(
+        item = dict(
             uaid=uaid,
             chidmessageid="%s:%s" % (channel_id, message_id),
             data=data,
             headers=headers,
             ttl=ttl,
-        ))
+        )
+        if data:
+            item["headers"] = headers
+            item["data"] = data
+        self.table.put_item(data=item)
         return True
 
     @track_provisioned
