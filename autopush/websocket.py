@@ -897,18 +897,21 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             return
 
         if self.use_webpush:
-            self.direct_updates[chid].append(
-                Notification(channel_id=chid, version=version,
-                             data=update["data"], headers=update["headers"],
-                             ttl=update["ttl"])
-            )
-            self.sendJSON(dict(
+            response = dict(
                 messageType="notification",
                 channelID=chid,
                 version=version,
-                data=update["data"],
-                headers=update["headers"],
-            ))
+            )
+            data = update.get("data")
+            if data:
+                response["data"] = data
+                response["headers"] = update["headers"]
+            self.direct_updates[chid].append(
+                Notification(channel_id=chid, version=version,
+                             data=data, headers=update.get("headers"),
+                             ttl=update["ttl"])
+            )
+            self.sendJSON(response)
         else:
             self.direct_updates[chid] = version
             msg = {"messageType": "notification", "updates": [update]}
