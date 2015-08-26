@@ -726,7 +726,40 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         ok_(result is not None)
+        ok_("headers" not in result)
+        ok_("data" not in result)
         yield client.ack(result["channelID"], result["version"])
+
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_empty_message_with_crypto_headers(self):
+        client = yield self.quick_register(use_webpush=True)
+        result = yield client.send_notification()
+        ok_(result is not None)
+        eq_(result["messageType"], "notification")
+        ok_("headers" not in result)
+        ok_("data" not in result)
+
+        result2 = yield client.send_notification()
+        # We shouldn't store headers for blank messages.
+        ok_(result2 is not None)
+        eq_(result2["messageType"], "notification")
+        ok_("headers" not in result2)
+        ok_("data" not in result2)
+
+        yield client.ack(result["channelID"], result["version"])
+        yield client.ack(result2["channelID"], result2["version"])
+
+        yield client.disconnect()
+        yield client.send_notification()
+        yield client.connect()
+        yield client.hello()
+        result3 = yield client.get_notification()
+        ok_(result3 is not None)
+        ok_("headers" not in result3)
+        ok_("data" not in result3)
+        yield client.ack(result3["channelID"], result3["version"])
 
         yield self.shut_down(client)
 
