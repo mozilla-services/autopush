@@ -2,6 +2,14 @@
 Autopush Changelog
 ==================
 
+1.6.0 (**dev**)
+===============
+
+Features
+--------
+
+* Add an endpoint for deleting undelivered messages. PR #131.
+
 1.5.1 (2015-09-02)
 ==================
 
