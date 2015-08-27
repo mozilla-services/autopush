@@ -2,6 +2,15 @@
 Autopush Changelog
 ==================
 
+1.5.0 (**dev**)
+===============
+
+Features
+--------
+
+* Memory profile benchmarking on a connection, displays in test results. Issue
+  #142.
+
 1.4.0 (2015-08-27)
 ==================
 
