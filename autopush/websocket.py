@@ -239,7 +239,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     @log_exception
     def onConnect(self, request):
         """autobahn onConnect handler for when a connection has started"""
-        track_object(self)
+        track_object(self, msg="onConnect Start")
 
         # Setup ourself to handle producing the data
         self.transport.bufferSize = 2 * 1024
@@ -277,7 +277,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # Track Notification's we don't need to delete separately
         self.direct_updates = {}
-        track_object(self)
+        track_object(self, msg="onConnect End")
 
     #############################################################
     #                    Connection Methods
@@ -286,7 +286,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def processHandshake(self):
         """Disable host port checking on nonstandard ports since some
         clients are buggy and don't provide it"""
-        track_object(self)
+        track_object(self, msg="processHandshake")
         port = self.ap_settings.port
         hide = port != 80 and port != 443
         if not hide:
@@ -306,6 +306,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.sendClose()
             return
 
+        track_object(self, msg="onMessage")
         data = None
         try:
             data = json.loads(payload.decode('utf8'))
@@ -350,7 +351,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def onClose(self, wasClean, code, reason):
         """autobahn onClose handler for shutting down the connection and any
         outstanding deferreds related to this connection"""
-        track_object(self)
+        track_object(self, msg="onClose")
         uaid = getattr(self, "uaid", None)
         self._shutdown_ran = True
         self._should_stop = True

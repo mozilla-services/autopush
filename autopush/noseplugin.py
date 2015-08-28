@@ -1,6 +1,8 @@
+from autobahn.twisted.websocket import WebSocketServerFactory
 from nose.plugins import Plugin
 from pympler import asizeof
 
+from autopush.settings import AutopushSettings
 
 _testing = False
 tracked_objects = []
@@ -8,17 +10,14 @@ test_results = {}
 open_objects = {}
 
 
-def track_object(obj):
+def track_object(obj, msg=None):
     # Only track if testing
+    sizer = asizeof.Asizer()
+    sizer.exclude_types(AutopushSettings, WebSocketServerFactory)
     if not _testing:
         return
 
-    obj_id = id(obj)
-    if obj_id in open_objects:
-        existing = open_objects[obj_id]
-        tracked_objects.append((obj, asizeof.asizeof(obj)-existing))
-    else:
-        open_objects[obj_id] = asizeof.asizeof(obj)
+    tracked_objects.append((obj, sizer.asizeof(obj), msg))
 
 
 class ObjectTracker(Plugin):  # pragma: nocover
@@ -43,5 +42,9 @@ class ObjectTracker(Plugin):  # pragma: nocover
         for test in sorted(test_results.keys()):
             objs = test_results[test]
             stream.write("\n%s\n" % test)
-            for obj, size in objs:
-                stream.write("\t%s\t%s\n" % (obj, size))
+            for obj, size, msg in objs:
+                if msg:
+                    out = "%s%25s" % (obj, msg)
+                else:
+                    out = "%s%s" % (obj, " " * 25)
+                stream.write("%s\t%15s\n" % (out, "{:,}".format(size)))
