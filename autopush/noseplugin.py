@@ -2,7 +2,11 @@ from collections import defaultdict
 import time
 
 from nose.plugins import Plugin
-from pympler import asizeof
+
+try:
+    from pympler import asizeof
+except:
+    asizeof = None
 
 
 _testing = False
@@ -13,6 +17,9 @@ open_objects = {}
 
 
 def track_object(obj, msg=None):
+    if not asizeof:
+        return
+
     # Only track if testing
     sizer = asizeof.Asizer()
     sizer.exclude_types(_excludes)
@@ -61,6 +68,6 @@ class ObjectTracker(Plugin):  # pragma: nocover
                     stream.write("\t\t%20s" % ft)
                     stream.write("  {:<25}".format(msg))
                     stream.write("%15s\n" % "{:,.2f}".format(size))
-                stream.write("\t\tMin: %s" % "{:,.2f}".format(min_val))
-                stream.write("    Max: %s" % "{:,.2f}".format(max_val))
-                stream.write("    Delta: %s\n" % "{:,.2f}".format(delta))
+                stream.write("\t\tMin: {:,.2f}".format(min_val))
+                stream.write("    Max: {:,.2f}".format(max_val))
+                stream.write("    Delta: {:,.2f}\n".format(delta))

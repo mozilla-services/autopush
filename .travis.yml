@@ -1,7 +1,7 @@
 language: python
 sudo: false
 python:
-  - "2.7"
+  - "pypy"
 install:
   - pip install coverage nose mock moto python-coveralls tox
 script: tox
