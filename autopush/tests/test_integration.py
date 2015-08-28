@@ -209,6 +209,8 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 
 
 class IntegrationBase(unittest.TestCase):
+    track_objects = True
+
     def setUp(self):
         import cyclone.web
         from autobahn.twisted.websocket import WebSocketServerFactory
@@ -224,6 +226,7 @@ class IntegrationBase(unittest.TestCase):
             StatusResource,
         )
         from twisted.web.server import Site
+
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
