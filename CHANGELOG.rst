@@ -11,6 +11,14 @@ Features
 * Memory profile benchmarking on a connection, displays in test results. Issue
   #142.
 
+1.4.1 (**dev**)
+===============
+
+Bug Fixes
+---------
+
+* Expose Web Push headers for CORS requests. PR #148.
+
 1.4.0 (2015-08-27)
 ==================
 

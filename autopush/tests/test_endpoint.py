@@ -435,37 +435,55 @@ class EndpointTestCase(unittest.TestCase):
     def test_cors(self):
         ch1 = "Access-Control-Allow-Origin"
         ch2 = "Access-Control-Allow-Methods"
+        ch3 = "Access-Control-Allow-Headers"
+        ch4 = "Access-Control-Expose-Headers"
         endpoint = self.endpoint
         endpoint.ap_settings.cors = False
         assert endpoint._headers.get(ch1) != "*"
-        assert endpoint._headers.get(ch2) != "PUT"
+        assert endpoint._headers.get(ch2) != "POST,PUT"
+        assert endpoint._headers.get(ch3) != ("content-encoding,encryption,"
+                                              "encryption-key,content-type")
+        assert endpoint._headers.get(ch4) != "location"
 
         endpoint.clear_header(ch1)
         endpoint.clear_header(ch2)
         endpoint.ap_settings.cors = True
         self.endpoint.prepare()
         eq_(endpoint._headers[ch1], "*")
-        eq_(endpoint._headers[ch2], "PUT")
+        eq_(endpoint._headers[ch2], "POST,PUT")
+        eq_(endpoint._headers[ch3], "content-encoding,encryption,"
+            "encryption-key,content-type")
+        eq_(endpoint._headers[ch4], "location")
 
     def test_cors_head(self):
         ch1 = "Access-Control-Allow-Origin"
         ch2 = "Access-Control-Allow-Methods"
+        ch3 = "Access-Control-Allow-Headers"
+        ch4 = "Access-Control-Expose-Headers"
         endpoint = self.endpoint
         endpoint.ap_settings.cors = True
         endpoint.prepare()
         endpoint.head(None)
         eq_(endpoint._headers[ch1], "*")
-        eq_(endpoint._headers[ch2], "PUT")
+        eq_(endpoint._headers[ch2], "POST,PUT")
+        eq_(endpoint._headers[ch3], "content-encoding,encryption,"
+            "encryption-key,content-type")
+        eq_(endpoint._headers[ch4], "location")
 
     def test_cors_options(self):
         ch1 = "Access-Control-Allow-Origin"
         ch2 = "Access-Control-Allow-Methods"
+        ch3 = "Access-Control-Allow-Headers"
+        ch4 = "Access-Control-Expose-Headers"
         endpoint = self.endpoint
         endpoint.ap_settings.cors = True
         endpoint.prepare()
         endpoint.options(None)
         eq_(endpoint._headers[ch1], "*")
-        eq_(endpoint._headers[ch2], "PUT")
+        eq_(endpoint._headers[ch2], "POST,PUT")
+        eq_(endpoint._headers[ch3], "content-encoding,encryption,"
+            "encryption-key,content-type")
+        eq_(endpoint._headers[ch4], "location")
 
     @patch_logger
     def test_write_error(self, log_mock):
