@@ -246,6 +246,8 @@ def parse_request_params(request):
 class AutoendpointHandler(cyclone.web.RequestHandler):
     """Common overrides for Autoendpoint handlers"""
     cors_methods = ""
+    cors_request_headers = []
+    cors_response_headers = []
 
     #############################################################
     #                    Cyclone API Methods
@@ -261,7 +263,12 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         """Common request preparation"""
         if self.ap_settings.cors:
             self.set_header("Access-Control-Allow-Origin", "*")
-            self.set_header("Access-Control-Allow-Methods", self.cors_methods)
+            self.set_header("Access-Control-Allow-Methods",
+                            self.cors_methods)
+            self.set_header("Access-Control-Allow-Headers",
+                            ",".join(self.cors_request_headers))
+            self.set_header("Access-Control-Expose-Headers",
+                            ",".join(self.cors_response_headers))
 
     def write_error(self, code, **kwargs):
         """Write the error (otherwise unhandled exception when dealing with
@@ -353,7 +360,10 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
 
 
 class EndpointHandler(AutoendpointHandler):
-    cors_methods = "PUT"
+    cors_methods = "POST,PUT"
+    cors_request_headers = ["content-encoding", "encryption",
+                            "encryption-key", "content-type"]
+    cors_response_headers = ["location"]
 
     #############################################################
     #                    Cyclone HTTP Methods
