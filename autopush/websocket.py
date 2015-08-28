@@ -351,7 +351,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def onClose(self, wasClean, code, reason):
         """autobahn onClose handler for shutting down the connection and any
         outstanding deferreds related to this connection"""
-        track_object(self, msg="onClose")
         uaid = getattr(self, "uaid", None)
         self._shutdown_ran = True
         self._should_stop = True
