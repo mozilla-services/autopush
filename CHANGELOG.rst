@@ -11,9 +11,6 @@ Features
 * Memory profile benchmarking on a connection, displays in test results. Issue
   #142.
 
-1.4.1 (**dev**)
-===============
-
 Bug Fixes
 ---------
 
