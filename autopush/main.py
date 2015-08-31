@@ -168,6 +168,10 @@ def _parse_connection(sysargs):
     parser.add_argument('--max_connections',
                         help="The maximum number of concurrent connections.",
                         default=0, type=int, env_var="MAX_CONNECTIONS")
+    parser.add_argument('--max_message_size',
+                        help="The maximum size that messages from client " +
+                        "can be (e.g. header, data, json formatting, etc.)",
+                        default=2048, type=int, env_var="MAX_MESSAGE_SIZE")
 
     add_external_router_args(parser)
     add_shared_args(parser)
@@ -296,8 +300,8 @@ def connection_main(sysargs=None):
     factory.protocol.ap_settings = settings
     factory.setProtocolOptions(
         webStatus=False,
-        maxFramePayloadSize=2048,
-        maxMessagePayloadSize=2048,
+        maxFramePayloadSize=args.max_message_size,
+        maxMessagePayloadSize=args.max_message_size,
         openHandshakeTimeout=5,
         autoPingInterval=args.auto_ping_interval,
         autoPingTimeout=args.auto_ping_timeout,
