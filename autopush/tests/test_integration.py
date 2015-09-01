@@ -35,6 +35,7 @@ twisted.internet.base.DelayedCall.debug = True
 
 
 def setUp():
+    logging.getLogger('boto').setLevel(logging.CRITICAL)
     boto_path = os.path.join(root_dir, "automock", "boto.cfg")
     boto.config.load_from_path(boto_path)
     if "SKIP_INTEGRATION" in os.environ:  # pragma: nocover
@@ -239,7 +240,7 @@ class IntegrationBase(unittest.TestCase):
 
         # Websocket server
         self._ws_url = "ws://localhost:9010/"
-        factory = WebSocketServerFactory(self._ws_url)
+        factory = WebSocketServerFactory(self._ws_url, debug=False)
         factory.protocol = SimplePushServerProtocol
         factory.protocol.ap_settings = settings
         factory.setProtocolOptions(
@@ -264,7 +265,8 @@ class IntegrationBase(unittest.TestCase):
             (r"/notif/([^\/]+)(/([^\/]+))?", n),
         ],
             default_host=settings.router_hostname,
-            log_function=skip_request_logging
+            log_function=skip_request_logging,
+            debug=False,
         )
         self.ws_website = reactor.listenTCP(9030, ws_site)
 
@@ -277,7 +279,8 @@ class IntegrationBase(unittest.TestCase):
              dict(ap_settings=settings)),
         ],
             default_host=settings.hostname,
-            log_function=skip_request_logging
+            log_function=skip_request_logging,
+            debug=False,
         )
         self.website = reactor.listenTCP(9020, site)
         self._settings = settings
