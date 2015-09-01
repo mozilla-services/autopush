@@ -11,10 +11,21 @@ Features
 * Memory profile benchmarking on a connection, displays in test results. Issue
   #142.
 
+
+1.4.1 (2015-08-31)
+==================
+
 Bug Fixes
 ---------
 
 * Expose Web Push headers for CORS requests. PR #148.
+* Expose argument for larger websocket message sizes (to fix issue #151)
+  Clients with a large number of channelIDs (50+) can cause the initial
+  connection to fail. A proper solution is to modify the client to not send
+  ChannelIDs as part of the "hello" message, but being able to increase the
+  message size on the server should keep the server from dying up front.
+  This fix should only impact clients with large numbers of registered channels,
+  notably, devs.
 
 1.4.0 (2015-08-27)
 ==================
