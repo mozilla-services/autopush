@@ -384,7 +384,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         outstanding deferreds related to this connection"""
         try:
             uaid = self.ps.uaid
-        except AttributeError:
+        except AttributeError:  # pragma: nocover
+            # Sometimes in odd production cases, onClose will be called without
+            # onConnect being called to set this up.
             uaid = None
         self._shutdown_ran = True
         self.ps._should_stop = True
