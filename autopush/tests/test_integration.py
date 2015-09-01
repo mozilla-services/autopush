@@ -13,6 +13,7 @@ from unittest.case import SkipTest
 import boto
 import psutil
 import websocket
+from autobahn.twisted.websocket import WebSocketServerFactory
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
 from twisted.internet import reactor
@@ -21,6 +22,7 @@ from twisted.internet.threads import deferToThread
 from twisted.web.client import Agent
 from twisted.test.proto_helpers import AccumulatingProtocol
 from autopush import __version__
+from autopush.settings import AutopushSettings
 from base64 import urlsafe_b64encode
 
 log = logging.getLogger(__name__)
@@ -209,6 +211,9 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 
 
 class IntegrationBase(unittest.TestCase):
+    track_objects = True
+    track_objects_excludes = [AutopushSettings, WebSocketServerFactory]
+
     def setUp(self):
         import cyclone.web
         from autobahn.twisted.websocket import WebSocketServerFactory
@@ -224,6 +229,7 @@ class IntegrationBase(unittest.TestCase):
             StatusResource,
         )
         from twisted.web.server import Site
+
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,

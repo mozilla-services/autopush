@@ -55,6 +55,7 @@ from twisted.web.resource import Resource
 from autopush import __version__
 from autopush.protocol import IgnoreBody
 from autopush.utils import validate_uaid
+from autopush.noseplugin import track_object
 
 
 def ms_time():
@@ -238,6 +239,8 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     @log_exception
     def onConnect(self, request):
         """autobahn onConnect handler for when a connection has started"""
+        track_object(self, msg="onConnect Start")
+
         # Setup ourself to handle producing the data
         self.transport.bufferSize = 2 * 1024
         self.transport.registerProducer(self, True)
@@ -274,6 +277,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         # Track Notification's we don't need to delete separately
         self.direct_updates = {}
+        track_object(self, msg="onConnect End")
 
     #############################################################
     #                    Connection Methods
@@ -282,6 +286,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def processHandshake(self):
         """Disable host port checking on nonstandard ports since some
         clients are buggy and don't provide it"""
+        track_object(self, msg="processHandshake")
         port = self.ap_settings.port
         hide = port != 80 and port != 443
         if not hide:
@@ -301,6 +306,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             self.sendClose()
             return
 
+        track_object(self, msg="onMessage")
         data = None
         try:
             data = json.loads(payload.decode('utf8'))
