@@ -1,7 +1,12 @@
 from collections import defaultdict
 import time
 
-from nose.plugins import Plugin
+try:
+    from nose.plugins import Plugin
+except ImportError:
+    class Plugin(object):
+        pass
+
 
 try:
     from pympler import asizeof
