@@ -315,6 +315,7 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
             "remote-ip": self.request.headers.get("x-forwarded-for",
                                                   self.request.remote_ip),
             "uaid_hash": self.uaid_hash,
+            "router_key": getattr(self, "router_key", ""),
         }
 
     #############################################################
@@ -346,6 +347,9 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         exc = fail.value
         if exc.log_exception:
             log.err(fail, **self._client_info())
+        if 200 <= exc.status_code < 300:
+            log.msg("Success", status_code=exc.status_code,
+                    **self._client_info())
         self.set_status(exc.status_code)
         self.write(exc.response_body)
         self.finish()
@@ -398,7 +402,7 @@ class EndpointHandler(AutoendpointHandler):
     def _uaid_lookup_results(self, result):
         """Process the result of the AWS UAID lookup"""
         # Save the whole record
-        router_key = result.get("router_type", "simplepush")
+        router_key = self.router_key = result.get("router_type", "simplepush")
         router = self.ap_settings.routers[router_key]
 
         # Only simplepush uses version/data out of body/query, GCM/APNS will
@@ -467,6 +471,12 @@ class EndpointHandler(AutoendpointHandler):
                                                            uaid_data))
             return d
         else:
+            if response.status_code == 200:
+                log.msg("Successful delivery", **self._client_info())
+            elif response.status_code == 202:
+                log.msg("Router miss, message stored.", **self._client_info())
+            time_diff = time.time() - self.start_time
+            self.metrics.timing("updates.handled", duration=time_diff)
             self.set_status(response.status_code)
             self.write(response.response_body)
             for name, val in response.headers.items():

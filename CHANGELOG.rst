@@ -2,8 +2,15 @@
 Autopush Changelog
 ==================
 
-1.5.0 (**dev**)
-===============
+1.5.0 (2015-09-02)
+==================
+
+Bug Fixes
+---------
+
+* Don't cancel a deferred that was already called.
+* Restore logging of simplepush successfull/stored delivery based on status.
+* Restore updates.handled endpoint timer to track time to deliver.
 
 Features
 --------
@@ -13,6 +20,8 @@ Features
 * Refactor of attribute assignment to the Websocket instance to avoid memory
   increases due to Python reallocating the underlying dict datastructure. Issue
   #149.
+* Add close_handshake_timeout option, with default of 0 to let our own close
+  timer handle clean-up.
 
 1.4.1 (2015-08-31)
 ==================
