@@ -316,6 +316,7 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
                                                   self.request.remote_ip),
             "uaid_hash": self.uaid_hash,
             "router_key": getattr(self, "router_key", ""),
+            "channel_id": getattr(self, "chid", ""),
         }
 
     #############################################################
