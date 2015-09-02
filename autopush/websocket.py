@@ -268,7 +268,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
     def sendClose(self, code=None, reason=None):
         """Override to add tracker that ensures the connection is truly
         torn down"""
-        reactor.callLater(5+self.closeHandshakeTimeout, self.nukeConnection)
+        reactor.callLater(10+self.closeHandshakeTimeout, self.nukeConnection)
         return WebSocketServerProtocol.sendClose(self, code, reason)
 
     @log_exception

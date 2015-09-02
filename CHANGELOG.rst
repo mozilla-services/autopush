@@ -22,6 +22,8 @@ Features
   #149.
 * Add close_handshake_timeout option, with default of 0 to let our own close
   timer handle clean-up.
+* Up default close handshake timer to 10 seconds for slower clients.
+* Add channel id logging to endpoint.
 
 1.4.1 (2015-08-31)
 ==================
