@@ -11,7 +11,6 @@ Bug Fixes
 * Don't cancel a deferred that was already called.
 * Restore logging of simplepush successfull/stored delivery based on status.
 * Restore updates.handled endpoint timer to track time to deliver.
-* Remove logging of connection closing.
 
 Features
 --------
