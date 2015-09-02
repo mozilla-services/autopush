@@ -2,6 +2,14 @@
 Autopush Changelog
 ==================
 
+1.5.1 (2015-09-02)
+==================
+
+Bug Fixes
+---------
+
+* Don't require nose to be installed to run.
+
 1.5.0 (2015-09-02)
 ==================
 
