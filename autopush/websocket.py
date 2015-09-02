@@ -279,11 +279,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if hasattr(self, "_shutdown_ran"):
             return
 
-        # Uh-oh, we have not been shut-down properly, report detailed data
-        self.ps.metrics.increment("client.error.sendClose_failed",
-                                  tags=self.base_tags)
-        log.msg("sendClose failed to result in onClose", state=str(self.state))
-
         self.transport.abortConnection()
         # Add a last callback to verify onClose finally was run
         reactor.callLater(60, self.verifyNuke)

@@ -21,6 +21,8 @@ Features
 * Refactor of attribute assignment to the Websocket instance to avoid memory
   increases due to Python reallocating the underlying dict datastructure. Issue
   #149.
+* Add close_handshake_timeout option, with default of 0 to let our own close
+  timer handle clean-up.
 
 1.4.1 (2015-08-31)
 ==================
