@@ -172,6 +172,10 @@ def _parse_connection(sysargs):
                         help="The maximum size that messages from client " +
                         "can be (e.g. header, data, json formatting, etc.)",
                         default=2048, type=int, env_var="MAX_MESSAGE_SIZE")
+    parser.add_argument('--close_handshake_timeout',
+                        help="The WebSocket closing handshake timeout. Set to "
+                        "0 to disable.", default=0, type=int,
+                        env_var="CLOSE_HANDSHAKE_TIMEOUT")
 
     add_external_router_args(parser)
     add_shared_args(parser)
@@ -305,7 +309,8 @@ def connection_main(sysargs=None):
         openHandshakeTimeout=5,
         autoPingInterval=args.auto_ping_interval,
         autoPingTimeout=args.auto_ping_timeout,
-        maxConnections=args.max_connections
+        maxConnections=args.max_connections,
+        closeHandshakeTimeout=args.close_handshake_timeout,
     )
     settings.factory = factory
 
