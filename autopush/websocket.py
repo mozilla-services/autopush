@@ -405,11 +405,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         self.ps.metrics.timing("client.socket.lifespan", duration=elapsed,
                                tags=self.base_tags)
 
-        # Log out the connection close and info
-        log.msg("Connection Close", code=code, reason=reason,
-                was_clean=wasClean, lifespan=elapsed,
-                ping_time_out=self.ps.ping_time_out)
-
         # Cleanup our client entry
         if self.ps.uaid and self.ap_settings.clients.get(self.ps.uaid) == self:
             del self.ap_settings.clients[self.ps.uaid]

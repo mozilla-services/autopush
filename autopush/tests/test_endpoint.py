@@ -1,6 +1,7 @@
 import functools
 import json
 import sys
+import time
 
 import twisted.internet.base
 from cryptography.fernet import Fernet, InvalidToken
@@ -89,6 +90,7 @@ class EndpointTestCase(unittest.TestCase):
 
         d = self.finish_deferred = Deferred()
         self.endpoint.finish = lambda: d.callback(True)
+        self.endpoint.start_time = time.time()
 
     def test_uaid_lookup_results(self):
         fresult = dict(router_type="test")
