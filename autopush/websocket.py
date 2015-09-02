@@ -377,9 +377,10 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         if self.uaid and self.ap_settings.clients.get(self.uaid) == self:
             del self.ap_settings.clients[self.uaid]
 
-        # Cancel any outstanding deferreds
+        # Cancel any outstanding deferreds that weren't already called
         for d in self._callbacks:
-            d.cancel()
+            if not d.called:
+                d.cancel()
 
         # Attempt to deliver any notifications not originating from storage
         if self.direct_updates:

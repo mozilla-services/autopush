@@ -2,8 +2,13 @@
 Autopush Changelog
 ==================
 
-1.5.0 (**dev**)
-===============
+1.5.0 (2015-09-02)
+==================
+
+Bug Fixes
+---------
+
+* Don't cancel a deferred that was already called.
 
 Features
 --------
