@@ -15,7 +15,11 @@ from boto.dynamodb2.exceptions import (
 )
 from repoze.lru import LRUCache
 from twisted.internet.threads import deferToThread
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import (
+    inlineCallbacks,
+    maybeDeferred,
+    returnValue,
+)
 from twisted.internet.error import (
     ConnectError,
     ConnectionRefusedError,
@@ -54,6 +58,10 @@ class SimpleRouter(object):
         """Verifies this routing call can be done successfully"""
         return True
 
+    def prepare_notification(self, uaid, notification):
+        """Prepares a notification for delivery."""
+        return notification
+
     def stored_response(self, notification):
         return RouterResponse(202, "Notification Stored")
 
@@ -71,6 +79,8 @@ class SimpleRouter(object):
 
         # Preflight check, hook used by webpush to verify channel id
         yield self.preflight_check(uaid, notification.channel_id)
+        notification = yield maybeDeferred(self.prepare_notification, uaid,
+                                           notification)
 
         # Node_id is present, attempt delivery.
         # - Send Notification to node

@@ -8,8 +8,10 @@ table for retrieval by the client.
 import json
 import time
 from StringIO import StringIO
+from collections import namedtuple
 
 from twisted.internet.threads import deferToThread
+from twisted.internet.defer import (inlineCallbacks, returnValue)
 from twisted.web.client import FileBodyProducer
 
 from autopush.protocol import IgnoreBody
@@ -17,16 +19,28 @@ from autopush.router.interface import RouterException, RouterResponse
 from autopush.router.simple import SimpleRouter
 
 
+class Notification(namedtuple("Notification",
+                   "version data channel_id headers ttl location")):
+    """Incoming WebPush notification"""
+
+
 class WebPushRouter(SimpleRouter):
     """SimpleRouter subclass to store individual messages appropriately"""
 
+    @inlineCallbacks
+    def prepare_notification(self, uaid, notification):
+        location = yield deferToThread(self.ap_settings.make_message_endpoint,
+                                       uaid, notification.channel_id,
+                                       notification.version)
+        returnValue(Notification(version=notification.version,
+                                 data=notification.data,
+                                 channel_id=notification.channel_id,
+                                 headers=notification.headers,
+                                 ttl=notification.ttl, location=location))
+
     def delivered_response(self, notification):
-        return RouterResponse(
-            status_code=201,
-            response_body="",
-            headers={"Location": "%s/m/%s" % (self.ap_settings.endpoint_url,
-                                              notification.version)}
-        )
+        return RouterResponse(status_code=201, response_body="",
+                              headers={"Location": notification.location})
     stored_response = delivered_response
 
     def _crypto_headers(self, notification):

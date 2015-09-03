@@ -19,6 +19,7 @@ from autopush.db import (
     ProvisionedThroughputExceededException,
     Router,
     Storage,
+    Message,
     ItemNotFound
 )
 from autopush.settings import AutopushSettings
@@ -57,6 +58,83 @@ def patch_logger(test):
         params = args + (log_mock,)
         return test(self, *params, **kwargs)
     return wrapper
+
+
+class MessageTestCase(unittest.TestCase):
+    def setUp(self):
+        twisted.internet.base.DelayedCall.debug = True
+        settings = endpoint.MessageHandler.ap_settings =\
+            AutopushSettings(
+                hostname="localhost",
+                statsd_host=None,
+            )
+        self.fernet_mock = settings.fernet = Mock(spec=Fernet)
+        self.metrics_mock = settings.metrics = Mock(spec=Metrics)
+        self.router_mock = settings.router = Mock(spec=Router)
+        self.storage_mock = settings.storage = Mock(spec=Storage)
+        self.message_mock = settings.message = Mock(spec=Message)
+
+        self.request_mock = Mock(body=b'', arguments={}, headers={})
+        self.message = endpoint.MessageHandler(Application(),
+                                               self.request_mock,
+                                               ap_settings=settings)
+
+        self.status_mock = self.message.set_status = Mock()
+        self.write_mock = self.message.write = Mock()
+
+        d = self.finish_deferred = Deferred()
+        self.message.finish = lambda: d.callback(True)
+
+    def test_delete_token_invalid(self):
+        self.fernet_mock.configure_mock(**{
+            "decrypt.side_effect": InvalidToken})
+
+        def handle_finish(result):
+            self.status_mock.assert_called_with(401)
+            self.write_mock.assert_called_with('Invalid token')
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.message.delete('')
+        return self.finish_deferred
+
+    def test_delete_token_wrong(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+
+        def handle_finish(result):
+            self.status_mock.assert_called_with(401)
+            self.write_mock.assert_called_with('Invalid token')
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.message.delete('')
+        return self.finish_deferred
+
+    def test_delete_success(self):
+        self.fernet_mock.decrypt.return_value = "123:456:789"
+        self.message_mock.configure_mock(**{
+            "delete_message.return_value": True})
+
+        def handle_finish(result):
+            self.message_mock.delete_message.assert_called_with(
+                "123", "456", "789")
+            self.status_mock.assert_called_with(204)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.message.delete('')
+        return self.finish_deferred
+
+    def test_delete_db_error(self):
+        self.fernet_mock.decrypt.return_value = "123:456:789"
+        self.message_mock.configure_mock(**{
+            "delete_message.side_effect":
+            ProvisionedThroughputExceededException(None, None)})
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.status_mock.assert_called_with(503)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.message.delete('')
+        return self.finish_deferred
 
 
 class EndpointTestCase(unittest.TestCase):
@@ -319,6 +397,18 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.status_mock.assert_called_with(401)
             self.write_mock.assert_called_with('Invalid token')
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.put('')
+        return self.finish_deferred
+
+    def test_put_token_wrong(self):
+        self.fernet_mock.decrypt.return_value = "123:456:789"
+        self.endpoint.request.body = b'version=123'
+
+        def handle_finish(result):
+            self.status_mock.assert_called_with(401)
+            self.write_mock.assert_called_with("Invalid token")
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put('')
