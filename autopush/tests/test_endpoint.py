@@ -97,7 +97,7 @@ class MessageTestCase(unittest.TestCase):
         self.message.delete('')
         return self.finish_deferred
 
-    def test_delete_token_wrong(self):
+    def test_delete_token_wrong_components(self):
         self.fernet_mock.decrypt.return_value = "123:456"
 
         def handle_finish(result):
@@ -108,8 +108,19 @@ class MessageTestCase(unittest.TestCase):
         self.message.delete('')
         return self.finish_deferred
 
+    def test_delete_token_wrong_kind(self):
+        self.fernet_mock.decrypt.return_value = "r:123:456:789"
+
+        def handle_finish(result):
+            self.status_mock.assert_called_with(401)
+            self.write_mock.assert_called_with('Invalid token')
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.message.delete('')
+        return self.finish_deferred
+
     def test_delete_success(self):
-        self.fernet_mock.decrypt.return_value = "123:456:789"
+        self.fernet_mock.decrypt.return_value = "m:123:456:789"
         self.message_mock.configure_mock(**{
             "delete_message.return_value": True})
 
@@ -123,7 +134,7 @@ class MessageTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_delete_db_error(self):
-        self.fernet_mock.decrypt.return_value = "123:456:789"
+        self.fernet_mock.decrypt.return_value = "m:123:456:789"
         self.message_mock.configure_mock(**{
             "delete_message.side_effect":
             ProvisionedThroughputExceededException(None, None)})

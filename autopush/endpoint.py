@@ -407,10 +407,13 @@ class MessageHandler(AutoendpointHandler):
 
     def _token_valid(self, result):
         info = result.split(":")
-        if len(info) != 3:
-            raise ValueError("Invalid message token")
+        if len(info) != 4:
+            raise ValueError("Wrong message token components")
 
-        uaid, chid, version = info
+        kind, uaid, chid, version = info
+        if kind != 'm':
+            raise ValueError("Wrong message token kind")
+
         d = deferToThread(self.ap_settings.message.delete_message, uaid,
                           chid, version)
         d.addCallback(self._delete_completed)
@@ -455,7 +458,7 @@ class EndpointHandler(AutoendpointHandler):
         """Called after the token is decrypted successfully"""
         info = result.split(":")
         if len(info) != 2:
-            raise ValueError("Invalid subscription token")
+            raise ValueError("Wrong subscription token components")
 
         self.uaid, self.chid = info
         d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)

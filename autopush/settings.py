@@ -159,4 +159,4 @@ class AutopushSettings(object):
 
     def make_message_endpoint(self, uaid, chid, message_id):
         return '%s/m/%s' % (self.endpoint_url, self.fernet.encrypt(':'.join([
-            uaid, chid, str(message_id)]).encode('utf8')))
+            'm', uaid, chid, str(message_id)]).encode('utf8')))
