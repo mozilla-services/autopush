@@ -10,6 +10,14 @@ Features
 
 * Add an endpoint for deleting undelivered messages. PR #131.
 
+Bug Fixes
+---------
+
+* Remove logging of sendClose, as its unactionable noise. Add metric for
+  sendClose success. Remove final verifyNuke as its never run in the several
+  months it was in, indicating that abortConnection is 100% effective.
+  Issue #161.
+
 1.5.1 (2015-09-02)
 ==================
 
