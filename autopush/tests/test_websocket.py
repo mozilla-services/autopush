@@ -141,7 +141,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.state = ""
         self.proto.ps.uaid = str(uuid.uuid4())
         self.proto.nukeConnection()
-        mock_reactor.callLater.assert_called_with(60, self.proto.verifyNuke)
+        assert(self.proto.ap_settings.metrics.increment.called)
 
     @patch("autopush.websocket.reactor")
     def test_nuke_connection_shutdown_ran(self, mock_reactor):
@@ -151,18 +151,6 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto._shutdown_ran = True
         self.proto.nukeConnection()
         eq_(len(mock_reactor.mock_calls), 0)
-
-    def test_verify_nuke(self):
-        self._connect()
-        self.proto.verifyNuke()
-        eq_(len(self.proto.ap_settings.metrics.mock_calls), 2)
-
-    def test_verify_nuke_shutdown_ran(self):
-        self._connect()
-        self.proto._shutdown_ran = True
-        self.proto.verifyNuke()
-        # Should be 1 from connect
-        eq_(len(self.proto.ap_settings.metrics.mock_calls), 1)
 
     def test_producer_interface(self):
         self._connect()

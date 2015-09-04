@@ -277,26 +277,15 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         still hadn't run by this point"""
         # Did onClose get called? If so, we shutdown properly, no worries.
         if hasattr(self, "_shutdown_ran"):
+            self.ps.metrics.increment("client.success.sendClose",
+                                      tags=self.base_tags)
             return
 
         # Uh-oh, we have not been shut-down properly, report detailed data
         self.ps.metrics.increment("client.error.sendClose_failed",
                                   tags=self.base_tags)
-        log.msg("sendClose failed to result in onClose", state=str(self.state))
 
         self.transport.abortConnection()
-        # Add a last callback to verify onClose finally was run
-        reactor.callLater(60, self.verifyNuke)
-
-    @log_exception
-    def verifyNuke(self):
-        """Verifies that :meth:`nukeConnection` actually worked"""
-        if hasattr(self, "_shutdown_ran"):
-            return
-
-        # abortConnection still has failed to shut this down one minute later
-        self.ps.metrics.increment("client.error.abortConnection_failed",
-                                  tags=self.base_tags)
 
     @log_exception
     def onConnect(self, request):
