@@ -398,8 +398,9 @@ class MessageHandler(AutoendpointHandler):
         successfully routed to a client as direct updates, but not delivered
         yet, will not be dropped.
         """
+        self.version = token
         d = deferToThread(self.ap_settings.fernet.decrypt,
-                          token.encode('utf8'))
+                          self.version.encode('utf8'))
         d.addCallback(self._token_valid)
         d.addErrback(self._token_err)
         d.addErrback(self._response_err)
@@ -407,15 +408,15 @@ class MessageHandler(AutoendpointHandler):
 
     def _token_valid(self, result):
         info = result.split(":")
-        if len(info) != 4:
+        if len(info) != 3:
             raise ValueError("Wrong message token components")
 
-        kind, uaid, chid, version = info
+        kind, uaid, chid = info
         if kind != 'm':
             raise ValueError("Wrong message token kind")
 
         d = deferToThread(self.ap_settings.message.delete_message, uaid,
-                          chid, version)
+                          chid, self.version)
         d.addCallback(self._delete_completed)
         self._db_error_handling(d)
         d.addErrback(self._response_err)
@@ -470,7 +471,7 @@ class EndpointHandler(AutoendpointHandler):
         """Process the result of the AWS UAID lookup"""
         # Save the whole record
         router_key = self.router_key = result.get("router_type", "simplepush")
-        router = self.ap_settings.routers[router_key]
+        self.router = self.ap_settings.routers[router_key]
 
         # Only simplepush uses version/data out of body/query, GCM/APNS will
         # use data out of the request body 'WebPush' style.
@@ -488,8 +489,6 @@ class EndpointHandler(AutoendpointHandler):
                     self.write("Missing crypto headers.")
                     return self.finish()
 
-            version = uuid.uuid4().hex
-
         try:
             ttl = int(self.request.headers.get("ttl", "0"))
         except ValueError:
@@ -500,10 +499,21 @@ class EndpointHandler(AutoendpointHandler):
             self.write("Data too large")
             return self.finish()
 
+        if router_key == "simplepush":
+            self._route_notification(version, result, data)
+            return
+
         # Web Push messages are encrypted binary blobs. We store and deliver
         # these messages as Base64-encoded strings.
         if router_key == "webpush":
             data = urlsafe_b64encode(self.request.body)
+
+        d = deferToThread(self.ap_settings.fernet.encrypt, ':'.join([
+            'm', self.uaid, self.chid]).encode('utf8'))
+        d.addCallback(self._route_notification, result, data, ttl)
+        return d
+
+    def _route_notification(self, version, result, data, ttl=None):
 
         notification = Notification(version=version, data=data,
                                     channel_id=self.chid,
@@ -511,7 +521,7 @@ class EndpointHandler(AutoendpointHandler):
                                     ttl=ttl)
 
         d = Deferred()
-        d.addCallback(router.route_notification, result)
+        d.addCallback(self.router.route_notification, result)
         d.addCallback(self._router_completed, result)
         d.addErrback(self._router_fail_err)
         d.addErrback(self._response_err)

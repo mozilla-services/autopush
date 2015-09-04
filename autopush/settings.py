@@ -156,7 +156,3 @@ class AutopushSettings(object):
         """ Create an endpoint from the identifiers"""
         return self.endpoint_url + '/push/' + \
             self.fernet.encrypt((uaid + ':' + chid).encode('utf8'))
-
-    def make_message_endpoint(self, uaid, chid, message_id):
-        return '%s/m/%s' % (self.endpoint_url, self.fernet.encrypt(':'.join([
-            'm', uaid, chid, str(message_id)]).encode('utf8')))
