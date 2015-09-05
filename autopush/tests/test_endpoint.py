@@ -109,7 +109,7 @@ class MessageTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_delete_token_wrong_kind(self):
-        self.fernet_mock.decrypt.return_value = "r:123:456:789"
+        self.fernet_mock.decrypt.return_value = "r:123:456"
 
         def handle_finish(result):
             self.status_mock.assert_called_with(401)
@@ -120,21 +120,21 @@ class MessageTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_delete_success(self):
-        self.fernet_mock.decrypt.return_value = "m:123:456:789"
+        self.fernet_mock.decrypt.return_value = "m:123:456"
         self.message_mock.configure_mock(**{
             "delete_message.return_value": True})
 
         def handle_finish(result):
             self.message_mock.delete_message.assert_called_with(
-                "123", "456", "789")
+                "123", "456", "123-456")
             self.status_mock.assert_called_with(204)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.message.delete('')
+        self.message.delete("123-456")
         return self.finish_deferred
 
     def test_delete_db_error(self):
-        self.fernet_mock.decrypt.return_value = "m:123:456:789"
+        self.fernet_mock.decrypt.return_value = "m:123:456"
         self.message_mock.configure_mock(**{
             "delete_message.side_effect":
             ProvisionedThroughputExceededException(None, None)})
