@@ -5,11 +5,6 @@ Autopush Changelog
 1.6.0 (**dev**)
 ===============
 
-Features
---------
-
-* Add an endpoint for deleting undelivered messages. PR #131.
-
 Bug Fixes
 ---------
 
@@ -17,6 +12,13 @@ Bug Fixes
   sendClose success. Remove final verifyNuke as its never run in the several
   months it was in, indicating that abortConnection is 100% effective.
   Issue #161.
+
+WebPush
+-------
+
+* Add an endpoint for deleting undelivered messages. PR #131.
+* Add Push message update mechanism. Issue #141.
+
 
 1.5.1 (2015-09-02)
 ==================

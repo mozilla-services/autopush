@@ -308,7 +308,8 @@ class WebsocketTestCase(unittest.TestCase):
         # Stick an un-acked direct notification in
         self.proto.ps.direct_updates[chid] = [
             Notification(channel_id=chid, version=str(uuid.uuid4()),
-                         headers={}, data="blah", ttl=200)
+                         headers={}, data="blah", ttl=200,
+                         timestamp=0)
         ]
 
         # Apply some mocks
@@ -919,13 +920,13 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Send ourself a notification
         payload = {"channelID": chid, "version": 10, "data": "bleh",
-                   "headers": {}, "ttl": 20}
+                   "headers": {}, "ttl": 20, "timestamp": 0}
         self.proto.send_notifications(payload)
 
         # Check the call result
         args = json.loads(self.send_mock.call_args[0][0])
         eq_(args, {"messageType": "notification", "channelID": chid,
-                   "data": "bleh", "version": 10, "headers": {}})
+                   "data": "bleh", "version": "10:", "headers": {}})
 
     def test_notification_avoid_newer_delivery(self):
         self._connect()
@@ -1009,12 +1010,12 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.use_webpush = True
         self.proto.ps.direct_updates[chid] = [
             Notification(version="bleh", headers={}, data="meh",
-                         channel_id=chid, ttl=200)
+                         channel_id=chid, ttl=200, timestamp=0)
         ]
 
         self.proto.ack_update(dict(
             channelID=chid,
-            version="bleh"
+            version="bleh:asdjfilajsdilfj"
         ))
         eq_(self.proto.ps.direct_updates[chid], [])
 
@@ -1025,14 +1026,14 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.direct_updates[chid] = []
         self.proto.ps.updates_sent[chid] = [
             Notification(version="bleh", headers={}, data="meh",
-                         channel_id=chid, ttl=200)
+                         channel_id=chid, ttl=200, timestamp=0)
         ]
 
         mock_defer = Mock()
         self.proto.force_retry = Mock(return_value=mock_defer)
         self.proto.ack_update(dict(
             channelID=chid,
-            version="bleh"
+            version="bleh:jialsdjfilasjdf"
         ))
         assert self.proto.force_retry.called
         assert mock_defer.addBoth.called
@@ -1041,7 +1042,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         chid = str(uuid.uuid4())
         notif = Notification(version="bleh", headers={}, data="meh",
-                             channel_id=chid, ttl=200)
+                             channel_id=chid, ttl=200, timestamp=0)
         self.proto.ps.updates_sent[chid] = [notif]
         self.proto._handle_webpush_update_remove(None, chid, notif)
         eq_(self.proto.ps.updates_sent[chid], [])
@@ -1050,7 +1051,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         chid = str(uuid.uuid4())
         notif = Notification(version="bleh", headers={}, data="meh",
-                             channel_id=chid, ttl=200)
+                             channel_id=chid, ttl=200, timestamp=0)
         self.proto.ps.updates_sent[chid] = None
         self.proto._handle_webpush_update_remove(None, chid, notif)
 
@@ -1189,7 +1190,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.use_webpush = True
         self.proto.ps.updates_sent["chid"] = [
             Notification(channel_id="chid", data="bleh", headers={},
-                         version="now", ttl=200)
+                         version="now", ttl=200, timestamp=0)
         ]
         self.proto.deferToLater = Mock()
         self.proto.process_notifications()
@@ -1236,9 +1237,9 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.process_notifications = Mock()
         self.proto.ps.updates_sent["asdf"] = []
 
-        ttl = int(time.time()) + 100
         self.proto.finish_webpush_notifications([
-            dict(chidmessageid="asdf:fdsa", headers={}, data="bleh", ttl=ttl)
+            dict(chidmessageid="asdf:fdsa", headers={}, data="bleh", ttl=100,
+                 timestamp=int(time.time()), updateid=uuid.uuid4().hex)
         ])
         assert self.send_mock.called
 
@@ -1252,7 +1253,8 @@ class WebsocketTestCase(unittest.TestCase):
 
         self.proto.force_retry = Mock()
         self.proto.finish_webpush_notifications([
-            dict(chidmessageid="asdf:fdsa", headers={}, data="bleh", ttl=10)
+            dict(chidmessageid="asdf:fdsa", headers={}, data="bleh", ttl=10,
+                 timestamp=0, updateid=uuid.uuid4().hex)
         ])
         assert self.proto.force_retry.called
         assert not self.send_mock.called
