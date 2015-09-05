@@ -421,6 +421,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             defers = []
             if self.ps.use_webpush:
                 for notifs in self.ps.direct_updates.values():
+                    notifs = filter(lambda x: x.ttl != 0, notifs)
                     defers.extend(map(self._save_webpush_notif, notifs))
             else:
                 for chid, version in self.ps.direct_updates.items():
