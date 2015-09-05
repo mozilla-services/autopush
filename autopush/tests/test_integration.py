@@ -799,6 +799,7 @@ class TestWebPush(IntegrationBase):
         eq_(result["messageType"], "notification")
         ok_("headers" not in result)
         ok_("data" not in result)
+        yield client.ack(result["channelID"], result["version"])
 
         result2 = yield client.send_notification()
         # We shouldn't store headers for blank messages.
@@ -807,7 +808,6 @@ class TestWebPush(IntegrationBase):
         ok_("headers" not in result2)
         ok_("data" not in result2)
 
-        yield client.ack(result["channelID"], result["version"])
         yield client.ack(result2["channelID"], result2["version"])
 
         yield client.disconnect()
