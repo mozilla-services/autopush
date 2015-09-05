@@ -60,7 +60,8 @@ class WebPushRouter(SimpleRouter):
         """
         payload = {"channelID": notification.channel_id,
                    "version": notification.version,
-                   "ttl": notification.ttl+int(time.time()),
+                   "ttl": notification.ttl,
+                   "timetamp": int(time.time()),
                    }
         if notification.data:
             payload["headers"] = self._crypto_headers(notification)
@@ -95,5 +96,6 @@ class WebPushRouter(SimpleRouter):
             data=notification.data,
             headers=headers,
             message_id=notification.version,
-            ttl=notification.ttl+int(time.time()),
+            ttl=notification.ttl,
+            timestamp=int(time.time()),
         )

@@ -1,4 +1,5 @@
 """Database Interaction"""
+import time
 import uuid
 from functools import wraps
 
@@ -265,7 +266,7 @@ class Message(object):
 
     @track_provisioned
     def store_message(self, uaid, channel_id, message_id, ttl, data=None,
-                      headers=None):
+                      headers=None, timestamp=None):
         """Stores a message in the message table for the given uaid/channel with
         the message id"""
         item = dict(
@@ -274,6 +275,8 @@ class Message(object):
             data=data,
             headers=headers,
             ttl=ttl,
+            timestamp=timestamp or int(time.time()),
+            updateid=uuid.uuid4().hex
         )
         if data:
             item["headers"] = headers
@@ -282,10 +285,14 @@ class Message(object):
         return True
 
     @track_provisioned
-    def delete_message(self, uaid, channel_id, message_id):
+    def delete_message(self, uaid, channel_id, message_id, updateid=None):
         """Deletes a specific message"""
-        self.table.delete_item(uaid=uaid, chidmessageid="%s:%s" % (
-            channel_id, message_id))
+        if updateid:
+            self.table.delete_item(uaid=uaid, chidmessageid="%s:%s" % (
+                channel_id, message_id), expected={'updateid__eq': updateid})
+        else:
+            self.table.delete_item(uaid=uaid, chidmessageid="%s:%s" % (
+                channel_id, message_id))
         return True
 
     def delete_messages(self, uaid, chidmessageids):

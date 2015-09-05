@@ -174,8 +174,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                 })
             body = data or ""
             method = "POST"
-            if not status:
-                status = 201
+            status = status or 201
         else:
             if data:
                 body = "version=%s&data=%s" % (version or "", data)
@@ -193,7 +192,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         http.request(method, url.path.encode("utf-8"), body, headers)
         resp = http.getresponse()
         http.close()
-        log.debug("%s Response: %s", method, resp.read())
+        log.debug("%s Response (%s): %s", method, resp.status, resp.read())
         eq_(resp.status, status)
         location = resp.getheader("Location", None)
         if self.use_webpush:
@@ -730,6 +729,7 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         result = yield client.send_notification(data=data, ttl=0)
+        assert(result is not None)
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], urlsafe_b64encode(data))
         eq_(result["messageType"], "notification")
