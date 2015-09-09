@@ -537,9 +537,9 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                              netid=mobilenetwork.get("netid", '')))
             # set this so we can store it for the endpoint to call.
             self.ps.waker = UDPWake(protocol=self,
-                                 timeout=self.ap_settings.wake_timeout,
-                                 kill_func=self.sendClose, code=4774,
-                                 reason="UDP Idle")
+                                    timeout=self.ap_settings.wake_timeout,
+                                    kill_func=self.sendClose, code=4774,
+                                    reason="UDP Idle")
         except (AttributeError, KeyError):
             # Some wake value is missing, toss it all.
             pass

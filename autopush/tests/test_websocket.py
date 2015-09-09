@@ -503,7 +503,7 @@ class WebsocketTestCase(unittest.TestCase):
         def check_result(msg):
             eq_(msg["status"], 200)
             routeData = self.proto.ap_settings.router.get_uaid(
-                    msg["uaid"]).values()[4]
+                msg["uaid"]).values()[4]
             eq_(routeData, {
                 'data': {"ip": "127.0.0.1", "port": 9999, "mcc": "hammer",
                          "mnc": "banana", "netid": "gorp"}})
@@ -1433,14 +1433,11 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.waker = Mock()
         self.proto.ps.waker.set_active = Mock()
         self.proto.ps.waker.check_active = Mock()
-        self.proto.ps.uaid="testuaid"
+        self.proto.ps.uaid = "testuaid"
 
         self._send_message(dict(messageType="test"))
         assert(self.proto.ps.waker.set_active.call_count == 2)
         assert(self.proto.ps.waker.check_active.call_count == 1)
-
-        print 'here';
-
 
 
 class RouterHandlerTestCase(unittest.TestCase):
