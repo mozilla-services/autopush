@@ -263,15 +263,21 @@ class Message(object):
             return set([])
 
     @track_provisioned
-    def store_message(self, uaid, channel_id, data, headers, message_id):
+    def store_message(self, uaid, channel_id, message_id, ttl, data=None,
+                      headers=None):
         """Stores a message in the message table for the given uaid/channel with
         the message id"""
-        self.table.put_item(data=dict(
+        item = dict(
             uaid=uaid,
             chidmessageid="%s:%s" % (channel_id, message_id),
             data=data,
             headers=headers,
-        ))
+            ttl=ttl,
+        )
+        if data:
+            item["headers"] = headers
+            item["data"] = data
+        self.table.put_item(data=item)
         return True
 
     @track_provisioned
@@ -305,8 +311,9 @@ class Message(object):
     @track_provisioned
     def fetch_messages(self, uaid, limit=10):
         """Fetches messages for a uaid"""
-        return self.table.query_2(uaid__eq=uaid, chidmessageid__gt=" ",
-                                  consistent=True, limit=limit)
+        # Eagerly fetches all results in the result set.
+        return list(self.table.query_2(uaid__eq=uaid, chidmessageid__gt=" ",
+                                       consistent=True, limit=limit))
 
 
 class Router(object):

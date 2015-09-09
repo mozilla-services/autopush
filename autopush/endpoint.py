@@ -187,6 +187,7 @@ import time
 import urlparse
 import uuid
 from collections import namedtuple
+from base64 import urlsafe_b64encode
 
 import cyclone.web
 from boto.dynamodb2.exceptions import (
@@ -206,7 +207,7 @@ from autopush.utils import (
 
 
 class Notification(namedtuple("Notification",
-                   "version data channel_id headers")):
+                   "version data channel_id headers ttl")):
     """Parsed notification from the request"""
 
 
@@ -245,6 +246,8 @@ def parse_request_params(request):
 class AutoendpointHandler(cyclone.web.RequestHandler):
     """Common overrides for Autoendpoint handlers"""
     cors_methods = ""
+    cors_request_headers = []
+    cors_response_headers = []
 
     #############################################################
     #                    Cyclone API Methods
@@ -260,7 +263,12 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         """Common request preparation"""
         if self.ap_settings.cors:
             self.set_header("Access-Control-Allow-Origin", "*")
-            self.set_header("Access-Control-Allow-Methods", self.cors_methods)
+            self.set_header("Access-Control-Allow-Methods",
+                            self.cors_methods)
+            self.set_header("Access-Control-Allow-Headers",
+                            ",".join(self.cors_request_headers))
+            self.set_header("Access-Control-Expose-Headers",
+                            ",".join(self.cors_response_headers))
 
     def write_error(self, code, **kwargs):
         """Write the error (otherwise unhandled exception when dealing with
@@ -307,6 +315,8 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
             "remote-ip": self.request.headers.get("x-forwarded-for",
                                                   self.request.remote_ip),
             "uaid_hash": self.uaid_hash,
+            "router_key": getattr(self, "router_key", ""),
+            "channel_id": getattr(self, "chid", ""),
         }
 
     #############################################################
@@ -332,14 +342,23 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         self.write("Server busy, try later")
         self.finish()
 
+    def _router_response(self, response):
+        self.set_status(response.status_code)
+        for name, val in response.headers.items():
+            self.set_header(name, val)
+        self.write(response.response_body)
+        self.finish()
+
     def _router_fail_err(self, fail):
         """errBack for router failures"""
         fail.trap(RouterException)
-        log.err(fail, **self._client_info())
         exc = fail.value
-        self.set_status(exc.status_code)
-        self.write(exc.response_body)
-        self.finish()
+        if exc.log_exception:
+            log.err(fail, **self._client_info())
+        if 200 <= exc.status_code < 300:
+            log.msg("Success", status_code=exc.status_code,
+                    **self._client_info())
+        self._router_response(exc)
 
     def _uaid_not_found_err(self, fail):
         """errBack for uaid lookup not finding the user"""
@@ -349,9 +368,70 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         self.write("Invalid")
         return self.finish()
 
+    def _token_err(self, fail):
+        """errBack for token decryption fail"""
+        fail.trap(InvalidToken, ValueError)
+        self.set_status(401)
+        log.msg("Invalid token", **self._client_info())
+        self.write("Invalid token")
+        self.finish()
+
+    #############################################################
+    #                    Utility Methods
+    #############################################################
+    def _db_error_handling(self, d):
+        """Tack on the common error handling for a dynamodb request and
+        uncaught exceptions"""
+        d.addErrback(self._overload_err)
+        d.addErrback(self._response_err)
+        return d
+
+
+class MessageHandler(AutoendpointHandler):
+    cors_methods = "DELETE"
+
+    @cyclone.web.asynchronous
+    def delete(self, token):
+        """Drops a pending message.
+
+        The message will only be removed from DynamoDB. Messages that were
+        successfully routed to a client as direct updates, but not delivered
+        yet, will not be dropped.
+        """
+        self.version = token
+        d = deferToThread(self.ap_settings.fernet.decrypt,
+                          self.version.encode('utf8'))
+        d.addCallback(self._token_valid)
+        d.addErrback(self._token_err)
+        d.addErrback(self._response_err)
+        return d
+
+    def _token_valid(self, result):
+        info = result.split(":")
+        if len(info) != 3:
+            raise ValueError("Wrong message token components")
+
+        kind, uaid, chid = info
+        if kind != 'm':
+            raise ValueError("Wrong message token kind")
+
+        d = deferToThread(self.ap_settings.message.delete_message, uaid,
+                          chid, self.version)
+        d.addCallback(self._delete_completed)
+        self._db_error_handling(d)
+        d.addErrback(self._response_err)
+        return d
+
+    def _delete_completed(self, response):
+        self.set_status(204)
+        self.finish()
+
 
 class EndpointHandler(AutoendpointHandler):
-    cors_methods = "PUT"
+    cors_methods = "POST,PUT"
+    cors_request_headers = ["content-encoding", "encryption",
+                            "encryption-key", "content-type"]
+    cors_response_headers = ["location"]
 
     #############################################################
     #                    Cyclone HTTP Methods
@@ -377,7 +457,11 @@ class EndpointHandler(AutoendpointHandler):
     #############################################################
     def _token_valid(self, result):
         """Called after the token is decrypted successfully"""
-        self.uaid, self.chid = result.split(":")
+        info = result.split(":")
+        if len(info) != 2:
+            raise ValueError("Wrong subscription token components")
+
+        self.uaid, self.chid = info
         d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
         d.addCallback(self._uaid_lookup_results)
         d.addErrback(self._uaid_not_found_err)
@@ -386,37 +470,58 @@ class EndpointHandler(AutoendpointHandler):
     def _uaid_lookup_results(self, result):
         """Process the result of the AWS UAID lookup"""
         # Save the whole record
-        router_key = result.get("router_type", "simplepush")
-        router = self.ap_settings.routers[router_key]
+        router_key = self.router_key = result.get("router_type", "simplepush")
+        self.router = self.ap_settings.routers[router_key]
 
         # Only simplepush uses version/data out of body/query, GCM/APNS will
         # use data out of the request body 'WebPush' style.
         if router_key == "simplepush":
             version, data = parse_request_params(self.request)
         else:
-            # We need crypto headers
-            req_fields = ["content-encoding", "encryption"]
-            if not all([x in self.request.headers for x in req_fields]):
-                self.set_status(401)
-                log.msg("Missing Crypto headers", **self._client_info())
-                self.write("Missing crypto headers.")
-                return self.finish()
-
-            version = uuid.uuid4().hex
             data = self.request.body
+            if router_key == "webpush":
+                # We need crypto headers for messages with payloads.
+                req_fields = ["content-encoding", "encryption"]
+                if data and not all([x in self.request.headers
+                                     for x in req_fields]):
+                    self.set_status(401)
+                    log.msg("Missing Crypto headers", **self._client_info())
+                    self.write("Missing crypto headers.")
+                    return self.finish()
 
+        try:
+            ttl = int(self.request.headers.get("ttl", "0"))
+        except ValueError:
+            ttl = 0
         if data and len(data) > self.ap_settings.max_data:
             self.set_status(401)
             log.msg("Data too large", **self._client_info())
             self.write("Data too large")
             return self.finish()
 
+        if router_key == "simplepush":
+            self._route_notification(version, result, data)
+            return
+
+        # Web Push messages are encrypted binary blobs. We store and deliver
+        # these messages as Base64-encoded strings.
+        if router_key == "webpush":
+            data = urlsafe_b64encode(self.request.body)
+
+        d = deferToThread(self.ap_settings.fernet.encrypt, ':'.join([
+            'm', self.uaid, self.chid]).encode('utf8'))
+        d.addCallback(self._route_notification, result, data, ttl)
+        return d
+
+    def _route_notification(self, version, result, data, ttl=None):
+
         notification = Notification(version=version, data=data,
                                     channel_id=self.chid,
-                                    headers=self.request.headers)
+                                    headers=self.request.headers,
+                                    ttl=ttl)
 
         d = Deferred()
-        d.addCallback(router.route_notification, result)
+        d.addCallback(self.router.route_notification, result)
         d.addCallback(self._router_completed, result)
         d.addErrback(self._router_fail_err)
         d.addErrback(self._response_err)
@@ -443,32 +548,13 @@ class EndpointHandler(AutoendpointHandler):
                                                            uaid_data))
             return d
         else:
-            self.set_status(response.status_code)
-            self.write(response.response_body)
-            for name, val in response.headers.items():
-                self.set_header(name, val)
-            self.finish()
-
-    #############################################################
-    #                    Utility Methods
-    #############################################################
-    def _db_error_handling(self, d):
-        """Tack on the common error handling for a dynamodb request and
-        uncaught exceptions"""
-        d.addErrback(self._overload_err)
-        d.addErrback(self._response_err)
-        return d
-
-    #############################################################
-    #                    Error Callbacks
-    #############################################################
-    def _token_err(self, fail):
-        """errBack for token decryption fail"""
-        fail.trap(InvalidToken)
-        self.set_status(401)
-        log.msg("Invalid token", **self._client_info())
-        self.write("Invalid token")
-        self.finish()
+            if response.status_code == 200:
+                log.msg("Successful delivery", **self._client_info())
+            elif response.status_code == 202:
+                log.msg("Router miss, message stored.", **self._client_info())
+            time_diff = time.time() - self.start_time
+            self.metrics.timing("updates.handled", duration=time_diff)
+            self._router_response(response)
 
 
 class RegistrationHandler(AutoendpointHandler):

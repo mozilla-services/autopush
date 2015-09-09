@@ -1,6 +1,7 @@
 import functools
 import json
 import sys
+import time
 
 import twisted.internet.base
 from cryptography.fernet import Fernet, InvalidToken
@@ -18,6 +19,7 @@ from autopush.db import (
     ProvisionedThroughputExceededException,
     Router,
     Storage,
+    Message,
     ItemNotFound
 )
 from autopush.settings import AutopushSettings
@@ -58,6 +60,94 @@ def patch_logger(test):
     return wrapper
 
 
+class MessageTestCase(unittest.TestCase):
+    def setUp(self):
+        twisted.internet.base.DelayedCall.debug = True
+        settings = endpoint.MessageHandler.ap_settings =\
+            AutopushSettings(
+                hostname="localhost",
+                statsd_host=None,
+            )
+        self.fernet_mock = settings.fernet = Mock(spec=Fernet)
+        self.metrics_mock = settings.metrics = Mock(spec=Metrics)
+        self.router_mock = settings.router = Mock(spec=Router)
+        self.storage_mock = settings.storage = Mock(spec=Storage)
+        self.message_mock = settings.message = Mock(spec=Message)
+
+        self.request_mock = Mock(body=b'', arguments={}, headers={})
+        self.message = endpoint.MessageHandler(Application(),
+                                               self.request_mock,
+                                               ap_settings=settings)
+
+        self.status_mock = self.message.set_status = Mock()
+        self.write_mock = self.message.write = Mock()
+
+        d = self.finish_deferred = Deferred()
+        self.message.finish = lambda: d.callback(True)
+
+    def test_delete_token_invalid(self):
+        self.fernet_mock.configure_mock(**{
+            "decrypt.side_effect": InvalidToken})
+
+        def handle_finish(result):
+            self.status_mock.assert_called_with(401)
+            self.write_mock.assert_called_with('Invalid token')
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.message.delete('')
+        return self.finish_deferred
+
+    def test_delete_token_wrong_components(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+
+        def handle_finish(result):
+            self.status_mock.assert_called_with(401)
+            self.write_mock.assert_called_with('Invalid token')
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.message.delete('')
+        return self.finish_deferred
+
+    def test_delete_token_wrong_kind(self):
+        self.fernet_mock.decrypt.return_value = "r:123:456"
+
+        def handle_finish(result):
+            self.status_mock.assert_called_with(401)
+            self.write_mock.assert_called_with('Invalid token')
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.message.delete('')
+        return self.finish_deferred
+
+    def test_delete_success(self):
+        self.fernet_mock.decrypt.return_value = "m:123:456"
+        self.message_mock.configure_mock(**{
+            "delete_message.return_value": True})
+
+        def handle_finish(result):
+            self.message_mock.delete_message.assert_called_with(
+                "123", "456", "123-456")
+            self.status_mock.assert_called_with(204)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.message.delete("123-456")
+        return self.finish_deferred
+
+    def test_delete_db_error(self):
+        self.fernet_mock.decrypt.return_value = "m:123:456"
+        self.message_mock.configure_mock(**{
+            "delete_message.side_effect":
+            ProvisionedThroughputExceededException(None, None)})
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.status_mock.assert_called_with(503)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.message.delete('')
+        return self.finish_deferred
+
+
 class EndpointTestCase(unittest.TestCase):
     def setUp(self):
         self.timeout = 0.5
@@ -89,6 +179,7 @@ class EndpointTestCase(unittest.TestCase):
 
         d = self.finish_deferred = Deferred()
         self.endpoint.finish = lambda: d.callback(True)
+        self.endpoint.start_time = time.time()
 
     def test_uaid_lookup_results(self):
         fresult = dict(router_type="test")
@@ -107,7 +198,58 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
 
-    def test_uaid_lookup_no_crypto_headers(self):
+    def test_uaid_lookup_results_bad_ttl(self):
+        fresult = dict(router_type="test")
+        frouter = Mock(spec=Router)
+        frouter.route_notification = Mock()
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.request_mock.headers["ttl"] = "woops"
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.endpoint.ap_settings.routers["test"] = frouter
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            assert(frouter.route_notification.called)
+            args, kwargs = frouter.route_notification.call_args
+            notif = args[0]
+            assert(notif.ttl == 0)
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    # Crypto headers should be required for Web Push...
+    def test_webpush_uaid_lookup_no_crypto_headers_with_data(self):
+        fresult = dict(router_type="webpush")
+        frouter = self.settings.routers["webpush"]
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.request_mock.body = b"stuff"
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            self.endpoint.set_status.assert_called_with(401)
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    # ...But can be omitted for blank messages...
+    def test_webpush_uaid_lookup_no_crypto_headers_without_data(self):
+        fresult = dict(router_type="webpush")
+        frouter = self.settings.routers["webpush"]
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            assert(frouter.route_notification.called)
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    # ...And for other router types.
+    def test_other_uaid_lookup_no_crypto_headers(self):
         fresult = dict(router_type="test")
         frouter = Mock(spec=Router)
         frouter.route_notification = Mock()
@@ -117,7 +259,48 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
-            self.endpoint.set_status.assert_called_with(401)
+            assert(frouter.route_notification.called)
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    def test_webpush_payload_encoding(self):
+        fresult = dict(router_type="webpush")
+        frouter = self.settings.routers["webpush"]
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.request_mock.body = b"\xc3\x28\xa0\xa1"
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            calls = frouter.route_notification.mock_calls
+            eq_(len(calls), 1)
+            (_, (notification, _), _) = calls[0]
+            eq_(notification.channel_id, "fred")
+            eq_(notification.data, b"wyigoQ==")
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    def test_other_payload_encoding(self):
+        fresult = dict(router_type="test")
+        frouter = Mock(spec=Router)
+        frouter.route_notification = Mock()
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.endpoint.ap_settings.routers["test"] = frouter
+
+        self.request_mock.body = b"stuff"
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            calls = frouter.route_notification.mock_calls
+            eq_(len(calls), 1)
+            (_, (notification, _), _) = calls[0]
+            eq_(notification.channel_id, "fred")
+            eq_(notification.data, b"stuff")
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -225,6 +408,18 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.status_mock.assert_called_with(401)
             self.write_mock.assert_called_with('Invalid token')
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.put('')
+        return self.finish_deferred
+
+    def test_put_token_wrong(self):
+        self.fernet_mock.decrypt.return_value = "123:456:789"
+        self.endpoint.request.body = b'version=123'
+
+        def handle_finish(result):
+            self.status_mock.assert_called_with(401)
+            self.write_mock.assert_called_with("Invalid token")
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put('')
@@ -343,37 +538,55 @@ class EndpointTestCase(unittest.TestCase):
     def test_cors(self):
         ch1 = "Access-Control-Allow-Origin"
         ch2 = "Access-Control-Allow-Methods"
+        ch3 = "Access-Control-Allow-Headers"
+        ch4 = "Access-Control-Expose-Headers"
         endpoint = self.endpoint
         endpoint.ap_settings.cors = False
         assert endpoint._headers.get(ch1) != "*"
-        assert endpoint._headers.get(ch2) != "PUT"
+        assert endpoint._headers.get(ch2) != "POST,PUT"
+        assert endpoint._headers.get(ch3) != ("content-encoding,encryption,"
+                                              "encryption-key,content-type")
+        assert endpoint._headers.get(ch4) != "location"
 
         endpoint.clear_header(ch1)
         endpoint.clear_header(ch2)
         endpoint.ap_settings.cors = True
         self.endpoint.prepare()
         eq_(endpoint._headers[ch1], "*")
-        eq_(endpoint._headers[ch2], "PUT")
+        eq_(endpoint._headers[ch2], "POST,PUT")
+        eq_(endpoint._headers[ch3], "content-encoding,encryption,"
+            "encryption-key,content-type")
+        eq_(endpoint._headers[ch4], "location")
 
     def test_cors_head(self):
         ch1 = "Access-Control-Allow-Origin"
         ch2 = "Access-Control-Allow-Methods"
+        ch3 = "Access-Control-Allow-Headers"
+        ch4 = "Access-Control-Expose-Headers"
         endpoint = self.endpoint
         endpoint.ap_settings.cors = True
         endpoint.prepare()
         endpoint.head(None)
         eq_(endpoint._headers[ch1], "*")
-        eq_(endpoint._headers[ch2], "PUT")
+        eq_(endpoint._headers[ch2], "POST,PUT")
+        eq_(endpoint._headers[ch3], "content-encoding,encryption,"
+            "encryption-key,content-type")
+        eq_(endpoint._headers[ch4], "location")
 
     def test_cors_options(self):
         ch1 = "Access-Control-Allow-Origin"
         ch2 = "Access-Control-Allow-Methods"
+        ch3 = "Access-Control-Allow-Headers"
+        ch4 = "Access-Control-Expose-Headers"
         endpoint = self.endpoint
         endpoint.ap_settings.cors = True
         endpoint.prepare()
         endpoint.options(None)
         eq_(endpoint._headers[ch1], "*")
-        eq_(endpoint._headers[ch2], "PUT")
+        eq_(endpoint._headers[ch2], "POST,PUT")
+        eq_(endpoint._headers[ch3], "content-encoding,encryption,"
+            "encryption-key,content-type")
+        eq_(endpoint._headers[ch4], "location")
 
     @patch_logger
     def test_write_error(self, log_mock):

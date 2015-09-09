@@ -83,7 +83,7 @@ class APNSRouterTestCase(unittest.TestCase):
         self.mock_apns = Mock(spec=apns.APNs)
         self.router = APNSRouter(settings, apns_config)
         self.router.apns = self.mock_apns
-        self.notif = Notification(10, "data", dummy_chid, None)
+        self.notif = Notification(10, "data", dummy_chid, None, 200)
         self.router_data = dict(router_data=dict(token="connect_data"))
 
     def test_register(self):
@@ -150,7 +150,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
         gcm_config = {'apikey': '12345678abcdefg'}
         self.router = GCMRouter(settings, gcm_config)
-        self.notif = Notification(10, "data", dummy_chid, None)
+        self.notif = Notification(10, "data", dummy_chid, None, 200)
         self.router_data = dict(router_data=dict(token="connect_data"))
         mock_result = Mock(spec=gcmclient.gcm.Result)
         mock_result.canonical = dict()
@@ -256,7 +256,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         )
 
         self.router = SimpleRouter(settings, {})
-        self.notif = Notification(10, "data", dummy_chid, None)
+        self.notif = Notification(10, "data", dummy_chid, None, 200)
         mock_result = Mock(spec=gcmclient.gcm.Result)
         mock_result.canonical = dict()
         mock_result.failed = dict()
@@ -288,7 +288,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 200)
         d.addBoth(verify_deliver)
         return d
@@ -316,7 +316,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
         d.addBoth(verify_deliver)
         return d
@@ -346,7 +346,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
         d.addBoth(verify_deliver)
         return d
@@ -375,7 +375,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
         d.addBoth(verify_deliver)
         return d
@@ -390,7 +390,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
             assert(self.router_mock.get_uaid.called)
         d.addBoth(verify_deliver)
@@ -409,7 +409,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
             assert(self.router_mock.clear_node.called)
             nk = simple.node_key(router_data["node_id"])
@@ -433,7 +433,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
             assert(self.router_mock.clear_node.called)
             nk = simple.node_key(router_data["node_id"])
@@ -453,7 +453,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 200)
             self.router.metrics.increment.assert_called_with(
                 "router.broadcast.save_hit"
@@ -505,13 +505,13 @@ class WebPushRouterTestCase(unittest.TestCase):
             statsd_host=None,
         )
 
-        headers = {
+        self.headers = headers = {
             "content-encoding": "aes128",
             "encryption": "awesomecrypto",
             "encryption-key": "niftykey"
         }
         self.router = WebPushRouter(settings, {})
-        self.notif = Notification(10, "data", dummy_chid, headers)
+        self.notif = Notification(10, "data", dummy_chid, headers, 20)
         mock_result = Mock(spec=gcmclient.gcm.Result)
         mock_result.canonical = dict()
         mock_result.failed = dict()
@@ -537,13 +537,36 @@ class WebPushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(result, RouterResponse)
+            ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 201)
             self.router.metrics.increment.assert_called_with(
                 "router.broadcast.save_hit"
             )
             ok_("Location" in result.headers)
         d.addCallback(verify_deliver)
+        return d
+
+    def test_route_to_busy_node_with_ttl_zero(self):
+        notif = Notification(10, "data", dummy_chid, self.headers, 0)
+        self.agent_mock.request.return_value = response_mock = Mock()
+        response_mock.addCallback.return_value = response_mock
+        type(response_mock).code = PropertyMock(
+            side_effect=MockAssist([202, 200]))
+        self.message_mock.store_message.return_value = True
+        self.message_mock.all_channels.return_value = [dummy_chid]
+        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
+        self.router_mock.get_uaid.return_value = router_data
+        self.router.message_id = uuid.uuid4().hex
+
+        d = self.router.route_notification(notif, router_data)
+
+        def verify_deliver(fail):
+            exc = fail.value
+            ok_(exc, RouterResponse)
+            eq_(exc.status_code, 201)
+            eq_(len(self.router.metrics.increment.mock_calls), 0)
+            ok_("Location" not in exc.headers)
+        d.addBoth(verify_deliver)
         return d
 
     def test_route_with_invalid_channel_id(self):

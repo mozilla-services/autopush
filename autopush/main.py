@@ -1,10 +1,16 @@
 """autopush/autoendpoint daemon scripts"""
 import configargparse
 import cyclone.web
-from autobahn.twisted.websocket import WebSocketServerFactory, listenWS
+from autobahn.twisted.websocket import WebSocketServerFactory
+from autobahn.twisted.resource import WebSocketResource
 from twisted.internet import reactor, task
+from twisted.web.server import Site
 
-from autopush.endpoint import (EndpointHandler, RegistrationHandler)
+from autopush.endpoint import (
+    EndpointHandler,
+    MessageHandler,
+    RegistrationHandler,
+)
 from autopush.health import (HealthHandler, StatusHandler)
 from autopush.logging import setup_logging
 from autopush.settings import AutopushSettings
@@ -14,7 +20,9 @@ from autopush.websocket import (
     SimplePushServerProtocol,
     RouterHandler,
     NotificationHandler,
-    periodic_reporter
+    periodic_reporter,
+    DefaultResource,
+    StatusResource,
 )
 
 
@@ -175,6 +183,14 @@ def _parse_connection(sysargs):
     parser.add_argument('--max_connections',
                         help="The maximum number of concurrent connections.",
                         default=0, type=int, env_var="MAX_CONNECTIONS")
+    parser.add_argument('--max_message_size',
+                        help="The maximum size that messages from client " +
+                        "can be (e.g. header, data, json formatting, etc.)",
+                        default=2048, type=int, env_var="MAX_MESSAGE_SIZE")
+    parser.add_argument('--close_handshake_timeout',
+                        help="The WebSocket closing handshake timeout. Set to "
+                        "0 to disable.", default=0, type=int,
+                        env_var="CLOSE_HANDSHAKE_TIMEOUT")
 
     add_external_router_args(parser)
     add_shared_args(parser)
@@ -309,16 +325,24 @@ def connection_main(sysargs=None):
     factory.protocol.ap_settings = settings
     factory.setProtocolOptions(
         webStatus=False,
-        maxFramePayloadSize=2048,
-        maxMessagePayloadSize=2048,
+        maxFramePayloadSize=args.max_message_size,
+        maxMessagePayloadSize=args.max_message_size,
         openHandshakeTimeout=5,
         autoPingInterval=args.auto_ping_interval,
         autoPingTimeout=args.auto_ping_timeout,
-        maxConnections=args.max_connections
+        maxConnections=args.max_connections,
+        closeHandshakeTimeout=args.close_handshake_timeout,
     )
     settings.factory = factory
 
     settings.metrics.start()
+
+    # Wrap the WebSocket server in a default resource that exposes the
+    # `/status` handler, and delegates to the WebSocket resource for all
+    # other requests.
+    resource = DefaultResource(WebSocketResource(factory))
+    resource.putChild("status", StatusResource())
+    siteFactory = Site(resource)
 
     # Start the WebSocket listener.
     if args.ssl_key:
@@ -326,9 +350,10 @@ def connection_main(sysargs=None):
                                                    args.ssl_cert)
         if args.ssl_dh_param:
             contextFactory.getContext().load_tmp_dh(args.ssl_dh_param)
-        listenWS(factory, contextFactory)
+
+        reactor.listenSSL(args.port, siteFactory, contextFactory)
     else:
-        reactor.listenTCP(args.port, factory)
+        reactor.listenTCP(args.port, siteFactory)
 
     # Start the internal routing listener.
     if args.router_ssl_key:
@@ -364,6 +389,7 @@ def endpoint_main(sysargs=None):
     # Endpoint HTTP router
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", EndpointHandler, dict(ap_settings=settings)),
+        (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
         # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint
         (r"/register(?:/(.+))?", RegistrationHandler,

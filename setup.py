@@ -39,6 +39,8 @@ setup(name="AutoPush",
       autopush = autopush.main:connection_main
       autoendpoint = autopush.main:endpoint_main
       autokey = autokey:main
+      [nose.plugins]
+      object-tracker = autopush.noseplugin:ObjectTracker
       """,
       **extra_options
       )

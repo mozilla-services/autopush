@@ -15,7 +15,10 @@ from boto.dynamodb2.exceptions import (
 )
 from repoze.lru import LRUCache
 from twisted.internet.threads import deferToThread
-from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.defer import (
+    inlineCallbacks,
+    returnValue,
+)
 from twisted.internet.error import (
     ConnectError,
     ConnectionRefusedError,
@@ -102,7 +105,8 @@ class SimpleRouter(object):
                 yield deferToThread(router.clear_node,
                                     uaid_data).addErrback(self._eat_db_err)
                 raise RouterException("Node was invalid", status_code=503,
-                                      response_body="Retry Request")
+                                      response_body="Retry Request",
+                                      log_exception=False)
             if result.code == 200:
                 self.metrics.increment("router.broadcast.hit")
                 returnValue(self.delivered_response(notification))

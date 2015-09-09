@@ -2,17 +2,137 @@
 Autopush Changelog
 ==================
 
-1.3.0 (**dev**)
+1.6.0 (**dev**)
 ===============
 
 Features
 --------
 
+* Add an endpoint for deleting undelivered messages. PR #131.
+
+Bug Fixes
+---------
+
+* Remove logging of sendClose, as its unactionable noise. Add metric for
+  sendClose success. Remove final verifyNuke as its never run in the several
+  months it was in, indicating that abortConnection is 100% effective.
+  Issue #161.
+
+1.5.1 (2015-09-02)
+==================
+
+Bug Fixes
+---------
+
+* Don't require nose to be installed to run.
+
+1.5.0 (2015-09-02)
+==================
+
+Bug Fixes
+---------
+
+* Don't cancel a deferred that was already called.
+* Restore logging of simplepush successfull/stored delivery based on status.
+* Restore updates.handled endpoint timer to track time to deliver.
+
+Features
+--------
+
+* Memory profile benchmarking on a connection, displays in test results. Issue
+  #142.
+* Refactor of attribute assignment to the Websocket instance to avoid memory
+  increases due to Python reallocating the underlying dict datastructure. Issue
+  #149.
+* Add close_handshake_timeout option, with default of 0 to let our own close
+  timer handle clean-up.
+* Up default close handshake timer to 10 seconds for slower clients.
+* Add channel id logging to endpoint.
+
+1.4.1 (2015-08-31)
+==================
+
+Bug Fixes
+---------
+
+* Expose Web Push headers for CORS requests. PR #148.
+* Expose argument for larger websocket message sizes (to fix issue #151)
+  Clients with a large number of channelIDs (50+) can cause the initial
+  connection to fail. A proper solution is to modify the client to not send
+  ChannelIDs as part of the "hello" message, but being able to increase the
+  message size on the server should keep the server from dying up front.
+  This fix should only impact clients with large numbers of registered channels,
+  notably, devs.
+
+1.4.0 (2015-08-27)
+==================
+
+Bug Fixes
+---------
+
+* Fix _notify_node to not attempt delivering to ourselves at the end of the
+  client connection.
+* Remove adaptive ping entirely. Send special close code and drop clients that
+  ping more frequently than 55 seconds (approx 1 min). This will result in
+  clients that ping too much being turned away for awhile, but will alleviate
+  data/battery issues in buggy mobile clients. Issue #103.
+* Store and transmit encrypted Web Push messages as Base64-encoded strings.
+  PR #135.
+
+Features
+--------
+
+* Add /status HTTP endpoint for autopush. Issue #136.
+* Log all disconnects, whether they were clean, the code, and the reason.
+* Allow encryption headers to be omitted for blank messages. Issue #132.
+
+1.3.3 (2015-08-18)
+==================
+
+* Handle None values in ack updates.
+
+1.3.2 (2015-08-11)
+==================
+
+Bug Fixes
+---------
+
+* Fix deferToLater to not call the function if it was cancelled using a
+  canceller function.
+* Fix finish_webpush_notifications to not immediately call
+  process_notifications as that will be called as needed after ack's have been
+  completed.
+* Fix process_ack to not call process_notifications when using webpush if there
+  are still remaining notifications to ack.
+
+Features
+--------
+
+* Integrate simplepush_test smoke-test client with the main autopush test-suite
+  into the test-runner. Issue #119.
+
+1.3.1 (2015-08-04)
+==================
+
+Bug Fixes
+---------
+
+* Fix RouterException to allow for non-logged responses. Change
+  RouterException's to only log actual exceptions that should be address in
+  bug-fixes. Issue #125.
+
+1.3.0 (2015-07-29)
+==================
+
+Features
+--------
+
+* Add WebPush TTL scheme per spec (as of July 28th 2015). Issue #56.
 * Add WebPush style data delivery with crypto headers to connected clients.
   Each message is stored independently in a new message table, with the version
   and channel id still required to ack a message. The version is a UUID4 hex
   which is also echo'd back to the AppServer as a Location URL per the current
-  WebPush spec (as of July 28th 2015).
+  WebPush spec (as of July 28th 2015). Issue #57.
 * Add Sphinx docs with ReadTheDocs publishing. Issue #98.
   This change also includes a slight Metrics refactoring with a IMetrics
   interface, and renames MetricSink -> SinkMetrics for naming consistency.
@@ -181,7 +301,7 @@ Features
   disconnected without ack'ing them. Resolves Issue #36.
 * Use IProducer to more precisely monitor when the client has drained the data
   to immediately resume sending more data. Resolves Issue #28.
-* Add /status HTTP endpoint for autopush/autoendpoint. Resolves Issue #27.
+* Add /status HTTP endpoint for autoendpoint. Resolves Issue #27.
 * Add example stage/prod config files. Resolves Issue #22.
 * Switch internal routing from requests to twisted http-client. Resolves Issue
   #21.

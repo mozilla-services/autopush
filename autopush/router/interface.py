@@ -8,10 +8,12 @@ class RouterException(AutopushException):
 
     """
     def __init__(self, message, status_code=500, response_body="",
-                 router_data=None):
+                 router_data=None, headers={}, log_exception=True):
         """Create a new RouterException"""
         super(AutopushException, self).__init__(message)
         self.status_code = status_code
+        self.headers = headers
+        self.log_exception = log_exception
         self.response_body = response_body or message
 
 

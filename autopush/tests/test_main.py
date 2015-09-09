@@ -67,7 +67,6 @@ class ConnectionMainTestCase(unittest.TestCase):
         patchers = [
             "autopush.main.task",
             "autopush.main.reactor",
-            "autopush.main.listenWS",
             "autopush.settings.TwistedMetrics",
         ]
         self.mocks = {}

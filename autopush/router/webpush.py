@@ -6,6 +6,7 @@ table for retrieval by the client.
 
 """
 import json
+import time
 from StringIO import StringIO
 
 from twisted.internet.threads import deferToThread
@@ -20,12 +21,10 @@ class WebPushRouter(SimpleRouter):
     """SimpleRouter subclass to store individual messages appropriately"""
 
     def delivered_response(self, notification):
-        return RouterResponse(
-            status_code=201,
-            response_body="",
-            headers={"Location": "%s/m/%s" % (self.ap_settings.endpoint_url,
-                                              notification.version)}
-        )
+        location = "%s/m/%s" % (self.ap_settings.endpoint_url,
+                                notification.version)
+        return RouterResponse(status_code=201, response_body="",
+                              headers={"Location": location})
     stored_response = delivered_response
 
     def _crypto_headers(self, notification):
@@ -43,7 +42,8 @@ class WebPushRouter(SimpleRouter):
 
     def _verify_channel(self, result, channel_id):
         if channel_id not in result:
-            raise RouterException("No such subscription", status_code=404)
+            raise RouterException("No such subscription", status_code=404,
+                                  log_exception=False)
 
     def preflight_check(self, uaid, channel_id):
         """Verifies this routing call can be done successfully"""
@@ -58,16 +58,18 @@ class WebPushRouter(SimpleRouter):
         headers for the notification.
 
         """
-        payload = json.dumps({"channelID": notification.channel_id,
-                              "version": notification.version,
-                              "data": notification.data,
-                              "headers": self._crypto_headers(notification),
-                              })
+        payload = {"channelID": notification.channel_id,
+                   "version": notification.version,
+                   "ttl": notification.ttl+int(time.time()),
+                   }
+        if notification.data:
+            payload["headers"] = self._crypto_headers(notification)
+            payload["data"] = notification.data
         url = node_id + "/push/" + uaid
         d = self.ap_settings.agent.request(
             "PUT",
             url.encode("utf8"),
-            bodyProducer=FileBodyProducer(StringIO(payload)),
+            bodyProducer=FileBodyProducer(StringIO(json.dumps(payload))),
         )
         d.addCallback(IgnoreBody.ignore)
         return d
@@ -80,11 +82,18 @@ class WebPushRouter(SimpleRouter):
         available.
 
         """
+        if notification.ttl == 0:
+            raise RouterException("Finished Routing", status_code=201,
+                                  log_exception=False)
+        headers = None
+        if notification.data:
+            headers = self._crypto_headers(notification)
         return deferToThread(
             self.ap_settings.message.store_message,
             uaid=uaid,
             channel_id=notification.channel_id,
             data=notification.data,
-            headers=self._crypto_headers(notification),
+            headers=headers,
             message_id=notification.version,
+            ttl=notification.ttl+int(time.time()),
         )
