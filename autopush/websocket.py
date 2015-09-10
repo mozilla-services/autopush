@@ -169,7 +169,7 @@ class PushState(object):
         self._should_stop = True
 
 
-class SimplePushServerProtocol(WebSocketServerProtocol):
+class PushServerProtocol(WebSocketServerProtocol):
     """Main Websocket Connection Protocol"""
 
     # Testing purposes

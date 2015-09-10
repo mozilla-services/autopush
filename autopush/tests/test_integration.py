@@ -255,7 +255,7 @@ class IntegrationBase(unittest.TestCase):
         )
         from autopush.settings import AutopushSettings
         from autopush.websocket import (
-            SimplePushServerProtocol,
+            PushServerProtocol,
             RouterHandler,
             NotificationHandler,
             DefaultResource,
@@ -273,7 +273,7 @@ class IntegrationBase(unittest.TestCase):
         # Websocket server
         self._ws_url = "ws://localhost:9010/"
         factory = WebSocketServerFactory(self._ws_url, debug=False)
-        factory.protocol = SimplePushServerProtocol
+        factory.protocol = PushServerProtocol
         factory.protocol.ap_settings = settings
         factory.setProtocolOptions(
             webStatus=False,
