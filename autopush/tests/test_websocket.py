@@ -456,6 +456,26 @@ class WebsocketTestCase(unittest.TestCase):
 
         return self._check_response(check_result)
 
+    def test_hello_check_collision(self):
+        self._connect()
+
+        mock_register = self.proto.ap_settings.router.register_user = Mock()
+
+        def register_user(data):
+            registered = len(mock_register.mock_calls) > 1
+            return (registered, {})
+
+        mock_register.side_effect = register_user
+
+        uaid = "8c658b5b-8b79-4cfc-a18d-c34516661bd9"
+        self._send_message(dict(messageType="hello", uaid=uaid))
+
+        def check_result(msg):
+            eq_(len(mock_register.mock_calls), 2)
+            eq_(msg["status"], 200)
+            ok_(msg["uaid"] != uaid)
+        return self._check_response(check_result)
+
     def test_hello_check_fail(self):
         self._connect()
 
@@ -466,6 +486,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
         def check_result(msg):
+            calls = self.proto.ap_settings.router.register_user.mock_calls
+            eq_(len(calls), 2)
             eq_(msg["status"], 500)
             eq_(msg["reason"], "already_connected")
         return self._check_response(check_result)
