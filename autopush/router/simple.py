@@ -34,7 +34,6 @@ from autopush.router.interface import (
     RouterException,
     RouterResponse,
 )
-from autopush.waker import UDPWake
 
 
 dead_cache = LRUCache(150)
@@ -69,12 +68,6 @@ class SimpleRouter(object):
     def delivered_response(self, notification):
         return RouterResponse(200, "Delivered")
 
-    def _raise_invalid_node_error(self):
-        self.metrics.increment("updates.client.host_gone")
-        raise RouterException("Node was invalid", status_code=503,
-                              response_body="Retry Request",
-                              log_exception=False)
-
     @inlineCallbacks
     def route_notification(self, notification, uaid_data):
         """Route a notification to an internal node, and store it if the node
@@ -84,13 +77,6 @@ class SimpleRouter(object):
         uaid = uaid_data["uaid"]
         self.udp = None
         if "udp" in uaid_data:
-            if (self.conf is not None and "server" in self.conf and
-                    "cert" in self.conf):
-                # This should use a Wake resolver dict, but there's only one
-                # right now, so skip a few instructions.
-                self.waker = UDPWake(host=self.conf.get("server"),
-                                     cert=self.conf.get("cert"))
-
             self.udp = uaid_data["udp"]
         router = self.ap_settings.router
 
@@ -104,18 +90,17 @@ class SimpleRouter(object):
         #   - Error (Client gone, node gone/dead): Clear node entry for user
         #       - Both: Done, return 503
         if node_id:
-            key = node_key(node_id)
-            if dead_cache.get(key):
-                self._raise_invalid_node_error()
-
             try:
                 result = yield self._send_notification(uaid, node_id,
                                                        notification)
             except (ConnectError, UserError, ConnectionRefusedError):
-                dead_cache.put(key, True)
+                self.metrics.increment("updates.client.host_gone")
+                dead_cache.put(node_key(node_id), True)
                 yield deferToThread(router.clear_node,
                                     uaid_data).addErrback(self._eat_db_err)
-                self._raise_invalid_node_error()
+                raise RouterException("Node was invalid", status_code=503,
+                                      response_body="Retry Request",
+                                      log_exception=False)
             if result.code == 200:
                 self.metrics.increment("router.broadcast.hit")
                 returnValue(self.delivered_response(notification))

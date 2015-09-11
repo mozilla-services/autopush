@@ -23,7 +23,6 @@ from autopush.router import APNSRouter, GCMRouter, SimpleRouter, WebPushRouter
 from autopush.router.simple import dead_cache
 from autopush.router.interface import RouterException, RouterResponse, IRouter
 from autopush.settings import AutopushSettings
-from autopush.waker import WakeException
 
 
 mock_dynamodb2 = mock_dynamodb2()
@@ -308,6 +307,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
             ok_(exc, RouterException)
             eq_(exc.status_code, 503)
             eq_(len(self.router_mock.clear_node.mock_calls), 1)
+            self.router_mock.clear_node.reset_mock()
             self.flushLoggedErrors()
 
         def verify_deliver(fail):
@@ -315,7 +315,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
             ok_(exc, RouterException)
             eq_(exc.status_code, 503)
             eq_(len(self.router_mock.clear_node.mock_calls), 1)
-
+            self.router_mock.clear_node.reset_mock()
             d = self.router.route_notification(self.notif, router_data)
             d.addBoth(verify_retry)
             return d
