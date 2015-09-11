@@ -5,8 +5,8 @@ autopush
 .. image:: https://travis-ci.org/mozilla-services/autopush.svg?branch=master
     :target: https://travis-ci.org/mozilla-services/autopush
 
-.. image:: https://coveralls.io/repos/mozilla-services/autopush/badge.svg
-  :target: https://coveralls.io/r/mozilla-services/autopush
+.. image:: https://codecov.io/github/mozilla-services/autopush/coverage.svg
+  :target: https://codecov.io/github/mozilla-services/autopush
 
 Mozilla Push server and Push Endpoint utilizing PyPy, twisted, and DynamoDB.
 

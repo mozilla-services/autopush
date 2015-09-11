@@ -170,7 +170,7 @@ class PushState(object):
         self._should_stop = True
 
 
-class SimplePushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
+class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     """Main Websocket Connection Protocol"""
 
     # Testing purposes

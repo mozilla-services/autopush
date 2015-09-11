@@ -17,7 +17,7 @@ from autopush.settings import AutopushSettings
 from autopush.ssl import AutopushSSLContextFactory
 from autopush.utils import str2bool
 from autopush.websocket import (
-    SimplePushServerProtocol,
+    PushServerProtocol,
     RouterHandler,
     NotificationHandler,
     periodic_reporter,
@@ -321,7 +321,7 @@ def connection_main(sysargs=None):
         debug=args.debug,
         debugCodePaths=args.debug,
     )
-    factory.protocol = SimplePushServerProtocol
+    factory.protocol = PushServerProtocol
     factory.protocol.ap_settings = settings
     factory.setProtocolOptions(
         webStatus=False,

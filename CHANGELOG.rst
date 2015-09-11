@@ -13,10 +13,12 @@ Features
 Bug Fixes
 ---------
 
+* Check for stale connection nodes when routing. Issue #163.
 * Remove logging of sendClose, as its unactionable noise. Add metric for
   sendClose success. Remove final verifyNuke as its never run in the several
   months it was in, indicating that abortConnection is 100% effective.
   Issue #161.
+* Rename `SimplePushServerProtocol` to `PushServerProtocol`. Issue #117.
 
 1.5.1 (2015-09-02)
 ==================

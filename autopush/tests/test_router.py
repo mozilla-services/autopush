@@ -20,6 +20,7 @@ from autopush.db import (
 )
 from autopush.endpoint import Notification
 from autopush.router import APNSRouter, GCMRouter, SimpleRouter, WebPushRouter
+from autopush.router.simple import dead_cache
 from autopush.router.interface import RouterException, RouterResponse, IRouter
 from autopush.settings import AutopushSettings
 from autopush.waker import WakeException
@@ -267,6 +268,9 @@ class SimplePushRouterTestCase(unittest.TestCase):
         settings.agent = self.agent_mock
         self.router.metrics = Mock()
 
+    def tearDown(self):
+        dead_cache.clear()
+
     def _raise_connect_error(self):
         raise ConnectError()
 
@@ -299,11 +303,22 @@ class SimplePushRouterTestCase(unittest.TestCase):
         self.router_mock.clear_node.return_value = None
         d = self.router.route_notification(self.notif, router_data)
 
+        def verify_retry(fail):
+            exc = fail.value
+            ok_(exc, RouterException)
+            eq_(exc.status_code, 503)
+            eq_(len(self.router_mock.clear_node.mock_calls), 1)
+            self.flushLoggedErrors()
+
         def verify_deliver(fail):
             exc = fail.value
             ok_(exc, RouterException)
             eq_(exc.status_code, 503)
-            self.flushLoggedErrors()
+            eq_(len(self.router_mock.clear_node.mock_calls), 1)
+
+            d = self.router.route_notification(self.notif, router_data)
+            d.addBoth(verify_retry)
+            return d
         d.addBoth(verify_deliver)
         return d
 
