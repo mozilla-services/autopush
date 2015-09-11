@@ -48,6 +48,7 @@ from twisted.internet.error import (
 )
 from twisted.internet.interfaces import IProducer
 from twisted.internet.threads import deferToThread
+from twisted.protocols import policies
 from twisted.python import failure, log
 from zope.interface import implements
 from twisted.web.resource import Resource
@@ -55,7 +56,6 @@ from twisted.web.resource import Resource
 from autopush import __version__
 from autopush.protocol import IgnoreBody
 from autopush.utils import validate_uaid
-from autopush.waker import UDPWake
 from autopush.noseplugin import track_object
 
 
@@ -119,7 +119,6 @@ class PushState(object):
         'pauseProducing',
         'resumeProducing',
         'stopProducing',
-        'waker',
     ]
 
     def __init__(self, settings, request):
@@ -156,7 +155,6 @@ class PushState(object):
 
         # Track Notification's we don't need to delete separately
         self.direct_updates = {}
-        self.waker = None
 
     def pauseProducing(self):
         """IProducer implementation tracking if we should pause output"""
@@ -172,7 +170,7 @@ class PushState(object):
         self._should_stop = True
 
 
-class SimplePushServerProtocol(WebSocketServerProtocol):
+class SimplePushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     """Main Websocket Connection Protocol"""
 
     # Testing purposes
@@ -353,8 +351,7 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
 
         cmd = data["messageType"]
         # We're no longer idle, prevent early connection closure.
-        if self.ps.waker is not None:
-            self.ps.waker.set_active()
+        self.resetTimeout()
         try:
             if cmd == "hello":
                 return self.process_hello(data)
@@ -368,10 +365,11 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
                 self.sendClose()
         finally:
             # Done processing, start idle.
-            if self.ps.waker is not None:
-                self.ps.waker.set_active()
-                # and start the timer on the connection
-                self.ps.waker.check_active()
+            self.resetTimeout()
+
+    def timeoutConnection(self):
+        """ UDP conneciton has timed out. """
+        self.sendClose(code=4774, reason="UDP Idle")
 
     def onAutoPingTimeout(self):
         """Override to track that this shut-down is from a ping timeout"""
@@ -524,38 +522,26 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
         _, uaid = validate_uaid(uaid)
         self.ps.uaid = uaid
         # Check for the special wakeup commands
-        wake_data = None
-        # If this connection uses the wakeup mechanism, add it.
-        try:
-            wakeup_host = data.get("wakeup_host")
-            mobilenetwork = data.get("mobilenetwork")
-            # Normalize the wake info to a single object.
-            wake_data = dict(data=dict(ip=wakeup_host.get("ip"),
-                             port=wakeup_host.get("port"),
-                             mcc=mobilenetwork.get("mcc", ''),
-                             mnc=mobilenetwork.get("mnc", ''),
-                             netid=mobilenetwork.get("netid", '')))
-            # set this so we can store it for the endpoint to call.
-            self.ps.waker = UDPWake(protocol=self,
-                                    timeout=self.ap_settings.wake_timeout,
-                                    kill_func=self.sendClose, code=4774,
-                                    reason="UDP Idle")
-        except (AttributeError, KeyError):
-            # Some wake value is missing, toss it all.
-            pass
-        self.transport.pauseProducing()
         user_item = dict(
             uaid=self.ps.uaid,
             node_id=self.ap_settings.router_url,
             connected_at=self.ps.connected_at,
             router_type=router_type,
         )
-        # NOTE: in tests, storing a value of None results in a corrupted
-        # return value of True. (This appears to have to do with a bug in
-        # either moto or boto in how it deals with values encoded to
-        # {"NULL": True}. For now, I'm avoiding storing values of None.
-        if wake_data is not None:
-            user_item['wake_data'] = wake_data
+        # If this connection uses the wakeup mechanism, add it.
+        if "wakeup_host" in data and "mobilenetwork" in data:
+            wakeup_host = data.get("wakeup_host")
+            if "ip" in wakeup_host and "port" in wakeup_host:
+                mobilenetwork = data.get("mobilenetwork")
+                # Normalize the wake info to a single object.
+                wake_data = dict(data=dict(ip=wakeup_host["ip"],
+                                 port=wakeup_host["port"],
+                                 mcc=mobilenetwork.get("mcc", ''),
+                                 mnc=mobilenetwork.get("mnc", ''),
+                                 netid=mobilenetwork.get("netid", '')))
+                user_item["wake_data"] = wake_data
+                self.setTimeout(self.ap_settings.wake_timeout)
+        self.transport.pauseProducing()
         d = self.deferToThread(self.ap_settings.router.register_user,
                                user_item)
         d.addCallback(self._check_other_nodes)
@@ -694,8 +680,6 @@ class SimplePushServerProtocol(WebSocketServerProtocol):
             msg = {"messageType": "notification", "updates": updates}
             self.sendJSON(msg)
 
-        if self.ps.waker is not None:
-            self.ps.waker.check_idle()
         # Were we told to check notifications again?
         if self.ps._check_notifications:
             self.ps._check_notifications = False

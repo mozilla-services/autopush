@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 from unittest import TestCase
-import json
 import uuid
 
-from mock import Mock, PropertyMock
+from mock import Mock, PropertyMock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
@@ -461,18 +460,16 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d.addBoth(verify_deliver)
         return d
 
-    def test_route_udp(self):
-        self.agent_mock.request.return_value = response_mock = Mock()
-        response_mock.code = 202
+    @patch("requests.post")
+    def test_route_udp(self, request_mock):
         self.storage_mock.save_notification.return_value = True
-        udp_data = {"wakeup_host": {"ip": "127.0.0.1", "port": 9999},
-                    "mobilenetwork": {"mcc": "hammer"}}
-        udp = json.dumps(udp_data)
+        udp_data = {'wakeup_host': {'ip': '127.0.0.1', 'port': 9999},
+                    'mobilenetwork': {'mcc': 'hammer'}}
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
-                           udp=udp)
+                           udp=udp_data)
         self.router_mock.get_uaid.return_value = router_data
-        self.router._send_wake = Mock()
-        self.router.conf = {"idle": 1, "cert": "test.pem"}
+        self.router.conf = {'server': 'http://example.com',
+            'idle': 1, 'cert': 'test.pem'}
 
         d = self.router.route_notification(self.notif, router_data)
 
@@ -482,20 +479,6 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d.addBoth(check_deliver)
         eq_(self.router.udp, udp_data)
         return d
-
-    def test_send_udp_wake(self):
-        self.router.waker = Mock()
-        self.router.waker.send_wake = Mock()
-        wake_data = {"wake": "data"}
-        self.router._send_wake(wake_data)
-        self.router.waker.send_wake.assert_called_with(wake_data)
-
-        def fail(arg):
-            raise WakeException()
-        self.router.waker.send_wake.side_effect = fail
-        self.assertRaises(RouterException,
-                          self.router._send_wake, wake_data)
-        return
 
 
 class WebPushRouterTestCase(unittest.TestCase):

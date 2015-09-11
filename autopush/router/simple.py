@@ -6,7 +6,9 @@ based channel ID's (only newest version is stored, no data stored).
 
 """
 import json
+import requests
 import time
+from urllib import urlencode
 from StringIO import StringIO
 
 from boto.dynamodb2.exceptions import (
@@ -24,6 +26,7 @@ from twisted.internet.error import (
     ConnectionRefusedError,
     UserError
 )
+from twisted.python import log
 from twisted.web.client import FileBodyProducer
 
 from autopush.protocol import IgnoreBody
@@ -31,7 +34,7 @@ from autopush.router.interface import (
     RouterException,
     RouterResponse,
 )
-from autopush.waker import WakeException, UDPWake
+from autopush.waker import UDPWake
 
 
 dead_cache = LRUCache(150)
@@ -51,11 +54,6 @@ class SimpleRouter(object):
         self.metrics = ap_settings.metrics
         self.conf = router_conf
         self.waker = None
-        if self.conf is not None and self.conf.get("server") is not None:
-            # This should use a Wake resolver dict, but there's only one
-            # right now, so skip a few instructions.
-            self.waker = UDPWake(host=self.conf.get("server"),
-                                 cert=self.conf.get("cert"))
 
     def register(self, uaid, connect):
         """Return no additional routing data"""
@@ -79,11 +77,15 @@ class SimpleRouter(object):
         node_id = uaid_data.get("node_id")
         uaid = uaid_data["uaid"]
         self.udp = None
-        try:
-            self.udp = json.loads(uaid_data["udp"])
-        except (TypeError, KeyError):
-            # No UDP info found, ignoring.
-            pass
+        if "udp" in uaid_data:
+            if (self.conf is not None and "server" in self.conf and
+                    "cert" in self.conf):
+                # This should use a Wake resolver dict, but there's only one
+                # right now, so skip a few instructions.
+                self.waker = UDPWake(host=self.conf.get("server"),
+                                     cert=self.conf.get("cert"))
+
+            self.udp = uaid_data["udp"]
         router = self.ap_settings.router
 
         # Preflight check, hook used by webpush to verify channel id
@@ -166,19 +168,17 @@ class SimpleRouter(object):
             returnValue(self.delivered_response(notification))
         else:
             self.metrics.increment("router.broadcast.miss")
-            if self.udp is not None:
-                yield deferToThread(self._send_wake,
-                                    self.udp)
-            returnValue(self.stored_response(notification))
-
-    def _send_wake(self, wake_info):
-        if self.waker is not None:
-            try:
-                self.waker.send_wake(wake_info)
-            except WakeException:
-                raise RouterException("Could not send wakeup",
-                                      status_code=500,
-                                      response_body="Could not send Wakeup")
+            retVal = self.stored_response(notification)
+            if self.udp is not None and "server" in self.conf:
+                # Attempt to send off the UDP wake request.
+                try:
+                    requests.post(self.conf["server"],
+                                  data=urlencode(self.udp["data"]),
+                                  cert=self.conf.get("cert"),
+                                  timeout=self.conf.get("server_timeout", 3))
+                except Exception, x:
+                    log.err("Could not send UDP wake request:", str(x))
+            returnValue(retVal)
 
     ###########################################################
     #                    Blocking Helper Functions

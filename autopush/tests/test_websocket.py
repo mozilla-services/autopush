@@ -503,11 +503,27 @@ class WebsocketTestCase(unittest.TestCase):
         def check_result(msg):
             eq_(msg["status"], 200)
             routeData = self.proto.ap_settings.router.get_uaid(
-                msg["uaid"]).values()[4]
+                msg["uaid"]).get('wake_data')
             eq_(routeData, {
                 'data': {"ip": "127.0.0.1", "port": 9999, "mcc": "hammer",
                          "mnc": "banana", "netid": "gorp"}})
         return self._check_response(check_result)
+
+    def test_bad_hello_udp(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                wakeup_host={"port": 9999},
+                                mobilenetwork={"mcc": "hammer",
+                                               "mnc": "banana",
+                                               "netid": "gorp",
+                                               "ignored": "ok"}))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            ok_("wake_data" not in
+                self.proto.ap_settings.router.get_uaid(msg["uaid"]).keys())
+        return self._check_response(check_result)
+
 
     def test_not_hello(self):
         self._connect()
@@ -633,10 +649,6 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
         d.addCallback(lambda x: True)
-
-        self.proto.waker = Mock()
-        self.proto.waker.check_active = Mock()
-        self.proto.waker.set_active = Mock()
 
         def check_register_result(msg):
             eq_(msg["status"], 200)
@@ -1428,16 +1440,6 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps._register.addCallback(after_hello)
         self.proto.ps._register.addErrback(lambda x: d.errback(x))
         return d
-
-    def test_waker(self):
-        self.proto.ps.waker = Mock()
-        self.proto.ps.waker.set_active = Mock()
-        self.proto.ps.waker.check_active = Mock()
-        self.proto.ps.uaid = "testuaid"
-
-        self._send_message(dict(messageType="test"))
-        assert(self.proto.ps.waker.set_active.call_count == 2)
-        assert(self.proto.ps.waker.check_active.call_count == 1)
 
 
 class RouterHandlerTestCase(unittest.TestCase):

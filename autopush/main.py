@@ -129,7 +129,7 @@ def add_external_router_args(parser):
     # UDP
     parser.add_argument('--wake_timeout',
                         help="UDP: idle timeout before closing socket",
-                        type=int, default=0, env_var="wake_TIMEOUT")
+                        type=int, default=0, env_var="WAKE_TIMEOUT")
     parser.add_argument('--wake_pem',
                         help="custom TLS PEM file for remote Wake server",
                         type=str, env_var="WAKE_PEM")
