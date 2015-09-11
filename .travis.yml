@@ -3,7 +3,7 @@ sudo: false
 python:
   - "pypy"
 install:
-  - pip install coverage nose mock moto python-coveralls tox
+  - pip install coverage nose mock moto codecov tox
 script: tox
 after_success:
-  - coveralls
+  - codecov
