@@ -524,7 +524,6 @@ class WebsocketTestCase(unittest.TestCase):
                 self.proto.ap_settings.router.get_uaid(msg["uaid"]).keys())
         return self._check_response(check_result)
 
-
     def test_not_hello(self):
         self._connect()
         self._send_message(dict(messageType="wooooo"))

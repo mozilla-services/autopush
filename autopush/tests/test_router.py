@@ -484,7 +484,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
                            udp=udp_data)
         self.router_mock.get_uaid.return_value = router_data
         self.router.conf = {'server': 'http://example.com',
-            'idle': 1, 'cert': 'test.pem'}
+                            'idle': 1, 'cert': 'test.pem'}
 
         d = self.router.route_notification(self.notif, router_data)
 
