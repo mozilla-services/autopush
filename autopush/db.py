@@ -288,8 +288,12 @@ class Message(object):
     def delete_message(self, uaid, channel_id, message_id, updateid=None):
         """Deletes a specific message"""
         if updateid:
-            self.table.delete_item(uaid=uaid, chidmessageid="%s:%s" % (
-                channel_id, message_id), expected={'updateid__eq': updateid})
+            try:
+                self.table.delete_item(uaid=uaid, chidmessageid="%s:%s" % (
+                    channel_id, message_id),
+                    expected={'updateid__eq': updateid})
+            except ConditionalCheckFailedException:
+                return False
         else:
             self.table.delete_item(uaid=uaid, chidmessageid="%s:%s" % (
                 channel_id, message_id))
