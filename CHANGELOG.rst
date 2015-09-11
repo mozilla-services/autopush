@@ -3,7 +3,7 @@ Autopush Changelog
 ==================
 
 1.7.0 (**dev**)
-==================
+===============
 
 Features
 --------
@@ -12,6 +12,10 @@ Features
   Some devices which use SimplePush routing offer a feature to wake on
   a carrier provided UDP ping. See issue #106 for details.
 
+Bug Fixes
+---------
+
+* Reset UAIDs for clients that change their router type. PR #167.
 
 1.6.0 (2015-09-14)
 ==================
