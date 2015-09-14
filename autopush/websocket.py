@@ -84,7 +84,6 @@ def log_exception(func):
             return func(self, *args, **kwargs)
         except Exception:
             self.log_err(failure.Failure())
-            raise
     return wrapper
 
 
