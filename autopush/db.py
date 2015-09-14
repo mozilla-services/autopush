@@ -392,7 +392,7 @@ class Router(object):
                 for key, value in result["Attributes"].items():
                     try:
                         r[key] = self.table._dynamizer.decode(value)
-                    except AttributeError:  # pragma: nocover
+                    except (TypeError, AttributeError):  # pragma: nocover
                         # Included for safety as moto has occasionally made
                         # this not work
                         r[key] = value

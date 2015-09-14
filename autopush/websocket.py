@@ -48,6 +48,7 @@ from twisted.internet.error import (
 )
 from twisted.internet.interfaces import IProducer
 from twisted.internet.threads import deferToThread
+from twisted.protocols import policies
 from twisted.python import failure, log
 from zope.interface import implements
 from twisted.web.resource import Resource
@@ -168,7 +169,7 @@ class PushState(object):
         self._should_stop = True
 
 
-class PushServerProtocol(WebSocketServerProtocol):
+class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     """Main Websocket Connection Protocol"""
 
     # Testing purposes
@@ -296,8 +297,6 @@ class PushServerProtocol(WebSocketServerProtocol):
         self.transport.bufferSize = 2 * 1024
         self.transport.registerProducer(self.ps, True)
 
-        track_object(self, msg="onConnect End")
-
     #############################################################
     #                    Connection Methods
     #############################################################
@@ -350,16 +349,26 @@ class PushServerProtocol(WebSocketServerProtocol):
             return
 
         cmd = data["messageType"]
-        if cmd == "hello":
-            return self.process_hello(data)
-        elif cmd == "register":
-            return self.process_register(data)
-        elif cmd == "unregister":
-            return self.process_unregister(data)
-        elif cmd == "ack":
-            return self.process_ack(data)
-        else:
-            self.sendClose()
+        # We're no longer idle, prevent early connection closure.
+        self.resetTimeout()
+        try:
+            if cmd == "hello":
+                return self.process_hello(data)
+            elif cmd == "register":
+                return self.process_register(data)
+            elif cmd == "unregister":
+                return self.process_unregister(data)
+            elif cmd == "ack":
+                return self.process_ack(data)
+            else:
+                self.sendClose()
+        finally:
+            # Done processing, start idle.
+            self.resetTimeout()
+
+    def timeoutConnection(self):
+        """UDP conneciton has timed out."""
+        self.sendClose(code=4774, reason="UDP Idle")
 
     def onAutoPingTimeout(self):
         """Override to track that this shut-down is from a ping timeout"""
@@ -511,14 +520,27 @@ class PushServerProtocol(WebSocketServerProtocol):
 
         _, uaid = validate_uaid(uaid)
         self.ps.uaid = uaid
-
-        self.transport.pauseProducing()
+        # Check for the special wakeup commands
         user_item = dict(
             uaid=self.ps.uaid,
             node_id=self.ap_settings.router_url,
             connected_at=self.ps.connected_at,
             router_type=router_type,
         )
+        # If this connection uses the wakeup mechanism, add it.
+        if "wakeup_host" in data and "mobilenetwork" in data:
+            wakeup_host = data.get("wakeup_host")
+            if "ip" in wakeup_host and "port" in wakeup_host:
+                mobilenetwork = data.get("mobilenetwork")
+                # Normalize the wake info to a single object.
+                wake_data = dict(data=dict(ip=wakeup_host["ip"],
+                                 port=wakeup_host["port"],
+                                 mcc=mobilenetwork.get("mcc", ''),
+                                 mnc=mobilenetwork.get("mnc", ''),
+                                 netid=mobilenetwork.get("netid", '')))
+                user_item["wake_data"] = wake_data
+                self.setTimeout(self.ap_settings.wake_timeout)
+        self.transport.pauseProducing()
         d = self.deferToThread(self.ap_settings.router.register_user,
                                user_item)
         d.addCallback(self._check_other_nodes)

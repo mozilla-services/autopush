@@ -2,6 +2,17 @@
 Autopush Changelog
 ==================
 
+1.7.0 (**dev**)
+==================
+
+Features
+--------
+
+* Add UDP Wake support. Issue #106
+  Some devices which use SimplePush routing offer a feature to wake on
+  a carrier provided UDP ping. See issue #106 for details.
+
+
 1.6.0 (2015-09-14)
 ==================
 

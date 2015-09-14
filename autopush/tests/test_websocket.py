@@ -490,6 +490,40 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
+    def test_hello_udp(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                wakeup_host={"ip": "127.0.0.1",
+                                             "port": 9999},
+                                mobilenetwork={"mcc": "hammer",
+                                               "mnc": "banana",
+                                               "netid": "gorp",
+                                               "ignored": "ok"}))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            routeData = self.proto.ap_settings.router.get_uaid(
+                msg["uaid"]).get('wake_data')
+            eq_(routeData, {
+                'data': {"ip": "127.0.0.1", "port": 9999, "mcc": "hammer",
+                         "mnc": "banana", "netid": "gorp"}})
+        return self._check_response(check_result)
+
+    def test_bad_hello_udp(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                wakeup_host={"port": 9999},
+                                mobilenetwork={"mcc": "hammer",
+                                               "mnc": "banana",
+                                               "netid": "gorp",
+                                               "ignored": "ok"}))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            ok_("wake_data" not in
+                self.proto.ap_settings.router.get_uaid(msg["uaid"]).keys())
+        return self._check_response(check_result)
+
     def test_not_hello(self):
         self._connect()
         self._send_message(dict(messageType="wooooo"))
@@ -1340,7 +1374,6 @@ class WebsocketTestCase(unittest.TestCase):
             self._send_message(dict(messageType="ack",
                                     updates=[{"channelID": chid,
                                               "version": 10}]))
-
             # Wait for updates to be cleared and notifications accepted again
             reactor.callLater(0.1, wait_for_clear)
 

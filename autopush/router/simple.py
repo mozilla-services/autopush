@@ -6,7 +6,9 @@ based channel ID's (only newest version is stored, no data stored).
 
 """
 import json
+import requests
 import time
+from urllib import urlencode
 from StringIO import StringIO
 
 from boto.dynamodb2.exceptions import (
@@ -24,6 +26,7 @@ from twisted.internet.error import (
     ConnectionRefusedError,
     UserError
 )
+from twisted.python import log
 from twisted.web.client import FileBodyProducer
 
 from autopush.protocol import IgnoreBody
@@ -38,7 +41,7 @@ dead_cache = LRUCache(150)
 
 def node_key(node_id):
     """Generate a node key for the dead node cache"""
-    return node_id + "-%s" % int(time.time()/3600)
+    return node_id + "-%s" % int(time.time() / 3600)
 
 
 class SimpleRouter(object):
@@ -48,6 +51,8 @@ class SimpleRouter(object):
         """Create a new SimpleRouter"""
         self.ap_settings = ap_settings
         self.metrics = ap_settings.metrics
+        self.conf = router_conf
+        self.waker = None
 
     def register(self, uaid, connect):
         """Return no additional routing data"""
@@ -63,12 +68,6 @@ class SimpleRouter(object):
     def delivered_response(self, notification):
         return RouterResponse(200, "Delivered")
 
-    def _raise_invalid_node_error(self):
-        self.metrics.increment("updates.client.host_gone")
-        raise RouterException("Node was invalid", status_code=503,
-                              response_body="Retry Request",
-                              log_exception=False)
-
     @inlineCallbacks
     def route_notification(self, notification, uaid_data):
         """Route a notification to an internal node, and store it if the node
@@ -76,6 +75,7 @@ class SimpleRouter(object):
         # Determine if they're connected at the moment
         node_id = uaid_data.get("node_id")
         uaid = uaid_data["uaid"]
+        self.udp = uaid_data.get("udp")
         router = self.ap_settings.router
 
         # Preflight check, hook used by webpush to verify channel id
@@ -88,18 +88,17 @@ class SimpleRouter(object):
         #   - Error (Client gone, node gone/dead): Clear node entry for user
         #       - Both: Done, return 503
         if node_id:
-            key = node_key(node_id)
-            if dead_cache.get(key):
-                self._raise_invalid_node_error()
-
             try:
                 result = yield self._send_notification(uaid, node_id,
                                                        notification)
             except (ConnectError, UserError, ConnectionRefusedError):
-                dead_cache.put(key, True)
+                self.metrics.increment("updates.client.host_gone")
+                dead_cache.put(node_key(node_id), True)
                 yield deferToThread(router.clear_node,
                                     uaid_data).addErrback(self._eat_db_err)
-                self._raise_invalid_node_error()
+                raise RouterException("Node was invalid", status_code=503,
+                                      response_body="Retry Request",
+                                      log_exception=False)
             if result.code == 200:
                 self.metrics.increment("router.broadcast.hit")
                 returnValue(self.delivered_response(notification))
@@ -159,9 +158,21 @@ class SimpleRouter(object):
             returnValue(self.delivered_response(notification))
         else:
             self.metrics.increment("router.broadcast.miss")
-            returnValue(self.stored_response(notification))
+            retVal = self.stored_response(notification)
+            if self.udp is not None and "server" in self.conf:
+                # Attempt to send off the UDP wake request.
+                try:
+                    yield deferToThread(
+                        requests.post(
+                            self.conf["server"],
+                            data=urlencode(self.udp["data"]),
+                            cert=self.conf.get("cert"),
+                            timeout=self.conf.get("server_timeout", 3)))
+                except Exception, x:
+                    log.err("Could not send UDP wake request:", str(x))
+            returnValue(retVal)
 
-    #############################################################
+    ###########################################################
     #                    Blocking Helper Functions
     #############################################################
     def _save_notification(self, uaid, notification):
