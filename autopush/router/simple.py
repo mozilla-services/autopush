@@ -75,9 +75,7 @@ class SimpleRouter(object):
         # Determine if they're connected at the moment
         node_id = uaid_data.get("node_id")
         uaid = uaid_data["uaid"]
-        self.udp = None
-        if "udp" in uaid_data:
-            self.udp = uaid_data["udp"]
+        self.udp = uaid_data.get("udp")
         router = self.ap_settings.router
 
         # Preflight check, hook used by webpush to verify channel id
@@ -164,10 +162,11 @@ class SimpleRouter(object):
             if self.udp is not None and "server" in self.conf:
                 # Attempt to send off the UDP wake request.
                 try:
-                    requests.post(self.conf["server"],
-                                  data=urlencode(self.udp["data"]),
-                                  cert=self.conf.get("cert"),
-                                  timeout=self.conf.get("server_timeout", 3))
+                    yield requests.post(
+                        self.conf["server"],
+                        data=urlencode(self.udp["data"]),
+                        cert=self.conf.get("cert"),
+                        timeout=self.conf.get("server_timeout", 3))
                 except Exception, x:
                     log.err("Could not send UDP wake request:", str(x))
             returnValue(retVal)

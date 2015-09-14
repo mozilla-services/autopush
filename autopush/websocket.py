@@ -367,7 +367,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.resetTimeout()
 
     def timeoutConnection(self):
-        """ UDP conneciton has timed out. """
+        """UDP conneciton has timed out."""
         self.sendClose(code=4774, reason="UDP Idle")
 
     def onAutoPingTimeout(self):
