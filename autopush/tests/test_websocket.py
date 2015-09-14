@@ -19,7 +19,7 @@ from twisted.trial import unittest
 from autopush.settings import AutopushSettings
 from autopush.websocket import (
     PushState,
-    SimplePushServerProtocol,
+    PushServerProtocol,
     RouterHandler,
     Notification,
     NotificationHandler,
@@ -43,7 +43,7 @@ def tearDown():
 class WebsocketTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
-        self.proto = SimplePushServerProtocol()
+        self.proto = PushServerProtocol()
 
         settings = AutopushSettings(
             hostname="localhost",

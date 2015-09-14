@@ -2,16 +2,20 @@
 Autopush Changelog
 ==================
 
-1.6.0 (**dev**)
-===============
+1.6.0 (2015-09-14)
+==================
 
 Bug Fixes
 ---------
 
+* log_exception no longer re-raises the exception, which was causing onClose
+  to not return thus letting the connectionCount not be decremented.
+* Check for stale connection nodes when routing. Issue #163.
 * Remove logging of sendClose, as its unactionable noise. Add metric for
   sendClose success. Remove final verifyNuke as its never run in the several
   months it was in, indicating that abortConnection is 100% effective.
   Issue #161.
+* Rename `SimplePushServerProtocol` to `PushServerProtocol`. Issue #117.
 
 WebPush
 -------

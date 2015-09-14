@@ -8,7 +8,7 @@
 Websocket Protocol
 ++++++++++++++++++
 
-.. autoclass:: SimplePushServerProtocol
+.. autoclass:: PushServerProtocol
     :members:
     :special-members: __init__
     :private-members:

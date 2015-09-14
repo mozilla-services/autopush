@@ -84,7 +84,6 @@ def log_exception(func):
             return func(self, *args, **kwargs)
         except Exception:
             self.log_err(failure.Failure())
-            raise
     return wrapper
 
 
@@ -170,7 +169,7 @@ class PushState(object):
         self._should_stop = True
 
 
-class SimplePushServerProtocol(WebSocketServerProtocol):
+class PushServerProtocol(WebSocketServerProtocol):
     """Main Websocket Connection Protocol"""
 
     # Testing purposes
