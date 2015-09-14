@@ -4,6 +4,6 @@ python:
   - "pypy"
 install:
   - pip install coverage nose mock moto codecov tox
-script: tox
+script: tox -- --with-coverage --cover-xml --cover-package=autopush
 after_success:
   - codecov
