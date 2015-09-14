@@ -285,6 +285,46 @@ class Message(object):
         return True
 
     @track_provisioned
+    def update_message(self, uaid, channel_id, message_id, ttl, data=None,
+                       headers=None, timestamp=None):
+        """Updates a message in the message table for the given uaid/channel
+        /message_id.
+
+        If the message is not present, False is returned.
+
+        """
+        conn = self.table.connection
+        item = dict(
+            ttl=ttl,
+            timestamp=timestamp or int(time.time()),
+            updateid=uuid.uuid4().hex
+        )
+        if data:
+            item["headers"] = headers
+            item["data"] = data
+        try:
+            chidmessageid = "%s:%s" % (channel_id, message_id)
+            db_key = self.encode({"uaid": uaid,
+                                  "chidmessageid": chidmessageid})
+            expr = ("SET ttl = :ttl, timestamp = :timestamp,"
+                    " updateid = :updateid")
+            if data:
+                expr += ", data = :data, headers = :headers"
+            else:
+                expr += " REMOVE data, headers"
+            expr_values = self.encode({":k" % k: v for k, v in item.items()})
+            conn.update_item(
+                self.table.table_name,
+                db_key,
+                condition_expression="attribute_exists (updateid)",
+                update_expression=expr,
+                expression_attribute_values=expr_values,
+            )
+        except ConditionalCheckFailedException:
+            return False
+        return True
+
+    @track_provisioned
     def delete_message(self, uaid, channel_id, message_id, updateid=None):
         """Deletes a specific message"""
         if updateid:

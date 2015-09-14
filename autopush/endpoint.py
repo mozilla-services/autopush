@@ -390,7 +390,22 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
 
 
 class MessageHandler(AutoendpointHandler):
-    cors_methods = "DELETE"
+    cors_methods = "DELETE, PUT"
+    cors_request_headers = ["content-encoding", "encryption",
+                            "encryption-key", "content-type"]
+    cors_response_headers = ["location"]
+
+    def _token_valid(self, result, func):
+        """Handles valid token processing, then dispatches to supplied
+        function"""
+        info = result.split(":")
+        if len(info) != 3:
+            raise ValueError("Wrong message token components")
+
+        kind, uaid, chid = info
+        if kind != 'm':
+            raise ValueError("Wrong message token kind")
+        return func(kind, uaid, chid)
 
     @cyclone.web.asynchronous
     def delete(self, token):
@@ -403,20 +418,12 @@ class MessageHandler(AutoendpointHandler):
         self.version = token
         d = deferToThread(self.ap_settings.fernet.decrypt,
                           self.version.encode('utf8'))
-        d.addCallback(self._token_valid)
+        d.addCallback(self._token_valid, self._delete_message)
         d.addErrback(self._token_err)
         d.addErrback(self._response_err)
         return d
 
-    def _token_valid(self, result):
-        info = result.split(":")
-        if len(info) != 3:
-            raise ValueError("Wrong message token components")
-
-        kind, uaid, chid = info
-        if kind != 'm':
-            raise ValueError("Wrong message token kind")
-
+    def _delete_message(self, kind, uaid, chid):
         d = deferToThread(self.ap_settings.message.delete_message, uaid,
                           chid, self.version)
         d.addCallback(self._delete_completed)
@@ -427,6 +434,71 @@ class MessageHandler(AutoendpointHandler):
     def _delete_completed(self, response):
         self.set_status(204)
         self.finish()
+
+    @cyclone.web.asynchronous
+    def put(self, token):
+        """Updates a pending message.
+
+        If the message was already acknowledged, than this will instead create
+        a new message.
+
+        """
+        self.version = token
+        d = deferToThread(self.ap_settings.fernet.decrypt,
+                          self.version.encode('utf8'))
+        d.addCallback(self._token_valid, self._put_message)
+        d.addErrback(self._token_err)
+        d.addErrback(self._response_err)
+        return d
+
+    def _put_message(self, kind, uaid, chid):
+        try:
+            ttl = int(self.request.headers.get("ttl", "0"))
+        except ValueError:
+            ttl = 0
+        data = self.request.body
+        if data and len(data) > self.ap_settings.max_data:
+            self.set_status(401)
+            log.msg("Data too large", **self._client_info())
+            self.write("Data too large")
+            return self.finish()
+
+        headers = None
+        if data:
+            headers = dict(
+                encoding=headers["content-encoding"],
+                encryption=headers["encryption"],
+            )
+            data = urlsafe_b64encode(self.request.body)
+            # AWS cannot store empty strings, so we only add the encryption-key
+            # if its present to avoid empty strings.
+            if "encryption-key" in headers:
+                headers["encryption_key"] = headers["encryption-key"]
+
+        d = deferToThread(self.ap_settings.message.update_message, uaid,
+                          chid, self.version, ttl=ttl, headers=headers)
+        d.addCallback(self._put_completed, uaid, chid, data, ttl, headers)
+        self._db_error_handling(d)
+        d.addErrback(self._response_err)
+        return d
+
+    def _put_completed(self, result, uaid, chid, data, ttl, headers):
+        if result:
+            self.set_status(201)
+            self.write("Accepted")
+            return self.finish()
+
+        # Storing the update failed, item doesn't exist anymore. Lookup the
+        # uaid data for message routing
+        self.chid = chid
+        d = deferToThread(self.ap_settings.router.get_uaid, uaid)
+        d.addCallback(self._uaid_lookup_results, data, ttl)
+        d.addErrback(self._uaid_not_found_err)
+        self._db_error_handling(d)
+
+    def _uaid_lookup_results(self, result, data, ttl):
+        return EndpointHandler._route_notification(self, self.version, result,
+                                                   data, ttl)
 
 
 class EndpointHandler(AutoendpointHandler):
