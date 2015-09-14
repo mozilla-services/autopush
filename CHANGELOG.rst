@@ -23,6 +23,11 @@ Bug Fixes
 * Respond with status code 413 for payloads that exceed the maximum size,
   404 for invalid tokens, and 400 for missing encryption headers. PR #170.
 
+WebPush
+-------
+
+* Add Push message update mechanism. Issue #141.
+
 1.6.0 (2015-09-14)
 ==================
 
@@ -42,8 +47,6 @@ WebPush
 -------
 
 * Add an endpoint for deleting undelivered messages. PR #131.
-* Add Push message update mechanism. Issue #141.
-
 
 1.5.1 (2015-09-02)
 ==================
