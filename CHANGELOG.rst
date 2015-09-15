@@ -16,6 +16,8 @@ Bug Fixes
 ---------
 
 * Reset UAIDs for clients that change their router type. PR #167.
+* Respond with status code 413 for payloads that exceed the maximum size,
+  404 for invalid tokens, and 400 for missing encryption headers. PR #170.
 
 1.6.0 (2015-09-14)
 ==================

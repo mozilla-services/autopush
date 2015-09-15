@@ -90,7 +90,7 @@ class MessageTestCase(unittest.TestCase):
             "decrypt.side_effect": InvalidToken})
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(401)
+            self.status_mock.assert_called_with(404)
             self.write_mock.assert_called_with('Invalid token')
         self.finish_deferred.addCallback(handle_finish)
 
@@ -101,7 +101,7 @@ class MessageTestCase(unittest.TestCase):
         self.fernet_mock.decrypt.return_value = "123:456"
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(401)
+            self.status_mock.assert_called_with(404)
             self.write_mock.assert_called_with('Invalid token')
         self.finish_deferred.addCallback(handle_finish)
 
@@ -112,7 +112,7 @@ class MessageTestCase(unittest.TestCase):
         self.fernet_mock.decrypt.return_value = "r:123:456"
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(401)
+            self.status_mock.assert_called_with(404)
             self.write_mock.assert_called_with('Invalid token')
         self.finish_deferred.addCallback(handle_finish)
 
@@ -229,7 +229,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
-            self.endpoint.set_status.assert_called_with(401)
+            self.endpoint.set_status.assert_called_with(400)
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -378,7 +378,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.request.body = b'version=1&data=1234'
 
         def handle_finish(result):
-            self.endpoint.set_status.assert_called_with(401)
+            self.endpoint.set_status.assert_called_with(413)
             self.endpoint.write.assert_called_with('Data too large')
         self.finish_deferred.addCallback(handle_finish)
 
@@ -406,7 +406,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.request.body = b'version=123&data=bad-token'
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(401)
+            self.status_mock.assert_called_with(404)
             self.write_mock.assert_called_with('Invalid token')
         self.finish_deferred.addCallback(handle_finish)
 
@@ -418,7 +418,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.request.body = b'version=123'
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(401)
+            self.status_mock.assert_called_with(404)
             self.write_mock.assert_called_with("Invalid token")
         self.finish_deferred.addCallback(handle_finish)
 

@@ -748,7 +748,7 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         result = yield client.send_notification(data=data, use_header=False,
-                                                status=401)
+                                                status=400)
         eq_(result, None)
         yield self.shut_down(client)
 
