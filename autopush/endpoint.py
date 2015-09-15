@@ -371,7 +371,7 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
     def _token_err(self, fail):
         """errBack for token decryption fail"""
         fail.trap(InvalidToken, ValueError)
-        self.set_status(401)
+        self.set_status(404)
         log.msg("Invalid token", **self._client_info())
         self.write("Invalid token")
         self.finish()
@@ -556,7 +556,7 @@ class EndpointHandler(AutoendpointHandler):
                 req_fields = ["content-encoding", "encryption"]
                 if data and not all([x in self.request.headers
                                      for x in req_fields]):
-                    self.set_status(401)
+                    self.set_status(400)
                     log.msg("Missing Crypto headers", **self._client_info())
                     self.write("Missing crypto headers.")
                     return self.finish()
@@ -566,7 +566,7 @@ class EndpointHandler(AutoendpointHandler):
         except ValueError:
             ttl = 0
         if data and len(data) > self.ap_settings.max_data:
-            self.set_status(401)
+            self.set_status(413)
             log.msg("Data too large", **self._client_info())
             self.write("Data too large")
             return self.finish()
@@ -612,7 +612,7 @@ class EndpointHandler(AutoendpointHandler):
                 del uaid_data["router_type"]
             else:
                 uaid_data["router_data"] = response.router_data
-            uaid_data["connected_at"] = int(time.time()*1000)
+            uaid_data["connected_at"] = int(time.time() * 1000)
             d = deferToThread(self.ap_settings.router.register_user,
                               uaid_data)
             response.router_data = None
@@ -747,7 +747,7 @@ class RegistrationHandler(AutoendpointHandler):
             uaid=self.uaid,
             router_type=router_type,
             router_data=router_data,
-            connected_at=int(time.time()*1000),
+            connected_at=int(time.time() * 1000),
         )
         return deferToThread(self.ap_settings.router.register_user, user_item)
 

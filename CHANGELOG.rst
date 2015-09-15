@@ -4,6 +4,22 @@ Autopush Changelog
 
 1.7.0 (**dev**)
 ===============
+<<<<<<< HEAD
+=======
+
+Features
+--------
+
+* Add UDP Wake support. Issue #106
+  Some devices which use SimplePush routing offer a feature to wake on
+  a carrier provided UDP ping. See issue #106 for details.
+
+Bug Fixes
+---------
+
+* Reset UAIDs for clients that change their router type. PR #167.
+* Respond with status code 413 for payloads that exceed the maximum size,
+  404 for invalid tokens, and 400 for missing encryption headers. PR #170.
 
 WebPush
 -------

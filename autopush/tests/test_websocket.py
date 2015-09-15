@@ -457,6 +457,26 @@ class WebsocketTestCase(unittest.TestCase):
 
         return self._check_response(check_result)
 
+    def test_hello_check_collision(self):
+        self._connect()
+
+        mock_register = self.proto.ap_settings.router.register_user = Mock()
+
+        def register_user(data):
+            registered = len(mock_register.mock_calls) > 1
+            return (registered, {})
+
+        mock_register.side_effect = register_user
+
+        uaid = "8c658b5b-8b79-4cfc-a18d-c34516661bd9"
+        self._send_message(dict(messageType="hello", uaid=uaid))
+
+        def check_result(msg):
+            eq_(len(mock_register.mock_calls), 2)
+            eq_(msg["status"], 200)
+            ok_(msg["uaid"] != uaid)
+        return self._check_response(check_result)
+
     def test_hello_check_fail(self):
         self._connect()
 
@@ -467,6 +487,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
         def check_result(msg):
+            calls = self.proto.ap_settings.router.register_user.mock_calls
+            eq_(len(calls), 2)
             eq_(msg["status"], 500)
             eq_(msg["reason"], "already_connected")
         return self._check_response(check_result)
@@ -490,6 +512,40 @@ class WebsocketTestCase(unittest.TestCase):
         f = self._check_response(check_first_hello)
         f.addErrback(lambda x: d.errback(x))
         return d
+
+    def test_hello_udp(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                wakeup_host={"ip": "127.0.0.1",
+                                             "port": 9999},
+                                mobilenetwork={"mcc": "hammer",
+                                               "mnc": "banana",
+                                               "netid": "gorp",
+                                               "ignored": "ok"}))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            routeData = self.proto.ap_settings.router.get_uaid(
+                msg["uaid"]).get('wake_data')
+            eq_(routeData, {
+                'data': {"ip": "127.0.0.1", "port": 9999, "mcc": "hammer",
+                         "mnc": "banana", "netid": "gorp"}})
+        return self._check_response(check_result)
+
+    def test_bad_hello_udp(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                wakeup_host={"port": 9999},
+                                mobilenetwork={"mcc": "hammer",
+                                               "mnc": "banana",
+                                               "netid": "gorp",
+                                               "ignored": "ok"}))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            ok_("wake_data" not in
+                self.proto.ap_settings.router.get_uaid(msg["uaid"]).keys())
+        return self._check_response(check_result)
 
     def test_not_hello(self):
         self._connect()
@@ -1342,7 +1398,6 @@ class WebsocketTestCase(unittest.TestCase):
             self._send_message(dict(messageType="ack",
                                     updates=[{"channelID": chid,
                                               "version": 10}]))
-
             # Wait for updates to be cleared and notifications accepted again
             reactor.callLater(0.1, wait_for_clear)
 

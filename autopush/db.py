@@ -119,7 +119,8 @@ def preflight_check(storage, router):
 
     # Store a router entry, fetch it, delete it
     router.register_user(dict(uaid=uaid, node_id=node_id,
-                              connected_at=connected_at))
+                              connected_at=connected_at,
+                              router_type="simplepush"))
     item = router.get_uaid(uaid)
     assert item.get("node_id") == node_id
     router.clear_node(item)
@@ -426,10 +427,13 @@ class Router(object):
         expr = "SET " + ", ".join(["%s=:%s" % (x, x) for x in data.keys()])
         expr_values = self.encode({":%s" % k: v for k, v in data.items()})
         try:
-            cond = " or ".join([
-                "attribute_not_exists(node_id)",
-                "(connected_at < :connected_at)",
-            ])
+            cond = """(
+                attribute_not_exists(router_type) or
+                (router_type = :router_type)
+            ) and (
+                attribute_not_exists(node_id) or
+                (connected_at < :connected_at)
+            )"""
             result = conn.update_item(
                 self.table.table_name,
                 db_key,
@@ -443,7 +447,7 @@ class Router(object):
                 for key, value in result["Attributes"].items():
                     try:
                         r[key] = self.table._dynamizer.decode(value)
-                    except AttributeError:  # pragma: nocover
+                    except (TypeError, AttributeError):  # pragma: nocover
                         # Included for safety as moto has occasionally made
                         # this not work
                         r[key] = value

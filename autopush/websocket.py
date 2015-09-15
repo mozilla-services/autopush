@@ -48,6 +48,7 @@ from twisted.internet.error import (
 )
 from twisted.internet.interfaces import IProducer
 from twisted.internet.threads import deferToThread
+from twisted.protocols import policies
 from twisted.python import failure, log
 from zope.interface import implements
 from twisted.web.resource import Resource
@@ -107,6 +108,8 @@ class PushState(object):
         'last_ping',
         'check_storage',
         'use_webpush',
+        'router_type',
+        'wake_data',
         'connected_at',
         'ping_time_out',
         '_check_notifications',
@@ -139,6 +142,8 @@ class PushState(object):
         self.last_ping = 0
         self.check_storage = False
         self.use_webpush = False
+        self.router_type = None
+        self.wake_data = None
         self.connected_at = ms_time()
         self.ping_time_out = False
 
@@ -169,7 +174,7 @@ class PushState(object):
         self._should_stop = True
 
 
-class PushServerProtocol(WebSocketServerProtocol):
+class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     """Main Websocket Connection Protocol"""
 
     # Testing purposes
@@ -297,8 +302,6 @@ class PushServerProtocol(WebSocketServerProtocol):
         self.transport.bufferSize = 2 * 1024
         self.transport.registerProducer(self.ps, True)
 
-        track_object(self, msg="onConnect End")
-
     #############################################################
     #                    Connection Methods
     #############################################################
@@ -351,16 +354,26 @@ class PushServerProtocol(WebSocketServerProtocol):
             return
 
         cmd = data["messageType"]
-        if cmd == "hello":
-            return self.process_hello(data)
-        elif cmd == "register":
-            return self.process_register(data)
-        elif cmd == "unregister":
-            return self.process_unregister(data)
-        elif cmd == "ack":
-            return self.process_ack(data)
-        else:
-            self.sendClose()
+        # We're no longer idle, prevent early connection closure.
+        self.resetTimeout()
+        try:
+            if cmd == "hello":
+                return self.process_hello(data)
+            elif cmd == "register":
+                return self.process_register(data)
+            elif cmd == "unregister":
+                return self.process_unregister(data)
+            elif cmd == "ack":
+                return self.process_ack(data)
+            else:
+                self.sendClose()
+        finally:
+            # Done processing, start idle.
+            self.resetTimeout()
+
+    def timeoutConnection(self):
+        """UDP conneciton has timed out."""
+        self.sendClose(code=4774, reason="UDP Idle")
 
     def onAutoPingTimeout(self):
         """Override to track that this shut-down is from a ping timeout"""
@@ -507,33 +520,66 @@ class PushServerProtocol(WebSocketServerProtocol):
 
         uaid = data.get("uaid")
         self.ps.use_webpush = data.get("use_webpush", False)
-        router_type = "webpush" if self.ps.use_webpush else "simplepush"
+        self.ps.router_type = "webpush" if self.ps.use_webpush\
+                              else "simplepush"
         if self.ps.use_webpush:
             self.ps.updates_sent = defaultdict(lambda: [])
             self.ps.direct_updates = defaultdict(lambda: [])
 
         _, uaid = validate_uaid(uaid)
         self.ps.uaid = uaid
+        # Check for the special wakeup commands
+        if "wakeup_host" in data and "mobilenetwork" in data:
+            wakeup_host = data.get("wakeup_host")
+            if "ip" in wakeup_host and "port" in wakeup_host:
+                mobilenetwork = data.get("mobilenetwork")
+                # Normalize the wake info to a single object.
+                wake_data = dict(data=dict(ip=wakeup_host["ip"],
+                                 port=wakeup_host["port"],
+                                 mcc=mobilenetwork.get("mcc", ''),
+                                 mnc=mobilenetwork.get("mnc", ''),
+                                 netid=mobilenetwork.get("netid", '')))
+                self.ps.wake_data = wake_data
 
         self.transport.pauseProducing()
+
+        d = self._register_user()
+        d.addCallback(self._check_collision)
+        d.addErrback(self.err_hello)
+        self.ps._register = d
+        return d
+
+    def _register_user(self):
         user_item = dict(
             uaid=self.ps.uaid,
             node_id=self.ap_settings.router_url,
             connected_at=self.ps.connected_at,
-            router_type=router_type,
+            router_type=self.ps.router_type,
         )
-        d = self.deferToThread(self.ap_settings.router.register_user,
-                               user_item)
-        d.addCallback(self._check_other_nodes)
-        d.addErrback(self.err_hello)
-        self.ps._register = d
-        return d
+        # If this connection uses the wakeup mechanism, add it.
+        if self.ps.wake_data:
+            user_item["wake_data"] = self.ps.wake_data
+
+        return self.deferToThread(self.ap_settings.router.register_user,
+                                  user_item)
 
     def err_hello(self, failure):
         """errBack for hello failures"""
         self.transport.resumeProducing()
         self.log_err(failure)
         self.returnError("hello", "error", 503)
+
+    def _check_collision(self, result):
+        """callback to reset the UAID if router registration fails"""
+        registered, previous = result
+        if registered:
+            return self._check_other_nodes(result)
+
+        # If registration fails, try resetting the UAID.
+        self.ps.uaid = str(uuid.uuid4())
+        d = self._register_user()
+        d.addCallback(self._check_other_nodes)
+        return d
 
     def _check_other_nodes(self, result):
         """callback to check other nodes for clients and send them a delete as
@@ -570,6 +616,9 @@ class PushServerProtocol(WebSocketServerProtocol):
                                               UserError))
                 d.addErrback(self.log_err,
                              extra="Failed to delete old node")
+        if self.ps.wake_data:
+            self.setTimeout(self.ap_settings.wake_timeout)
+
         self.finish_hello()
 
     def finish_hello(self, *args):

@@ -2,7 +2,7 @@
 from unittest import TestCase
 import uuid
 
-from mock import Mock, PropertyMock
+from mock import Mock, PropertyMock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
@@ -51,7 +51,7 @@ class MockAssist(object):
             else:
                 return r
         finally:
-            if self.cur < (self.max-1):
+            if self.cur < (self.max - 1):
                 self.cur += 1
 
 
@@ -307,6 +307,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
             ok_(exc, RouterException)
             eq_(exc.status_code, 503)
             eq_(len(self.router_mock.clear_node.mock_calls), 1)
+            self.router_mock.clear_node.reset_mock()
             self.flushLoggedErrors()
 
         def verify_deliver(fail):
@@ -314,7 +315,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
             ok_(exc, RouterException)
             eq_(exc.status_code, 503)
             eq_(len(self.router_mock.clear_node.mock_calls), 1)
-
+            self.router_mock.clear_node.reset_mock()
             d = self.router.route_notification(self.notif, router_data)
             d.addBoth(verify_retry)
             return d
@@ -472,6 +473,26 @@ class SimplePushRouterTestCase(unittest.TestCase):
                 "router.broadcast.save_hit"
             )
         d.addBoth(verify_deliver)
+        return d
+
+    @patch("requests.post")
+    def test_route_udp(self, request_mock):
+        self.storage_mock.save_notification.return_value = True
+        udp_data = {'wakeup_host': {'ip': '127.0.0.1', 'port': 9999},
+                    'mobilenetwork': {'mcc': 'hammer'}}
+        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
+                           udp=udp_data)
+        self.router_mock.get_uaid.return_value = router_data
+        self.router.conf = {'server': 'http://example.com',
+                            'idle': 1, 'cert': 'test.pem'}
+
+        d = self.router.route_notification(self.notif, router_data)
+
+        def check_deliver(result):
+            eq_(result.status_code, 202)
+
+        d.addBoth(check_deliver)
+        eq_(self.router.udp, udp_data)
         return d
 
 

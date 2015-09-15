@@ -60,6 +60,8 @@ class AutopushSettings(object):
                  statsd_port=8125,
                  resolve_hostname=False,
                  max_data=4096,
+                 # Reflected up from UDP Router
+                 wake_timeout=0,
                  enable_cors=False):
         """Initialize the Settings object
 
@@ -134,9 +136,15 @@ class AutopushSettings(object):
         # CORS
         self.cors = enable_cors
 
+        # Force timeout in idle seconds
+        self.wake_timeout = wake_timeout
+
         # Setup the routers
         self.routers = {}
-        self.routers["simplepush"] = SimpleRouter(self, None)
+        self.routers["simplepush"] = SimpleRouter(
+            self,
+            router_conf.get("simplepush")
+        )
         self.routers["webpush"] = WebPushRouter(self, None)
         if 'apns' in router_conf:
             self.routers["apns"] = APNSRouter(self, router_conf["apns"])
