@@ -4,8 +4,6 @@ Autopush Changelog
 
 1.7.0 (**dev**)
 ===============
-<<<<<<< HEAD
-=======
 
 Features
 --------
