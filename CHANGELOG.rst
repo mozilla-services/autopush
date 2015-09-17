@@ -12,6 +12,10 @@ Features
   Some devices which use SimplePush routing offer a feature to wake on
   a carrier provided UDP ping. See issue #106 for details.
 
+* Provide service environment information
+  To help clients identify the service environment, server provides
+  it along with the hello message. See issue #50 for details.
+
 Bug Fixes
 ---------
 
