@@ -259,7 +259,7 @@ class Message(object):
         try:
             result = self.table.get_item(consistent=True, uaid=uaid,
                                          chidmessageid=" ")
-            return result["chids"]
+            return result["chids"] or set([])
         except ItemNotFound:
             return set([])
 

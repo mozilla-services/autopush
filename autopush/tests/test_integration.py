@@ -689,6 +689,23 @@ class TestWebPush(IntegrationBase):
     def test_no_delivery_to_unregistered(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
+        ok_(client.channels)
+        chan = client.channels.keys()[0]
+
+        result = yield client.send_notification(data=data)
+        eq_(result["channelID"], chan)
+        eq_(result["data"], urlsafe_b64encode(data))
+        yield client.ack(result["channelID"], result["version"])
+
+        yield client.unregister(chan)
+        result = yield client.send_notification(data=data, status=404)
+        eq_(result, None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_no_delivery_to_unregistered_on_reconnect(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
         yield client.disconnect()
         ok_(client.channels)
         chan = client.channels.keys()[0]
