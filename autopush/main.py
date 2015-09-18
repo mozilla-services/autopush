@@ -98,6 +98,9 @@ def add_shared_args(parser):
                         env_var="LOG_LEVEL")
     parser.add_argument('--max_data', help="Max data segment length in bytes",
                         default=4096, env_var='MAX_DATA')
+    parser.add_argument('--env',
+                        help="The environment autopush is running under",
+                        default='development', env_var='AUTOPUSH_ENV')
 
 
 def add_external_router_args(parser):
@@ -296,6 +299,7 @@ def connection_main(sysargs=None):
         router_scheme="https" if args.router_ssl_key else "http",
         router_hostname=args.router_hostname,
         router_port=args.router_port,
+        env=args.env
     )
     setup_logging("Autopush")
 
