@@ -10,6 +10,7 @@ Bug Fixes
 
 * Use proper client connected_at in delete handler.
 * Trap provisioned exception error in websocket handler.
+* Clear the node entry for a client even if we know the node is dead.
 
 1.6.0 (2015-09-14)
 ==================
