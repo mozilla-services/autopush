@@ -9,6 +9,7 @@ Bug Fixes
 ---------
 
 * Use proper client connected_at in delete handler.
+* Trap provisioned exception error in websocket handler.
 
 1.6.0 (2015-09-14)
 ==================

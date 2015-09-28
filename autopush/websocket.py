@@ -37,6 +37,7 @@ from functools import wraps
 
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
+from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from twisted.internet import reactor
 from twisted.internet.defer import (
     Deferred,
@@ -522,9 +523,14 @@ class PushServerProtocol(WebSocketServerProtocol):
         d = self.deferToThread(self.ap_settings.router.register_user,
                                user_item)
         d.addCallback(self._check_other_nodes)
+        d.addErrback(self.retry_hello)
         d.addErrback(self.err_hello)
         self.ps._register = d
         return d
+
+    def retry_hello(self, failure):
+        failure.trap(ProvisionedThroughputExceededException)
+        self.returnError("hello", "overloaded", 503)
 
     def err_hello(self, failure):
         """errBack for hello failures"""

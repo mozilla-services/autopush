@@ -90,6 +90,8 @@ class SimpleRouter(object):
         if node_id:
             key = node_key(node_id)
             if dead_cache.get(key):
+                yield deferToThread(router.clear_node,
+                                    uaid_data).addErrback(self._eat_db_err)
                 self._raise_invalid_node_error()
 
             try:

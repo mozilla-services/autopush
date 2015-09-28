@@ -306,7 +306,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
             exc = fail.value
             ok_(exc, RouterException)
             eq_(exc.status_code, 503)
-            eq_(len(self.router_mock.clear_node.mock_calls), 1)
+            eq_(len(self.router_mock.clear_node.mock_calls), 2)
             self.flushLoggedErrors()
 
         def verify_deliver(fail):
