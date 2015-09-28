@@ -1496,10 +1496,13 @@ class NotificationHandlerTestCase(unittest.TestCase):
         eq_(self.status_mock.call_args, ((404,),))
 
     def test_delete(self):
+        from autopush.websocket import PushServerProtocol, PushState
         uaid = str(uuid.uuid4())
         now = int(time.time() * 1000)
-        self.ap_settings.clients[uaid] = mock_client = Mock()
-        mock_client.connected_at = now
+        self.ap_settings.clients[uaid] = mock_client = Mock(
+            spec=PushServerProtocol)
+        mock_client.ps = Mock(spec=PushState)
+        mock_client.ps.connected_at = now
         mock_client.sendClose = Mock()
         self.handler.delete(uaid, "", now)
         assert(mock_client.sendClose.called)
