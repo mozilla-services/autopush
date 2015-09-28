@@ -2,6 +2,14 @@
 Autopush Changelog
 ==================
 
+1.6.1 (2015-09-28)
+==================
+
+Bug Fixes
+---------
+
+* Use proper client connected_at in delete handler.
+
 1.6.0 (2015-09-14)
 ==================
 
