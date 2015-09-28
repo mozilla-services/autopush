@@ -523,6 +523,7 @@ class PushServerProtocol(WebSocketServerProtocol):
         d = self.deferToThread(self.ap_settings.router.register_user,
                                user_item)
         d.addCallback(self._check_other_nodes)
+        d.addErrback(self.trap_cancel)
         d.addErrback(self.retry_hello)
         d.addErrback(self.err_hello)
         self.ps._register = d
@@ -637,7 +638,8 @@ class PushServerProtocol(WebSocketServerProtocol):
 
         # Are we paused, try again later
         if self.paused:
-            self.deferToLater(1, self.process_notifications)
+            d = self.deferToLater(1, self.process_notifications)
+            d.addErrback(self.trap_cancel)
             return
 
         # Process notifications differently based on webpush style or not
@@ -666,7 +668,8 @@ class PushServerProtocol(WebSocketServerProtocol):
         # Were we told to check notifications again?
         if self.ps._check_notifications:
             self.ps._check_notifications = False
-            self.deferToLater(1, self.process_notifications)
+            d = self.deferToLater(1, self.process_notifications)
+            d.addErrback(self.trap_cancel)
 
     def finish_webpush_notifications(self, notifs):
         """webpush notification processor"""
@@ -675,7 +678,8 @@ class PushServerProtocol(WebSocketServerProtocol):
             self.ps._more_notifications = False
             if self.ps._check_notifications:
                 self.ps._check_notifications = False
-                self.deferToLater(1, self.process_notifications)
+                d = self.deferToLater(1, self.process_notifications)
+                d.addErrback(self.trap_cancel)
             return
 
         # Send out all the notifications
@@ -746,6 +750,7 @@ class PushServerProtocol(WebSocketServerProtocol):
         d = self.deferToThread(self.ap_settings.make_endpoint, self.ps.uaid,
                                chid)
         d.addCallback(self.finish_register, chid)
+        d.addErrback(self.trap_cancel)
         d.addErrback(self.error_register)
         return d
 
@@ -761,6 +766,7 @@ class PushServerProtocol(WebSocketServerProtocol):
             d = self.deferToThread(self.ap_settings.message.register_channel,
                                    self.ps.uaid, chid)
             d.addCallback(self.send_register_finish, endpoint, chid)
+            d.addErrback(self.trap_cancel)
             return d
         else:
             self.send_register_finish(None, endpoint, chid)
