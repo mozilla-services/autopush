@@ -1,7 +1,7 @@
 .. _router_apns_module:
 
 :mod:`autopush.router.apnsrouter`
-------------------------
+---------------------------------
 
 .. automodule:: autopush.router.apnsrouter
 

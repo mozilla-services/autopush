@@ -76,9 +76,12 @@ All message bodies must be UTF-8 encoded.
     Create a new endpoint for a given UAID, or register a new UAID and
     return a new endpoint.
 
-    If a channelID is not supplied then one will be generated.
+    .. note::
 
-    **Endpoint w/New Registration**
+      If a ``channelID`` field is not supplied then one will be generated.
+      Supplied ``channelID`` fields must be valid UUID hex strings.
+
+    **1. Endpoint w/New Registration**
 
     **Example Request (for APNS router)**:
 
@@ -90,7 +93,6 @@ All message bodies must be UTF-8 encoded.
 
         {
             "type": "apns",
-            "channelID": "a13872c9-5cba-48ab-a8e5-955264647303",
             "data": {
                 "token": "APNS_TOKEN_DATA",
                 ...
@@ -112,7 +114,7 @@ All message bodies must be UTF-8 encoded.
             "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
         }
 
-    **Endpoint w/Existing UAID**
+    **2. Endpoint w/Existing UAID**
 
     **Example Request**:
 

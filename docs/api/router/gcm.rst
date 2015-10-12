@@ -1,7 +1,7 @@
 .. _router_gcm_module:
 
 :mod:`autopush.router.gcm`
-------------------------
+--------------------------
 
 .. automodule:: autopush.router.gcm
 

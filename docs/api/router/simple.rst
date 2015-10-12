@@ -1,7 +1,7 @@
 .. _router_simple_module:
 
 :mod:`autopush.router.simple`
-------------------------
+-----------------------------
 
 .. automodule:: autopush.router.simple
 
