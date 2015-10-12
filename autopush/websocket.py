@@ -501,9 +501,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def sendJSON(self, body):
         """Send a Python dict as a JSON string in a websocket message"""
 
-        if body.get('messageType') == 'hello':
-            body['env'] = self.ap_settings.env
-
         self.sendMessage(json.dumps(body).encode('utf8'), False)
 
     #############################################################
@@ -630,6 +627,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             msg["ping"] = self.autoPingInterval
         if self.ps.use_webpush:
             msg["use_webpush"] = True
+        msg['env'] = self.ap_settings.env
         self.ap_settings.clients[self.ps.uaid] = self
         self.sendJSON(msg)
         self.ps.metrics.increment("updates.client.hello", tags=self.base_tags)
