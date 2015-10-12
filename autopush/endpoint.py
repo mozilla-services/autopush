@@ -690,7 +690,7 @@ class RegistrationHandler(AutoendpointHandler):
         """Called after the endpoint was made and should be returned to the
         requestor"""
         if new_uaid:
-            hashed = generate_hash(self.uaid, self.ap_settings.crypto_key)
+            hashed = generate_hash(self.ap_settings.crypto_key, self.uaid)
             msg = dict(
                 uaid=self.uaid,
                 secret=hashed,
