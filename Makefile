@@ -2,10 +2,11 @@ SHELL := /bin/sh
 APPNAME = autopush
 DEPS =
 HERE = $(shell pwd)
-BIN = $(HERE)/pypy/bin
+PTYPE=python
+BIN = $(HERE)/bin
 VIRTUALENV = virtualenv
 TESTS = $(APPNAME)/tests
-PYTHON = $(BIN)/pypy
+PYTHON = $(BIN)/$(PTYPE)
 INSTALL = $(BIN)/pip install
 PATH := $(BIN):$(PATH)
 
@@ -17,7 +18,7 @@ BUILD_DIRS = bin build deps include lib lib64 lib_pypy lib-python\
 
 all:	build
 
-$(BIN)/pip: $(BIN)/pypy
+$(BIN)/pip: $(PYTHON)
 	curl -O https://bootstrap.pypa.io/get-pip.py
 	$(PYTHON) get-pip.py
 	rm get-pip.py

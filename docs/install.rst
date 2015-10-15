@@ -4,30 +4,42 @@
 Installing
 ==========
 
-Using PyPy
-==========
+System Requirements
+===================
 
-You will first need to get pypy as appropriate for your system and put it's
-uncompressed folder in the autopush directory as ``pypy``.
+Autopush requires the following to be installed. Since each system has different
+methods and package names, it's best to search for each package.
 
-PyPy downloads can be found here: http://pypy.org/download.html#default-with-a-jit-compiler
-autopush requires PyPy >= 2.6.
+* autoconf
+* automake
+* gcc
+* make
+* libffi development
+* libncurses5 development
+* openssl development
+* patch 
+* python development
+* python virtualenv
+* readline development
 
-Once you have downloaded, decompressed, and renamed this to ``pypy``, you can
-run the Makefile with ``make``, which will setup the application.
+For instance, if installing on an Amazon EC2 machine:
+
+.. code-block:: bash
+
+    $ sudo yum install autoconf automake gcc make libffi-devel \
+    libncurses5-devel openssl-devel patch python-devel \
+    python-virtualenv readline-devel -y
+
+Autopush uses the `Boto python library <http://boto.readthedocs.org/en/latest/>`_. Be sure to `properly set up <http://boto.readthedocs.org/en/latest/boto_config_tut.html>`_ your ``.boto`` configuration file. 
 
 Python 2.7.7+ w/virtualenv
 ==========================
 
-You will need ``virtualenv`` installed, then create a virtualenv named ``pypy``
-and symlink ``pypy/bin/python`` -> ``pypy/bin/pypy``:
+You will need ``virtualenv`` installed per the above requirements. Set up your virtual environment by running
 
 .. code-block:: bash
 
-    $ virutalenv pypy
-    $ cd pypy/bin
-    $ ln -s python pypy
-    $ cd ../..
+    $ virutalenv .
 
 Then run the Makefile with ``make`` to setup the application.
 
@@ -46,3 +58,13 @@ environment variable, and add your OpenSSL library path to ``LDFLAGS`` and
     # Homebrew installs OpenSSL to `/usr/local/opt/openssl` instead of
     # `/usr/local`.
     export LDFLAGS="-L/usr/local/lib" CFLAGS="-I/usr/local/include"
+
+Notes on GCM support
+====================
+autopush is capable of routing messages over Google Cloud Messaging for android
+devices. You will need to set up a valid GCM `account <http://developer.android.com/google/gcm/index.html>`_. Once you have an account open the Google Developer Console:
+
+* create a new project. Record the Project Number as "SENDER_ID". You will need this value for your android application.
+* create a new Auth Credential Key for your project. This is available under **APIs & Auth** >> **Credentials** of the Google Developer Console. Store this value as ``gcm_apikey`` in ``.autopush_endpoint`` server configuration file. 
+
+Additional notes on using the GCM bridge are available `on the wiki <https://github.com/mozilla-services/autopush/wiki/Bridging-Via-GCM>`_.
