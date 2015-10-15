@@ -17,7 +17,7 @@ methods and package names, it's best to search for each package.
 * libffi development
 * libncurses5 development
 * openssl development
-* patch 
+* patch
 * python development
 * python virtualenv
 * readline development
@@ -30,7 +30,7 @@ For instance, if installing on an Amazon EC2 machine:
     libncurses5-devel openssl-devel patch python-devel \
     python-virtualenv readline-devel -y
 
-Autopush uses the `Boto python library <http://boto.readthedocs.org/en/latest/>`_. Be sure to `properly set up <http://boto.readthedocs.org/en/latest/boto_config_tut.html>`_ your ``.boto`` configuration file. 
+Autopush uses the `Boto python library <http://boto.readthedocs.org/en/latest/>`_. Be sure to `properly set up <http://boto.readthedocs.org/en/latest/boto_config_tut.html>`_ your ``.boto`` configuration file.
 
 Python 2.7.7+ w/virtualenv
 ==========================
@@ -65,6 +65,7 @@ autopush is capable of routing messages over Google Cloud Messaging for android
 devices. You will need to set up a valid GCM `account <http://developer.android.com/google/gcm/index.html>`_. Once you have an account open the Google Developer Console:
 
 * create a new project. Record the Project Number as "SENDER_ID". You will need this value for your android application.
-* create a new Auth Credential Key for your project. This is available under **APIs & Auth** >> **Credentials** of the Google Developer Console. Store this value as ``gcm_apikey`` in ``.autopush_endpoint`` server configuration file. 
+* create a new Auth Credential Key for your project. This is available under **APIs & Auth** >> **Credentials** of the Google Developer Console. Store this value as ``gcm_apikey`` in ``.autopush_endpoint`` server configuration file.
+* add ``external_router=t`` to the ``.autopush_endpoint`` server configuration file to enable GCM routing.
 
 Additional notes on using the GCM bridge are available `on the wiki <https://github.com/mozilla-services/autopush/wiki/Bridging-Via-GCM>`_.
