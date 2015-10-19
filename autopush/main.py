@@ -380,10 +380,11 @@ def endpoint_main(sysargs=None):
     """Main entry point to setup an endpoint node, aka the autoendpoint
     script"""
     args, parser = _parse_endpoint(sysargs)
+    scheme = args.endpoint_scheme or \
+        "https" if args.ssl_key else "http"
     settings = make_settings(
         args,
-        endpoint_scheme=args.endpoint_scheme or "https"
-        if args.ssl_key else "http",
+        endpoint_scheme=scheme,
         endpoint_hostname=args.endpoint_hostname or args.hostname,
         endpoint_port=args.port,
         enable_cors=args.cors
