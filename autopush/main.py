@@ -140,6 +140,10 @@ def add_external_router_args(parser):
                         help="remote endpoint for wake-up calls",
                         type=str, default='http://example.com',
                         env_var="WAKE_SERVER")
+    parser.add_argument('--endpoint_scheme', help="HTTP Endpoint Scheme",
+                        type=str, default="http", env_var="ENDPOINT_SCHEME")
+    parser.add_argument('--endpoint_hostname', help="HTTP Endpoint Hostname",
+                        type=str, default=None, env_var="ENDPOINT_HOSTNAME")
 
 
 def _parse_connection(sysargs):
@@ -171,10 +175,6 @@ def _parse_connection(sysargs):
     parser.add_argument('--router_ssl_cert',
                         help="Routing listener SSL cert path", type=str,
                         default="", env_var="ROUTER_SSL_CERT")
-    parser.add_argument('--endpoint_scheme', help="HTTP Endpoint Scheme",
-                        type=str, default="http", env_var="ENDPOINT_SCHEME")
-    parser.add_argument('--endpoint_hostname', help="HTTP Endpoint Hostname",
-                        type=str, default=None, env_var="ENDPOINT_HOSTNAME")
     parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
                         type=int, default=8082, env_var="ENDPOINT_PORT")
     parser.add_argument('--auto_ping_interval',
@@ -380,10 +380,12 @@ def endpoint_main(sysargs=None):
     """Main entry point to setup an endpoint node, aka the autoendpoint
     script"""
     args, parser = _parse_endpoint(sysargs)
+    scheme = args.endpoint_scheme or \
+        "https" if args.ssl_key else "http"
     settings = make_settings(
         args,
-        endpoint_scheme="https" if args.ssl_key else "http",
-        endpoint_hostname=args.hostname,
+        endpoint_scheme=scheme,
+        endpoint_hostname=args.endpoint_hostname or args.hostname,
         endpoint_port=args.port,
         enable_cors=args.cors
     )
