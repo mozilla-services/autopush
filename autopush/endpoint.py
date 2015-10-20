@@ -41,6 +41,20 @@ All message bodies must be UTF-8 encoded.
                      time.
     :statuscode 200: Message delivered to node client is connected to.
 
+.. http:delete:: /m/(string:message_id)
+
+    Delete the message given the `message_id`.
+
+.. http:put:: /m/(string/message_id)
+
+    Update the message at the given `message_id`.
+
+    This method takes the same arguments as WebPush PUT, with values
+    replacing that for the provided message.
+
+    :statuscode 404: `message_id` is not found.
+    :statuscode 200: Message has been updated.
+
 .. http:get:: /register/(uuid:uaid)
 
     Returns registered router data for the UAID.
@@ -390,7 +404,7 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
 
 
 class MessageHandler(AutoendpointHandler):
-    cors_methods = "DELETE, PUT"
+    cors_methods = "DELETE,PUT"
     cors_request_headers = ["content-encoding", "encryption",
                             "encryption-key", "content-type"]
     cors_response_headers = ["location"]
