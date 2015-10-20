@@ -1,4 +1,7 @@
 """Database Interaction"""
+from __future__ import absolute_import
+
+import logging
 import time
 import uuid
 from functools import wraps
@@ -13,6 +16,9 @@ from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table
 from boto.dynamodb2.types import NUMBER
+
+
+log = logging.getLogger(__file__)
 
 
 def create_router_table(tablename="router", read_throughput=5,
@@ -306,18 +312,22 @@ class Message(object):
             chidmessageid = "%s:%s" % (channel_id, message_id)
             db_key = self.encode({"uaid": uaid,
                                   "chidmessageid": chidmessageid})
-            expr = ("SET ttl = :ttl, timestamp = :timestamp,"
-                    " updateid = :updateid")
+            expr = ("SET #time=:ttl, #ts=:timestamp,"
+                    " updateid=:updateid")
             if data:
-                expr += ", data = :data, headers = :headers"
+                expr += ", #dd=:data, headers=:headers"
             else:
-                expr += " REMOVE data, headers"
-            expr_values = self.encode({":k" % k: v for k, v in item.items()})
+                expr += " REMOVE #dd, headers"
+            expr_values = self.encode({":%s" % k: v for k, v in item.items()})
+            log.debug(expr_values)
             conn.update_item(
                 self.table.table_name,
                 db_key,
-                condition_expression="attribute_exists (updateid)",
+                condition_expression="attribute_exists(updateid)",
                 update_expression=expr,
+                expression_attribute_names={"#time": "ttl",
+                                            "#ts": "timestamp",
+                                            "#dd": "data"},
                 expression_attribute_values=expr_values,
             )
         except ConditionalCheckFailedException:

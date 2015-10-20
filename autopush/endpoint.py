@@ -465,9 +465,16 @@ class MessageHandler(AutoendpointHandler):
 
         headers = None
         if data:
+            req_fields = ["content-encoding", "encryption"]
+            if not all([x in self.request.headers for x in req_fields]):
+                self.set_status(400)
+                log.msg("Missing Crypto headers", **self._client_info())
+                self.write("Missing crypto headers.")
+                return self.finish()
+
             headers = dict(
-                encoding=headers["content-encoding"],
-                encryption=headers["encryption"],
+                encoding=self.request.headers["content-encoding"],
+                encryption=self.request.headers["encryption"],
             )
             data = urlsafe_b64encode(self.request.body)
             # AWS cannot store empty strings, so we only add the encryption-key
@@ -476,11 +483,11 @@ class MessageHandler(AutoendpointHandler):
                 headers["encryption_key"] = headers["encryption-key"]
 
         d = deferToThread(self.ap_settings.message.update_message, uaid,
-                          chid, self.version, ttl=ttl, headers=headers)
+                          chid, self.version, ttl=ttl, data=data,
+                          headers=headers)
         d.addCallback(self._put_completed, uaid, chid, data, ttl, headers)
         self._db_error_handling(d)
         d.addErrback(self._response_err)
-        return d
 
     def _put_completed(self, result, uaid, chid, data, ttl, headers):
         if result:

@@ -3,15 +3,11 @@ import json
 import logging
 import os
 import random
-import signal
-import subprocess
 import time
 import urlparse
 import uuid
 from unittest.case import SkipTest
 
-import boto
-import psutil
 import websocket
 from autobahn.twisted.websocket import WebSocketServerFactory
 from nose.tools import eq_, ok_
@@ -28,7 +24,6 @@ from base64 import urlsafe_b64encode
 log = logging.getLogger(__name__)
 here_dir = os.path.abspath(os.path.dirname(__file__))
 root_dir = os.path.dirname(os.path.dirname(here_dir))
-moto_process = None
 
 import twisted.internet.base
 twisted.internet.base.DelayedCall.debug = True
@@ -36,28 +31,8 @@ twisted.internet.base.DelayedCall.debug = True
 
 def setUp():
     logging.getLogger('boto').setLevel(logging.CRITICAL)
-    boto_path = os.path.join(root_dir, "automock", "boto.cfg")
-    boto.config.load_from_path(boto_path)
-    if "SKIP_INTEGRATION" in os.environ:  # pragma: nocover
+    if "RUN_INTEGRATION" not in os.environ:  # pragma: nocover
         raise SkipTest("Skipping integration tests")
-    global moto_process
-    cmd = "moto_server dynamodb2 -p 5000"
-    moto_process = subprocess.Popen(cmd, shell=True, env=os.environ)
-
-
-def tearDown():
-    global moto_process
-    # This kinda sucks, but its the only way to nuke the child procs
-    proc = psutil.Process(pid=moto_process.pid)
-    child_procs = proc.children(recursive=True)
-    for p in [proc] + child_procs:
-        os.kill(p.pid, signal.SIGTERM)
-    moto_process.wait()
-
-    # Clear out the boto config that was loaded so the rest of the tests run
-    # fine
-    for section in boto.config.sections():
-        boto.config.remove_section(section)
 
 
 class Client(object):
@@ -209,6 +184,36 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         # Pull the notification if connected
         if self.ws and self.ws.connected:
             return object.__getattribute__(self, "get_notification")(timeout)
+
+    def update_notification(self, location, data=None, status=None, ttl=200):
+        url = urlparse.urlparse(location)
+        http = None
+        if url.scheme == "https":  # pragma: nocover
+            http = httplib.HTTPSConnection(url.netloc)
+        else:
+            http = httplib.HTTPConnection(url.netloc)
+
+        assert self.use_webpush is True
+
+        headers = {"TTL": str(ttl)}
+        if data:
+            headers.update({
+                "Content-Type": "application/octet-stream",
+                "Content-Encoding": "aesgcm-128",
+                "Encryption": self._crypto_key,
+                "Encryption-Key":
+                    'keyid="a1"; key="JcqK-OLkJZlJ3sJJWstJCA"',
+            })
+        body = data or ""
+        method = "PUT"
+        status = status or 201
+
+        log.debug("%s body: %s", method, body)
+        http.request(method, url.path.encode("utf-8"), body, headers)
+        resp = http.getresponse()
+        log.debug("%s Response (%s): %s", method, resp.status, resp.read())
+        http.close()
+        eq_(resp.status, status)
 
     def get_notification(self, timeout=0.2):
         self.ws.settimeout(timeout)
@@ -834,6 +839,47 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         eq_(result, None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_message_update(self):
+        data = uuid.uuid4().hex
+        data2 = uuid.uuid4().hex
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        ok_(client.channels)
+        chan = client.channels.keys()[0]
+        yield client.send_notification(data=data)
+        ok_(client.messages.get(chan, []) != [])
+        location = client.messages[chan][0]
+        yield client.update_notification(location=location, data=data2)
+
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result is not None)
+        ok_(result != {})
+        eq_(result["data"], urlsafe_b64encode(data2))
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_message_update_remove_data(self):
+        data = uuid.uuid4().hex
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        ok_(client.channels)
+        chan = client.channels.keys()[0]
+        yield client.send_notification(data=data)
+        ok_(client.messages.get(chan, []) != [])
+        location = client.messages[chan][0]
+        yield client.update_notification(location=location)
+
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result is not None)
+        ok_(result != {})
+        ok_("data" not in result)
         yield self.shut_down(client)
 
 
