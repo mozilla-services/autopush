@@ -2,6 +2,7 @@ import functools
 import json
 import sys
 import time
+import uuid
 
 import twisted.internet.base
 from cryptography.fernet import Fernet, InvalidToken
@@ -63,7 +64,7 @@ def patch_logger(test):
 class MessageTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
-        settings = endpoint.MessageHandler.ap_settings =\
+        settings = self.ap_settings = endpoint.MessageHandler.ap_settings =\
             AutopushSettings(
                 hostname="localhost",
                 statsd_host=None,
@@ -145,6 +146,37 @@ class MessageTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
 
         self.message.delete('')
+        return self.finish_deferred
+
+    def test_update_bad_ttl_value_and_missing_crypto_headers(self):
+        uaid = uuid.uuid4().hex
+        chid = uuid.uuid4().hex
+        self.request_mock.headers = {"ttl": "fred"}
+        self.request_mock.body = "some data"
+        self.message.version = "asdf"
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.status_mock.assert_called_with(400)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.message._put_message(None, uaid, chid)
+        return self.finish_deferred
+
+    def test_update_too_much_data(self):
+        uaid = uuid.uuid4().hex
+        chid = uuid.uuid4().hex
+        self.ap_settings.max_data = 2
+        self.request_mock.headers = {"ttl": "fred"}
+        self.request_mock.body = "some data"
+        self.message.version = "asdf"
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.status_mock.assert_called_with(401)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.message._put_message(None, uaid, chid)
         return self.finish_deferred
 
 

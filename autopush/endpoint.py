@@ -41,6 +41,27 @@ All message bodies must be UTF-8 encoded.
                      time.
     :statuscode 200: Message delivered to node client is connected to.
 
+.. http:delete:: /m/(string:message_id)
+
+    Delete the message given the `message_id`.
+
+.. http:put:: /m/(string/message_id)
+
+    Update the message at the given `message_id`.
+
+    This method takes the same arguments as WebPush PUT, with values
+    replacing that for the provided message.
+
+    .. note::
+
+        In the rare condition that the client is online, and has recieved
+        the message but has not acknowledged it yet; then it is possible that
+        the client will not get the updated message until reconnect. This
+        should be considered a rare edge-case.
+
+    :statuscode 404: `message_id` is not found.
+    :statuscode 200: Message has been updated.
+
 .. http:get:: /register/(uuid:uaid)
 
     Returns registered router data for the UAID.
@@ -390,7 +411,22 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
 
 
 class MessageHandler(AutoendpointHandler):
-    cors_methods = "DELETE"
+    cors_methods = "DELETE,PUT"
+    cors_request_headers = ["content-encoding", "encryption",
+                            "encryption-key", "content-type"]
+    cors_response_headers = ["location"]
+
+    def _token_valid(self, result, func):
+        """Handles valid token processing, then dispatches to supplied
+        function"""
+        info = result.split(":")
+        if len(info) != 3:
+            raise ValueError("Wrong message token components")
+
+        kind, uaid, chid = info
+        if kind != 'm':
+            raise ValueError("Wrong message token kind")
+        return func(kind, uaid, chid)
 
     @cyclone.web.asynchronous
     def delete(self, token):
@@ -403,20 +439,12 @@ class MessageHandler(AutoendpointHandler):
         self.version = token
         d = deferToThread(self.ap_settings.fernet.decrypt,
                           self.version.encode('utf8'))
-        d.addCallback(self._token_valid)
+        d.addCallback(self._token_valid, self._delete_message)
         d.addErrback(self._token_err)
         d.addErrback(self._response_err)
         return d
 
-    def _token_valid(self, result):
-        info = result.split(":")
-        if len(info) != 3:
-            raise ValueError("Wrong message token components")
-
-        kind, uaid, chid = info
-        if kind != 'm':
-            raise ValueError("Wrong message token kind")
-
+    def _delete_message(self, kind, uaid, chid):
         d = deferToThread(self.ap_settings.message.delete_message, uaid,
                           chid, self.version)
         d.addCallback(self._delete_completed)
@@ -427,6 +455,71 @@ class MessageHandler(AutoendpointHandler):
     def _delete_completed(self, response):
         self.set_status(204)
         self.finish()
+
+    @cyclone.web.asynchronous
+    def put(self, token):
+        """Updates a pending message.
+
+        If the message was already acknowledged, than this will instead create
+        a new message.
+
+        """
+        self.version = token
+        d = deferToThread(self.ap_settings.fernet.decrypt,
+                          self.version.encode('utf8'))
+        d.addCallback(self._token_valid, self._put_message)
+        d.addErrback(self._token_err)
+        d.addErrback(self._response_err)
+        return d
+
+    def _put_message(self, kind, uaid, chid):
+        try:
+            ttl = int(self.request.headers.get("ttl", "0"))
+        except ValueError:
+            ttl = 0
+        data = self.request.body
+        if data and len(data) > self.ap_settings.max_data:
+            self.set_status(401)
+            log.msg("Data too large", **self._client_info())
+            self.write("Data too large")
+            return self.finish()
+
+        headers = None
+        if data:
+            req_fields = ["content-encoding", "encryption"]
+            if not all([x in self.request.headers for x in req_fields]):
+                self.set_status(400)
+                log.msg("Missing Crypto headers", **self._client_info())
+                self.write("Missing crypto headers.")
+                return self.finish()
+
+            headers = dict(
+                encoding=self.request.headers["content-encoding"],
+                encryption=self.request.headers["encryption"],
+            )
+            data = urlsafe_b64encode(self.request.body)
+            # AWS cannot store empty strings, so we only add the encryption-key
+            # if its present to avoid empty strings.
+            if "encryption-key" in self.request.headers:
+                headers["encryption_key"] = \
+                    self.request.headers["encryption-key"]
+
+        d = deferToThread(self.ap_settings.message.update_message, uaid,
+                          chid, self.version, ttl=ttl, data=data,
+                          headers=headers)
+        d.addCallback(self._put_completed, uaid, chid, data, ttl, headers)
+        self._db_error_handling(d)
+        d.addErrback(self._response_err)
+
+    def _put_completed(self, result, uaid, chid, data, ttl, headers):
+        if result:
+            self.set_status(201)
+            self.write("Accepted")
+            return self.finish()
+        else:
+            self.set_status(404)
+            self.write("Message not found")
+            return self.finish()
 
 
 class EndpointHandler(AutoendpointHandler):

@@ -8,13 +8,10 @@ Autopush Changelog
 Features
 --------
 
-* Add UDP Wake support. Issue #106
-  Some devices which use SimplePush routing offer a feature to wake on
-  a carrier provided UDP ping. See issue #106 for details.
-
-* Provide service environment information
-  To help clients identify the service environment, server provides
-  it along with the hello message. See issue #50 for details.
+* Add UDP Wake support. Some devices which use SimplePush routing offer a
+  feature to wake on a carrier provided UDP ping. Issue #106.
+* Provide service environment information to help clients identify the service
+  environment, server provides it along with the hello message. Issue #50.
 
 Bug Fixes
 ---------
@@ -23,13 +20,13 @@ Bug Fixes
 * Respond with status code 413 for payloads that exceed the maximum size,
   404 for invalid tokens, and 400 for missing encryption headers. PR #170.
 
+WebPush
+-------
+
+* Add Push message update mechanism. Issue #141.
+
 1.6.0 (2015-09-14)
 ==================
-
-Features
---------
-
-* Add an endpoint for deleting undelivered messages. PR #131.
 
 Bug Fixes
 ---------
@@ -42,6 +39,11 @@ Bug Fixes
   months it was in, indicating that abortConnection is 100% effective.
   Issue #161.
 * Rename `SimplePushServerProtocol` to `PushServerProtocol`. Issue #117.
+
+WebPush
+-------
+
+* Add an endpoint for deleting undelivered messages. PR #131.
 
 1.5.1 (2015-09-02)
 ==================

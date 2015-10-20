@@ -28,7 +28,10 @@ from base64 import urlsafe_b64encode
 log = logging.getLogger(__name__)
 here_dir = os.path.abspath(os.path.dirname(__file__))
 root_dir = os.path.dirname(os.path.dirname(here_dir))
-moto_process = None
+ddb_dir = os.path.join(root_dir, "ddb")
+ddb_lib_dir = os.path.join(ddb_dir, "DynamoDBLocal_lib")
+ddb_jar = os.path.join(ddb_dir, "DynamoDBLocal.jar")
+ddb_process = None
 
 import twisted.internet.base
 twisted.internet.base.DelayedCall.debug = True
@@ -40,19 +43,22 @@ def setUp():
     boto.config.load_from_path(boto_path)
     if "SKIP_INTEGRATION" in os.environ:  # pragma: nocover
         raise SkipTest("Skipping integration tests")
-    global moto_process
-    cmd = "moto_server dynamodb2 -p 5000"
-    moto_process = subprocess.Popen(cmd, shell=True, env=os.environ)
+    global ddb_process
+    cmd = " ".join([
+        "java", "-Djava.library.path=%s" % ddb_lib_dir,
+        "-jar", ddb_jar, "-sharedDb"
+    ])
+    ddb_process = subprocess.Popen(cmd, shell=True, env=os.environ)
 
 
 def tearDown():
-    global moto_process
+    global ddb_process
     # This kinda sucks, but its the only way to nuke the child procs
-    proc = psutil.Process(pid=moto_process.pid)
+    proc = psutil.Process(pid=ddb_process.pid)
     child_procs = proc.children(recursive=True)
     for p in [proc] + child_procs:
         os.kill(p.pid, signal.SIGTERM)
-    moto_process.wait()
+    ddb_process.wait()
 
     # Clear out the boto config that was loaded so the rest of the tests run
     # fine
@@ -174,8 +180,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                 })
             body = data or ""
             method = "POST"
-            if not status:
-                status = 201
+            status = status or 201
         else:
             if data:
                 body = "version=%s&data=%s" % (version or "", data)
@@ -192,8 +197,8 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         log.debug("%s body: %s", method, body)
         http.request(method, url.path.encode("utf-8"), body, headers)
         resp = http.getresponse()
+        log.debug("%s Response (%s): %s", method, resp.status, resp.read())
         http.close()
-        log.debug("%s Response: %s", method, resp.read())
         eq_(resp.status, status)
         location = resp.getheader("Location", None)
         if self.use_webpush:
@@ -210,6 +215,36 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         # Pull the notification if connected
         if self.ws and self.ws.connected:
             return object.__getattribute__(self, "get_notification")(timeout)
+
+    def update_notification(self, location, data=None, status=None, ttl=200):
+        url = urlparse.urlparse(location)
+        http = None
+        if url.scheme == "https":  # pragma: nocover
+            http = httplib.HTTPSConnection(url.netloc)
+        else:
+            http = httplib.HTTPConnection(url.netloc)
+
+        assert self.use_webpush is True
+
+        headers = {"TTL": str(ttl)}
+        if data:
+            headers.update({
+                "Content-Type": "application/octet-stream",
+                "Content-Encoding": "aesgcm-128",
+                "Encryption": self._crypto_key,
+                "Encryption-Key":
+                    'keyid="a1"; key="JcqK-OLkJZlJ3sJJWstJCA"',
+            })
+        body = data or ""
+        method = "PUT"
+        status = status or 201
+
+        log.debug("%s body: %s", method, body)
+        http.request(method, url.path.encode("utf-8"), body, headers)
+        resp = http.getresponse()
+        log.debug("%s Response (%s): %s", method, resp.status, resp.read())
+        http.close()
+        eq_(resp.status, status)
 
     def get_notification(self, timeout=0.2):
         self.ws.settimeout(timeout)
@@ -263,11 +298,18 @@ class IntegrationBase(unittest.TestCase):
         )
         from twisted.web.server import Site
 
+        router_table = os.environ.get("ROUTER_TABLE", "router_int_test")
+        storage_table = os.environ.get("STORAGE_TABLE", "storage_int_test")
+        message_table = os.environ.get("MESSAGE_TABLE", "message_int_test")
+
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
             endpoint_port="9020",
-            router_port="9030"
+            router_port="9030",
+            router_tablename=router_table,
+            storage_tablename=storage_table,
+            message_tablename=message_table,
         )
 
         # Websocket server
@@ -730,6 +772,7 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         result = yield client.send_notification(data=data, ttl=0)
+        assert(result is not None)
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], urlsafe_b64encode(data))
         eq_(result["messageType"], "notification")
@@ -834,6 +877,110 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         eq_(result, None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_message_update(self):
+        data = uuid.uuid4().hex
+        data2 = uuid.uuid4().hex
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        ok_(client.channels)
+        chan = client.channels.keys()[0]
+        yield client.send_notification(data=data)
+        ok_(client.messages.get(chan, []) != [])
+        location = client.messages[chan][0]
+        yield client.update_notification(location=location, data=data2)
+
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result is not None)
+        ok_(result != {})
+        eq_(result["data"], urlsafe_b64encode(data2))
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_message_update_remove_data(self):
+        data = uuid.uuid4().hex
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        ok_(client.channels)
+        chan = client.channels.keys()[0]
+        yield client.send_notification(data=data)
+        ok_(client.messages.get(chan, []) != [])
+        location = client.messages[chan][0]
+        yield client.update_notification(location=location)
+
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result is not None)
+        ok_(result != {})
+        ok_("data" not in result)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_message_update_invalid_message(self):
+        data = uuid.uuid4().hex
+        data2 = uuid.uuid4().hex
+        client = yield self.quick_register(use_webpush=True)
+        ok_(client.channels)
+        chan = client.channels.keys()[0]
+
+        update = yield client.send_notification(data=data)
+        self.assertEquals(update["channelID"], chan)
+        yield client.ack(chan, update["version"])
+        ok_(client.messages.get(chan, []) != [])
+        yield client.disconnect()
+
+        # Update the message
+        location = client.messages[chan][0]
+        yield client.update_notification(location=location, data=data2,
+                                         status=404)
+
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result is None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_message_update_unackd_delivered_message(self):
+        data = uuid.uuid4().hex
+        data2 = uuid.uuid4().hex
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+
+        ok_(client.channels)
+        chan = client.channels.keys()[0]
+
+        # Send in the notification, so its stored
+        yield client.send_notification(data=data)
+
+        yield client.connect()
+        yield client.hello()
+        update = yield client.get_notification()
+        self.assertEquals(update["channelID"], chan)
+
+        # Update the message as it hasn't been ack'dyet
+        location = client.messages[chan][0]
+        yield client.update_notification(location=location, data=data2)
+
+        # Ack the message
+        yield client.ack(chan, update["version"])
+
+        # We won't get the new message yet, because client has no way to
+        # know it should check, so we'll reconnect it
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+
+        # We should now get the new one
+        result = yield client.get_notification()
+        ok_(result is not None)
+        ok_(result != {})
+        eq_(result["data"], urlsafe_b64encode(data2))
         yield self.shut_down(client)
 
 
