@@ -3,6 +3,9 @@ sudo: false
 python:
   - "pypy"
 install:
+  - mkdir ddb
+  - wget http://dynamodb-local.s3-website-us-west-2.amazonaws.com/dynamodb_local_latest.tar.gz
+  - cd ddb && tar xzvf ../dynamodb_local_latest.tar.gz
   - pip install coverage nose mock moto codecov tox
 script: tox -- --with-coverage --cover-xml --cover-package=autopush
 after_success:

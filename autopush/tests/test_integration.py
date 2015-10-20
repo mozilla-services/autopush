@@ -3,11 +3,15 @@ import json
 import logging
 import os
 import random
+import signal
+import subprocess
 import time
 import urlparse
 import uuid
 from unittest.case import SkipTest
 
+import boto
+import psutil
 import websocket
 from autobahn.twisted.websocket import WebSocketServerFactory
 from nose.tools import eq_, ok_
@@ -24,6 +28,10 @@ from base64 import urlsafe_b64encode
 log = logging.getLogger(__name__)
 here_dir = os.path.abspath(os.path.dirname(__file__))
 root_dir = os.path.dirname(os.path.dirname(here_dir))
+ddb_dir = os.path.join(root_dir, "ddb")
+ddb_lib_dir = os.path.join(ddb_dir, "DynamoDBLocal_lib")
+ddb_jar = os.path.join(ddb_dir, "DynamoDBLocal.jar")
+ddb_process = None
 
 import twisted.internet.base
 twisted.internet.base.DelayedCall.debug = True
@@ -31,8 +39,31 @@ twisted.internet.base.DelayedCall.debug = True
 
 def setUp():
     logging.getLogger('boto').setLevel(logging.CRITICAL)
-    if "RUN_INTEGRATION" not in os.environ:  # pragma: nocover
+    boto_path = os.path.join(root_dir, "automock", "boto.cfg")
+    boto.config.load_from_path(boto_path)
+    if "SKIP_INTEGRATION" in os.environ:  # pragma: nocover
         raise SkipTest("Skipping integration tests")
+    global ddb_process
+    cmd = " ".join([
+        "java", "-Djava.library.path=%s" % ddb_lib_dir,
+        "-jar", ddb_jar, "-sharedDb"
+    ])
+    ddb_process = subprocess.Popen(cmd, shell=True, env=os.environ)
+
+
+def tearDown():
+    global ddb_process
+    # This kinda sucks, but its the only way to nuke the child procs
+    proc = psutil.Process(pid=ddb_process.pid)
+    child_procs = proc.children(recursive=True)
+    for p in [proc] + child_procs:
+        os.kill(p.pid, signal.SIGTERM)
+    ddb_process.wait()
+
+    # Clear out the boto config that was loaded so the rest of the tests run
+    # fine
+    for section in boto.config.sections():
+        boto.config.remove_section(section)
 
 
 class Client(object):
@@ -267,11 +298,18 @@ class IntegrationBase(unittest.TestCase):
         )
         from twisted.web.server import Site
 
+        router_table = os.environ.get("ROUTER_TABLE", "router_int_test")
+        storage_table = os.environ.get("STORAGE_TABLE", "storage_int_test")
+        message_table = os.environ.get("MESSAGE_TABLE", "message_int_test")
+
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
             endpoint_port="9020",
-            router_port="9030"
+            router_port="9030",
+            router_tablename=router_table,
+            storage_tablename=storage_table,
+            message_tablename=message_table,
         )
 
         # Websocket server
