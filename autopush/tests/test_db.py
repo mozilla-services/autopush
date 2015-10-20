@@ -11,7 +11,7 @@ from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.items import Item
 from mock import Mock
 from moto import mock_dynamodb2
-from nose.tools import eq_, ok_
+from nose.tools import eq_
 
 from autopush.db import (
     get_message_table,

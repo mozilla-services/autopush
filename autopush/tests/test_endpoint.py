@@ -180,7 +180,6 @@ class MessageTestCase(unittest.TestCase):
         return self.finish_deferred
 
 
-
 class EndpointTestCase(unittest.TestCase):
     def setUp(self):
         self.timeout = 0.5

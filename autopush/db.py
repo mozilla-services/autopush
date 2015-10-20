@@ -312,7 +312,7 @@ class Message(object):
             chidmessageid = "%s:%s" % (channel_id, message_id)
             db_key = self.encode({"uaid": uaid,
                                   "chidmessageid": chidmessageid})
-            expr = ("SET #time=:ttl, #ts=:timestamp,"
+            expr = ("SET #tl=:ttl, #ts=:timestamp,"
                     " updateid=:updateid")
             if data:
                 expr += ", #dd=:data, headers=:headers"
@@ -325,7 +325,7 @@ class Message(object):
                 db_key,
                 condition_expression="attribute_exists(updateid)",
                 update_expression=expr,
-                expression_attribute_names={"#time": "ttl",
+                expression_attribute_names={"#tl": "ttl",
                                             "#ts": "timestamp",
                                             "#dd": "data"},
                 expression_attribute_values=expr_values,
