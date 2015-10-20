@@ -26,6 +26,9 @@ from autopush.router import (
     WebPushRouter,
 )
 from autopush.utils import canonical_url, resolve_ip
+from autopush.senderids import SENDERID_EXPRY
+
+S3_BUCKET = "org.mozilla.services.autopush"
 
 
 class AutopushSettings(object):
@@ -63,7 +66,11 @@ class AutopushSettings(object):
                  # Reflected up from UDP Router
                  wake_timeout=0,
                  env='development',
-                 enable_cors=False):
+                 enable_cors=False,
+                 s3_bucket="org.mozilla.services.autopush",
+                 senderid_expry=SENDERID_EXPRY,
+                 senderid_list="[]",
+                 ):
         """Initialize the Settings object
 
         Upon creation, the HTTP agent will initialize, all configured routers
@@ -154,6 +161,10 @@ class AutopushSettings(object):
 
         # Env
         self.env = env
+
+        self.s3_bucket = s3_bucket
+        self.senderid_expry = senderid_expry
+        self.senderid_list = senderid_list
 
     def update(self, **kwargs):
         """Update the arguments, if a ``crypto_key`` is in kwargs then the

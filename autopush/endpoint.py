@@ -594,8 +594,9 @@ class RegistrationHandler(AutoendpointHandler):
         self.start_time = time.time()
         self.add_header("Content-Type", "application/json")
         params = self._load_params()
+        # If the client didn't provide a CHID, make one up.
         if "channelID" not in params:
-            return self._error(400, "Invalid arguments")
+            params["channelID"] = uuid.uuid4()
 
         # If there's a UAID, ensure its valid, otherwise we ensure the hash
         # matches up
@@ -691,10 +692,12 @@ class RegistrationHandler(AutoendpointHandler):
         requestor"""
         if new_uaid:
             hashed = generate_hash(self.ap_settings.crypto_key, self.uaid)
+            senderid = self.ap_settings.senderIDs.getID()
             msg = dict(
                 uaid=self.uaid,
                 secret=hashed,
                 channelID=self.chid,
+                senderid=senderid,
                 endpoint=endpoint,
             )
         else:

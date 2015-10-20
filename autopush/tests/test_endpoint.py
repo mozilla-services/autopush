@@ -7,7 +7,7 @@ import twisted.internet.base
 from cryptography.fernet import Fernet, InvalidToken
 from cyclone.web import Application
 from mock import Mock, patch
-from moto import mock_dynamodb2
+from moto import mock_dynamodb2, mock_s3
 from nose.tools import eq_, ok_
 from twisted.internet.defer import Deferred
 from twisted.trial import unittest
@@ -24,16 +24,19 @@ from autopush.db import (
 )
 from autopush.settings import AutopushSettings
 from autopush.router.interface import IRouter, RouterResponse
+from autopush.senderids import SenderIDs
 
 mock_dynamodb2 = mock_dynamodb2()
 
 
 def setUp():
     mock_dynamodb2.start()
+    mock_s3().start()
 
 
 def tearDown():
     mock_dynamodb2.stop()
+    mock_s3().stop()
 
 
 class FileConsumer(object):  # pragma: no cover
@@ -164,6 +167,8 @@ class EndpointTestCase(unittest.TestCase):
         self.response_mock = Mock(spec=Response)
         self.router_mock = settings.router = Mock(spec=Router)
         self.storage_mock = settings.storage = Mock(spec=Storage)
+        self.senderIDs_mock = settings.senderIDs = Mock(spec=SenderIDs)
+        self.senderIDs_mock.getID.return_value = "test_senderid"
 
         self.request_mock = Mock(body=b'', arguments={}, headers={})
         self.endpoint = endpoint.EndpointHandler(Application(),
@@ -637,6 +642,8 @@ class RegistrationTestCase(unittest.TestCase):
         self.metrics_mock = settings.metrics = Mock(spec=Metrics)
         self.router_mock = settings.router = Mock(spec=Router)
         self.storage_mock = settings.storage = Mock(spec=Storage)
+        self.senderIDs_mock = settings.senderIDs = Mock(spec=SenderIDs)
+        self.senderIDs_mock.getID.return_value = "test_senderid"
 
         self.request_mock = Mock(body=b'', arguments={}, headers={})
         self.reg = endpoint.RegistrationHandler(Application(),
@@ -802,6 +809,8 @@ class RegistrationTestCase(unittest.TestCase):
             'encrypt.return_value': 'abcd123',
         })
 
+        self.senderIDs_mock.getID.return_value="test123"
+
         def handle_finish(value):
             call_args = self.reg.write.call_args
             ok_(call_args is not None)
@@ -809,6 +818,7 @@ class RegistrationTestCase(unittest.TestCase):
             call_arg = json.loads(args[0])
             eq_(call_arg["uaid"], dummy_uaid)
             eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
+            eq_(call_arg["senderid"], "test123")
             ok_("secret" in call_arg)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -918,6 +928,33 @@ class RegistrationTestCase(unittest.TestCase):
             args = call_args[0]
             call_arg = json.loads(args[0])
             eq_(call_arg["uaid"], dummy_uaid)
+            eq_(call_arg["channelID"], dummy_chid)
+            eq_(call_arg["senderid"], "test_senderid")
+            eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
+            ok_("secret" in call_arg)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.post()
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=dummy_chid)
+    def test_post_nochid(self, *args):
+        self.reg.request.body = json.dumps(dict(
+            type="simplepush",
+            data={},
+        ))
+        self.fernet_mock.configure_mock(**{
+            'encrypt.return_value': 'abcd123',
+        })
+
+        def handle_finish(value):
+            call_args = self.reg.write.call_args
+            ok_(call_args is not None)
+            args = call_args[0]
+            call_arg = json.loads(args[0])
+            eq_(call_arg["uaid"], dummy_chid)
+            eq_(call_arg["channelID"], dummy_chid)
+            eq_(call_arg["senderid"], "test_senderid")
             eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
             ok_("secret" in call_arg)
 
