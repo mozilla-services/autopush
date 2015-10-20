@@ -52,6 +52,13 @@ All message bodies must be UTF-8 encoded.
     This method takes the same arguments as WebPush PUT, with values
     replacing that for the provided message.
 
+    .. note::
+
+        In the rare condition that the client is online, and has recieved
+        the message but has not acknowledged it yet; then it is possible that
+        the client will not get the updated message until reconnect. This
+        should be considered a rare edge-case.
+
     :statuscode 404: `message_id` is not found.
     :statuscode 200: Message has been updated.
 

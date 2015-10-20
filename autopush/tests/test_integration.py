@@ -907,6 +907,44 @@ class TestWebPush(IntegrationBase):
         ok_(result is None)
         yield self.shut_down(client)
 
+    @inlineCallbacks
+    def test_message_update_unackd_delivered_message(self):
+        data = uuid.uuid4().hex
+        data2 = uuid.uuid4().hex
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+
+        ok_(client.channels)
+        chan = client.channels.keys()[0]
+
+        # Send in the notification, so its stored
+        yield client.send_notification(data=data)
+
+        yield client.connect()
+        yield client.hello()
+        update = yield client.get_notification()
+        self.assertEquals(update["channelID"], chan)
+
+        # Update the message as it hasn't been ack'dyet
+        location = client.messages[chan][0]
+        yield client.update_notification(location=location, data=data2)
+
+        # Ack the message
+        yield client.ack(chan, update["version"])
+
+        # We won't get the new message yet, because client has no way to
+        # know it should check, so we'll reconnect it
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+
+        # We should now get the new one
+        result = yield client.get_notification()
+        ok_(result is not None)
+        ok_(result != {})
+        eq_(result["data"], urlsafe_b64encode(data2))
+        yield self.shut_down(client)
+
 
 class TestHealth(IntegrationBase):
     @inlineCallbacks
