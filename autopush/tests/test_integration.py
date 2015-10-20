@@ -882,6 +882,31 @@ class TestWebPush(IntegrationBase):
         ok_("data" not in result)
         yield self.shut_down(client)
 
+    @inlineCallbacks
+    def test_message_update_invalid_message(self):
+        data = uuid.uuid4().hex
+        data2 = uuid.uuid4().hex
+        client = yield self.quick_register(use_webpush=True)
+        ok_(client.channels)
+        chan = client.channels.keys()[0]
+
+        update = yield client.send_notification(data=data)
+        self.assertEquals(update["channelID"], chan)
+        yield client.ack(chan, update["version"])
+        ok_(client.messages.get(chan, []) != [])
+        yield client.disconnect()
+
+        # Update the message
+        location = client.messages[chan][0]
+        yield client.update_notification(location=location, data=data2,
+                                         status=404)
+
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result is None)
+        yield self.shut_down(client)
+
 
 class TestHealth(IntegrationBase):
     @inlineCallbacks

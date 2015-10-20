@@ -254,6 +254,19 @@ class MessageTestCase(unittest.TestCase):
         all_messages = list(message.fetch_messages(self.uaid, limit=100))
         eq_(len(all_messages), 0)
 
+    def test_message_delete_fail_condition(self):
+        m = get_message_table()
+        message = Message(m, SinkMetrics())
+
+        def raise_condition(*args, **kwargs):
+            raise ConditionalCheckFailedException(None, None)
+
+        message.table = Mock()
+        message.table.delete_item.side_effect = raise_condition
+        result = message.delete_message(uaid="asdf", channel_id="asdf",
+                                        message_id="asdf", updateid="asdf")
+        eq_(result, False)
+
 
 class RouterTestCase(unittest.TestCase):
     def setUp(self):

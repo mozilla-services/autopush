@@ -479,8 +479,9 @@ class MessageHandler(AutoendpointHandler):
             data = urlsafe_b64encode(self.request.body)
             # AWS cannot store empty strings, so we only add the encryption-key
             # if its present to avoid empty strings.
-            if "encryption-key" in headers:
-                headers["encryption_key"] = headers["encryption-key"]
+            if "encryption-key" in self.request.headers:
+                headers["encryption_key"] = \
+                    self.request.headers["encryption-key"]
 
         d = deferToThread(self.ap_settings.message.update_message, uaid,
                           chid, self.version, ttl=ttl, data=data,
@@ -494,18 +495,10 @@ class MessageHandler(AutoendpointHandler):
             self.set_status(201)
             self.write("Accepted")
             return self.finish()
-
-        # Storing the update failed, item doesn't exist anymore. Lookup the
-        # uaid data for message routing
-        self.chid = chid
-        d = deferToThread(self.ap_settings.router.get_uaid, uaid)
-        d.addCallback(self._uaid_lookup_results, data, ttl)
-        d.addErrback(self._uaid_not_found_err)
-        self._db_error_handling(d)
-
-    def _uaid_lookup_results(self, result, data, ttl):
-        return EndpointHandler._route_notification(self, self.version, result,
-                                                   data, ttl)
+        else:
+            self.set_status(404)
+            self.write("Message not found")
+            return self.finish()
 
 
 class EndpointHandler(AutoendpointHandler):
