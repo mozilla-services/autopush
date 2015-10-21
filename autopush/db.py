@@ -111,8 +111,8 @@ def preflight_check(storage, router):
     Failure to run correctly will raise an exception.
 
     """
-    uaid = str(uuid.uuid4())
-    chid = str(uuid.uuid4())
+    uaid = uuid.uuid4().hex
+    chid = uuid.uuid4().hex
     node_id = "mynode:2020"
     connected_at = 0
     version = 12
@@ -431,6 +431,7 @@ class Router(object):
             exceeds throughput.
 
         """
+        # Fetch a senderid for this user
         conn = self.table.connection
         db_key = self.encode({"uaid": data.pop("uaid")})
         # Generate our update expression

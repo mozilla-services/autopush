@@ -2,7 +2,7 @@ import unittest
 import uuid
 
 from mock import Mock, patch
-from moto import mock_dynamodb2
+from moto import mock_dynamodb2, mock_s3
 from nose.tools import eq_
 
 from autopush.main import (
@@ -25,10 +25,12 @@ mock_dynamodb2 = mock_dynamodb2()
 
 def setUp():
     mock_dynamodb2.start()
+    mock_s3().start()
 
 
 def tearDown():
     mock_dynamodb2.stop()
+    mock_s3().stop()
 
 
 class UtilsTestCase(unittest.TestCase):
@@ -64,6 +66,7 @@ class SettingsTestCase(unittest.TestCase):
 
 class ConnectionMainTestCase(unittest.TestCase):
     def setUp(self):
+        mock_s3().start()
         patchers = [
             "autopush.main.task",
             "autopush.main.reactor",
@@ -75,6 +78,7 @@ class ConnectionMainTestCase(unittest.TestCase):
             self.mocks[name] = patcher.start()
 
     def tearDown(self):
+        mock_s3().stop()
         for mock in self.mocks.values():
             mock.stop()
 
@@ -99,6 +103,7 @@ class ConnectionMainTestCase(unittest.TestCase):
 
 class EndpointMainTestCase(unittest.TestCase):
     def setUp(self):
+        mock_s3().start()
         patchers = [
             "autopush.main.task",
             "autopush.main.reactor",
@@ -111,6 +116,7 @@ class EndpointMainTestCase(unittest.TestCase):
             self.mocks[name] = patcher.start()
 
     def tearDown(self):
+        mock_s3().stop()
         for mock in self.mocks.values():
             mock.stop()
 

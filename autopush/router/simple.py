@@ -58,6 +58,9 @@ class SimpleRouter(object):
         """Return no additional routing data"""
         return {}
 
+    def amend_msg(self, msg):
+        return msg
+
     def preflight_check(self, uaid, channel_id):
         """Verifies this routing call can be done successfully"""
         return True
