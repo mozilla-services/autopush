@@ -809,8 +809,6 @@ class RegistrationTestCase(unittest.TestCase):
             'encrypt.return_value': 'abcd123',
         })
 
-        self.senderIDs_mock.getID.return_value="test123"
-
         def handle_finish(value):
             call_args = self.reg.write.call_args
             ok_(call_args is not None)
@@ -818,7 +816,6 @@ class RegistrationTestCase(unittest.TestCase):
             call_arg = json.loads(args[0])
             eq_(call_arg["uaid"], dummy_uaid)
             eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
-            eq_(call_arg["senderid"], "test123")
             ok_("secret" in call_arg)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -929,7 +926,6 @@ class RegistrationTestCase(unittest.TestCase):
             call_arg = json.loads(args[0])
             eq_(call_arg["uaid"], dummy_uaid)
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["senderid"], "test_senderid")
             eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
             ok_("secret" in call_arg)
 
@@ -954,7 +950,6 @@ class RegistrationTestCase(unittest.TestCase):
             call_arg = json.loads(args[0])
             eq_(call_arg["uaid"], dummy_chid)
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["senderid"], "test_senderid")
             eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
             ok_("secret" in call_arg)
 

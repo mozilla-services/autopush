@@ -6,6 +6,7 @@ from twisted.python import log
 from twisted.internet.threads import deferToThread
 
 from autopush.router.interface import RouterException, RouterResponse
+from autopush.senderids import SenderIDs
 
 
 class GCMRouter(object):
@@ -14,6 +15,7 @@ class GCMRouter(object):
     ttl = 60
     dryRun = 0
     collapseKey = "simplepush"
+    senderid = ""
 
     def __init__(self, ap_settings, router_conf):
         """Create a new GCM router and connect to GCM"""
@@ -22,12 +24,19 @@ class GCMRouter(object):
         self.dryRun = router_conf.get("dryrun", False)
         self.collapseKey = router_conf.get("collapseKey", "simplepush")
         self.gcm = gcmclient.GCM(router_conf.get("apikey"))
+        self.senderIDs = SenderIDs(router_conf)
         log.msg("Starting GCM router...")
+
+    def amend_msg(self, msg):
+        msg["senderid"] = self.senderid
+        return msg
 
     def register(self, uaid, router_data):
         """Validate that a token is in the ``router_data``"""
         if not router_data.get("token"):
             self._error("connect info missing 'token'", status=401)
+        # Assign a senderid
+        self.senderid = router_data["senderid"] = self.senderIDs.getID()
         return router_data
 
     def route_notification(self, notification, uaid_data):

@@ -53,6 +53,15 @@ class IRouter(object):
         """
         raise NotImplementedError("register must be implemented")
 
+    def amend_msg(self, msg):
+        """Modify an outbound response message to include router info
+
+        Some routers may require additional info to be returned to clients.
+
+        :param msg: A dict of the response data to be sent to the client
+        """
+        raise NotImplementedError("amend_msg must be implemented")
+
     def route_notification(self, notification, uaid_data):
         """Route a notification
 

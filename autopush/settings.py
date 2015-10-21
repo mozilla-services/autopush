@@ -26,9 +26,7 @@ from autopush.router import (
     WebPushRouter,
 )
 from autopush.utils import canonical_url, resolve_ip
-from autopush.senderids import SENDERID_EXPRY
-
-S3_BUCKET = "org.mozilla.services.autopush"
+from autopush.senderids import SENDERID_EXPRY, DEFAULT_BUCKET
 
 
 class AutopushSettings(object):
@@ -67,7 +65,7 @@ class AutopushSettings(object):
                  wake_timeout=0,
                  env='development',
                  enable_cors=False,
-                 s3_bucket="org.mozilla.services.autopush",
+                 s3_bucket=DEFAULT_BUCKET,
                  senderid_expry=SENDERID_EXPRY,
                  senderid_list="[]",
                  ):
@@ -157,14 +155,14 @@ class AutopushSettings(object):
         if 'apns' in router_conf:
             self.routers["apns"] = APNSRouter(self, router_conf["apns"])
         if 'gcm' in router_conf:
-            self.routers["gcm"] = GCMRouter(self, router_conf["gcm"])
+            conf = router_conf.get("gcm", {})
+            conf["s3_bucket"] = s3_bucket
+            conf["senderid_expry"] = senderid_expry
+            conf["senderid_list"] = senderid_list
+            self.routers["gcm"] = GCMRouter(self, conf)
 
         # Env
         self.env = env
-
-        self.s3_bucket = s3_bucket
-        self.senderid_expry = senderid_expry
-        self.senderid_list = senderid_list
 
     def update(self, **kwargs):
         """Update the arguments, if a ``crypto_key`` is in kwargs then the

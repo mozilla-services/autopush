@@ -97,3 +97,6 @@ class WebPushRouter(SimpleRouter):
             message_id=notification.version,
             ttl=notification.ttl+int(time.time()),
         )
+
+    def amend_msg(msg):
+        return msg

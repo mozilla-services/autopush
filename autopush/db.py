@@ -229,7 +229,8 @@ class Message(object):
         db_key = self.encode({"uaid": uaid, "chidmessageid": " "})
         # Generate our update expression
         expr = "ADD chids :channel_id"
-        expr_values = self.encode({":channel_id": set([channel_id])})
+        expr_values = self.encode({":channel_id": set([channel_id]),
+            })
         conn.update_item(
             self.table.table_name,
             db_key,
@@ -370,6 +371,7 @@ class Router(object):
             exceeds throughput.
 
         """
+        ## Fetch a senderid for this user
         conn = self.table.connection
         db_key = self.encode({"uaid": data.pop("uaid")})
         # Generate our update expression

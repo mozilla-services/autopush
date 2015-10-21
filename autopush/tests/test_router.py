@@ -3,7 +3,7 @@ from unittest import TestCase
 import uuid
 
 from mock import Mock, PropertyMock, patch
-from moto import mock_dynamodb2
+from moto import mock_dynamodb2, mock_s3
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
 from twisted.internet.error import ConnectError
@@ -29,10 +29,12 @@ mock_dynamodb2 = mock_dynamodb2()
 
 
 def setUp():
+    mock_s3().start()
     mock_dynamodb2.start()
 
 
 def tearDown():
+    mock_s3().stop()
     mock_dynamodb2.stop()
 
 
@@ -147,7 +149,9 @@ class GCMRouterTestCase(unittest.TestCase):
         self._old_gcm = gcmclient.GCM
         gcmclient.GCM = Mock(spec=gcmclient.GCM)
 
-        gcm_config = {'apikey': '12345678abcdefg'}
+        gcm_config = {'apikey': '12345678abcdefg',
+                      's3_bucket': 'org.mozilla.services.autopush.test',
+                      'senderid_list': ['test123']}
         self.router = GCMRouter(settings, gcm_config)
         self.notif = Notification(10, "data", dummy_chid, None, 200)
         self.router_data = dict(router_data=dict(token="connect_data"))
@@ -170,7 +174,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_register(self):
         result = self.router.register("uaid", {"token": "connect_data"})
-        eq_(result, {"token": "connect_data"})
+        eq_(result, {"token": "connect_data", "senderid": "test123"})
 
     def test_register_bad(self):
         self.assertRaises(RouterException, self.router.register, "uaid", {})

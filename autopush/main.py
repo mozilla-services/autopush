@@ -24,8 +24,7 @@ from autopush.websocket import (
     DefaultResource,
     StatusResource,
 )
-from autopush.senderids import SenderIDs, SENDERID_EXPRY
-from autopush.settings import S3_BUCKET
+from autopush.senderids import SenderIDs, SENDERID_EXPRY, DEFAULT_BUCKET
 
 
 shared_config_files = [
@@ -222,7 +221,7 @@ def _parse_endpoint(sysargs):
     parser.add_argument('--cors', help='Allow CORS PUTs for update.',
                         type=bool, default=False, env_var='ALLOW_CORS')
     parser.add_argument('--s3_bucket', help='S3 Bucket for SenderIDs',
-                        type=str, default=S3_BUCKET,
+                        type=str, default=DEFAULT_BUCKET,
                         env_var='S3-BUCKET')
     parser.add_argument('--senderid_expry', help='Cache expry for senderIDs',
                         type=int, default=SENDERID_EXPRY,
@@ -406,7 +405,6 @@ def endpoint_main(sysargs=None):
     setup_logging("Autoendpoint")
 
     # Endpoint HTTP router
-    settings.senderIDs = SenderIDs(settings)
     site = cyclone.web.Application([
         (r"/push/([^\/]+)", EndpointHandler, dict(ap_settings=settings)),
         (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),

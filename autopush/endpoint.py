@@ -620,7 +620,7 @@ class RegistrationHandler(AutoendpointHandler):
             d.addCallback(router.register, params.get("data", {}))
             d.addCallback(self._save_router_data, router_type)
             d.addCallback(self._make_endpoint)
-            d.addCallback(self._return_endpoint, new_uaid)
+            d.addCallback(self._return_endpoint, new_uaid, router)
             d.addErrback(self._router_fail_err)
             d.addErrback(self._response_err)
             d.callback(uaid)
@@ -687,19 +687,20 @@ class RegistrationHandler(AutoendpointHandler):
         return deferToThread(self.ap_settings.make_endpoint,
                              self.uaid, self.chid)
 
-    def _return_endpoint(self, endpoint, new_uaid):
+    def _return_endpoint(self, endpoint, new_uaid, router=None):
         """Called after the endpoint was made and should be returned to the
         requestor"""
         if new_uaid:
             hashed = generate_hash(self.ap_settings.crypto_key, self.uaid)
-            senderid = self.ap_settings.senderIDs.getID()
             msg = dict(
                 uaid=self.uaid,
                 secret=hashed,
                 channelID=self.chid,
-                senderid=senderid,
                 endpoint=endpoint,
             )
+            # Apply any router specific fixes to the outbound response.
+            if router is not None:
+                msg = router.amend_msg(msg)
         else:
             msg = dict(channelID=self.chid, endpoint=endpoint)
         self.write(json.dumps(msg))
