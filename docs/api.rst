@@ -19,6 +19,7 @@ documentation is organized alphabetically by module name.
    api/router/gcm
    api/router/interface
    api/router/simple
+   api/senderids
    api/settings
    api/ssl
    api/utils

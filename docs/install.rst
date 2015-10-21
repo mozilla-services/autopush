@@ -10,10 +10,13 @@ System Requirements
 Autopush requires the following to be installed. Since each system has different
 methods and package names, it's best to search for each package.
 
-* autoconf
-* automake
-* gcc
-* make
+* python 2.7.7 (or later) with the following flags set:
+    * --enable-unicode=usc4 --enable-ipv6
+* build-essentials (a meta package that includes:
+    * autoconf
+    * automake
+    * gcc
+    * make
 * libffi development
 * libncurses5 development
 * openssl development

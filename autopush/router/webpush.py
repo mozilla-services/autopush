@@ -99,3 +99,6 @@ class WebPushRouter(SimpleRouter):
             ttl=notification.ttl,
             timestamp=int(time.time()),
         )
+
+    def amend_msg(self, msg):
+        return msg

@@ -45,7 +45,7 @@ def validate_uaid(uaid):
             return bool(uuid.UUID(uaid)), uaid
         except ValueError:
             pass
-    return False, str(uuid.uuid4())
+    return False, uuid.uuid4().hex
 
 
 def validate_hash(key, payload, hashed):

@@ -3,7 +3,7 @@ from unittest import TestCase
 import uuid
 
 from mock import Mock, PropertyMock, patch
-from moto import mock_dynamodb2
+from moto import mock_dynamodb2, mock_s3
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
 from twisted.internet.error import ConnectError
@@ -29,10 +29,12 @@ mock_dynamodb2 = mock_dynamodb2()
 
 
 def setUp():
+    mock_s3().start()
     mock_dynamodb2.start()
 
 
 def tearDown():
+    mock_s3().stop()
     mock_dynamodb2.stop()
 
 
@@ -66,6 +68,7 @@ class RouterInterfaceTestCase(TestCase):
         self.assertRaises(NotImplementedError, ir.register, "uaid", {})
         self.assertRaises(NotImplementedError, ir.route_notification, "uaid",
                           {})
+        self.assertRaises(NotImplementedError, ir.amend_msg, {})
 
 
 dummy_chid = str(uuid.uuid4())
@@ -136,6 +139,10 @@ class APNSRouterTestCase(unittest.TestCase):
         self.router._error(dict(status=1, identifier=10))
         eq_(len(self.router.messages), 1)
 
+    def test_ammend(self):
+        resp = {"key": "value"}
+        eq_(resp, self.router.amend_msg(resp))
+
 
 class GCMRouterTestCase(unittest.TestCase):
     def setUp(self):
@@ -147,7 +154,9 @@ class GCMRouterTestCase(unittest.TestCase):
         self._old_gcm = gcmclient.GCM
         gcmclient.GCM = Mock(spec=gcmclient.GCM)
 
-        gcm_config = {'apikey': '12345678abcdefg'}
+        gcm_config = {'apikey': '12345678abcdefg',
+                      's3_bucket': 'org.mozilla.services.autopush.test',
+                      'senderid_list': ['test123']}
         self.router = GCMRouter(settings, gcm_config)
         self.notif = Notification(10, "data", dummy_chid, None, 200)
         self.router_data = dict(router_data=dict(token="connect_data"))
@@ -170,7 +179,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_register(self):
         result = self.router.register("uaid", {"token": "connect_data"})
-        eq_(result, {"token": "connect_data"})
+        eq_(result, {"token": "connect_data", "senderid": "test123"})
 
     def test_register_bad(self):
         self.assertRaises(RouterException, self.router.register, "uaid", {})
@@ -245,6 +254,12 @@ class GCMRouterTestCase(unittest.TestCase):
             self._check_error_call(fail.value, 503)
         d.addBoth(check_results)
         return d
+
+    def test_ammend(self):
+        self.router.register("uaid", {"token": "connect_data"})
+        resp = {"key": "value"}
+        eq_({"key": "value", "senderid": "test123"},
+            self.router.amend_msg(resp))
 
 
 class SimplePushRouterTestCase(unittest.TestCase):
@@ -495,6 +510,10 @@ class SimplePushRouterTestCase(unittest.TestCase):
         eq_(self.router.udp, udp_data)
         return d
 
+    def test_ammend(self):
+        resp = {"key": "value"}
+        eq_(resp, self.router.amend_msg(resp))
+
 
 class WebPushRouterTestCase(unittest.TestCase):
     def setUp(self):
@@ -587,3 +606,7 @@ class WebPushRouterTestCase(unittest.TestCase):
             self.flushLoggedErrors()
         d.addBoth(verify_deliver)
         return d
+
+    def test_ammend(self):
+        resp = {"key": "value"}
+        eq_(resp, self.router.amend_msg(resp))

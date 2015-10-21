@@ -577,7 +577,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             return self._check_other_nodes(result)
 
         # If registration fails, try resetting the UAID.
-        self.ps.uaid = str(uuid.uuid4())
+        self.ps.uaid = uuid.uuid4().hex
         d = self._register_user()
         d.addCallback(self._check_other_nodes)
         return d

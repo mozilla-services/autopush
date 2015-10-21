@@ -26,6 +26,7 @@ from autopush.router import (
     WebPushRouter,
 )
 from autopush.utils import canonical_url, resolve_ip
+from autopush.senderids import SENDERID_EXPRY, DEFAULT_BUCKET
 
 
 class AutopushSettings(object):
@@ -63,7 +64,11 @@ class AutopushSettings(object):
                  # Reflected up from UDP Router
                  wake_timeout=0,
                  env='development',
-                 enable_cors=False):
+                 enable_cors=False,
+                 s3_bucket=DEFAULT_BUCKET,
+                 senderid_expry=SENDERID_EXPRY,
+                 senderid_list="[]",
+                 ):
         """Initialize the Settings object
 
         Upon creation, the HTTP agent will initialize, all configured routers
@@ -150,7 +155,11 @@ class AutopushSettings(object):
         if 'apns' in router_conf:
             self.routers["apns"] = APNSRouter(self, router_conf["apns"])
         if 'gcm' in router_conf:
-            self.routers["gcm"] = GCMRouter(self, router_conf["gcm"])
+            conf = router_conf.get("gcm", {})
+            conf["s3_bucket"] = s3_bucket
+            conf["senderid_expry"] = senderid_expry
+            conf["senderid_list"] = senderid_list
+            self.routers["gcm"] = GCMRouter(self, conf)
 
         # Env
         self.env = env

@@ -24,6 +24,7 @@ from autopush.websocket import (
     DefaultResource,
     StatusResource,
 )
+from autopush.senderids import SENDERID_EXPRY, DEFAULT_BUCKET
 
 
 shared_config_files = [
@@ -219,6 +220,14 @@ def _parse_endpoint(sysargs):
                         type=int, default=8082, env_var="PORT")
     parser.add_argument('--cors', help='Allow CORS PUTs for update.',
                         type=bool, default=False, env_var='ALLOW_CORS')
+    parser.add_argument('--s3_bucket', help='S3 Bucket for SenderIDs',
+                        type=str, default=DEFAULT_BUCKET,
+                        env_var='S3-BUCKET')
+    parser.add_argument('--senderid_expry', help='Cache expry for senderIDs',
+                        type=int, default=SENDERID_EXPRY,
+                        env_var='SENDERID_EXPRY')
+    parser.add_argument('--senderid_list', help='SenderIDs to load to S3',
+                        type=int, default=[], action='append')
     add_shared_args(parser)
     add_external_router_args(parser)
 
@@ -387,7 +396,10 @@ def endpoint_main(sysargs=None):
         endpoint_scheme=scheme,
         endpoint_hostname=args.endpoint_hostname or args.hostname,
         endpoint_port=args.port,
-        enable_cors=args.cors
+        enable_cors=args.cors,
+        s3_bucket=args.s3_bucket,
+        senderid_expry=args.senderid_expry,
+        senderid_list=args.senderid_list,
     )
 
     setup_logging("Autoendpoint")
