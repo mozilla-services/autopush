@@ -662,6 +662,7 @@ class EndpointHandler(AutoendpointHandler):
         d = deferToThread(self.ap_settings.fernet.encrypt, ':'.join([
             'm', self.uaid, self.chid]).encode('utf8'))
         d.addCallback(self._route_notification, result, data, ttl)
+        return d
 
     def _route_notification(self, version, result, data, ttl=None):
 

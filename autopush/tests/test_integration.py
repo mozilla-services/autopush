@@ -46,7 +46,7 @@ def setUp():
     global ddb_process
     cmd = " ".join([
         "java", "-Djava.library.path=%s" % ddb_lib_dir,
-        "-jar", ddb_jar, "-sharedDb"
+        "-jar", ddb_jar, "-sharedDb", "-inMemory"
     ])
     ddb_process = subprocess.Popen(cmd, shell=True, env=os.environ)
 
