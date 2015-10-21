@@ -92,7 +92,6 @@ class MessageTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.status_mock.assert_called_with(404)
-            self.write_mock.assert_called_with('Invalid token')
         self.finish_deferred.addCallback(handle_finish)
 
         self.message.delete('')
@@ -103,7 +102,6 @@ class MessageTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.status_mock.assert_called_with(404)
-            self.write_mock.assert_called_with('Invalid token')
         self.finish_deferred.addCallback(handle_finish)
 
         self.message.delete('')
@@ -114,7 +112,6 @@ class MessageTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.status_mock.assert_called_with(404)
-            self.write_mock.assert_called_with('Invalid token')
         self.finish_deferred.addCallback(handle_finish)
 
         self.message.delete('')
@@ -151,6 +148,7 @@ class MessageTestCase(unittest.TestCase):
     def test_update_bad_ttl_value_and_missing_crypto_headers(self):
         uaid = uuid.uuid4().hex
         chid = uuid.uuid4().hex
+        self.fernet_mock.decrypt.return_value = "m:%s:%s" % (uaid, chid)
         self.request_mock.headers = {"ttl": "fred"}
         self.request_mock.body = "some data"
         self.message.version = "asdf"
@@ -160,12 +158,11 @@ class MessageTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(400)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.message._put_message(None, uaid, chid)
+        self.message.put("")
         return self.finish_deferred
 
     def test_update_too_much_data(self):
-        uaid = uuid.uuid4().hex
-        chid = uuid.uuid4().hex
+        self.fernet_mock.decrypt.return_value = "m:123:456"
         self.ap_settings.max_data = 2
         self.request_mock.headers = {"ttl": "fred"}
         self.request_mock.body = "some data"
@@ -173,10 +170,13 @@ class MessageTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.assertTrue(result)
-            self.status_mock.assert_called_with(401)
+            self.status_mock.assert_called_with(413)
+            data = self.write_mock.call_args[0][0]
+            d = json.loads(data)
+            self.assertEqual(d.get("message"), "Data payload too large")
 
         self.finish_deferred.addCallback(handle_finish)
-        self.message._put_message(None, uaid, chid)
+        self.message.put("")
         return self.finish_deferred
 
 
@@ -250,6 +250,17 @@ class EndpointTestCase(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
+
+    def test_webpush_bad_routertype(self):
+        fresult = dict(router_type="fred")
+        self.endpoint.chid = "fred"
+        self.request_mock.body = b"stuff"
+        self.endpoint._uaid_lookup_results(fresult)
+
+        self.endpoint.set_status.assert_called_with(400)
+        data = self.write_mock.call_args[0][0]
+        d = json.loads(data)
+        eq_(d.get("errno"), 108)
 
     # Crypto headers should be required for Web Push...
     def test_webpush_uaid_lookup_no_crypto_headers_with_data(self):
@@ -411,7 +422,6 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.endpoint.set_status.assert_called_with(413)
-            self.endpoint.write.assert_called_with('Data too large')
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put('')
@@ -439,7 +449,6 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.status_mock.assert_called_with(404)
-            self.write_mock.assert_called_with('Invalid token')
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put('')
@@ -451,7 +460,6 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.status_mock.assert_called_with(404)
-            self.write_mock.assert_called_with("Invalid token")
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put('')
@@ -470,7 +478,11 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.router_mock.get_uaid.assert_called_with('123')
             self.status_mock.assert_called_with(404)
-            self.write_mock.assert_called_with('Invalid')
+            data = self.write_mock.call_args[0][0]
+            d = json.loads(data)
+            self.assertEqual(d.get("code"), 404)
+            self.assertEqual(d.get("errno"), 103)
+            self.assertEqual(d.get("error"), "Not Found")
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.version, self.endpoint.data = 789, None
@@ -650,7 +662,6 @@ class EndpointTestCase(unittest.TestCase):
 
     def _assert_error_response(self, result):
         self.status_mock.assert_called_with(500)
-        self.write_mock.assert_called_with("Error processing request")
 
 
 dummy_uaid = "00000000123412341234567812345678"
@@ -800,8 +811,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.ap_settings.endpoint_url = "http://localhost"
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(
-                401, 'Invalid Authentication')
+            self.reg.set_status.assert_called_with(401)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.get()
@@ -815,8 +825,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.ap_settings.endpoint_url = "http://localhost"
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(
-                401, 'Invalid Authentication')
+            self.reg.set_status.assert_called_with(401)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.get('invalid')

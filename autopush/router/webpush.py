@@ -43,7 +43,7 @@ class WebPushRouter(SimpleRouter):
     def _verify_channel(self, result, channel_id):
         if channel_id not in result:
             raise RouterException("No such subscription", status_code=404,
-                                  log_exception=False)
+                                  log_exception=False, errno=106)
 
     def preflight_check(self, uaid, channel_id):
         """Verifies this routing call can be done successfully"""
