@@ -13,15 +13,14 @@ probably wiser to use the S3 console, otherwise there may be multiple
 instances writing and the possiblity that the list of SenderIDs is
 overwritten with older, less accurate values.
 
-
 """
-from boto.exception import S3ResponseError
-from boto.s3.connection import S3Connection
-from boto.s3.key import Key
-
 import time
 import json
 import random
+
+from boto.exception import S3ResponseError
+from boto.s3.connection import S3Connection
+from boto.s3.key import Key
 
 # re-read from source every 15 minutes or so.
 SENDERID_EXPRY = 15*60
@@ -86,6 +85,6 @@ class SenderIDs(object):
         self.ID = args.get("s3_bucket", DEFAULT_BUCKET)
         self._expry = args.get("senderid_expry", SENDERID_EXPRY)
         senderIDs = args.get("senderid_list", [])
-        if len(senderIDs):
+        if senderIDs:
             self.update(senderIDs)
         self._refresh()

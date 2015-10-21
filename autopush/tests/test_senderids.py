@@ -1,6 +1,4 @@
-# This Source Code Form is subject to the terms of the Mozilla Public
-# License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at http://mozilla.org/MPL/2.0/.
+import json
 
 from autopush.senderids import SenderIDs
 from mock import Mock
@@ -8,8 +6,6 @@ from boto.exception import S3ResponseError
 from moto import mock_s3, mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
-
-import json
 
 
 class SenderIDsTestCase(unittest.TestCase):
