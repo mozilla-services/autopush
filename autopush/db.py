@@ -1,4 +1,8 @@
 """Database Interaction"""
+from __future__ import absolute_import
+
+import logging
+import time
 import uuid
 from functools import wraps
 
@@ -12,6 +16,9 @@ from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table
 from boto.dynamodb2.types import NUMBER
+
+
+log = logging.getLogger(__file__)
 
 
 def create_router_table(tablename="router", read_throughput=5,
@@ -266,7 +273,7 @@ class Message(object):
 
     @track_provisioned
     def store_message(self, uaid, channel_id, message_id, ttl, data=None,
-                      headers=None):
+                      headers=None, timestamp=None):
         """Stores a message in the message table for the given uaid/channel with
         the message id"""
         item = dict(
@@ -275,6 +282,8 @@ class Message(object):
             data=data,
             headers=headers,
             ttl=ttl,
+            timestamp=timestamp or int(time.time()),
+            updateid=uuid.uuid4().hex
         )
         if data:
             item["headers"] = headers
@@ -283,10 +292,62 @@ class Message(object):
         return True
 
     @track_provisioned
-    def delete_message(self, uaid, channel_id, message_id):
+    def update_message(self, uaid, channel_id, message_id, ttl, data=None,
+                       headers=None, timestamp=None):
+        """Updates a message in the message table for the given uaid/channel
+        /message_id.
+
+        If the message is not present, False is returned.
+
+        """
+        conn = self.table.connection
+        item = dict(
+            ttl=ttl,
+            timestamp=timestamp or int(time.time()),
+            updateid=uuid.uuid4().hex
+        )
+        if data:
+            item["headers"] = headers
+            item["data"] = data
+        try:
+            chidmessageid = "%s:%s" % (channel_id, message_id)
+            db_key = self.encode({"uaid": uaid,
+                                  "chidmessageid": chidmessageid})
+            expr = ("SET #tl=:ttl, #ts=:timestamp,"
+                    " updateid=:updateid")
+            if data:
+                expr += ", #dd=:data, headers=:headers"
+            else:
+                expr += " REMOVE #dd, headers"
+            expr_values = self.encode({":%s" % k: v for k, v in item.items()})
+            log.debug(expr_values)
+            conn.update_item(
+                self.table.table_name,
+                db_key,
+                condition_expression="attribute_exists(updateid)",
+                update_expression=expr,
+                expression_attribute_names={"#tl": "ttl",
+                                            "#ts": "timestamp",
+                                            "#dd": "data"},
+                expression_attribute_values=expr_values,
+            )
+        except ConditionalCheckFailedException:
+            return False
+        return True
+
+    @track_provisioned
+    def delete_message(self, uaid, channel_id, message_id, updateid=None):
         """Deletes a specific message"""
-        self.table.delete_item(uaid=uaid, chidmessageid="%s:%s" % (
-            channel_id, message_id))
+        if updateid:
+            try:
+                self.table.delete_item(uaid=uaid, chidmessageid="%s:%s" % (
+                    channel_id, message_id),
+                    expected={'updateid__eq': updateid})
+            except ConditionalCheckFailedException:
+                return False
+        else:
+            self.table.delete_item(uaid=uaid, chidmessageid="%s:%s" % (
+                channel_id, message_id))
         return True
 
     def delete_messages(self, uaid, chidmessageids):

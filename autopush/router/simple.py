@@ -101,7 +101,7 @@ class SimpleRouter(object):
                                     uaid_data).addErrback(self._eat_db_err)
                 raise RouterException("Node was invalid", status_code=503,
                                       response_body="Retry Request",
-                                      log_exception=False)
+                                      log_exception=False, errno=202)
             if result.code == 200:
                 self.metrics.increment("router.broadcast.hit")
                 returnValue(self.delivered_response(notification))
@@ -118,7 +118,8 @@ class SimpleRouter(object):
         except ProvisionedThroughputExceededException:
             raise RouterException("Provisioned throughput error",
                                   status_code=503,
-                                  response_body="Retry Request")
+                                  response_body="Retry Request",
+                                  errno=201)
 
         # - Lookup client
         #   - Success (node found): Notify node of new notification
@@ -138,7 +139,8 @@ class SimpleRouter(object):
             self.metrics.increment("updates.client.deleted")
             raise RouterException("User was deleted",
                                   status_code=404,
-                                  response_body="Invalid UAID")
+                                  response_body="Invalid UAID",
+                                  errno=105)
 
         # Verify there's a node_id in here, if not we're done
         node_id = uaid_data.get("node_id")

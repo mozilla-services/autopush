@@ -3,13 +3,16 @@
 This is the primary running code of the ``autoendpoint`` script that handles
 the reception of HTTP notification requests for AppServers.
 
-Two HTTP endpoints are exposed by default:
+Three HTTP endpoints are exposed by default:
 
 1. :class:`EndpointHandler` - Handles Push notification deliveries from the
    :term:`AppServer`.
 2. :class:`RegistrationHandler` - Handles Registration requests for registering
    additional router type/data when not using the default notification delivery
    scheme.
+3. :class:`MessageHandler` - Handles individual message operations such as
+   deleting a message before delivery, or updating the contents/ttl of an
+   existing message pending delivery.
 
 If no external routers are configured then the :class:`RegistrationHandler`
 will not be able to perform any additional router data registration.
@@ -24,6 +27,41 @@ payload being the raw content of the body (if any).
 Hash: ``HMAC(key=secret, message=RAW_CONTENT_PAYLOAD)``
 
 All message bodies must be UTF-8 encoded.
+
+Response Format
+---------------
+
+All responses will be of the content-type `application/json`, the structure of
+which depends on whether the requests was successful or not. In the case of
+success, the status code will be in the 2XX family.
+
+Error responses will be in the following format:
+
+.. code-block:: json
+
+    {
+        "code": 404, // matches the HTTP status code
+        "errno": 103, // stable application-level error number
+        "error": "Not Found", // string representation of the status
+        "message": "No message found" // Optional additional error information
+    }
+
+The current application-level error numbers are:
+
+* status code 400, errno 101: missing necessary crypto keys
+* status code 404, errno 102: invalid URL endpoint
+* status code 404, errno 103: expired URL endpoint
+* status code 413, errno 104: data payload is too large
+* status code 404, errno 105: endpoint became unavailable during request
+* status code 404, errno 106: invalid subscription
+* status code 404, errno 107: message not found
+* status code 400, errno 108: router type is invalid
+* status code 401, errno 109: invalid authentication
+* status code 503, errno 201: service temporarily unavailable due to high
+  load (use exponential back-off for retries)
+* status code 503, errno 202: temporary failure, immediate retry ok
+* status code 500, errno 999: unknown error
+
 
 .. http:put:: /push/(uuid:token)
 
@@ -40,6 +78,27 @@ All message bodies must be UTF-8 encoded.
     :statuscode 202: Message stored for delivery to client at a later
                      time.
     :statuscode 200: Message delivered to node client is connected to.
+
+.. http:delete:: /m/(string:message_id)
+
+    Delete the message given the `message_id`.
+
+.. http:put:: /m/(string/message_id)
+
+    Update the message at the given `message_id`.
+
+    This method takes the same arguments as WebPush PUT, with values
+    replacing that for the provided message.
+
+    .. note::
+
+        In the rare condition that the client is online, and has recieved
+        the message but has not acknowledged it yet; then it is possible that
+        the client will not get the updated message until reconnect. This
+        should be considered a rare edge-case.
+
+    :statuscode 404: `message_id` is not found.
+    :statuscode 200: Message has been updated.
 
 .. http:get:: /register/(uuid:uaid)
 
@@ -207,6 +266,18 @@ from autopush.utils import (
     validate_hash,
 )
 
+status_codes = {
+    200: "OK",
+    201: "Created",
+    202: "Accepted",
+    400: "Bad Request",
+    401: "Unauthorized",
+    404: "Not Found",
+    413: "Payload Too Large",
+    500: "Internal Server Error",
+    503: "Service Unavailable",
+}
+
 
 class Notification(namedtuple("Notification",
                    "version data channel_id headers ttl")):
@@ -324,6 +395,20 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
     #############################################################
     #                    Error Callbacks
     #############################################################
+    def _write_response(self, status_code, errno, message=None):
+        """Writes out a full JSON error and sets the appropriate status"""
+        self.set_status(status_code)
+        error_data = dict(
+            code=status_code,
+            errno=errno,
+            error=status_codes.get(status_code, "")
+        )
+        if message:
+            error_data["message"] = message
+        self.write(json.dumps(error_data))
+        self.set_header("Content-Type", "application/json")
+        self.finish()
+
     def _response_err(self, fail):
         """errBack for all exceptions that should be logged
 
@@ -332,24 +417,26 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
 
         """
         log.err(fail, **self._client_info())
-        self.set_status(500)
-        self.write("Error processing request")
-        self.finish()
+        self._write_response(500, 999)
 
     def _overload_err(self, fail):
         """errBack for throughput provisioned exceptions"""
         fail.trap(ProvisionedThroughputExceededException)
-        self.set_status(503)
         log.msg("Throughput Exceeded", **self._client_info())
-        self.write("Server busy, try later")
-        self.finish()
+        self._write_response(503, 201)
 
     def _router_response(self, response):
-        self.set_status(response.status_code)
         for name, val in response.headers.items():
             self.set_header(name, val)
-        self.write(response.response_body)
-        self.finish()
+        if 200 <= response.status_code < 300:
+            self.set_status(response.status_code)
+            self.write(response.response_body)
+            self.finish()
+        else:
+            return self._write_response(
+                response.status_code,
+                errno=response.errno or 999,
+                message=response.response_body)
 
     def _router_fail_err(self, fail):
         """errBack for router failures"""
@@ -365,18 +452,14 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
     def _uaid_not_found_err(self, fail):
         """errBack for uaid lookup not finding the user"""
         fail.trap(ItemNotFound)
-        self.set_status(404)
         log.msg("UAID not found in AWS.", **self._client_info())
-        self.write("Invalid")
-        return self.finish()
+        self._write_response(404, 103)
 
     def _token_err(self, fail):
         """errBack for token decryption fail"""
         fail.trap(InvalidToken, ValueError)
-        self.set_status(404)
         log.msg("Invalid token", **self._client_info())
-        self.write("Invalid token")
-        self.finish()
+        self._write_response(404, 102)
 
     #############################################################
     #                    Utility Methods
@@ -390,7 +473,22 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
 
 
 class MessageHandler(AutoendpointHandler):
-    cors_methods = "DELETE"
+    cors_methods = "DELETE,PUT"
+    cors_request_headers = ["content-encoding", "encryption",
+                            "encryption-key", "content-type"]
+    cors_response_headers = ["location"]
+
+    def _token_valid(self, result, func):
+        """Handles valid token processing, then dispatches to supplied
+        function"""
+        info = result.split(":")
+        if len(info) != 3:
+            raise ValueError("Wrong message token components")
+
+        kind, uaid, chid = info
+        if kind != 'm':
+            raise ValueError("Wrong message token kind")
+        return func(kind, uaid, chid)
 
     @cyclone.web.asynchronous
     def delete(self, token):
@@ -403,30 +501,80 @@ class MessageHandler(AutoendpointHandler):
         self.version = token
         d = deferToThread(self.ap_settings.fernet.decrypt,
                           self.version.encode('utf8'))
-        d.addCallback(self._token_valid)
+        d.addCallback(self._token_valid, self._delete_message)
         d.addErrback(self._token_err)
         d.addErrback(self._response_err)
         return d
 
-    def _token_valid(self, result):
-        info = result.split(":")
-        if len(info) != 3:
-            raise ValueError("Wrong message token components")
-
-        kind, uaid, chid = info
-        if kind != 'm':
-            raise ValueError("Wrong message token kind")
-
+    def _delete_message(self, kind, uaid, chid):
         d = deferToThread(self.ap_settings.message.delete_message, uaid,
                           chid, self.version)
         d.addCallback(self._delete_completed)
         self._db_error_handling(d)
-        d.addErrback(self._response_err)
         return d
 
     def _delete_completed(self, response):
         self.set_status(204)
         self.finish()
+
+    @cyclone.web.asynchronous
+    def put(self, token):
+        """Updates a pending message.
+
+        If the message was already acknowledged, than this will instead create
+        a new message.
+
+        """
+        self.version = token
+        d = deferToThread(self.ap_settings.fernet.decrypt,
+                          self.version.encode('utf8'))
+        d.addCallback(self._token_valid, self._put_message)
+        d.addErrback(self._token_err)
+        d.addErrback(self._response_err)
+        return d
+
+    def _put_message(self, kind, uaid, chid):
+        try:
+            ttl = int(self.request.headers.get("ttl", "0"))
+        except ValueError:
+            ttl = 0
+        data = self.request.body
+        if data and len(data) > self.ap_settings.max_data:
+            log.msg("Data too large", **self._client_info())
+            return self._write_response(
+                413, 104, message="Data payload too large")
+
+        headers = None
+        if data:
+            req_fields = ["content-encoding", "encryption"]
+            if not all([x in self.request.headers for x in req_fields]):
+                log.msg("Missing Crypto headers", **self._client_info())
+                return self._write_response(400, 101)
+
+            headers = dict(
+                encoding=self.request.headers["content-encoding"],
+                encryption=self.request.headers["encryption"],
+            )
+            data = urlsafe_b64encode(self.request.body)
+            # AWS cannot store empty strings, so we only add the encryption-key
+            # if its present to avoid empty strings.
+            if "encryption-key" in self.request.headers:
+                headers["encryption_key"] = \
+                    self.request.headers["encryption-key"]
+
+        d = deferToThread(self.ap_settings.message.update_message, uaid,
+                          chid, self.version, ttl=ttl, data=data,
+                          headers=headers)
+        d.addCallback(self._put_completed, uaid, chid, data, ttl, headers)
+        self._db_error_handling(d)
+
+    def _put_completed(self, result, uaid, chid, data, ttl, headers):
+        if result:
+            self.set_status(201)
+            self.write("Accepted")
+            return self.finish()
+        else:
+            return self._write_response(404, 107, message="Message not found")
 
 
 class EndpointHandler(AutoendpointHandler):
@@ -473,7 +621,12 @@ class EndpointHandler(AutoendpointHandler):
         """Process the result of the AWS UAID lookup"""
         # Save the whole record
         router_key = self.router_key = result.get("router_type", "simplepush")
-        self.router = self.ap_settings.routers[router_key]
+
+        try:
+            self.router = self.ap_settings.routers[router_key]
+        except KeyError:
+            return self._write_response(400, 108,
+                                        message="Invalid router type")
 
         # Only simplepush uses version/data out of body/query, GCM/APNS will
         # use data out of the request body 'WebPush' style.
@@ -486,20 +639,16 @@ class EndpointHandler(AutoendpointHandler):
                 req_fields = ["content-encoding", "encryption"]
                 if data and not all([x in self.request.headers
                                      for x in req_fields]):
-                    self.set_status(400)
                     log.msg("Missing Crypto headers", **self._client_info())
-                    self.write("Missing crypto headers.")
-                    return self.finish()
+                    return self._write_response(400, 101)
 
         try:
             ttl = int(self.request.headers.get("ttl", "0"))
         except ValueError:
             ttl = 0
         if data and len(data) > self.ap_settings.max_data:
-            self.set_status(413)
-            log.msg("Data too large", **self._client_info())
-            self.write("Data too large")
-            return self.finish()
+            return self._write_response(
+                413, 104, message="Data payload too large")
 
         if router_key == "simplepush":
             self._route_notification(version, result, data)
@@ -573,7 +722,8 @@ class RegistrationHandler(AutoendpointHandler):
 
         """
         if not self._validate_auth(uaid):
-            return self._error(401, "Invalid Authentication")
+            return self._write_response(401, 109,
+                                        message="Invalid authentication")
 
         self.uaid = uaid
         self.chid = str(uuid.uuid4())

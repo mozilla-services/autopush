@@ -88,8 +88,9 @@ def log_exception(func):
     return wrapper
 
 
-class Notification(namedtuple("Notification",
-                              "channel_id data headers version ttl")):
+class Notification(namedtuple(
+                   "Notification",
+                   "channel_id data headers version ttl timestamp")):
     """Parsed notification from the request"""
 
 
@@ -420,6 +421,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             defers = []
             if self.ps.use_webpush:
                 for notifs in self.ps.direct_updates.values():
+                    notifs = filter(lambda x: x.ttl != 0, notifs)
                     defers.extend(map(self._save_webpush_notif, notifs))
             else:
                 for chid, version in self.ps.direct_updates.items():
@@ -443,6 +445,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             headers=notif.headers,
             message_id=notif.version,
             ttl=notif.ttl,
+            timestamp=notif.timestamp,
         ).addErrback(self.log_err)
 
     def _save_simple_notif(self, channel_id, version):
@@ -730,16 +733,17 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             chid, version = notif["chidmessageid"].split(":")
 
             # If the TTL is too old, don't deliver and fire a delete off
-            if now >= notif["ttl"]:
+            if now >= (notif["ttl"]+notif["timestamp"]):
                 self.force_retry(
                     self.ap_settings.message.delete_message, self.ps.uaid,
-                    chid, version)
+                    chid, version, updateid=notif["updateid"])
                 continue
+
             data = notif.get("data")
             msg = dict(
                 messageType="notification",
                 channelID=chid,
-                version=version,
+                version=version + ":" + notif["updateid"],
             )
             if data:
                 msg["data"] = data
@@ -747,7 +751,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.updates_sent[chid].append(
                 Notification(channel_id=chid, version=version,
                              data=notif["data"], headers=notif.get("headers"),
-                             ttl=notif["ttl"])
+                             ttl=notif["ttl"], timestamp=notif["timestamp"])
             )
             self.sendJSON(msg)
 
@@ -879,6 +883,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def _handle_webpush_ack(self, chid, version):
         """Handle clearing out a webpush ack"""
+        # Split off the updateid if its not a direct update
+        version, updateid = version.split(":")
+
         ver_filter = lambda x: x.version == version
         found = filter(ver_filter, self.ps.direct_updates[chid])
         if found:
@@ -888,7 +895,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         found = filter(ver_filter, self.ps.updates_sent[chid])
         if found:
             d = self.force_retry(self.ap_settings.message.delete_message,
-                                 self.ps.uaid, chid, version)
+                                 uaid=self.ps.uaid,
+                                 channel_id=chid,
+                                 message_id=version,
+                                 updateid=updateid)
             # We don't remove the update until we know the delete ran
             # This is because we don't use range queries on dynamodb and we
             # need to make sure this notification is deleted from the db before
@@ -981,7 +991,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             response = dict(
                 messageType="notification",
                 channelID=chid,
-                version=version,
+                version="%s:" % version,
             )
             data = update.get("data")
             if data:
@@ -990,7 +1000,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.direct_updates[chid].append(
                 Notification(channel_id=chid, version=version,
                              data=data, headers=update.get("headers"),
-                             ttl=update["ttl"])
+                             ttl=update["ttl"], timestamp=update["timestamp"])
             )
             self.sendJSON(response)
         else:
