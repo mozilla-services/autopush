@@ -57,7 +57,7 @@ The current application-level error numbers are:
 * status code 404, errno 107: message not found
 * status code 400, errno 108: router type is invalid
 * status code 401, errno 109: invalid authentication
-* status code 503, errno 201: service temporailly unavailable due to high
+* status code 503, errno 201: service temporarily unavailable due to high
   load (use exponential back-off for retries)
 * status code 503, errno 202: temporary failure, immediate retry ok
 * status code 500, errno 999: unknown error
