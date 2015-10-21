@@ -59,9 +59,11 @@ class IRouter(object):
     def amend_msg(self, msg):
         """Modify an outbound response message to include router info
 
+        :param msg: A dict of the response data to be sent to the client
+        :returns: A potentially modified dict to return to the client
+
         Some routers may require additional info to be returned to clients.
 
-        :param msg: A dict of the response data to be sent to the client
         """
         raise NotImplementedError("amend_msg must be implemented")
 

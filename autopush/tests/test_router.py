@@ -68,7 +68,7 @@ class RouterInterfaceTestCase(TestCase):
         self.assertRaises(NotImplementedError, ir.register, "uaid", {})
         self.assertRaises(NotImplementedError, ir.route_notification, "uaid",
                           {})
-        self.assertRaises(NotImplementedError, ir.amend_msg({}))
+        self.assertRaises(NotImplementedError, ir.amend_msg, {})
 
 
 dummy_chid = str(uuid.uuid4())
