@@ -12,6 +12,7 @@ Features
   feature to wake on a carrier provided UDP ping. Issue #106.
 * Provide service environment information to help clients identify the service
   environment, server provides it along with the hello message. Issue #50.
+* Add actionable JSON errors to the Endpoint responses. Issue #178.
 
 Bug Fixes
 ---------
