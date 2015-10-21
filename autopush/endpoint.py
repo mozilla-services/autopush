@@ -726,7 +726,7 @@ class RegistrationHandler(AutoendpointHandler):
                                         message="Invalid authentication")
 
         self.uaid = uaid
-        self.chid = str(uuid.uuid4())
+        self.chid = uuid.uuid4().hex
         d = deferToThread(self.ap_settings.router.get_uaid, uaid)
         d.addCallback(self._return_router_data)
         d.addErrback(self._overload_err)
@@ -746,7 +746,7 @@ class RegistrationHandler(AutoendpointHandler):
         params = self._load_params()
         # If the client didn't provide a CHID, make one up.
         if "channelID" not in params:
-            params["channelID"] = uuid.uuid4()
+            params["channelID"] = uuid.uuid4().hex
 
         # If there's a UAID, ensure its valid, otherwise we ensure the hash
         # matches up
@@ -756,7 +756,7 @@ class RegistrationHandler(AutoendpointHandler):
                 return self._error(401, "Invalid Authentication")
         else:
             # No UAID supplied, make our own
-            uaid = str(uuid.uuid4())
+            uaid = uuid.uuid4().hex
             new_uaid = True
         self.uaid = uaid
         router_type = params.get("type")

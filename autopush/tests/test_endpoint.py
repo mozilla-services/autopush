@@ -721,7 +721,7 @@ class RegistrationTestCase(unittest.TestCase):
             '\x00\x00\x00\x00\x00\x00\x00\x00'
             '\x00\x00\x00\x00\x00\x00\x00\x00')
 
-    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     def test_load_params_arguments(self, u=None):
         self.reg.request.body = json.dumps(dict(
             channelID=dummy_chid,
@@ -735,14 +735,14 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.request.body = b'connect={"type":"test"}'
         self.assertTrue(not self.reg._load_params())
 
-    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     def test_load_params_prefer_body(self, t):
         args = self.reg.request.arguments
         args['connect'] = ['{"type":"invalid"}']
         self.reg.request.body = b'connect={"type":"test"}'
         self.assertTrue(self.reg._load_params())
 
-    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     def test_load_params_no_conn(self, t):
         self.reg.request.body = b'noconnect={"type":"test"}'
         self.assertTrue(not self.reg._load_params())
@@ -782,7 +782,7 @@ class RegistrationTestCase(unittest.TestCase):
         eq_(reg._headers[ch1], "*")
         eq_(reg._headers[ch2], "GET,PUT")
 
-    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     @patch('autopush.endpoint.validate_hash', return_value=True)
     def test_get_valid(self, *args):
         # All is well check.
@@ -810,7 +810,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.get(dummy_uaid)
         return self.finish_deferred
 
-    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     def test_get_no_uuid(self, arg):
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
@@ -824,7 +824,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.get()
         return self.finish_deferred
 
-    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     def test_get_bad_uuid(self, arg):
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
@@ -838,7 +838,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.get('invalid')
         return self.finish_deferred
 
-    @patch('uuid.uuid4', return_value=dummy_uaid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
     def test_post(self, arg):
         self.reg.ap_settings.routers["test"] = self.router_mock
         self.reg.request.body = json.dumps(dict(
@@ -863,7 +863,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.post()
         return self.finish_deferred
 
-    @patch('uuid.uuid4', return_value=dummy_uaid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
     def test_post_invalid_args(self, arg):
         self.reg.request.body = json.dumps(dict(
             type="test",
@@ -878,7 +878,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.post()
         return self.finish_deferred
 
-    @patch('uuid.uuid4', return_value=dummy_uaid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
     def test_post_bad_router_type(self, arg):
         self.reg.request.body = json.dumps(dict(
             type="test",
@@ -894,7 +894,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.post()
         return self.finish_deferred
 
-    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     @patch('autopush.endpoint.validate_hash', return_value=True)
     def test_post_existing_uaid(self, *args):
         self.reg.request.headers["Authorization"] = "Fred Smith"
@@ -917,7 +917,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.post(dummy_uaid)
         return self.finish_deferred
 
-    @patch('uuid.uuid4', return_value=dummy_uaid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
     def test_post_bad_uaid(self, arg):
         self.reg.ap_settings.routers["test"] = self.router_mock
         self.reg.request.body = json.dumps(dict(
@@ -934,7 +934,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.post('invalid')
         return self.finish_deferred
 
-    @patch('uuid.uuid4', return_value=dummy_uaid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
     def test_post_bad_params(self, arg):
         self.reg.ap_settings.routers["test"] = self.router_mock
         self.reg.request.body = json.dumps(dict(
@@ -949,7 +949,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.post(dummy_uaid)
         return self.finish_deferred
 
-    @patch('uuid.uuid4', return_value=dummy_uaid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
     def test_post_uaid_chid(self, arg):
         self.reg.request.body = json.dumps(dict(
             type="simplepush",
@@ -974,7 +974,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.post()
         return self.finish_deferred
 
-    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     def test_post_nochid(self, *args):
         self.reg.request.body = json.dumps(dict(
             type="simplepush",
@@ -1024,7 +1024,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.post()
         return self.finish_deferred
 
-    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     @patch('autopush.endpoint.validate_hash', return_value=True)
     def test_put(self, *args):
         self.reg.request.headers["Authorization"] = "Fred"
@@ -1044,7 +1044,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.put(dummy_uaid)
         return self.finish_deferred
 
-    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     def test_put_bad_auth(self, *args):
         self.reg.request.headers["Authorization"] = "Fred Smith"
 
@@ -1056,7 +1056,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.put(dummy_uaid)
         return self.finish_deferred
 
-    @patch('uuid.uuid4', return_value=dummy_chid)
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     @patch('autopush.endpoint.validate_hash', return_value=True)
     def test_put_bad_arguments(self, *args):
         self.reg.request.headers["Authorization"] = "Fred"

@@ -111,8 +111,8 @@ def preflight_check(storage, router):
     Failure to run correctly will raise an exception.
 
     """
-    uaid = str(uuid.uuid4())
-    chid = str(uuid.uuid4())
+    uaid = uuid.uuid4().hex
+    chid = uuid.uuid4().hex
     node_id = "mynode:2020"
     connected_at = 0
     version = 12
