@@ -49,7 +49,7 @@ class APNSRouter(object):
                                   response_body="No token registered")
         return router_data
 
-    def amend_msg(msg):
+    def amend_msg(self, msg):
         return msg
 
     def route_notification(self, notification, uaid_data):

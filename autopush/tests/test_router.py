@@ -68,6 +68,7 @@ class RouterInterfaceTestCase(TestCase):
         self.assertRaises(NotImplementedError, ir.register, "uaid", {})
         self.assertRaises(NotImplementedError, ir.route_notification, "uaid",
                           {})
+        self.assertRaises(NotImplementedError, ir.amend_msg({}))
 
 
 dummy_chid = str(uuid.uuid4())
@@ -137,6 +138,10 @@ class APNSRouterTestCase(unittest.TestCase):
         self.router.messages = {1: {'token': 'dump', 'payload': {}}}
         self.router._error(dict(status=1, identifier=10))
         eq_(len(self.router.messages), 1)
+
+    def test_ammend(self):
+        resp = {"key": "value"}
+        eq_(resp, self.router.amend_msg(resp))
 
 
 class GCMRouterTestCase(unittest.TestCase):
@@ -249,6 +254,12 @@ class GCMRouterTestCase(unittest.TestCase):
             self._check_error_call(fail.value, 503)
         d.addBoth(check_results)
         return d
+
+    def test_ammend(self):
+        self.router.register("uaid", {"token": "connect_data"})
+        resp = {"key": "value"}
+        eq_({"key": "value", "senderid": "test123"},
+            self.router.amend_msg(resp))
 
 
 class SimplePushRouterTestCase(unittest.TestCase):
@@ -499,6 +510,10 @@ class SimplePushRouterTestCase(unittest.TestCase):
         eq_(self.router.udp, udp_data)
         return d
 
+    def test_ammend(self):
+        resp = {"key": "value"}
+        eq_(resp, self.router.amend_msg(resp))
+
 
 class WebPushRouterTestCase(unittest.TestCase):
     def setUp(self):
@@ -591,3 +606,7 @@ class WebPushRouterTestCase(unittest.TestCase):
             self.flushLoggedErrors()
         d.addBoth(verify_deliver)
         return d
+
+    def test_ammend(self):
+        resp = {"key": "value"}
+        eq_(resp, self.router.amend_msg(resp))
