@@ -24,7 +24,7 @@ from autopush.websocket import (
     DefaultResource,
     StatusResource,
 )
-from autopush.senderids import SenderIDs, SENDERID_EXPRY, DEFAULT_BUCKET
+from autopush.senderids import SENDERID_EXPRY, DEFAULT_BUCKET
 
 
 shared_config_files = [
