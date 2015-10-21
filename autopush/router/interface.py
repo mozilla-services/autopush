@@ -8,13 +8,15 @@ class RouterException(AutopushException):
 
     """
     def __init__(self, message, status_code=500, response_body="",
-                 router_data=None, headers={}, log_exception=True):
+                 router_data=None, headers={}, log_exception=True,
+                 errno=None):
         """Create a new RouterException"""
         super(AutopushException, self).__init__(message)
         self.status_code = status_code
         self.headers = headers
         self.log_exception = log_exception
         self.response_body = response_body or message
+        self.errno = errno
 
 
 class RouterResponse(object):
@@ -26,12 +28,13 @@ class RouterResponse(object):
 
     """
     def __init__(self, status_code=200, response_body="", router_data=None,
-                 headers={}):
+                 headers={}, errno=None):
         """Create a new RouterResponse"""
         self.status_code = status_code
         self.response_body = response_body
         self.router_data = router_data
         self.headers = headers
+        self.errno = errno
 
 
 class IRouter(object):
