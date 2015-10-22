@@ -53,7 +53,7 @@ class SenderIDsTestCase(unittest.TestCase):
 
     def test_update(self):
         settings = dict(
-            s3_bucket="TEST_BUCKET",
+            s3_bucket=TEST_BUCKET,
             senderid_expry=0,
             senderid_list=["test123", "test456"],
             )
