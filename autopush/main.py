@@ -51,8 +51,8 @@ def add_shared_args(parser):
     parser.add_argument('--datadog_flush_interval',
                         help="DataDog Flush Interval", type=int,
                         default=10, env_var="DATADOG_FLUSH_INTERVAL")
-    parser.add_argument('--hostname', help="Hostname to announce under",
-                        type=str, default=None, env_var="HOSTNAME")
+    parser.add_argument('--local_hostname', help="Hostname to announce under",
+                        type=str, default=None, env_var="LOCAL_HOSTNAME")
     parser.add_argument('--resolve_hostname',
                         help="Resolve the announced hostname",
                         type=bool, default=False, env_var="RESOLVE_HOSTNAME")
@@ -260,7 +260,7 @@ def make_settings(args, **kwargs):
         datadog_api_key=args.datadog_api_key,
         datadog_app_key=args.datadog_app_key,
         datadog_flush_interval=args.datadog_flush_interval,
-        hostname=args.hostname,
+        hostname=args.local_hostname,
         statsd_host=args.statsd_host,
         statsd_port=args.statsd_port,
         router_conf=router_conf,
@@ -330,7 +330,7 @@ def connection_main(sysargs=None):
     # Public websocket server
     proto = "wss" if args.ssl_key else "ws"
     factory = WebSocketServerFactory(
-        "%s://%s:%s/" % (proto, args.hostname, args.port),
+        "%s://%s:%s/" % (proto, args.local_hostname, args.port),
         debug=args.debug,
         debugCodePaths=args.debug,
     )
@@ -394,7 +394,7 @@ def endpoint_main(sysargs=None):
     settings = make_settings(
         args,
         endpoint_scheme=scheme,
-        endpoint_hostname=args.endpoint_hostname or args.hostname,
+        endpoint_hostname=args.endpoint_hostname or args.local_hostname,
         endpoint_port=args.port,
         enable_cors=args.cors,
         s3_bucket=args.s3_bucket,

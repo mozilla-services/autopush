@@ -148,7 +148,7 @@ class EndpointMainTestCase(unittest.TestCase):
             datadog_api_key = "datadog_api_key"
             datadog_app_key = "datadog_app_key"
             datadog_flush_interval = "datadog_flush_interval"
-            hostname = "hostname"
+            local_hostname = "hostname"
             statsd_host = "statsd_host"
             statsd_port = "statsd_port"
             router_tablename = "None"
@@ -167,6 +167,8 @@ class EndpointMainTestCase(unittest.TestCase):
             message_write_throughput = 0
 
         ap = make_settings(arg)
+        # verify that the hostname is what we said.
+        eq_(ap.hostname, arg.local_hostname)
         eq_(ap.routers["gcm"].gcm.api_key, arg.gcm_apikey)
         eq_(ap.routers["apns"].apns.cert_file, arg.apns_cert_file)
         eq_(ap.routers["apns"].apns.key_file, arg.apns_key_file)
