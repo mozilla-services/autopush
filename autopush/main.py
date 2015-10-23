@@ -51,7 +51,7 @@ def add_shared_args(parser):
                         help="DataDog Flush Interval", type=int,
                         default=10, env_var="DATADOG_FLUSH_INTERVAL")
     parser.add_argument('--hostname', help="Hostname to announce under",
-                        type=str, default=None, env_var="HOSTNAME")
+                        type=str, default=None, env_var="LOCAL_HOSTNAME")
     parser.add_argument('--resolve_hostname',
                         help="Resolve the announced hostname",
                         type=bool, default=False, env_var="RESOLVE_HOSTNAME")
