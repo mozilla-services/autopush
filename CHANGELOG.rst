@@ -21,6 +21,12 @@ Bug Fixes
 WebPush
 -------
 
+1.7.1 (2015-10-23)
+==================
+
+* Change HOSTNAME env name to not conflict with AWS env. Issue #198
+* Move endpoint_* marks to shared variables.
+
 1.7.0 (2015-10-21)
 ==================
 
