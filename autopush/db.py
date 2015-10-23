@@ -15,6 +15,7 @@ from boto.dynamodb2.exceptions import (
 from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table
+from boto.dynamodb2.item import Item
 from boto.dynamodb2.types import NUMBER
 
 
@@ -371,6 +372,13 @@ class Message(object):
             self.delete_messages(uaid, chidmessageids)
 
     @track_provisioned
+    def delete_all_for_user(self, uaid):
+        """Deletes all messages and channel info for a given uaid"""
+        self.table.delete_item(uaid__eq=uaid,
+                               chid__gte=" ",
+                               consistent=True)
+
+    @track_provisioned
     def fetch_messages(self, uaid, limit=10):
         """Fetches messages for a uaid"""
         # Eagerly fetches all results in the result set.
@@ -466,6 +474,12 @@ class Router(object):
             return (True, result)
         except ConditionalCheckFailedException:
             return (False, {})
+
+    @track_provisioned
+    def drop_user(self, uaid):
+        db_key = self.encode({"uaid": uaid})
+        # TODO: Does this raise any exceptions?
+        Item(self.table.table_name, db_key).delete();
 
     @track_provisioned
     def clear_node(self, item):

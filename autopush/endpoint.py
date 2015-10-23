@@ -709,7 +709,7 @@ class EndpointHandler(AutoendpointHandler):
 
 
 class RegistrationHandler(AutoendpointHandler):
-    cors_methods = "GET,PUT"
+    cors_methods = "GET,PUT,DELETE"
 
     #############################################################
     #                    Cyclone HTTP Methods
@@ -810,6 +810,32 @@ class RegistrationHandler(AutoendpointHandler):
         d.addErrback(self._response_err)
         d.callback(uaid)
 
+    @cyclone.web.asynchronous
+    def delete(self, combo):
+        """HTTP DELETE
+
+        Invalidate a UAID (and all channels associated with it).
+
+        """
+        if "/" in combo:
+            (uaid, chid) = combo.split("/", 2)
+        else:
+            uaid = combo
+            chid = None
+        if not self._validate_auth(uaid):
+            return self._error(401, "Invalid Authentication")
+        # TODO: make these async
+        if chid:
+            # mark channel as dead
+            self.ap_settings.message.delete_messages_for_channel(uaid, chid)
+            self.ap_settings.message.unregister_channel(uaid, chid)
+        else:
+            # nuke uaid
+            self.ap_settings.message.delete_all_for_user(uaid)
+            self.ap_settings.router.drop_user(uaid)
+
+
+
     #############################################################
     #                    Callbacks
     #############################################################
@@ -866,7 +892,15 @@ class RegistrationHandler(AutoendpointHandler):
     #                    Utility Methods
     #############################################################
     def _validate_auth(self, uaid):
-        """Validates the Authorization header in a request"""
+        """Validates the Authorization header in a request
+
+        The remote client generates an Authorization header by using
+        the following
+
+        AuthToken = hmac.new(key=sharedSecret, msg=request.body,
+                             digestmod=hashlib.sha256)
+        headers.set("Authorization", AuthToken)
+        """
         secret = self.ap_settings.crypto_key
         hashed = self.request.headers.get("Authorization", "").strip()
         key = generate_hash(secret, uaid)
