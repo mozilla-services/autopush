@@ -68,6 +68,7 @@ class AutopushSettings(object):
                  s3_bucket=DEFAULT_BUCKET,
                  senderid_expry=SENDERID_EXPRY,
                  senderid_list="[]",
+                 hello_timeout=0,
                  ):
         """Initialize the Settings object
 
@@ -163,6 +164,8 @@ class AutopushSettings(object):
 
         # Env
         self.env = env
+
+        self.hello_timeout = hello_timeout
 
     def update(self, **kwargs):
         """Update the arguments, if a ``crypto_key`` is in kwargs then the
