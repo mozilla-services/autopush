@@ -7,6 +7,8 @@ from moto import mock_s3, mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
 
+TEST_BUCKET = "oma_test"
+
 
 class SenderIDsTestCase(unittest.TestCase):
     def setUp(self):
@@ -19,7 +21,7 @@ class SenderIDsTestCase(unittest.TestCase):
 
     def test_success(self):
         settings = dict(
-            s3_bucket="org.mozilla.autopush.test",
+            s3_bucket=TEST_BUCKET,
             senderid_expry=10,
             senderid_list=["test123", "test456"],
             )
@@ -35,7 +37,7 @@ class SenderIDsTestCase(unittest.TestCase):
 
     def test_ensureCreated(self):
         settings = dict(
-            s3_bucket="org.mozilla.autopush.test",
+            s3_bucket=TEST_BUCKET,
             senderid_expry=0,
             senderid_list=["test123", "test456"],
             )
@@ -51,7 +53,7 @@ class SenderIDsTestCase(unittest.TestCase):
 
     def test_update(self):
         settings = dict(
-            s3_bucket="org.mozilla.autopush.test",
+            s3_bucket=TEST_BUCKET,
             senderid_expry=0,
             senderid_list=["test123", "test456"],
             )
