@@ -20,6 +20,8 @@ Bug Fixes
 * Reset UAIDs for clients that change their router type. PR #167.
 * Respond with status code 413 for payloads that exceed the maximum size,
   404 for invalid tokens, and 400 for missing encryption headers. PR #170.
+* Change HOSTNAME env name to not conflict with AWS env. Issue #198
+* Move endpoint_* marks to shared variables.
 
 WebPush
 -------

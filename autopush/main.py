@@ -51,7 +51,7 @@ def add_shared_args(parser):
                         help="DataDog Flush Interval", type=int,
                         default=10, env_var="DATADOG_FLUSH_INTERVAL")
     parser.add_argument('--hostname', help="Hostname to announce under",
-                        type=str, default=None, env_var="HOSTNAME")
+                        type=str, default=None, env_var="LOCAL_HOSTNAME")
     parser.add_argument('--resolve_hostname',
                         help="Resolve the announced hostname",
                         type=bool, default=False, env_var="RESOLVE_HOSTNAME")
@@ -101,6 +101,12 @@ def add_shared_args(parser):
     parser.add_argument('--env',
                         help="The environment autopush is running under",
                         default='development', env_var='AUTOPUSH_ENV')
+    parser.add_argument('--endpoint_scheme', help="HTTP Endpoint Scheme",
+                        type=str, default="http", env_var="ENDPOINT_SCHEME")
+    parser.add_argument('--endpoint_hostname', help="HTTP Endpoint Hostname",
+                        type=str, default=None, env_var="ENDPOINT_HOSTNAME")
+    parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
+                        type=int, default=8082, env_var="ENDPOINT_PORT")
 
 
 def add_external_router_args(parser):
@@ -140,10 +146,6 @@ def add_external_router_args(parser):
                         help="remote endpoint for wake-up calls",
                         type=str, default='http://example.com',
                         env_var="WAKE_SERVER")
-    parser.add_argument('--endpoint_scheme', help="HTTP Endpoint Scheme",
-                        type=str, default="http", env_var="ENDPOINT_SCHEME")
-    parser.add_argument('--endpoint_hostname', help="HTTP Endpoint Hostname",
-                        type=str, default=None, env_var="ENDPOINT_HOSTNAME")
 
 
 def _parse_connection(sysargs):
@@ -175,8 +177,6 @@ def _parse_connection(sysargs):
     parser.add_argument('--router_ssl_cert',
                         help="Routing listener SSL cert path", type=str,
                         default="", env_var="ROUTER_SSL_CERT")
-    parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
-                        type=int, default=8082, env_var="ENDPOINT_PORT")
     parser.add_argument('--auto_ping_interval',
                         help="Interval between Websocket pings", default=0,
                         type=float, env_var="AUTO_PING_INTERVAL")
