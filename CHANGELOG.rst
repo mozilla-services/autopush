@@ -17,8 +17,6 @@ Features
 
 Bug Fixes
 ---------
-* Do not use HOSTNAME as a config option. AWS already defines it (resolves
-  #198)
 
 WebPush
 -------
