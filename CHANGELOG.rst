@@ -2,6 +2,15 @@
 Autopush Changelog
 ==================
 
+1.7.1 (2015-10-23)
+==================
+
+Bug Fixes
+---------
+
+* Change HOSTNAME env name to not conflict with AWS env. Issue #198
+* Move endpoint_* marks to shared variables.
+
 1.7.0 (2015-10-21)
 ==================
 
@@ -20,8 +29,6 @@ Bug Fixes
 * Reset UAIDs for clients that change their router type. PR #167.
 * Respond with status code 413 for payloads that exceed the maximum size,
   404 for invalid tokens, and 400 for missing encryption headers. PR #170.
-* Change HOSTNAME env name to not conflict with AWS env. Issue #198
-* Move endpoint_* marks to shared variables.
 
 WebPush
 -------
