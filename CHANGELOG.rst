@@ -2,6 +2,14 @@
 Autopush Changelog
 ==================
 
+1.7.2 (2015-10-24)
+==================
+
+Bug Fixes
+---------
+
+* Set SSL mode properly for release buffers.
+
 1.7.1 (2015-10-23)
 ==================
 
