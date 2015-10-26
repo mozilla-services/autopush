@@ -13,12 +13,6 @@ default_ports = {
 }
 
 
-def str2bool(v):
-    """Convert different string representations of true/false into a Python
-    bool"""
-    return v in ("1", "t", "T", "true", "TRUE", "True")
-
-
 def canonical_url(scheme, hostname, port=None):
     """Return a canonical URL given a scheme/hostname and optional port"""
     if port is None or port == default_ports.get(scheme):
