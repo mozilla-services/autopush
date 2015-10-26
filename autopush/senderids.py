@@ -4,8 +4,12 @@ GCM requires a valid SenderID. One can use a single hard-coded value, but
 that can be a problem if that lone SenderID is ever disqualified for some
 reason. Instead, the server provides a senderid that the client can use.
 
-This module uses a bucket named "org.mozilla.services.autopush" by default,
+This module uses a bucket named "oms_autopush" by default,
 and stores the list of SenderIDs as a JSON string under the key of "senderids".
+Please note that AWS uses the bucket ID as part of a TLS hostname. This
+means that the Bucket ID cannot have ".", be over 255 characters in length,
+and must be globally unique. (In our case, we use "oms_" as a prefix. It's
+an acronym for "org.mozilla.services")
 
 You can either update the list of SenderIDs using the S3 console, or you
 can load the SenderIDs by using the "--senderid_list" argument. It is
@@ -24,7 +28,7 @@ from boto.s3.key import Key
 
 # re-read from source every 15 minutes or so.
 SENDERID_EXPRY = 15*60
-DEFAULT_BUCKET = "org.mozilla.services.autopush"
+DEFAULT_BUCKET = "oms_autopush"
 
 
 class SenderIDs(object):

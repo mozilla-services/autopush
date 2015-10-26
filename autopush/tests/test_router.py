@@ -155,7 +155,7 @@ class GCMRouterTestCase(unittest.TestCase):
         gcmclient.GCM = Mock(spec=gcmclient.GCM)
 
         gcm_config = {'apikey': '12345678abcdefg',
-                      's3_bucket': 'org.mozilla.services.autopush.test',
+                      's3_bucket': 'oms_autopush_test',
                       'senderid_list': ['test123']}
         self.router = GCMRouter(settings, gcm_config)
         self.notif = Notification(10, "data", dummy_chid, None, 200)
