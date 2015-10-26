@@ -302,6 +302,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.transport.bufferSize = 2 * 1024
         self.transport.registerProducer(self.ps, True)
 
+        if self.ap_settings.hello_timeout > 0:
+            self.setTimeout(self.ap_settings.hello_timeout)
+
     #############################################################
     #                    Connection Methods
     #############################################################
@@ -372,8 +375,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.resetTimeout()
 
     def timeoutConnection(self):
-        """UDP conneciton has timed out."""
-        self.sendClose(code=4774, reason="UDP Idle")
+        """Idle timer fired."""
+        if self.ps.wake_data:
+            return self.sendClose(code=4774, reason="UDP Idle")
+
+        self.sendClose()
 
     def onAutoPingTimeout(self):
         """Override to track that this shut-down is from a ping timeout"""
@@ -617,8 +623,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                                               UserError))
                 d.addErrback(self.log_err,
                              extra="Failed to delete old node")
-        if self.ps.wake_data:
-            self.setTimeout(self.ap_settings.wake_timeout)
+        timeout = self.ap_settings.wake_timeout if self.ps.wake_data else None
+        self.setTimeout(timeout)
 
         self.finish_hello()
 

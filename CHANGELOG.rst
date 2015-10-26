@@ -14,6 +14,7 @@ Features
   autopush and passing the values as the "senderid_list" argument. Issue #185
 * REST Registration will now return a valid ChannelID if one is not specified.
   Issue #182
+* Add hello timeout. Issue #169.
 
 Bug Fixes
 ---------

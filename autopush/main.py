@@ -195,6 +195,10 @@ def _parse_connection(sysargs):
                         help="The WebSocket closing handshake timeout. Set to "
                         "0 to disable.", default=0, type=int,
                         env_var="CLOSE_HANDSHAKE_TIMEOUT")
+    parser.add_argument('--hello_timeout',
+                        help="The client handshake timeout. Set to 0 to"
+                        "disable.", default=0, type=int,
+                        env_var="HELLO_TIMEOUT")
 
     add_external_router_args(parser)
     add_shared_args(parser)
@@ -308,7 +312,8 @@ def connection_main(sysargs=None):
         router_scheme="https" if args.router_ssl_key else "http",
         router_hostname=args.router_hostname,
         router_port=args.router_port,
-        env=args.env
+        env=args.env,
+        hello_timeout=args.hello_timeout,
     )
     setup_logging("Autopush")
 
