@@ -24,6 +24,7 @@ from autopush.websocket import (
     Notification,
     NotificationHandler,
     WebSocketServerProtocol,
+    ms_time,
 )
 
 from .test_router import MockAssist
@@ -83,7 +84,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def _wait_for_close(self, d):  # pragma: nocover
         if self.close_mock.call_args is not None:
-            d.callback(True)
+            d.callback(self.close_mock.call_args)
             return
 
         reactor.callLater(0.1, self._wait_for_close, d)
@@ -236,8 +237,9 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = "asdf"
         self._send_message(dict(data="wassup"))
 
-        def check_result(result):
-            eq_(result, True)
+        def check_result(close_args):
+            _, kwargs = close_args
+            eq_(len(kwargs), 0)
         d = Deferred()
         d.addCallback(check_result)
         self._wait_for_close(d)
@@ -248,8 +250,9 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = "asdf"
         self._send_message(dict(messageType="wassup"))
 
-        def check_result(result):
-            eq_(result, True)
+        def check_result(close_args):
+            _, kwargs = close_args
+            eq_(len(kwargs), 0)
         d = Deferred()
         d.addCallback(check_result)
         self._wait_for_close(d)
@@ -514,6 +517,44 @@ class WebsocketTestCase(unittest.TestCase):
         f.addErrback(lambda x: d.errback(x))
         return d
 
+    def test_hello_timeout(self):
+        connected = time.time()
+        self.proto.ap_settings.hello_timeout = 3
+        self._connect()
+
+        def check_elapsed(close_args):
+            _, kwargs = close_args
+            eq_(len(kwargs), 0)
+            ok_(time.time() - connected >= 3)
+
+        d = Deferred()
+        d.addCallback(check_elapsed)
+        self._wait_for_close(d)
+        return d
+
+    def test_hello_timeout_with_wake_timeout(self):
+        self.proto.ap_settings.hello_timeout = 3
+        self.proto.ap_settings.wake_timeout = 3
+
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                wakeup_host={"ip": "127.0.0.1",
+                                             "port": 9999},
+                                mobilenetwork={"mcc": "hammer",
+                                               "mnc": "banana",
+                                               "netid": "gorp",
+                                               "ignored": "ok"}))
+
+        def check_elapsed(close_args):
+            ok_(ms_time() - self.proto.ps.connected_at >= 3000)
+            _, kwargs = close_args
+            eq_(kwargs, {"code": 4774, "reason": "UDP Idle"})
+
+        d = Deferred()
+        d.addCallback(check_elapsed)
+        self._wait_for_close(d)
+        return d
+
     def test_hello_udp(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[],
@@ -552,8 +593,9 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         self._send_message(dict(messageType="wooooo"))
 
-        def check_result(result):
-            eq_(result, True)
+        def check_result(close_args):
+            _, kwargs = close_args
+            eq_(len(kwargs), 0)
         d = Deferred()
         d.addCallback(check_result)
         self._wait_for_close(d)
