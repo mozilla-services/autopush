@@ -14,12 +14,30 @@ Features
   autopush and passing the values as the "senderid_list" argument. Issue #185
 * REST Registration will now return a valid ChannelID if one is not specified.
   Issue #182
+* Add hello timeout. Issue #169.
 
 Bug Fixes
 ---------
 
 WebPush
 -------
+
+1.7.2 (2015-10-24)
+==================
+
+Bug Fixes
+---------
+
+* Set SSL mode properly for release buffers.
+
+1.7.1 (2015-10-23)
+==================
+
+Bug Fixes
+---------
+
+* Change HOSTNAME env name to not conflict with AWS env. Issue #198
+* Move endpoint_* marks to shared variables.
 
 1.7.0 (2015-10-21)
 ==================
