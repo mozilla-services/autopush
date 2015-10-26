@@ -21,6 +21,12 @@ Bug Fixes
 WebPush
 -------
 
+Backwards Incompatibilities
+---------------------------
+* Do not specify values for boolean flags.
+* 'cors' is now enabled by default. In it's place use --nocors if you wish
+  to disable CORS. Please remove "cors" flag from configuration files.
+
 1.7.1 (2015-10-23)
 ==================
 
