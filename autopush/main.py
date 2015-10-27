@@ -15,7 +15,6 @@ from autopush.health import (HealthHandler, StatusHandler)
 from autopush.logging import setup_logging
 from autopush.settings import AutopushSettings
 from autopush.ssl import AutopushSSLContextFactory
-from autopush.utils import str2bool
 from autopush.websocket import (
     PushServerProtocol,
     RouterHandler,
@@ -39,7 +38,7 @@ def add_shared_args(parser):
     parser.add_argument('--config-shared',
                         help="Common configuration file path",
                         dest='config_file', is_config_file=True)
-    parser.add_argument('--debug', help='Debug Info.', type=bool,
+    parser.add_argument('--debug', help='Debug Info.', action="store_true",
                         default=False, env_var="DEBUG")
     parser.add_argument('--crypto_key', help="Crypto key for tokens", type=str,
                         default="i_CYcNKa2YXrF_7V1Y-2MFfoEl7b6KX55y_9uvOKfJQ=",
@@ -55,7 +54,8 @@ def add_shared_args(parser):
                         type=str, default=None, env_var="LOCAL_HOSTNAME")
     parser.add_argument('--resolve_hostname',
                         help="Resolve the announced hostname",
-                        type=bool, default=False, env_var="RESOLVE_HOSTNAME")
+                        action="store_true", default=False,
+                        env_var="RESOLVE_HOSTNAME")
     parser.add_argument('--statsd_host', help="Statsd Host", type=str,
                         default="localhost", env_var="STATSD_HOST")
     parser.add_argument('--statsd_port', help="Statsd Port", type=int,
@@ -114,13 +114,15 @@ def add_external_router_args(parser):
     """Parses out external router arguments"""
     # GCM
     parser.add_argument('--external_router', help='enable external routers',
-                        type=bool, default=False, env_var='EXTERNAL_ROUTER')
+                        action="store_true", default=False,
+                        env_var='EXTERNAL_ROUTER')
     label = "GCM Router:"
     parser.add_argument('--gcm_ttl', help="%s Time to Live" % label,
                         type=int, default=60, env_var="GCM_TTL")
     parser.add_argument('--gcm_dryrun',
                         help="%s Dry run (no message sent)" % label,
-                        type=bool, default=False, env_var="GCM_DRYRUN")
+                        action="store_true", default=False,
+                        env_var="GCM_DRYRUN")
     parser.add_argument('--gcm_collapsekey',
                         help="%s string to collapse messages" % label,
                         type=str, default="simplepush",
@@ -130,7 +132,8 @@ def add_external_router_args(parser):
     # Apple Push Notification system (APNs) for iOS
     label = "APNS Router:"
     parser.add_argument('--apns_sandbox', help="%s Use Dev Sandbox" % label,
-                        type=bool, default=True, env_var="APNS_SANDBOX")
+                        action="store_true", default=False,
+                        env_var="APNS_SANDBOX")
     parser.add_argument('--apns_cert_file',
                         help="%s Certificate PEM file" % label,
                         type=str, env_var="APNS_CERT_FILE")
@@ -159,7 +162,6 @@ def _parse_connection(sysargs):
     parser = configargparse.ArgumentParser(
         description='Runs a Connection Node.',
         default_config_files=shared_config_files + config_files)
-    parser.register('type', bool, str2bool)
     parser.add_argument('--config-connection',
                         help="Connection node configuration file path",
                         dest='config_file', is_config_file=True)
@@ -216,14 +218,14 @@ def _parse_endpoint(sysargs):
     parser = configargparse.ArgumentParser(
         description='Runs an Endpoint Node.',
         default_config_files=shared_config_files + config_files)
-    parser.register('type', bool, str2bool)
     parser.add_argument('--config-endpoint',
                         help="Endpoint node configuration file path",
                         dest='config_file', is_config_file=True)
     parser.add_argument('-p', '--port', help='Public HTTP Endpoint Port',
                         type=int, default=8082, env_var="PORT")
-    parser.add_argument('--cors', help='Allow CORS PUTs for update.',
-                        type=bool, default=False, env_var='ALLOW_CORS')
+    parser.add_argument('--no_cors', help='Disallow CORS PUTs for update.',
+                        action="store_true",
+                        default=False, env_var='ALLOW_CORS')
     parser.add_argument('--s3_bucket', help='S3 Bucket for SenderIDs',
                         type=str, default=DEFAULT_BUCKET,
                         env_var='S3-BUCKET')
@@ -401,7 +403,7 @@ def endpoint_main(sysargs=None):
         endpoint_scheme=scheme,
         endpoint_hostname=args.endpoint_hostname or args.hostname,
         endpoint_port=args.port,
-        enable_cors=args.cors,
+        enable_cors=not args.no_cors,
         s3_bucket=args.s3_bucket,
         senderid_expry=args.senderid_expry,
         senderid_list=args.senderid_list,

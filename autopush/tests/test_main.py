@@ -12,7 +12,6 @@ from autopush.main import (
     skip_request_logging,
 )
 from autopush.utils import (
-    str2bool,
     resolve_ip,
     generate_hash,
     validate_hash,
@@ -34,11 +33,6 @@ def tearDown():
 
 
 class UtilsTestCase(unittest.TestCase):
-    def test_str2bool(self):
-        eq_(True, str2bool("t"))
-        eq_(False, str2bool("false"))
-        eq_(True, str2bool("True"))
-
     def test_validate_hash(self):
         key = str(uuid.uuid4())
         payload = str(uuid.uuid4())
