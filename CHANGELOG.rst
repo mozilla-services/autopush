@@ -24,6 +24,7 @@ Bug Fixes
   Issue #175.
 * Clean-up several recent deferToLater calls that didn't have their cancelled
   exceptions ignored. Issue #208.
+* Fix improper attribute reference in delete call. Issue #211.
 
 WebPush
 -------
