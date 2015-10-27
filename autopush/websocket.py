@@ -1114,7 +1114,7 @@ class NotificationHandler(cyclone.web.RequestHandler):
 
         """
         client = self.ap_settings.clients.get(uaid)
-        if client and client.connected_at == int(connectionTime):
+        if client and client.ps.connected_at == int(connectionTime):
             client.sendClose()
             return self.write("Terminated duplicate")
 

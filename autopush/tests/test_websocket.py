@@ -1648,7 +1648,8 @@ class NotificationHandlerTestCase(unittest.TestCase):
         uaid = str(uuid.uuid4())
         now = int(time.time() * 1000)
         self.ap_settings.clients[uaid] = mock_client = Mock()
-        mock_client.connected_at = now
+        mock_client.ps = Mock()
+        mock_client.ps.connected_at = now
         mock_client.sendClose = Mock()
         self.handler.delete(uaid, "", now)
         assert(mock_client.sendClose.called)
