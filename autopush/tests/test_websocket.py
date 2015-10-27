@@ -461,6 +461,26 @@ class WebsocketTestCase(unittest.TestCase):
 
         return self._check_response(check_result)
 
+    @patch("autopush.websocket.random.randrange", return_value=0.1)
+    def test_hello_provisioned_exception(self, mock_rand):
+        self._connect()
+        # Fail out the register_user call
+
+        def throw_error(*args, **kwargs):
+            raise ProvisionedThroughputExceededException(None, None)
+
+        router = self.proto.ap_settings.router
+        router.table.connection.update_item = Mock(side_effect=throw_error)
+
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        def check_result(msg):
+            eq_(msg["status"], 503)
+            eq_(msg["reason"], "error - overloaded")
+            self.flushLoggedErrors()
+
+        return self._check_response(check_result)
+
     def test_hello_check_collision(self):
         self._connect()
 
@@ -1273,7 +1293,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = str(uuid.uuid4())
 
         def throw_error(*args, **kwargs):
-            raise ProvisionedThroughputExceededException(None, None)
+            raise Exception("An error happened!")
 
         self.proto.ap_settings.storage = Mock(
             **{"fetch_notifications.side_effect": throw_error})
@@ -1290,6 +1310,27 @@ class WebsocketTestCase(unittest.TestCase):
 
         self.proto.ps._notification_fetch.addBoth(check_error)
         return d
+
+    @patch("autopush.websocket.random.randrange", return_value=0.1)
+    def test_process_notification_provisioned_error(self, t):
+        self._connect()
+        self.proto.ps.uaid = str(uuid.uuid4())
+
+        def throw_error(*args, **kwargs):
+            raise ProvisionedThroughputExceededException(None, None)
+
+        self.proto.ap_settings.storage = Mock(
+            **{"fetch_notifications.side_effect": throw_error})
+        self.proto.ps._check_notifications = True
+        self.proto.process_notifications()
+
+        def check_result(msg):
+            eq_(self.proto.ps._check_notifications, False)
+            eq_(msg["status"], 503)
+            eq_(msg["reason"], "error - overloaded")
+            self.flushLoggedErrors()
+
+        return self._check_response(check_result)
 
     def test_process_notif_doesnt_run_with_webpush_outstanding(self):
         self._connect()
