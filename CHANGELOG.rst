@@ -22,6 +22,8 @@ Bug Fixes
 
 * Capture all ProvisionedException errors in websocket and endpoint correctly.
   Issue #175.
+* Clean-up several recent deferToLater calls that didn't have their cancelled
+  exceptions ignored. Issue #208.
 
 WebPush
 -------
