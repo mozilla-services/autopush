@@ -256,6 +256,28 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
 
+    def test_webpush_ttl_too_large(self):
+        from autopush.endpoint import MAX_TTL
+        fresult = dict(router_type="test")
+        frouter = Mock(spec=Router)
+        frouter.route_notification = Mock()
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = "fred"
+        self.request_mock.headers["ttl"] = MAX_TTL + 100
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.endpoint.ap_settings.routers["test"] = frouter
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            assert(frouter.route_notification.called)
+            args, kwargs = frouter.route_notification.call_args
+            notif = args[0]
+            eq_(notif.ttl, MAX_TTL)
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
     def test_webpush_bad_routertype(self):
         fresult = dict(router_type="fred")
         self.endpoint.chid = "fred"

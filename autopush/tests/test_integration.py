@@ -201,7 +201,11 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         http.close()
         eq_(resp.status, status)
         location = resp.getheader("Location", None)
+        log.debug("Response Headers: %s", resp.getheaders())
         if self.use_webpush:
+            if status == 201:
+                ttl_header = resp.getheader("TTL")
+                eq_(ttl_header, str(ttl))
             if ttl != 0 and status == 201:
                 assert(location is not None)
                 if channel in self.messages:
@@ -245,8 +249,12 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         log.debug("%s Response (%s): %s", method, resp.status, resp.read())
         http.close()
         eq_(resp.status, status)
+        log.debug("Response Headers: %s", resp.getheaders())
+        if status == 201:
+            ttl_header = resp.getheader("TTL")
+            eq_(ttl_header, str(ttl))
 
-    def get_notification(self, timeout=0.2):
+    def get_notification(self, timeout=1):
         self.ws.settimeout(timeout)
         try:
             d = self.ws.recv()
