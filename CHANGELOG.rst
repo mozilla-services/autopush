@@ -7,11 +7,12 @@ Autopush Changelog
 
 Features
 --------
+
 * Server provided SenderID values for GCM router using clients
   The GCM router will randomly select one of a list of SenderIDs stored in
   S3 under the "org.mozilla.services.autopush"/"senderids" key. The values can
   be loaded into S3 either via the S3 console, or by runnig an instance of
-  autopush and passing the values as the "senderid_list" argument. Issue #185
+  autopush and passing the values as the "senderid_list" argument. Issue #185.
 * REST Registration will now return a valid ChannelID if one is not specified.
   Issue #182
 * Add hello timeout. Issue #169.
@@ -31,7 +32,6 @@ Backwards Incompatibilities
 * 'cors' is now enabled by default. In it's place use --nocors if you wish
   to disable CORS. Please remove "cors" flag from configuration files.
 
-=======
 1.7.2 (2015-10-24)
 ==================
 
