@@ -25,6 +25,7 @@ Bug Fixes
 * Clean-up several recent deferToLater calls that didn't have their cancelled
   exceptions ignored. Issue #208.
 * Fix improper attribute reference in delete call. Issue #211.
+* Always include TTL header in response to a WebPush notification. Issue #194.
 
 WebPush
 -------
