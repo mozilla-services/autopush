@@ -15,7 +15,6 @@ from boto.dynamodb2.exceptions import (
 from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table
-from boto.dynamodb2.items import Item
 from boto.dynamodb2.types import NUMBER
 
 
@@ -483,7 +482,6 @@ class Router(object):
 
     @track_provisioned
     def drop_user(self, uaid):
-        db_key = self.encode({"uaid": uaid})
         return self.table.delete_item(uaid=uaid)
 
     @track_provisioned

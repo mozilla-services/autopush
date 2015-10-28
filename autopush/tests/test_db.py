@@ -9,7 +9,7 @@ from boto.dynamodb2.exceptions import (
 )
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.items import Item
-from mock import Mock, patch
+from mock import Mock
 from moto import mock_dynamodb2
 from nose.tools import eq_
 
@@ -450,4 +450,3 @@ class RouterTestCase(unittest.TestCase):
         router.register_user(dict(uaid=uaid, node_id="asdf",
                                   connected_at=1234))
         router.drop_user(uaid)
-

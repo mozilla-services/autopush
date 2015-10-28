@@ -1121,15 +1121,15 @@ class RegistrationTestCase(unittest.TestCase):
     def test_delete_uaid(self, *args):
         # import pdb;pdb.set_trace()
         self.reg.ap_settings.message.store_message(
-                dummy_uaid,
-                dummy_chid,
-                "1",
-                10000)
+            dummy_uaid,
+            dummy_chid,
+            "1",
+            10000)
         self.reg.ap_settings.message.store_message(
-                dummy_uaid,
-                "test",
-                "2",
-                10000)
+            dummy_uaid,
+            "test",
+            "2",
+            10000)
         self.reg.request.headers["Authorization"] = "HAWK test"
         path = "%s" % dummy_uaid
         self.reg.delete(path)
