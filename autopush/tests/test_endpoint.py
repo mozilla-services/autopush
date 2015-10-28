@@ -1139,3 +1139,17 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.request.headers["Authorization"] = "HAWK test"
         self.reg.delete("/%s/" % dummy_uaid)
         return
+
+    @patch('hawkauthlib.check_signature', return_value=False)
+    def test_delete_bad_auth(self, *args):
+        self.reg.request.headers["Authorization"] = "HAWK test"
+
+        def handle_finish(value):
+            self.reg.set_status.assert_called_with(401)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.delete("/%s/" % dummy_uaid)
+        return
+
+
+
