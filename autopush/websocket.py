@@ -30,6 +30,7 @@ not be publicly exposed.
 
 """
 import json
+import random
 import time
 import uuid
 from collections import defaultdict, namedtuple
@@ -37,6 +38,7 @@ from functools import wraps
 
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
+from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from twisted.internet import reactor
 from twisted.internet.defer import (
     Deferred,
@@ -507,6 +509,29 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if close:
             self.sendClose()
 
+    def err_overload(self, failure, message_type):
+        """Handle database overloads
+
+        Pause producing to cease incoming notifications while we wait a random
+        interval up to 8 seconds before closing down the connection. Most
+        clients wait up to 10 seconds for a command, but this is not a
+        guarantee, so rather than never reply, we still shut the connection
+        down.
+
+        """
+        failure.trap(ProvisionedThroughputExceededException)
+        self.transport.pauseProducing()
+        d = self.deferToLater(random.randrange(4, 9), self.err_finish_overload,
+                              message_type)
+        d.addErrback(self.trap_cancel)
+
+    def err_finish_overload(self, message_type):
+        """Close the connection down and resume consuming input after the
+        random interval from a db overload"""
+        # Resume producing so we can finish the shutdown
+        self.transport.resumeProducing()
+        self.returnError(message_type,  "error - overloaded", 503)
+
     def sendJSON(self, body):
         """Send a Python dict as a JSON string in a websocket message"""
 
@@ -552,6 +577,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         d = self._register_user()
         d.addCallback(self._check_collision)
+        d.addErrback(self.trap_cancel)
+        d.addErrback(self.err_overload, "hello")
         d.addErrback(self.err_hello)
         self.ps._register = d
         return d
@@ -676,6 +703,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                 self.ap_settings.storage.fetch_notifications, self.ps.uaid)
         d.addCallback(self.finish_notifications)
         d.addErrback(self.trap_cancel)
+        d.addErrback(self.err_overload, "notif")
         d.addErrback(self.error_notifications)
         self.ps._notification_fetch = d
 
@@ -691,7 +719,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         # Are we paused, try again later
         if self.paused:
-            self.deferToLater(1, self.process_notifications)
+            d = self.deferToLater(1, self.process_notifications)
+            d.addErrback(self.trap_cancel)
             return
 
         # Process notifications differently based on webpush style or not
@@ -720,7 +749,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # Were we told to check notifications again?
         if self.ps._check_notifications:
             self.ps._check_notifications = False
-            self.deferToLater(1, self.process_notifications)
+            d = self.deferToLater(1, self.process_notifications)
+            d.addErrback(self.trap_cancel)
 
     def finish_webpush_notifications(self, notifs):
         """webpush notification processor"""
@@ -729,7 +759,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps._more_notifications = False
             if self.ps._check_notifications:
                 self.ps._check_notifications = False
-                self.deferToLater(1, self.process_notifications)
+                d = self.deferToLater(1, self.process_notifications)
+                d.addErrback(self.trap_cancel)
             return
 
         # Send out all the notifications
@@ -801,6 +832,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         d = self.deferToThread(self.ap_settings.make_endpoint, self.ps.uaid,
                                chid)
         d.addCallback(self.finish_register, chid)
+        d.addErrback(self.trap_cancel)
         d.addErrback(self.error_register)
         return d
 
@@ -816,6 +848,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             d = self.deferToThread(self.ap_settings.message.register_channel,
                                    self.ps.uaid, chid)
             d.addCallback(self.send_register_finish, endpoint, chid)
+            # Note: No trap_cancel needed here since the deferred here is
+            # returned to process_register which will trap it
+            d.addErrback(self.err_overload, "register")
             return d
         else:
             self.send_register_finish(None, endpoint, chid)
@@ -1079,7 +1114,7 @@ class NotificationHandler(cyclone.web.RequestHandler):
 
         """
         client = self.ap_settings.clients.get(uaid)
-        if client and client.connected_at == int(connectionTime):
+        if client and client.ps.connected_at == int(connectionTime):
             client.sendClose()
             return self.write("Terminated duplicate")
 

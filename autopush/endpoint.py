@@ -263,6 +263,8 @@ from autopush.utils import (
     validate_uaid,
 )
 
+# Our max TTL is 60 days realistically with table rotation, so we hard-code it
+MAX_TTL = 60 * 60 * 24 * 60
 status_codes = {
     200: "OK",
     201: "Created",
@@ -533,6 +535,8 @@ class MessageHandler(AutoendpointHandler):
     def _put_message(self, kind, uaid, chid):
         try:
             ttl = int(self.request.headers.get("ttl", "0"))
+            # Cap the TTL to our MAX_TTL
+            ttl = min(ttl, MAX_TTL)
         except ValueError:
             ttl = 0
         data = self.request.body
@@ -567,6 +571,7 @@ class MessageHandler(AutoendpointHandler):
 
     def _put_completed(self, result, uaid, chid, data, ttl, headers):
         if result:
+            self.set_header("TTL", str(ttl))
             self.set_status(201)
             self.write("Accepted")
             return self.finish()
@@ -641,6 +646,8 @@ class EndpointHandler(AutoendpointHandler):
 
         try:
             ttl = int(self.request.headers.get("ttl", "0"))
+            # Cap the TTL to our MAX_TTL
+            ttl = min(ttl, MAX_TTL)
         except ValueError:
             ttl = 0
         if data and len(data) > self.ap_settings.max_data:
