@@ -832,15 +832,19 @@ class RegistrationHandler(AutoendpointHandler):
         # what is request
         if not self._validate_auth(uaid):
             return self._error(401, "Invalid Authentication")
-        # TODO: make these async
+        message = self.ap_settings.message
         if chid:
             # mark channel as dead
-            self.ap_settings.message.delete_messages_for_channel(uaid, chid)
-            self.ap_settings.message.unregister_channel(uaid, chid)
-        else:
-            # nuke uaid
-            self.ap_settings.message.delete_all_for_user(uaid)
-            self.ap_settings.router.drop_user(uaid)
+            d = deferToThread(message.delete_messages_for_channel, uaid, chid)
+            d.addCallback(message.unregister_channel, uaid, chid)
+            d.addErrback(self._response_err)
+            return d
+        # nuke uaid
+        d = Deferred()
+        d.addCallback(message.delete_all_for_user)
+        d.addCallback(self.ap_settings.router.drop_user)
+        d.addErrback(self._response_err)
+        d.callback(uaid)
 
     #############################################################
     #                    Callbacks

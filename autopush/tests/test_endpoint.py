@@ -1119,7 +1119,6 @@ class RegistrationTestCase(unittest.TestCase):
 
     @patch('hawkauthlib.check_signature', return_value=True)
     def test_delete_uaid(self, *args):
-        # import pdb;pdb.set_trace()
         self.reg.ap_settings.message.store_message(
             dummy_uaid,
             dummy_chid,
