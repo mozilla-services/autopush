@@ -1,6 +1,6 @@
 .. _senderids_module:
 
-:mod:`autopush.senderids'
+:mod:`autopush.senderids`
 -------------------------
 
 .. automodule:: autopush.senderids

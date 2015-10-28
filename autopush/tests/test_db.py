@@ -9,7 +9,7 @@ from boto.dynamodb2.exceptions import (
 )
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.items import Item
-from mock import Mock
+from mock import Mock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_
 
@@ -267,6 +267,40 @@ class MessageTestCase(unittest.TestCase):
                                         message_id="asdf", updateid="asdf")
         eq_(result, False)
 
+    def test_update_message(self):
+        chid = uuid.uuid4().hex
+        m = get_message_table()
+        message = Message(m, SinkMetrics())
+        data1 = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        time1 = self._nstime()
+        time2 = self._nstime()+100
+        ttl = self._nstime()+1000
+        message.store_message(self.uaid, chid, time1, ttl, data1, {})
+        message.update_message(self.uaid, chid, time2, ttl, data2, {})
+        messages = list(message.fetch_messages(self.uaid))
+        eq_(data2, messages[0]['#dd'])
+
+    def test_update_message_fail(self):
+        message = Message(get_message_table(), SinkMetrics)
+        message.store_message(self.uaid,
+                              uuid.uuid4().hex,
+                              self._nstime(),
+                              str(uuid.uuid4()),
+                              {})
+        u = message.table.connection.update_item = Mock()
+
+        def raise_condition(*args, **kwargs):
+            raise ConditionalCheckFailedException(None, None)
+
+        u.side_effect = raise_condition
+        b = message.update_message(self.uaid,
+                                   uuid.uuid4().hex,
+                                   self._nstime(),
+                                   str(uuid.uuid4()),
+                                   {})
+        eq_(b, False)
+
 
 class RouterTestCase(unittest.TestCase):
     def setUp(self):
@@ -407,3 +441,13 @@ class RouterTestCase(unittest.TestCase):
         data = dict(uaid="asdf", node_id="asdf", connected_at=1234)
         result = router.clear_node(Item(r, data))
         eq_(result, False)
+
+    def test_drop_user(self):
+        uaid = str(uuid.uuid4())
+        r = get_router_table()
+        router = Router(r, SinkMetrics())
+        # Register a node user
+        router.register_user(dict(uaid=uaid, node_id="asdf",
+                                  connected_at=1234))
+        router.drop_user(uaid)
+

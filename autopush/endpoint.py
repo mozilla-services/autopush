@@ -20,11 +20,8 @@ will not be able to perform any additional router data registration.
 HTTP API
 ========
 
-API methods requiring Authorization must include a HMAC, generated with SHA256
-of the secret key sent on the original register ``POST`` and the message
-payload being the raw content of the body (if any).
-
-Hash: ``HMAC(key=secret, message=RAW_CONTENT_PAYLOAD)``
+API methods requiring Authorization must use a standard HAWK Authorization
+header (See https://github.com/hueniverse/hawk)
 
 All message bodies must be UTF-8 encoded.
 
@@ -110,7 +107,7 @@ The current application-level error numbers are:
 
         GET /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
         Host: endpoint.push.com
-        Authorization: HASH
+        Authorization: HAWK ...
 
     **Example Response**
 
@@ -128,7 +125,7 @@ The current application-level error numbers are:
             }
         }
 
-    :reqheader Authorization: Hash with message set to an empty string.
+    :reqheader Authorization: HAWK ...
 
 .. http:post:: /register/(uuid:uaid)
 
@@ -181,7 +178,7 @@ The current application-level error numbers are:
 
         POST /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
         Host: endpoint.push.com
-        Authorization: HASH
+        Authorization: HAWK ...
         Content-Type: application/json
 
         {}
@@ -199,8 +196,7 @@ The current application-level error numbers are:
             "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
         }
 
-    :reqheader Authorization: Hash with message set to raw body content
-                              required for existing UAID's.
+    :reqheader Authorization: HAWK ...
 
 .. http:put:: /register/(uuid:uaid)
 
@@ -217,7 +213,7 @@ The current application-level error numbers are:
 
         PUT /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
         Host: endpoint.push.com
-        Authorization: HASH
+        Authorization: HAWK ...
         Content-Type: application/json
 
         {
@@ -238,8 +234,7 @@ The current application-level error numbers are:
 
         {}
 
-    :reqheader Authorization: Hash with message set to raw body content
-                              required for existing UAID's.
+    :reqheader Authorization: HAWK ...
 
 """
 import hashlib
@@ -247,6 +242,8 @@ import json
 import time
 import urlparse
 import uuid
+import hawkauthlib
+
 from collections import namedtuple
 from base64 import urlsafe_b64encode
 
@@ -263,7 +260,7 @@ from twisted.python import failure, log
 from autopush.router.interface import RouterException
 from autopush.utils import (
     generate_hash,
-    validate_hash,
+    validate_uaid,
 )
 
 status_codes = {
@@ -721,7 +718,8 @@ class RegistrationHandler(AutoendpointHandler):
         Retrieves the router type/data for a UAID.
 
         """
-        if not self._validate_auth(uaid):
+        test, _ = validate_uaid(uaid)
+        if not test or not self._validate_auth(uaid):
             return self._write_response(401, 109,
                                         message="Invalid authentication")
 
@@ -752,7 +750,8 @@ class RegistrationHandler(AutoendpointHandler):
         # matches up
         new_uaid = False
         if uaid:
-            if not self._validate_auth(uaid):
+            test, _ = validate_uaid(uaid)
+            if not test or not self._validate_auth(uaid):
                 return self._error(401, "Invalid Authentication")
         else:
             # No UAID supplied, make our own
@@ -817,11 +816,13 @@ class RegistrationHandler(AutoendpointHandler):
         Invalidate a UAID (and all channels associated with it).
 
         """
+        combo = combo.strip("/")
         if "/" in combo:
             (uaid, chid) = combo.split("/", 2)
         else:
             uaid = combo
             chid = None
+        # what is request
         if not self._validate_auth(uaid):
             return self._error(401, "Invalid Authentication")
         # TODO: make these async
@@ -833,8 +834,6 @@ class RegistrationHandler(AutoendpointHandler):
             # nuke uaid
             self.ap_settings.message.delete_all_for_user(uaid)
             self.ap_settings.router.drop_user(uaid)
-
-
 
     #############################################################
     #                    Callbacks
@@ -894,17 +893,13 @@ class RegistrationHandler(AutoendpointHandler):
     def _validate_auth(self, uaid):
         """Validates the Authorization header in a request
 
-        The remote client generates an Authorization header by using
-        the following
-
-        AuthToken = hmac.new(key=sharedSecret, msg=request.body,
-                             digestmod=hashlib.sha256)
-        headers.set("Authorization", AuthToken)
+        Validate the given request using HAWK.
         """
         secret = self.ap_settings.crypto_key
-        hashed = self.request.headers.get("Authorization", "").strip()
-        key = generate_hash(secret, uaid)
-        return validate_hash(key, self.request.body, hashed)
+
+        return hawkauthlib.check_signature(self.request,
+                                           secret,
+                                           algorithm="sha256")
 
     def _error(self, code, msg):
         """Writes out an error status code"""
