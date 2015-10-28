@@ -1150,6 +1150,3 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         self.reg.delete("/%s/" % dummy_uaid)
         return
-
-
-
