@@ -714,6 +714,12 @@ class EndpointHandler(AutoendpointHandler):
 
 class RegistrationHandler(AutoendpointHandler):
     cors_methods = "GET,PUT,DELETE"
+    _base_tags = []
+
+    def base_tags(self):
+        tags = self._base_tags
+        tags.append("user-agent:%s" %
+                    self.request.headers.get("user-agent"))
 
     #############################################################
     #                    Cyclone HTTP Methods
@@ -752,7 +758,8 @@ class RegistrationHandler(AutoendpointHandler):
         # If the client didn't provide a CHID, make one up.
         if "channelID" not in params:
             params["channelID"] = uuid.uuid4().hex
-
+        self.ap_settings.metrics.increment("updates.client.register",
+                                           tags=self.base_tags())
         # If there's a UAID, ensure its valid, otherwise we ensure the hash
         # matches up
         new_uaid = False
@@ -764,6 +771,7 @@ class RegistrationHandler(AutoendpointHandler):
             # No UAID supplied, make our own
             uaid = uuid.uuid4().hex
             new_uaid = True
+            # Should this be different than websocket?
         self.uaid = uaid
         router_type = params.get("type")
         if new_uaid and router_type not in self.ap_settings.routers:
@@ -835,6 +843,8 @@ class RegistrationHandler(AutoendpointHandler):
         message = self.ap_settings.message
         if chid:
             # mark channel as dead
+            self.ap_settings.metrics.increment("updates.client.unregister",
+                                               tags=self.base_tags())
             d = deferToThread(message.delete_messages_for_channel, uaid, chid)
             d.addCallback(message.unregister_channel, uaid, chid)
             d.addErrback(self._response_err)
