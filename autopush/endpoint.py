@@ -243,6 +243,7 @@ import time
 import urlparse
 import uuid
 import hawkauthlib
+import requests as prequests
 
 from collections import namedtuple
 from base64 import urlsafe_b64encode
@@ -763,6 +764,7 @@ class RegistrationHandler(AutoendpointHandler):
         # If there's a UAID, ensure its valid, otherwise we ensure the hash
         # matches up
         new_uaid = False
+
         if uaid:
             test, _ = validate_uaid(uaid)
             if not test or not self._validate_auth(uaid):
@@ -850,11 +852,10 @@ class RegistrationHandler(AutoendpointHandler):
             d.addErrback(self._response_err)
             return d
         # nuke uaid
-        d = Deferred()
-        d.addCallback(message.delete_all_for_user)
+        d = deferToThread(message.delete_all_for_user, uaid)
         d.addCallback(self.ap_settings.router.drop_user)
         d.addErrback(self._response_err)
-        d.callback(uaid)
+        return d
 
     #############################################################
     #                    Callbacks
@@ -916,11 +917,16 @@ class RegistrationHandler(AutoendpointHandler):
 
         Validate the given request using HAWK.
         """
-        secret = self.ap_settings.crypto_key
+        secret = generate_hash(self.ap_settings.crypto_key, uaid)
 
-        return hawkauthlib.check_signature(self.request,
-                                           secret,
-                                           algorithm="sha256")
+        fReq = prequests.Request(
+            self.request.method,
+            "%s://%s%s" % (self.request.protocol, self.request.host,
+                           self.request.uri),
+            headers=self.request.headers,
+            data=self.request.body).prepare()
+        return hawkauthlib.check_signature(fReq,
+                                           secret)
 
     def _error(self, code, msg):
         """Writes out an error status code"""
