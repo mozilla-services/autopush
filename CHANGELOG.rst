@@ -16,6 +16,7 @@ Features
 * REST Registration will now return a valid ChannelID if one is not specified.
   Issue #182
 * Add hello timeout. Issue #169.
+* Add .editorconfig for consistent styling in editors. Issue #218.
 
 Bug Fixes
 ---------
