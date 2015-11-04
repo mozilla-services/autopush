@@ -5,8 +5,6 @@
 
 .. automodule:: autopush.utils
 
-.. autofunction:: str2bool
-
 .. autofunction:: canonical_url
 
 .. autofunction:: resolve_ip

@@ -8,8 +8,14 @@ This module uses a bucket named "oms_autopush" by default,
 and stores the list of SenderIDs as a JSON string under the key of "senderids".
 Please note that AWS uses the bucket ID as part of a TLS hostname. This
 means that the Bucket ID cannot have ".", be over 255 characters in length,
-and must be globally unique. (In our case, we use "oms_" as a prefix. It's
+and must be globally unique. (In our case, we use "oms_*" as a prefix. It's
 an acronym for "org.mozilla.services")
+
+The SenderID list has the following format:
+
+     {"`senderId`": {"auth": "`API Key`"}, ...}
+
+We use a dictionary of dictionaries to allow for future expansion.
 
 You can either update the list of SenderIDs using the S3 console, or you
 can load the SenderIDs by using the "--senderid_list" argument. It is

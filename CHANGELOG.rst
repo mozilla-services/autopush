@@ -16,6 +16,11 @@ Features
 * REST Registration will now return a valid ChannelID if one is not specified.
   Issue #182
 * Add hello timeout. Issue #169.
+* Added --human_logs to display more human friendly logging
+* If you specify the --s3_bucket=None, the app will only use local memory
+  and will not call out to the S3 repository. It is STRONGLY suggested that
+  you specify the full --senderid_list data set.
+
 
 Bug Fixes
 ---------
@@ -26,6 +31,7 @@ Bug Fixes
   exceptions ignored. Issue #208.
 * Fix improper attribute reference in delete call. Issue #211.
 * Always include TTL header in response to a WebPush notification. Issue #194.
+* Fixed issue with local senderid data cache. (discovered while debugging)
 
 WebPush
 -------
@@ -35,6 +41,10 @@ Backwards Incompatibilities
 * Do not specify values for boolean flags.
 * 'cors' is now enabled by default. In it's place use --nocors if you wish
   to disable CORS. Please remove "cors" flag from configuration files.
+* Do not specify --gcm_apikey. Instead, store the API key and senderid as
+  values in S3. The data may still be written as a JSON string such as:
+  ' "`_senderID_`": {"auth": "`_api_key`"}}'
+  activate the GCM bridge by specifying --gcm_enabled
 
 1.7.2 (2015-10-24)
 ==================
