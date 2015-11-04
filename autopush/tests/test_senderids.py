@@ -9,6 +9,8 @@ from twisted.trial import unittest
 
 TEST_BUCKET = "oma_test"
 
+test_list = {"test123": {"auth": "abc"}, "test456": {"auth": "def"}}
+
 
 class SenderIDsTestCase(unittest.TestCase):
     def setUp(self):
@@ -19,27 +21,45 @@ class SenderIDsTestCase(unittest.TestCase):
         mock_dynamodb2().stop()
         mock_s3().stop()
 
+    def test_nos3(self):
+        senderIDs = SenderIDs(dict(use_s3=False))
+        senderIDs.conn = Mock()
+        senderIDs._refresh()
+        eq_(senderIDs.conn.get_bucket.call_count, 0)
+        senderIDs.update({})
+        eq_(senderIDs.conn.get_bucket.call_count, 0)
+
+    def test_bad_init(self):
+        senderIDs = SenderIDs(dict(senderid_list="[Update"))
+        eq_(senderIDs._senderIDs, {})
+
     def test_success(self):
         settings = dict(
             s3_bucket=TEST_BUCKET,
             senderid_expry=10,
-            senderid_list=["test123", "test456"],
+            senderid_list=test_list,
             )
         senderIDs = SenderIDs(settings)
         eq_(senderIDs.conn.get_bucket(settings.get("s3_bucket")).
             get_key('senderids').get_contents_as_string(),
             json.dumps(settings.get("senderid_list")))
 
-        ok_(senderIDs.getID() in settings.get("senderid_list"))
         eq_(senderIDs.senderIDs(), settings.get("senderid_list"))
+        # getID may modify the record in memory adding a field.
+        got = senderIDs.getID()
+        ok_(got.get('senderID') in settings.get("senderid_list").keys())
+        ok_(got.get('auth') ==
+            settings.get("senderid_list")[got.get('senderID')]['auth'])
+        old = senderIDs._updated
         senderIDs._expry = 0
-        eq_(senderIDs.senderIDs(), settings.get("senderid_list"))
+        senderIDs.senderIDs()
+        ok_(senderIDs._updated != old)
 
     def test_ensureCreated(self):
         settings = dict(
             s3_bucket=TEST_BUCKET,
             senderid_expry=0,
-            senderid_list=["test123", "test456"],
+            senderid_list=test_list,
             )
         senderIDs = SenderIDs(settings)
         oldConn = senderIDs.conn
@@ -55,10 +75,48 @@ class SenderIDsTestCase(unittest.TestCase):
         settings = dict(
             s3_bucket=TEST_BUCKET,
             senderid_expry=0,
-            senderid_list=["test123", "test456"],
+            senderid_list=test_list,
             )
         senderIDs = SenderIDs(settings)
-        senderIDs.update(["test789"])
+        update = {"test789": {"auth": "ghi"}}
+        senderIDs.update(update)
         eq_(senderIDs.conn.get_bucket(settings.get("s3_bucket")).
             get_key('senderids').get_contents_as_string(),
-            '["test789"]')
+            json.dumps(update))
+
+    def test_bad_update(self):
+        settings = dict(
+            s3_bucket=TEST_BUCKET,
+            senderid_expry=0,
+            senderid_list=test_list,
+            )
+        senderIDs = SenderIDs(settings)
+        update = {}
+        senderIDs.update(update)
+        eq_(senderIDs._senderIDs, test_list)
+        senderIDs.update([123])
+        eq_(senderIDs._senderIDs, test_list)
+
+    def test_get_record(self):
+        settings = dict(
+            s3_bucket=TEST_BUCKET,
+            senderid_expry=0,
+            senderid_list=test_list,
+            )
+        senderIDs = SenderIDs(settings)
+        fetch = senderIDs.get('test123')
+        eq_(fetch, {"senderID": "test123", "auth": "abc"})
+
+    def test_refresh(self):
+        settings = dict(
+            s3_bucket=TEST_BUCKET,
+            senderid_expry=0,
+            senderid_list=test_list,
+            )
+        senderIDs = SenderIDs(settings)
+        bucket = senderIDs.conn.get_bucket(senderIDs.ID)
+        senderIDs._write(bucket, "[Invalid")
+        senderIDs._senderIDs = {}
+        senderIDs._expry = 0
+        senderIDs._refresh()
+        eq_(senderIDs._senderIDs, {})

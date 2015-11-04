@@ -124,13 +124,18 @@ class EndpointMainTestCase(unittest.TestCase):
             "--ssl_key=keys/server.key",
         ])
 
+    def test_bad_senderidlist(self):
+        endpoint_main([
+            "--senderid_list='[Invalid'"
+        ])
+
     def test_ping_settings(self):
         class arg:
             # important stuff
             external_router = True
-            gcm_apikey = "gcm.key"
             apns_cert_file = "cert.file"
             apns_key_file = "key.file"
+            gcm_enabled = True
             # less important stuff
             apns_sandbox = False
             gcm_ttl = 999
@@ -159,11 +164,13 @@ class EndpointMainTestCase(unittest.TestCase):
             message_tablename = "None"
             message_read_throughput = 0
             message_write_throughput = 0
+            senderid_list = {}
 
         ap = make_settings(arg)
         # verify that the hostname is what we said.
         eq_(ap.hostname, arg.hostname)
-        eq_(ap.routers["gcm"].gcm.api_key, arg.gcm_apikey)
+        # gcm isn't created until later since we may have to pull
+        # config info from s3
         eq_(ap.routers["apns"].apns.cert_file, arg.apns_cert_file)
         eq_(ap.routers["apns"].apns.key_file, arg.apns_key_file)
         eq_(ap.wake_timeout, 10)

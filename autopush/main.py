@@ -1,9 +1,11 @@
 """autopush/autoendpoint daemon scripts"""
 import configargparse
 import cyclone.web
+import json
 from autobahn.twisted.websocket import WebSocketServerFactory
 from autobahn.twisted.resource import WebSocketResource
 from twisted.internet import reactor, task
+from twisted.python import log
 from twisted.web.server import Site
 
 from autopush.endpoint import (
@@ -108,6 +110,9 @@ def add_shared_args(parser):
                         type=str, default=None, env_var="ENDPOINT_HOSTNAME")
     parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
                         type=int, default=8082, env_var="ENDPOINT_PORT")
+    parser.add_argument('--gcm_enabled', help="Enable GCM Bridge",
+                        action="store_true", default=False,
+                        env_var="GCM_ENABLED")
 
 
 def add_external_router_args(parser):
@@ -127,8 +132,6 @@ def add_external_router_args(parser):
                         help="%s string to collapse messages" % label,
                         type=str, default="simplepush",
                         env_var="GCM_COLLAPSEKEY")
-    parser.add_argument('--gcm_apikey', help="%s API Key" % label,
-                        type=str, env_var="GCM_APIKEY")
     # Apple Push Notification system (APNs) for iOS
     label = "APNS Router:"
     parser.add_argument('--apns_sandbox', help="%s Use Dev Sandbox" % label,
@@ -233,7 +236,7 @@ def _parse_endpoint(sysargs):
                         type=int, default=SENDERID_EXPRY,
                         env_var='SENDERID_EXPRY')
     parser.add_argument('--senderid_list', help='SenderIDs to load to S3',
-                        type=int, default=[], action='append')
+                        type=str, default="{}")
     add_shared_args(parser)
     add_external_router_args(parser)
 
@@ -255,11 +258,11 @@ def make_settings(args, **kwargs):
             router_conf["apns"] = {"sandbox": args.apns_sandbox,
                                    "cert_file": args.apns_cert_file,
                                    "key_file": args.apns_key_file}
-        if args.gcm_apikey is not None:
+        if args.gcm_enabled:
             router_conf["gcm"] = {"ttl": args.gcm_ttl,
                                   "dryrun": args.gcm_dryrun,
                                   "collapsekey": args.gcm_collapsekey,
-                                  "apikey": args.gcm_apikey}
+                                  "senderid_list": args.senderid_list}
 
     return AutopushSettings(
         crypto_key=args.crypto_key,
@@ -398,6 +401,12 @@ def endpoint_main(sysargs=None):
     args, parser = _parse_endpoint(sysargs)
     scheme = args.endpoint_scheme or \
         "https" if args.ssl_key else "http"
+    senderid_list = None
+    if args.senderid_list:
+        try:
+            senderid_list = json.loads(args.senderid_list)
+        except (ValueError, TypeError), x:
+            log.err("Invalid JSON specified for senderid_list. Ignoring.", x)
     settings = make_settings(
         args,
         endpoint_scheme=scheme,
@@ -406,7 +415,7 @@ def endpoint_main(sysargs=None):
         enable_cors=not args.no_cors,
         s3_bucket=args.s3_bucket,
         senderid_expry=args.senderid_expry,
-        senderid_list=args.senderid_list,
+        senderid_list=senderid_list,
     )
 
     setup_logging("Autoendpoint")
