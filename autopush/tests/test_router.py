@@ -183,7 +183,7 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_register_bad(self):
         self.assertRaises(RouterException, self.router.register, "uaid", {})
 
-    def test_router_notification(self):
+    def test_route_notification(self):
         self.router.gcm = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
@@ -266,6 +266,19 @@ class GCMRouterTestCase(unittest.TestCase):
         resp = {"key": "value"}
         eq_({"key": "value", "senderid": "test123"},
             self.router.amend_msg(resp))
+
+    @patch("gcmclient.GCM", spec=gcmclient.GCM)
+    def test_route_gcm(self, fgcm):
+        fgcm.send.return_value = self.mock_result
+        self.router._process_reply = Mock()
+        d = self.router._route(self.notif,
+                               self.router_data["router_data"])
+
+        def check_results(result):
+            ok_(isinstance(result, RouterResponse))
+            assert(self.router.gcm.send.called)
+        d.addCallback(check_results)
+        return d
 
 
 class SimplePushRouterTestCase(unittest.TestCase):

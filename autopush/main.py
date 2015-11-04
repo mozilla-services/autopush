@@ -262,6 +262,7 @@ def make_settings(args, **kwargs):
             router_conf["gcm"] = {"ttl": args.gcm_ttl,
                                   "dryrun": args.gcm_dryrun,
                                   "collapsekey": args.gcm_collapsekey,
+
                                   "senderid_list": args.senderid_list}
 
     return AutopushSettings(

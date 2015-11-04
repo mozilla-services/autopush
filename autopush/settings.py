@@ -160,6 +160,7 @@ class AutopushSettings(object):
             conf["s3_bucket"] = s3_bucket
             conf["senderid_expry"] = senderid_expry
             conf["senderid_list"] = senderid_list
+            conf["use_s3"] = s3_bucket != 'None'
             self.routers["gcm"] = GCMRouter(self, conf)
 
         # Env
