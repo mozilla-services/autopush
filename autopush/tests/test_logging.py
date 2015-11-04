@@ -47,4 +47,4 @@ class EliotLogTestCase(twisted.trial.unittest.TestCase):
         setup_logging("Autopush", True)
         with patch("sys.stdout") as mock_stdout:
             log.msg("omg!", Type=7)
-            eq_(len(mock_stdout.mock_calls), 1)
+            eq_(len(mock_stdout.mock_calls), 4)
