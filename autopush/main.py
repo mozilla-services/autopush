@@ -113,6 +113,9 @@ def add_shared_args(parser):
     parser.add_argument('--gcm_enabled', help="Enable GCM Bridge",
                         action="store_true", default=False,
                         env_var="GCM_ENABLED")
+    parser.add_argument('--human_logs', help="Enable human readable logs",
+                        action="store_true", default=False)
+    # No ENV because this is for humans
 
 
 def add_external_router_args(parser):
@@ -321,7 +324,7 @@ def connection_main(sysargs=None):
         env=args.env,
         hello_timeout=args.hello_timeout,
     )
-    setup_logging("Autopush")
+    setup_logging("Autopush", args.human_logs)
 
     r = RouterHandler
     r.ap_settings = settings
@@ -419,7 +422,7 @@ def endpoint_main(sysargs=None):
         senderid_list=senderid_list,
     )
 
-    setup_logging("Autoendpoint")
+    setup_logging("Autoendpoint", args.human_logs)
 
     # Endpoint HTTP router
     site = cyclone.web.Application([
