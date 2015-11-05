@@ -158,7 +158,10 @@ class GCMRouterTestCase(unittest.TestCase):
         self.gcm = fgcm
         self.router = GCMRouter(settings, gcm_config)
         self.notif = Notification(10, "data", dummy_chid, None, 200)
-        self.router_data = dict(router_data=dict(token="connect_data"))
+        self.router_data = dict(
+            router_data=dict(
+                token="connect_data",
+                creds=dict(senderID="test123", auth="12345678abcdefg")))
         mock_result = Mock(spec=gcmclient.gcm.Result)
         mock_result.canonical = dict()
         mock_result.failed = dict()
@@ -172,6 +175,15 @@ class GCMRouterTestCase(unittest.TestCase):
         eq_(exc.status_code, code)
         assert(self.router.gcm.send.called)
         self.flushLoggedErrors()
+
+    def test_init(self):
+        self.router.senderIDs.getID = Mock()
+
+        def throw_ex():
+            raise AttributeError
+        fsenderids = Mock()
+        fsenderids.getID.side_effect = throw_ex
+        self.assertRaises(IOError, GCMRouter, {}, {"senderIDs": fsenderids})
 
     def test_register(self):
         result = self.router.register("uaid", {"token": "connect_data"})
@@ -261,20 +273,20 @@ class GCMRouterTestCase(unittest.TestCase):
         d.addBoth(check_results)
         return d
 
+    def test_router_notification_gcm_no_auth(self):
+        d = self.router.route_notification(self.notif,
+                                           {"router_data": {"token": "abc"}})
+
+        def check_results(fail):
+            eq_(fail.value.status_code, 500)
+        d.addBoth(check_results)
+        return d
+
     def test_ammend(self):
         self.router.register("uaid", {"token": "connect_data"})
         resp = {"key": "value"}
         eq_({"key": "value", "senderid": "test123"},
             self.router.amend_msg(resp))
-
-    @patch("gcmclient.GCM", spec=gcmclient.GCM)
-    def test_route_gcm(self, fgcm):
-        fgcm.send.return_value = self.mock_result
-        self.router._process_reply = Mock()
-        d = self.router._route(self.notif,
-                               self.router_data["router_data"])
-        ok_(self.router.gcm is not None)
-        return d
 
 
 class SimplePushRouterTestCase(unittest.TestCase):

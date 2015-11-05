@@ -156,12 +156,7 @@ class AutopushSettings(object):
         if 'apns' in router_conf:
             self.routers["apns"] = APNSRouter(self, router_conf["apns"])
         if 'gcm' in router_conf:
-            conf = router_conf.get("gcm", {})
-            conf["s3_bucket"] = s3_bucket
-            conf["senderid_expry"] = senderid_expry
-            conf["senderid_list"] = senderid_list
-            conf["use_s3"] = s3_bucket != 'None'
-            self.routers["gcm"] = GCMRouter(self, conf)
+            self.routers["gcm"] = GCMRouter(self, router_conf["gcm"])
 
         # Env
         self.env = env

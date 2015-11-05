@@ -81,6 +81,44 @@ class ConnectionMainTestCase(unittest.TestCase):
 
 
 class EndpointMainTestCase(unittest.TestCase):
+    class test_arg:
+        # important stuff
+        external_router = True
+        apns_cert_file = "cert.file"
+        apns_key_file = "key.file"
+        gcm_enabled = True
+        # less important stuff
+        apns_sandbox = False
+        gcm_ttl = 999
+        gcm_dryrun = False
+        gcm_collapsekey = "collapse"
+
+        # filler
+        crypto_key = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
+        datadog_api_key = "datadog_api_key"
+        datadog_app_key = "datadog_app_key"
+        datadog_flush_interval = "datadog_flush_interval"
+        hostname = "hostname"
+        statsd_host = "statsd_host"
+        statsd_port = "statsd_port"
+        router_tablename = "None"
+        storage_tablename = "None"
+        storage_read_throughput = 0
+        storage_write_throughput = 0
+        router_read_throughput = 0
+        router_write_throughput = 0
+        resolve_hostname = False
+        # UDP
+        wake_pem = "test"
+        wake_timeout = 10
+        wake_server = "http://example.com"
+        message_tablename = "None"
+        message_read_throughput = 0
+        message_write_throughput = 0
+        senderid_list = '{"12345":{"auth":"abcd"}}'
+        s3_bucket = "None"
+        senderid_expry = 0
+
     def setUp(self):
         mock_s3().start()
         patchers = [
@@ -115,47 +153,18 @@ class EndpointMainTestCase(unittest.TestCase):
         ])
 
     def test_ping_settings(self):
-        class arg:
-            # important stuff
-            external_router = True
-            apns_cert_file = "cert.file"
-            apns_key_file = "key.file"
-            gcm_enabled = True
-            # less important stuff
-            apns_sandbox = False
-            gcm_ttl = 999
-            gcm_dryrun = False
-            gcm_collapsekey = "collapse"
-
-            # filler
-            crypto_key = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
-            datadog_api_key = "datadog_api_key"
-            datadog_app_key = "datadog_app_key"
-            datadog_flush_interval = "datadog_flush_interval"
-            hostname = "hostname"
-            statsd_host = "statsd_host"
-            statsd_port = "statsd_port"
-            router_tablename = "None"
-            storage_tablename = "None"
-            storage_read_throughput = 0
-            storage_write_throughput = 0
-            router_read_throughput = 0
-            router_write_throughput = 0
-            resolve_hostname = False
-            # UDP
-            wake_pem = "test"
-            wake_timeout = 10
-            wake_server = "http://example.com"
-            message_tablename = "None"
-            message_read_throughput = 0
-            message_write_throughput = 0
-            senderid_list = {}
-
-        ap = make_settings(arg)
+        ap = make_settings(self.test_arg)
         # verify that the hostname is what we said.
-        eq_(ap.hostname, arg.hostname)
+        eq_(ap.hostname, self.test_arg.hostname)
         # gcm isn't created until later since we may have to pull
         # config info from s3
-        eq_(ap.routers["apns"].apns.cert_file, arg.apns_cert_file)
-        eq_(ap.routers["apns"].apns.key_file, arg.apns_key_file)
+        eq_(ap.routers["apns"].apns.cert_file, self.test_arg.apns_cert_file)
+        eq_(ap.routers["apns"].apns.key_file, self.test_arg.apns_key_file)
         eq_(ap.wake_timeout, 10)
+
+    def test_bad_senders(self):
+        oldList = self.test_arg.senderid_list
+        self.test_arg.senderid_list = "{}"
+        ap = make_settings(self.test_arg)
+        eq_(ap, None)
+        self.test_arg.senderid_list = oldList

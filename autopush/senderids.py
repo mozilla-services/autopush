@@ -13,7 +13,7 @@ an acronym for "org.mozilla.services")
 
 The SenderID list has the following format:
 
-     {"`senderId`": {"auth": "`API Key`"}, ...}
+     {"`senderID`": {"auth": "`API Key`"}, ...}
 
 We use a dictionary of dictionaries to allow for future expansion.
 
@@ -85,14 +85,16 @@ class SenderIDs(object):
 
     def update(self, senderIDs):
         """Update the S3 bucket containing the SenderIDs"""
-        if not self._use_s3:
-            # Skip using s3 (For debugging)
-            self._updated = time.time()
-            return
         if not senderIDs:
             return
         if type(senderIDs) is not dict:
-            log.err("Wrong data type for senderIDs. Should be dict. Ignoring")
+            log.err("Wrong data type for senderIDs. Should be dict.")
+            return
+        if not self._use_s3:
+            # Skip using s3 (For debugging)
+            if senderIDs:
+                self._senderIDs = senderIDs
+            self._updated = time.time()
             return
         try:
             bucket = self.conn.get_bucket(self.ID)
@@ -116,6 +118,8 @@ class SenderIDs(object):
     def getID(self):
         """Return a randomly selected SenderID, refreshing if required"""
         self._refresh()
+        if not len(self._senderIDs):
+            return None
         choice = random.choice(self._senderIDs.keys())
         record = self._senderIDs.get(choice)
         record["senderID"] = choice
