@@ -23,6 +23,7 @@ LOGGER = None
 TWISTED_LOG_MESSAGE = MessageType("twisted:log",
                                   fields(error=bool, message=unicode),
                                   u"A log message from Twisted.")
+HUMAN = False
 
 
 class EliotObserver(object):
@@ -69,14 +70,12 @@ class EliotObserver(object):
 def stdout(message):
     """Format a message appropriately for structured logging capture of stdout
     and then write it to stdout"""
-    # uncomment to get concise human readable logging messages.
-    """
-    if message['error']:
-        sys.stdout.write("ERROR: %s\n" % message['message'])
-    else:
-        sys.stdout.write("       %s\n" % message['message'])
-    return
-    # """
+    if HUMAN:
+        if message['error']:
+            sys.stdout.write("ERROR: %s\n" % message['message'])
+        else:
+            sys.stdout.write("       %s\n" % message['message'])
+        return
     msg = {}
     ts = message.pop("timestamp")
     del message["task_level"]
@@ -100,11 +99,12 @@ def stdout(message):
     sys.stdout.write(json.dumps(msg) + "\n")
 
 
-def setup_logging(logger_name):
+def setup_logging(logger_name, human=False):
     """Patch in the Eliot logger and twisted log interception"""
-    global LOGGER
+    global LOGGER, HUMAN
     LOGGER = "-".join([logger_name,
                        pkg_resources.get_distribution("autopush").version])
+    HUMAN = human
     add_destination(stdout)
     ellie = EliotObserver()
     ellie.start()

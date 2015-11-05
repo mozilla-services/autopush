@@ -246,7 +246,7 @@ class Message(object):
         return True
 
     @track_provisioned
-    def unregister_channel(self, uaid, channel_id):
+    def unregister_channel(self, uaid, channel_id, **kwargs):
         """Remove a channel registration for a given uaid"""
         conn = self.table.connection
         db_key = self.encode({"uaid": uaid, "chidmessageid": " "})

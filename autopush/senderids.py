@@ -8,8 +8,14 @@ This module uses a bucket named "oms_autopush" by default,
 and stores the list of SenderIDs as a JSON string under the key of "senderids".
 Please note that AWS uses the bucket ID as part of a TLS hostname. This
 means that the Bucket ID cannot have ".", be over 255 characters in length,
-and must be globally unique. (In our case, we use "oms_" as a prefix. It's
+and must be globally unique. (In our case, we use "oms_*" as a prefix. It's
 an acronym for "org.mozilla.services")
+
+The SenderID list has the following format:
+
+     {"`senderId`": {"auth": "`API Key`"}, ...}
+
+We use a dictionary of dictionaries to allow for future expansion.
 
 You can either update the list of SenderIDs using the S3 console, or you
 can load the SenderIDs by using the "--senderid_list" argument. It is
@@ -25,6 +31,7 @@ import random
 from boto.exception import S3ResponseError
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
+from twisted.python import log
 
 # re-read from source every 15 minutes or so.
 SENDERID_EXPRY = 15*60
@@ -35,7 +42,8 @@ class SenderIDs(object):
     """Handle Read, Write and cache of SenderID values from S3"""
     _updated = 0
     _expry = SENDERID_EXPRY
-    _senderIDs = []
+    _senderIDs = {}
+    _use_s3 = True
     KEYNAME = "senderids"
 
     def _write(self, bucket, senderIDs):
@@ -53,6 +61,10 @@ class SenderIDs(object):
 
     def _refresh(self):
         """Refresh the senderIDs from the S3 bucket"""
+        if not self._use_s3:
+            # Skip using s3 (For debugging)
+            self._updated = time.time()
+            return
         # Only refresh if needed.
         if time.time() < self._updated + self._expry:
             return
@@ -60,12 +72,28 @@ class SenderIDs(object):
             bucket = self.conn.get_bucket(self.ID)
             key = Key(bucket)
             key.key = self.KEYNAME
-            self._senderIDs = json.loads(key.get_contents_as_string())
+            candidates = json.loads(key.get_contents_as_string())
+            if candidates:
+                if type(candidates) is not dict:
+                    log.err("Wrong data type stored for senderIDs. "
+                            "Should be dict. Ignoring.")
+                    return
+                self._senderIDs = candidates
+                self._updated = time.time()
         except S3ResponseError:
             self._create(self._senderIDs)
 
     def update(self, senderIDs):
         """Update the S3 bucket containing the SenderIDs"""
+        if not self._use_s3:
+            # Skip using s3 (For debugging)
+            self._updated = time.time()
+            return
+        if not senderIDs:
+            return
+        if type(senderIDs) is not dict:
+            log.err("Wrong data type for senderIDs. Should be dict. Ignoring")
+            return
         try:
             bucket = self.conn.get_bucket(self.ID)
             self._write(bucket, senderIDs)
@@ -78,17 +106,31 @@ class SenderIDs(object):
             self._refresh()
         return self._senderIDs
 
+    def get(self, id):
+        """Return the associated record for a given SenderID"""
+        record = self._senderIDs.get(id)
+        if record:
+            record["senderID"] = id
+        return record
+
     def getID(self):
         """Return a randomly selected SenderID, refreshing if required"""
         self._refresh()
-        return random.choice(self._senderIDs)
+        choice = random.choice(self._senderIDs.keys())
+        record = self._senderIDs.get(choice)
+        record["senderID"] = choice
+        return record
 
     def __init__(self, args):
         """Optionally load or fetch the set of SenderIDs from S3"""
         self.conn = S3Connection()
         self.ID = args.get("s3_bucket", DEFAULT_BUCKET)
         self._expry = args.get("senderid_expry", SENDERID_EXPRY)
-        senderIDs = args.get("senderid_list", [])
+        self._use_s3 = args.get("use_s3", True)
+        senderIDs = args.get("senderid_list", {})
         if senderIDs:
-            self.update(senderIDs)
+            if type(senderIDs) is not dict:
+                log.err("senderid_list is not a dict. Ignoring")
+            else:
+                self.update(senderIDs)
         self._refresh()

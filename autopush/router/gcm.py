@@ -15,7 +15,7 @@ class GCMRouter(object):
     ttl = 60
     dryRun = 0
     collapseKey = "simplepush"
-    senderid = ""
+    creds = {}
 
     def __init__(self, ap_settings, router_conf):
         """Create a new GCM router and connect to GCM"""
@@ -23,12 +23,12 @@ class GCMRouter(object):
         self.ttl = router_conf.get("ttl", 60)
         self.dryRun = router_conf.get("dryrun", False)
         self.collapseKey = router_conf.get("collapseKey", "simplepush")
-        self.gcm = gcmclient.GCM(router_conf.get("apikey"))
         self.senderIDs = SenderIDs(router_conf)
+        self._default_auth = router_conf.get("apikey")
         log.msg("Starting GCM router...")
 
     def amend_msg(self, msg):
-        msg["senderid"] = self.senderid
+        msg["senderid"] = self.creds.get("senderID")
         return msg
 
     def register(self, uaid, router_data):
@@ -36,7 +36,7 @@ class GCMRouter(object):
         if not router_data.get("token"):
             self._error("connect info missing 'token'", status=401)
         # Assign a senderid
-        self.senderid = router_data["senderid"] = self.senderIDs.getID()
+        router_data["creds"] = self.creds = self.senderIDs.getID()
         return router_data
 
     def route_notification(self, notification, uaid_data):
@@ -47,6 +47,11 @@ class GCMRouter(object):
 
     def _route(self, notification, router_data):
         """Blocking GCM call to route the notification"""
+        if not self.gcm:
+            self.gcm = gcmclient.GCM(
+                router_data.get("creds",
+                                {}).get("auth",
+                                        self._default_auth))
         payload = gcmclient.JSONMessage(
             registration_ids=[router_data["token"]],
             collapse_key=self.collapseKey,

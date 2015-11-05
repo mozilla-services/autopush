@@ -219,6 +219,12 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.finish = lambda: d.callback(True)
         self.endpoint.start_time = time.time()
 
+    def _check_error(self, code, errno, error):
+        d = json.loads(self.write_mock.call_args[0][0])
+        eq_(d.get("code"), code)
+        eq_(d.get("errno"), errno)
+        eq_(d.get("error"), error)
+
     def test_uaid_lookup_results(self):
         fresult = dict(router_type="test")
         frouter = Mock(spec=Router)
@@ -506,11 +512,7 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.router_mock.get_uaid.assert_called_with('123')
             self.status_mock.assert_called_with(404)
-            data = self.write_mock.call_args[0][0]
-            d = json.loads(data)
-            self.assertEqual(d.get("code"), 404)
-            self.assertEqual(d.get("errno"), 103)
-            self.assertEqual(d.get("error"), "Not Found")
+            self._check_error(404, 103, "Not Found")
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.version, self.endpoint.data = 789, None
@@ -724,6 +726,12 @@ class RegistrationTestCase(unittest.TestCase):
         d = self.finish_deferred = Deferred()
         self.reg.finish = lambda: d.callback(True)
 
+    def _check_error(self, code, errno, error):
+        d = json.loads(self.write_mock.call_args[0][0])
+        eq_(d.get("code"), code)
+        eq_(d.get("errno"), errno)
+        eq_(d.get("error"), error)
+
     def test_client_info(self):
         h = self.request_mock.headers
         h["user-agent"] = "myself"
@@ -900,8 +908,7 @@ class RegistrationTestCase(unittest.TestCase):
         ))
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(
-                400, 'Invalid arguments')
+            self._check_error(400, 108, "Bad Request")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.post()
@@ -917,8 +924,7 @@ class RegistrationTestCase(unittest.TestCase):
         ))
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(
-                400, 'Invalid arguments')
+            self._check_error(400, 108, "Bad Request")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.post()
@@ -958,8 +964,7 @@ class RegistrationTestCase(unittest.TestCase):
         ))
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(
-                401, 'Invalid Authentication')
+            self._check_error(401, 109, "Unauthorized")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.post('invalid')
@@ -974,8 +979,7 @@ class RegistrationTestCase(unittest.TestCase):
         ))
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(
-                401, 'Invalid Authentication')
+            self._check_error(401, 109, 'Unauthorized')
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.post(dummy_uaid)
@@ -1085,8 +1089,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.request.headers["Authorization"] = "Fred Smith"
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(
-                401, "Invalid Authentication")
+            self._check_error(401, 109, "Unauthorized")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.put(dummy_uaid)
@@ -1103,8 +1106,7 @@ class RegistrationTestCase(unittest.TestCase):
         ))
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(
-                400, "Invalid arguments")
+            self._check_error(400, 108, "Bad Request")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.put(dummy_uaid)
