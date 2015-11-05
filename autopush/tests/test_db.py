@@ -223,6 +223,26 @@ class MessageTestCase(unittest.TestCase):
         all_messages = list(message.fetch_messages(self.uaid))
         eq_(len(all_messages), 0)
 
+    def test_delete_all_for_user(self):
+        chid = str(uuid.uuid4())
+        chid2 = str(uuid.uuid4())
+        m = get_message_table()
+        message = Message(m, SinkMetrics())
+        message.register_channel(self.uaid, chid)
+        message.register_channel(self.uaid, chid2)
+
+        data1 = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        ttl = int(time.time())+100
+        time1, time2, time3 = self._nstime(), self._nstime(), self._nstime()+1
+        message.store_message(self.uaid, chid, time1, ttl, data1, {})
+        message.store_message(self.uaid, chid2, time2, ttl, data2, {})
+        message.store_message(self.uaid, chid2, time3, ttl, data1, {})
+
+        message.delete_all_for_user(self.uaid)
+        all_messages = list(message.fetch_messages(self.uaid))
+        eq_(len(all_messages), 0)
+
     def test_message_delete_pagination(self):
         def make_messages(channel_id, count):
             m = []
