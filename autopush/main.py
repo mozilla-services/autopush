@@ -25,7 +25,7 @@ from autopush.websocket import (
     DefaultResource,
     StatusResource,
 )
-from autopush.senderids import SENDERID_EXPRY, DEFAULT_BUCKET
+from autopush.senderids import SenderIDs, SENDERID_EXPRY, DEFAULT_BUCKET
 
 
 shared_config_files = [
@@ -262,11 +262,22 @@ def make_settings(args, **kwargs):
                                    "cert_file": args.apns_cert_file,
                                    "key_file": args.apns_key_file}
         if args.gcm_enabled:
+            # Create a common gcmclient
+            list = json.loads(args.senderid_list)
+            senderIDs = SenderIDs(dict(
+                s3_bucket=args.s3_bucket,
+                senderid_expry=args.senderid_expry,
+                use_s3=args.s3_bucket.lower() != "none",
+                senderid_list=list))
+            senderID = senderIDs.getID()
+            if senderID is None:
+                log.err("No GCM SenderIDs specified or found.")
+                return
             router_conf["gcm"] = {"ttl": args.gcm_ttl,
                                   "dryrun": args.gcm_dryrun,
                                   "collapsekey": args.gcm_collapsekey,
-
-                                  "senderid_list": args.senderid_list}
+                                  "senderIDs": senderIDs,
+                                  "senderid_list": list}
 
     return AutopushSettings(
         crypto_key=args.crypto_key,
@@ -312,6 +323,7 @@ def mount_health_handlers(site, settings):
 def connection_main(sysargs=None):
     """Main entry point to setup a connection node, aka the autopush script"""
     args, parser = _parse_connection(sysargs)
+    setup_logging("Autopush", args.human_logs)
     settings = make_settings(
         args,
         port=args.port,
@@ -324,7 +336,6 @@ def connection_main(sysargs=None):
         env=args.env,
         hello_timeout=args.hello_timeout,
     )
-    setup_logging("Autopush", args.human_logs)
 
     r = RouterHandler
     r.ap_settings = settings
@@ -410,7 +421,11 @@ def endpoint_main(sysargs=None):
         try:
             senderid_list = json.loads(args.senderid_list)
         except (ValueError, TypeError), x:
-            log.err("Invalid JSON specified for senderid_list. Ignoring.", x)
+            log.err("Invalid JSON specified for senderid_list.", x)
+            return
+
+    setup_logging("Autoendpoint", args.human_logs)
+
     settings = make_settings(
         args,
         endpoint_scheme=scheme,
@@ -421,8 +436,6 @@ def endpoint_main(sysargs=None):
         senderid_expry=args.senderid_expry,
         senderid_list=senderid_list,
     )
-
-    setup_logging("Autoendpoint", args.human_logs)
 
     # Endpoint HTTP router
     site = cyclone.web.Application([

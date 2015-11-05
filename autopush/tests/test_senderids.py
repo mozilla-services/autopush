@@ -107,6 +107,15 @@ class SenderIDsTestCase(unittest.TestCase):
         fetch = senderIDs.get('test123')
         eq_(fetch, {"senderID": "test123", "auth": "abc"})
 
+    def test_get_norecord(self):
+        settings = dict(
+            s3_bucket=TEST_BUCKET,
+            senderid_expry=0,
+        )
+        senderIDs = SenderIDs(settings)
+        fetch = senderIDs.getID()
+        eq_(fetch, None)
+
     def test_refresh(self):
         settings = dict(
             s3_bucket=TEST_BUCKET,

@@ -23,8 +23,12 @@ class GCMRouter(object):
         self.ttl = router_conf.get("ttl", 60)
         self.dryRun = router_conf.get("dryrun", False)
         self.collapseKey = router_conf.get("collapseKey", "simplepush")
-        self.senderIDs = SenderIDs(router_conf)
-        self._default_auth = router_conf.get("apikey")
+        self.senderIDs = router_conf.get("senderIDs", SenderIDs(router_conf))
+        try:
+            senderID = self.senderIDs.getID()
+            self.gcm = gcmclient.GCM(senderID.get("auth"))
+        except:
+            raise IOError("GCM Bridge not initiated in main")
         log.msg("Starting GCM router...")
 
     def amend_msg(self, msg):
@@ -47,11 +51,6 @@ class GCMRouter(object):
 
     def _route(self, notification, router_data):
         """Blocking GCM call to route the notification"""
-        if not self.gcm:
-            self.gcm = gcmclient.GCM(
-                router_data.get("creds",
-                                {}).get("auth",
-                                        self._default_auth))
         payload = gcmclient.JSONMessage(
             registration_ids=[router_data["token"]],
             collapse_key=self.collapseKey,
@@ -61,8 +60,13 @@ class GCMRouter(object):
                   "Chid": notification.channel_id,
                   "Ver": notification.version}
         )
+        creds = router_data.get("creds", {"senderID": "missing id"})
         try:
+            self.gcm.api_key = creds["auth"]
             result = self.gcm.send(payload)
+        except KeyError:
+            self._error("Server error, missing bridge credentials for %s" %
+                        creds.get("senderID"), 500)
         except gcmclient.GCMAuthenticationError, e:
             self._error("Authentication Error: %s" % e, 500)
         except Exception, e:
