@@ -16,11 +16,11 @@ Features
 * REST Registration will now return a valid ChannelID if one is not specified.
   Issue #182.
 * Add hello timeout. Issue #169.
-* Add .editorconfig for consistent styling in editors. Issue #2.
-* Added --human_logs to display more human friendly logging
+* Add .editorconfig for consistent styling in editors. Issue #218.
+* Added --human_logs to display more human friendly logging.
 * If you specify the --s3_bucket=None, the app will only use local memory
   and will not call out to the S3 repository. It is STRONGLY suggested that
-  you specify the full --senderid_list data set
+  you specify the full --senderid_list data set.
 
 =======
 
