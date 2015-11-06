@@ -78,8 +78,6 @@ class APNSRouter(object):
             for time_sent in self.messages.keys():
                 if time_sent < now - self.config.get("expry", 10):
                     del self.messages[time_sent]
-                else:
-                    break
         return RouterResponse(status_code=200, response_body="Message sent")
 
     def _error(self, err):
