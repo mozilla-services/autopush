@@ -732,8 +732,7 @@ class RegistrationHandler(AutoendpointHandler):
         Retrieves the router type/data for a UAID.
 
         """
-        test, _ = validate_uaid(uaid)
-        if not test or not self._validate_auth(uaid):
+        if not self._validate_auth(uaid):
             return self._write_response(401, 109,
                                         message="Invalid authentication")
 
@@ -766,8 +765,7 @@ class RegistrationHandler(AutoendpointHandler):
         new_uaid = False
 
         if uaid:
-            test, _ = validate_uaid(uaid)
-            if not test or not self._validate_auth(uaid):
+            if not self._validate_auth(uaid):
                 return self._write_response(
                     401, 109, message="Unauthorized")
         else:
@@ -830,6 +828,14 @@ class RegistrationHandler(AutoendpointHandler):
         d.addErrback(self._response_err)
         d.callback(uaid)
 
+    def _deleteChannel(self, message, uaid, chid):
+        message.delete_messages_for_channel(uaid, chid)
+        message.unregister_channel(uaid, chid)
+
+    def _deleteUaid(self, message, uaid, router):
+        message.delete_all_for_user(uaid)
+        router.drop_user(uaid)
+
     @cyclone.web.asynchronous
     def delete(self, combo):
         """HTTP DELETE
@@ -852,13 +858,12 @@ class RegistrationHandler(AutoendpointHandler):
             # mark channel as dead
             self.ap_settings.metrics.increment("updates.client.unregister",
                                                tags=self.base_tags())
-            d = deferToThread(message.delete_messages_for_channel, uaid, chid)
-            d.addCallback(message.unregister_channel, uaid, chid)
+            d = deferToThread(self._deleteChannel, message, uaid, chid)
             d.addErrback(self._response_err)
             return d
         # nuke uaid
-        d = deferToThread(message.delete_all_for_user, uaid)
-        d.addCallback(self.ap_settings.router.drop_user)
+        d = deferToThread(self._deleteUaid, message, uaid,
+                          self.ap_settings.router)
         d.addErrback(self._response_err)
         return d
 
@@ -922,6 +927,10 @@ class RegistrationHandler(AutoendpointHandler):
 
         Validate the given request using HAWK.
         """
+
+        test, _ = validate_uaid(uaid)
+        if not test:
+            return False
         secret = generate_hash(self.ap_settings.crypto_key, uaid)
 
         fReq = prequests.Request(

@@ -1116,8 +1116,8 @@ class RegistrationTestCase(unittest.TestCase):
     def test_delete_chid(self, *args):
         self.reg.request.headers["Authorization"] = "HAWK test"
         path = "%s/%s" % (dummy_uaid, dummy_chid)
-        self.reg.delete(path)
-        return
+        d = self.reg.delete(path)
+        return d
 
     @patch('hawkauthlib.check_signature', return_value=True)
     def test_delete_uaid(self, *args):
@@ -1133,14 +1133,14 @@ class RegistrationTestCase(unittest.TestCase):
             10000)
         self.reg.request.headers["Authorization"] = "HAWK test"
         path = "%s" % dummy_uaid
-        self.reg.delete(path)
-        return
+        d = self.reg.delete(path)
+        return d
 
     @patch('hawkauthlib.check_signature', return_value=True)
     def test_delete_bad_uaid(self, *args):
         self.reg.request.headers["Authorization"] = "HAWK test"
-        self.reg.delete("/%s/" % dummy_uaid)
-        return
+        d = self.reg.delete("/%s/" % dummy_uaid)
+        return d
 
     @patch('hawkauthlib.check_signature', return_value=False)
     def test_delete_bad_auth(self, *args):
@@ -1150,5 +1150,5 @@ class RegistrationTestCase(unittest.TestCase):
             self.reg.set_status.assert_called_with(401)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete("/%s/" % dummy_uaid)
-        return
+        d = self.reg.delete("/%s/" % dummy_uaid)
+        return d
