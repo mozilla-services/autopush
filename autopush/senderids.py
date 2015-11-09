@@ -46,6 +46,20 @@ class SenderIDs(object):
     _use_s3 = True
     KEYNAME = "senderids"
 
+    def __init__(self, args):
+        """Optionally load or fetch the set of SenderIDs from S3"""
+        self.conn = S3Connection()
+        self.ID = args.get("s3_bucket", DEFAULT_BUCKET)
+        self._expry = args.get("senderid_expry", SENDERID_EXPRY)
+        self._use_s3 = args.get("use_s3", True)
+        senderIDs = args.get("senderid_list", {})
+        if senderIDs:
+            if type(senderIDs) is not dict:
+                log.err("senderid_list is not a dict. Ignoring")
+            else:
+                self.update(senderIDs)
+        self._refresh()
+
     def _write(self, bucket, senderIDs):
         """Write a list of SenderIDs to S3"""
         key = Key(bucket)
@@ -62,8 +76,6 @@ class SenderIDs(object):
     def _refresh(self):
         """Refresh the senderIDs from the S3 bucket"""
         if not self._use_s3:
-            # Skip using s3 (For debugging)
-            self._updated = time.time()
             return
         # Only refresh if needed.
         if time.time() < self._updated + self._expry:
@@ -108,14 +120,14 @@ class SenderIDs(object):
             self._refresh()
         return self._senderIDs
 
-    def get(self, id):
+    def get_ID(self, id):
         """Return the associated record for a given SenderID"""
         record = self._senderIDs.get(id)
         if record:
             record["senderID"] = id
         return record
 
-    def getID(self):
+    def choose_ID(self):
         """Return a randomly selected SenderID, refreshing if required"""
         self._refresh()
         if not len(self._senderIDs):
@@ -124,17 +136,3 @@ class SenderIDs(object):
         record = self._senderIDs.get(choice)
         record["senderID"] = choice
         return record
-
-    def __init__(self, args):
-        """Optionally load or fetch the set of SenderIDs from S3"""
-        self.conn = S3Connection()
-        self.ID = args.get("s3_bucket", DEFAULT_BUCKET)
-        self._expry = args.get("senderid_expry", SENDERID_EXPRY)
-        self._use_s3 = args.get("use_s3", True)
-        senderIDs = args.get("senderid_list", {})
-        if senderIDs:
-            if type(senderIDs) is not dict:
-                log.err("senderid_list is not a dict. Ignoring")
-            else:
-                self.update(senderIDs)
-        self._refresh()

@@ -177,12 +177,12 @@ class GCMRouterTestCase(unittest.TestCase):
         self.flushLoggedErrors()
 
     def test_init(self):
-        self.router.senderIDs.getID = Mock()
+        self.router.senderIDs.get_ID = Mock()
 
         def throw_ex():
             raise AttributeError
         fsenderids = Mock()
-        fsenderids.getID.side_effect = throw_ex
+        fsenderids.choose_ID.side_effect = throw_ex
         self.assertRaises(IOError, GCMRouter, {}, {"senderIDs": fsenderids})
 
     def test_register(self):
