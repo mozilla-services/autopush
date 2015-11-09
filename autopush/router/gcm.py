@@ -23,7 +23,9 @@ class GCMRouter(object):
         self.ttl = router_conf.get("ttl", 60)
         self.dryRun = router_conf.get("dryrun", False)
         self.collapseKey = router_conf.get("collapseKey", "simplepush")
-        self.senderIDs = router_conf.get("senderIDs", SenderIDs(router_conf))
+        self.senderIDs = router_conf.get("senderIDs")
+        if not self.senderIDs:
+            self.senderIDs = SenderIDs(router_conf)
         try:
             senderID = self.senderIDs.choose_ID()
             self.gcm = gcmclient.GCM(senderID.get("auth"))

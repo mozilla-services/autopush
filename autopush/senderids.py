@@ -24,7 +24,6 @@ instances writing and the possiblity that the list of SenderIDs is
 overwritten with older, less accurate values.
 
 """
-import time
 import json
 import random
 
@@ -32,6 +31,7 @@ from boto.exception import S3ResponseError
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from twisted.python import log
+from twisted.internet import reactor
 
 # re-read from source every 15 minutes or so.
 SENDERID_EXPRY = 15*60
@@ -40,11 +40,12 @@ DEFAULT_BUCKET = "oms_autopush"
 
 class SenderIDs(object):
     """Handle Read, Write and cache of SenderID values from S3"""
-    _updated = 0
     _expry = SENDERID_EXPRY
     _senderIDs = {}
     _use_s3 = True
+    _cancelled = False
     KEYNAME = "senderids"
+    _refresher = None
 
     def __init__(self, args):
         """Optionally load or fetch the set of SenderIDs from S3"""
@@ -58,7 +59,14 @@ class SenderIDs(object):
                 log.err("senderid_list is not a dict. Ignoring")
             else:
                 self.update(senderIDs)
-        self._refresh()
+        # set up auto-refresh for senderIDs
+        if self._use_s3:
+            self._refresh()
+
+    def __del__(self):
+        if self._refresher:
+            import pdb;pdb.set_trace()
+            self._refresher.cancel()
 
     def _write(self, bucket, senderIDs):
         """Write a list of SenderIDs to S3"""
@@ -66,7 +74,6 @@ class SenderIDs(object):
         key.key = self.KEYNAME
         key.set_contents_from_string(json.dumps(senderIDs))
         self._senderIDs = senderIDs
-        self._updated = time.time()
 
     def _create(self, senderIDs):
         """Create a new bucket containing the senderIDs"""
@@ -75,10 +82,9 @@ class SenderIDs(object):
 
     def _refresh(self):
         """Refresh the senderIDs from the S3 bucket"""
-        if not self._use_s3:
+        if self._cancelled:
             return
-        # Only refresh if needed.
-        if time.time() < self._updated + self._expry:
+        if not self._use_s3:
             return
         try:
             bucket = self.conn.get_bucket(self.ID)
@@ -91,9 +97,10 @@ class SenderIDs(object):
                             "Should be dict. Ignoring.")
                     return
                 self._senderIDs = candidates
-                self._updated = time.time()
         except S3ResponseError:
             self._create(self._senderIDs)
+        finally:
+            self.refresher = reactor.callLater(self._expry, self._refresh)
 
     def update(self, senderIDs):
         """Update the S3 bucket containing the SenderIDs"""
@@ -106,7 +113,6 @@ class SenderIDs(object):
             # Skip using s3 (For debugging)
             if senderIDs:
                 self._senderIDs = senderIDs
-            self._updated = time.time()
             return
         try:
             bucket = self.conn.get_bucket(self.ID)
@@ -115,9 +121,7 @@ class SenderIDs(object):
             self._create(senderIDs)
 
     def senderIDs(self):
-        """Return a list of senderIDs, refreshing if required"""
-        if time.time() > self._updated + self._expry:
-            self._refresh()
+        """Return a list of senderIDs"""
         return self._senderIDs
 
     def get_ID(self, id):
@@ -129,10 +133,13 @@ class SenderIDs(object):
 
     def choose_ID(self):
         """Return a randomly selected SenderID, refreshing if required"""
-        self._refresh()
         if not len(self._senderIDs):
             return None
         choice = random.choice(self._senderIDs.keys())
         record = self._senderIDs.get(choice)
         record["senderID"] = choice
         return record
+
+    def cancel(self):
+        if self._refresher:
+            self._refresher.cancel()
