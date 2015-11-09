@@ -22,7 +22,7 @@ Features
 * Added --human_logs to display more human friendly logging
 * If you specify the --s3_bucket=None, the app will only use local memory
   and will not call out to the S3 repository. It is STRONGLY suggested that
-  you specify the full --senderid_list data set
+  you specify the full --senderid_list data set.
 
 
 Bug Fixes

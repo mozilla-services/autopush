@@ -25,7 +25,7 @@ class GCMRouter(object):
         self.collapseKey = router_conf.get("collapseKey", "simplepush")
         self.senderIDs = router_conf.get("senderIDs", SenderIDs(router_conf))
         try:
-            senderID = self.senderIDs.getID()
+            senderID = self.senderIDs.choose_ID()
             self.gcm = gcmclient.GCM(senderID.get("auth"))
         except:
             raise IOError("GCM Bridge not initiated in main")
@@ -40,7 +40,7 @@ class GCMRouter(object):
         if not router_data.get("token"):
             self._error("connect info missing 'token'", status=401)
         # Assign a senderid
-        router_data["creds"] = self.creds = self.senderIDs.getID()
+        router_data["creds"] = self.creds = self.senderIDs.choose_ID()
         return router_data
 
     def route_notification(self, notification, uaid_data):

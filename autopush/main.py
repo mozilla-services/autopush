@@ -269,7 +269,10 @@ def make_settings(args, **kwargs):
                 senderid_expry=args.senderid_expry,
                 use_s3=args.s3_bucket.lower() != "none",
                 senderid_list=list))
-            senderID = senderIDs.getID()
+            # This is an init check to verify that things are configured
+            # correctly. Otherwise errors may creep in later that go
+            # unaccounted.
+            senderID = senderIDs.choose_ID()
             if senderID is None:
                 log.err("No GCM SenderIDs specified or found.")
                 return

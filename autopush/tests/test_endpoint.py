@@ -201,7 +201,7 @@ class EndpointTestCase(unittest.TestCase):
         self.router_mock = settings.router = Mock(spec=Router)
         self.storage_mock = settings.storage = Mock(spec=Storage)
         self.senderIDs_mock = settings.senderIDs = Mock(spec=SenderIDs)
-        self.senderIDs_mock.getID.return_value = "test_senderid"
+        self.senderIDs_mock.get_ID.return_value = "test_senderid"
 
         self.request_mock = Mock(body=b'', arguments={}, headers={})
         self.endpoint = endpoint.EndpointHandler(Application(),
@@ -713,7 +713,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.router_mock = settings.router = Mock(spec=Router)
         self.storage_mock = settings.storage = Mock(spec=Storage)
         self.senderIDs_mock = settings.senderIDs = Mock(spec=SenderIDs)
-        self.senderIDs_mock.getID.return_value = "test_senderid"
+        self.senderIDs_mock.get_ID.return_value = "test_senderid"
 
         self.request_mock = Mock(body=b'', arguments={}, headers={})
         self.reg = endpoint.RegistrationHandler(Application(),

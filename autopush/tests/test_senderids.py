@@ -45,8 +45,8 @@ class SenderIDsTestCase(unittest.TestCase):
             json.dumps(settings.get("senderid_list")))
 
         eq_(senderIDs.senderIDs(), settings.get("senderid_list"))
-        # getID may modify the record in memory adding a field.
-        got = senderIDs.getID()
+        # choose_ID may modify the record in memory adding a field.
+        got = senderIDs.choose_ID()
         ok_(got.get('senderID') in settings.get("senderid_list").keys())
         ok_(got.get('auth') ==
             settings.get("senderid_list")[got.get('senderID')]['auth'])
@@ -104,7 +104,7 @@ class SenderIDsTestCase(unittest.TestCase):
             senderid_list=test_list,
             )
         senderIDs = SenderIDs(settings)
-        fetch = senderIDs.get('test123')
+        fetch = senderIDs.get_ID('test123')
         eq_(fetch, {"senderID": "test123", "auth": "abc"})
 
     def test_get_norecord(self):
@@ -113,7 +113,7 @@ class SenderIDsTestCase(unittest.TestCase):
             senderid_expry=0,
         )
         senderIDs = SenderIDs(settings)
-        fetch = senderIDs.getID()
+        fetch = senderIDs.choose_ID()
         eq_(fetch, None)
 
     def test_refresh(self):
