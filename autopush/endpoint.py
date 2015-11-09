@@ -760,7 +760,8 @@ class RegistrationHandler(AutoendpointHandler):
         new_uaid = False
         if uaid:
             if not self._validate_auth(uaid):
-                return self._error(401, "Invalid Authentication")
+                return self._write_response(
+                    401, 109, message="Unauthorized")
         else:
             # No UAID supplied, make our own
             uaid = uuid.uuid4().hex
@@ -769,7 +770,8 @@ class RegistrationHandler(AutoendpointHandler):
         router_type = params.get("type")
         if new_uaid and router_type not in self.ap_settings.routers:
             log.msg("Invalid parameters", **self._client_info())
-            return self._error(400, "Invalid arguments")
+            return self._write_response(
+                400, 108, message="Invalid arguments")
         self.chid = params["channelID"]
         if new_uaid:
             router = self.ap_settings.routers[router_type]
@@ -796,7 +798,8 @@ class RegistrationHandler(AutoendpointHandler):
         self.start_time = time.time()
 
         if not self._validate_auth(uaid):
-            return self._error(401, "Invalid Authentication")
+            return self._write_response(
+                401, 109, message="Invalid Authentication")
 
         params = self._load_params()
         self.uaid = uaid
@@ -804,7 +807,8 @@ class RegistrationHandler(AutoendpointHandler):
         router_data = params.get("data")
         if router_type not in self.ap_settings.routers or not router_data:
             log.msg("Invalid parameters", **self._client_info())
-            return self._error(400, "Invalid arguments")
+            return self._write_response(
+                400, 108, message="Invalid arguments")
 
         self.add_header("Content-Type", "application/json")
         router = self.ap_settings.routers[router_type]
@@ -878,11 +882,6 @@ class RegistrationHandler(AutoendpointHandler):
         hashed = self.request.headers.get("Authorization", "").strip()
         key = generate_hash(secret, uaid)
         return validate_hash(key, self.request.body, hashed)
-
-    def _error(self, code, msg):
-        """Writes out an error status code"""
-        self.set_status(code, msg)
-        self.finish()
 
     def _load_params(self):
         """Load and parse a JSON body out of the request body, or return an

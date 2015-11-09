@@ -67,7 +67,7 @@ class AutopushSettings(object):
                  enable_cors=False,
                  s3_bucket=DEFAULT_BUCKET,
                  senderid_expry=SENDERID_EXPRY,
-                 senderid_list="[]",
+                 senderid_list={},
                  hello_timeout=0,
                  ):
         """Initialize the Settings object
@@ -156,11 +156,7 @@ class AutopushSettings(object):
         if 'apns' in router_conf:
             self.routers["apns"] = APNSRouter(self, router_conf["apns"])
         if 'gcm' in router_conf:
-            conf = router_conf.get("gcm", {})
-            conf["s3_bucket"] = s3_bucket
-            conf["senderid_expry"] = senderid_expry
-            conf["senderid_list"] = senderid_list
-            self.routers["gcm"] = GCMRouter(self, conf)
+            self.routers["gcm"] = GCMRouter(self, router_conf["gcm"])
 
         # Env
         self.env = env

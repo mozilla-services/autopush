@@ -42,3 +42,13 @@ class EliotLogTestCase(twisted.trial.unittest.TestCase):
             eq_(len(mock_stdout.mock_calls), 1)
             kwargs = mock_stdout.mock_calls[0][1][0]
         ok_("Type" in kwargs)
+
+    def test_human_logs(self):
+        setup_logging("Autopush", True)
+        with patch("sys.stdout") as mock_stdout:
+            mock_stdout.reset_mock()
+            log.msg("omg!", Type=7)
+            eq_(len(mock_stdout.mock_calls), 4)
+            mock_stdout.reset_mock()
+            log.err("wtf!", Type=7)
+            eq_(len(mock_stdout.mock_calls), 4)

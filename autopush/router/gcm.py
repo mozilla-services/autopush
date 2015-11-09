@@ -15,7 +15,7 @@ class GCMRouter(object):
     ttl = 60
     dryRun = 0
     collapseKey = "simplepush"
-    senderid = ""
+    creds = {}
 
     def __init__(self, ap_settings, router_conf):
         """Create a new GCM router and connect to GCM"""
@@ -23,12 +23,16 @@ class GCMRouter(object):
         self.ttl = router_conf.get("ttl", 60)
         self.dryRun = router_conf.get("dryrun", False)
         self.collapseKey = router_conf.get("collapseKey", "simplepush")
-        self.gcm = gcmclient.GCM(router_conf.get("apikey"))
-        self.senderIDs = SenderIDs(router_conf)
+        self.senderIDs = router_conf.get("senderIDs", SenderIDs(router_conf))
+        try:
+            senderID = self.senderIDs.choose_ID()
+            self.gcm = gcmclient.GCM(senderID.get("auth"))
+        except:
+            raise IOError("GCM Bridge not initiated in main")
         log.msg("Starting GCM router...")
 
     def amend_msg(self, msg):
-        msg["senderid"] = self.senderid
+        msg["senderid"] = self.creds.get("senderID")
         return msg
 
     def register(self, uaid, router_data):
@@ -36,7 +40,7 @@ class GCMRouter(object):
         if not router_data.get("token"):
             self._error("connect info missing 'token'", status=401)
         # Assign a senderid
-        self.senderid = router_data["senderid"] = self.senderIDs.getID()
+        router_data["creds"] = self.creds = self.senderIDs.choose_ID()
         return router_data
 
     def route_notification(self, notification, uaid_data):
@@ -56,8 +60,13 @@ class GCMRouter(object):
                   "Chid": notification.channel_id,
                   "Ver": notification.version}
         )
+        creds = router_data.get("creds", {"senderID": "missing id"})
         try:
+            self.gcm.api_key = creds["auth"]
             result = self.gcm.send(payload)
+        except KeyError:
+            self._error("Server error, missing bridge credentials for %s" %
+                        creds.get("senderID"), 500)
         except gcmclient.GCMAuthenticationError, e:
             self._error("Authentication Error: %s" % e, 500)
         except Exception, e:

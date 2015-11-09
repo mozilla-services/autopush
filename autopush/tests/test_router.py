@@ -145,31 +145,30 @@ class APNSRouterTestCase(unittest.TestCase):
 
 
 class GCMRouterTestCase(unittest.TestCase):
-    def setUp(self):
+
+    @patch("gcmclient.gcm.GCM", spec=gcmclient.gcm.GCM)
+    def setUp(self, fgcm):
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
-        # Mock out GCM client
-        self._old_gcm = gcmclient.GCM
-        gcmclient.GCM = Mock(spec=gcmclient.GCM)
-
-        gcm_config = {'apikey': '12345678abcdefg',
-                      's3_bucket': 'oms_autopush_test',
-                      'senderid_list': ['test123']}
+        gcm_config = {'s3_bucket': 'oms_autopush_test',
+                      'senderid_list': {'test123':
+                                        {"auth": "12345678abcdefg"}}}
+        self.gcm = fgcm
         self.router = GCMRouter(settings, gcm_config)
         self.notif = Notification(10, "data", dummy_chid, None, 200)
-        self.router_data = dict(router_data=dict(token="connect_data"))
+        self.router_data = dict(
+            router_data=dict(
+                token="connect_data",
+                creds=dict(senderID="test123", auth="12345678abcdefg")))
         mock_result = Mock(spec=gcmclient.gcm.Result)
         mock_result.canonical = dict()
         mock_result.failed = dict()
         mock_result.not_registered = dict()
         mock_result.needs_retry.return_value = False
         self.mock_result = mock_result
-        self.router.gcm.send.return_value = mock_result
-
-    def tearDown(self):
-        gcmclient.GCM = self._old_gcm
+        fgcm.send.return_value = mock_result
 
     def _check_error_call(self, exc, code):
         ok_(isinstance(exc, RouterException))
@@ -177,14 +176,27 @@ class GCMRouterTestCase(unittest.TestCase):
         assert(self.router.gcm.send.called)
         self.flushLoggedErrors()
 
+    def test_init(self):
+        self.router.senderIDs.get_ID = Mock()
+
+        def throw_ex():
+            raise AttributeError
+        fsenderids = Mock()
+        fsenderids.choose_ID.side_effect = throw_ex
+        self.assertRaises(IOError, GCMRouter, {}, {"senderIDs": fsenderids})
+
     def test_register(self):
         result = self.router.register("uaid", {"token": "connect_data"})
-        eq_(result, {"token": "connect_data", "senderid": "test123"})
+        # Check the information that will be recorded for this user
+        eq_(result, {"token": "connect_data",
+                     "creds": {"senderID": "test123",
+                               "auth": "12345678abcdefg"}})
 
     def test_register_bad(self):
         self.assertRaises(RouterException, self.router.register, "uaid", {})
 
-    def test_router_notification(self):
+    def test_route_notification(self):
+        self.router.gcm = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -196,7 +208,8 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_router_notification_gcm_auth_error(self):
         def throw_auth(arg):
             raise gcmclient.GCMAuthenticationError()
-        self.router.gcm.send.side_effect = throw_auth
+        self.gcm.send.side_effect = throw_auth
+        self.router.gcm = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -207,7 +220,8 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_router_notification_gcm_other_error(self):
         def throw_other(arg):
             raise Exception("oh my!")
-        self.router.gcm.send.side_effect = throw_other
+        self.gcm.send.side_effect = throw_other
+        self.router.gcm = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -217,6 +231,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_router_notification_gcm_id_change(self):
         self.mock_result.canonical["old"] = "new"
+        self.router.gcm = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -228,6 +243,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_router_notification_gcm_not_regged(self):
         self.mock_result.not_registered = {"connect_data": True}
+        self.router.gcm = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -239,6 +255,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_router_notification_gcm_failed_items(self):
         self.mock_result.failed = dict(connect_data=True)
+        self.router.gcm = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -248,10 +265,20 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_router_notification_gcm_needs_retry(self):
         self.mock_result.needs_retry.return_value = True
+        self.router.gcm = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
             self._check_error_call(fail.value, 503)
+        d.addBoth(check_results)
+        return d
+
+    def test_router_notification_gcm_no_auth(self):
+        d = self.router.route_notification(self.notif,
+                                           {"router_data": {"token": "abc"}})
+
+        def check_results(fail):
+            eq_(fail.value.status_code, 500)
         d.addBoth(check_results)
         return d
 

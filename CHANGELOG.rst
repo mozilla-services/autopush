@@ -11,12 +11,18 @@ Features
 * Server provided SenderID values for GCM router using clients
   The GCM router will randomly select one of a list of SenderIDs stored in
   S3 under the "org.mozilla.services.autopush"/"senderids" key. The values can
-  be loaded into S3 either via the S3 console, or by runnig an instance of
+  be loaded into S3 either via the S3 console, or by running an instance of
   autopush and passing the values as the "senderid_list" argument. Issue #185.
 * REST Registration will now return a valid ChannelID if one is not specified.
-  Issue #182
+  Issue #182.
 * Add hello timeout. Issue #169.
 * Add .editorconfig for consistent styling in editors. Issue #218.
+* Added --human_logs to display more human friendly logging.
+* If you specify the --s3_bucket=None, the app will only use local memory
+  and will not call out to the S3 repository. It is STRONGLY suggested that
+  you specify the full --senderid_list data set.
+
+=======
 
 Bug Fixes
 ---------
@@ -27,6 +33,7 @@ Bug Fixes
   exceptions ignored. Issue #208.
 * Fix improper attribute reference in delete call. Issue #211.
 * Always include TTL header in response to a WebPush notification. Issue #194.
+* Fixed issue with local senderid data cache. (discovered while debugging.)
 
 WebPush
 -------
@@ -36,6 +43,10 @@ Backwards Incompatibilities
 * Do not specify values for boolean flags.
 * 'cors' is now enabled by default. In it's place use --nocors if you wish
   to disable CORS. Please remove "cors" flag from configuration files.
+* Do not specify --gcm_apikey. Instead, store the API key and senderid as
+  values in S3. The data may still be written as a JSON string such as:
+  ' "`_senderID_`": {"auth": "`_api_key`"}}'
+  activate the GCM bridge by specifying --gcm_enabled.
 
 1.7.2 (2015-10-24)
 ==================
