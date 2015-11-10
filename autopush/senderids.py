@@ -31,7 +31,7 @@ from boto.exception import S3ResponseError
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from twisted.python import log
-from twisted.internet import reactor
+from twisted.application.internet import TimerService
 
 # re-read from source every 15 minutes or so.
 SENDERID_EXPRY = 15*60
@@ -43,14 +43,13 @@ class SenderIDs(object):
     _expry = SENDERID_EXPRY
     _senderIDs = {}
     _use_s3 = True
-    _cancelled = False
     KEYNAME = "senderids"
-    _refresher = None
+    service = None
 
     def __init__(self, args):
         """Optionally load or fetch the set of SenderIDs from S3"""
         self.conn = S3Connection()
-        self.ID = args.get("s3_bucket", DEFAULT_BUCKET)
+        self.ID = args.get("s3_bucket", DEFAULT_BUCKET).lower()
         self._expry = args.get("senderid_expry", SENDERID_EXPRY)
         self._use_s3 = args.get("use_s3", True)
         senderIDs = args.get("senderid_list", {})
@@ -61,12 +60,8 @@ class SenderIDs(object):
                 self.update(senderIDs)
         # set up auto-refresh for senderIDs
         if self._use_s3:
-            self._refresh()
-
-    def __del__(self):
-        if self._refresher:
-            import pdb;pdb.set_trace()
-            self._refresher.cancel()
+            self.service = TimerService(self._expry, self._refresh)
+            self.service.startService()
 
     def _write(self, bucket, senderIDs):
         """Write a list of SenderIDs to S3"""
@@ -82,8 +77,6 @@ class SenderIDs(object):
 
     def _refresh(self):
         """Refresh the senderIDs from the S3 bucket"""
-        if self._cancelled:
-            return
         if not self._use_s3:
             return
         try:
@@ -99,8 +92,6 @@ class SenderIDs(object):
                 self._senderIDs = candidates
         except S3ResponseError:
             self._create(self._senderIDs)
-        finally:
-            self.refresher = reactor.callLater(self._expry, self._refresh)
 
     def update(self, senderIDs):
         """Update the S3 bucket containing the SenderIDs"""
@@ -140,6 +131,6 @@ class SenderIDs(object):
         record["senderID"] = choice
         return record
 
-    def cancel(self):
-        if self._refresher:
-            self._refresher.cancel()
+    def stop(self):
+        if self.service:
+            self.service.stopService()

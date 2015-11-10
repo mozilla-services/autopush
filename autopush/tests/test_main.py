@@ -116,7 +116,7 @@ class EndpointMainTestCase(unittest.TestCase):
         hostname = "hostname"
         statsd_host = "statsd_host"
         statsd_port = "statsd_port"
-        router_tablename = "None"
+        router_tablename = "none"
         storage_tablename = "None"
         storage_read_throughput = 0
         storage_write_throughput = 0
@@ -131,7 +131,7 @@ class EndpointMainTestCase(unittest.TestCase):
         message_read_throughput = 0
         message_write_throughput = 0
         senderid_list = '{"12345":{"auth":"abcd"}}'
-        s3_bucket = "None"
+        s3_bucket = "none"
         senderid_expry = 0
 
     def setUp(self):
@@ -153,13 +153,16 @@ class EndpointMainTestCase(unittest.TestCase):
             mock.stop()
 
     def test_basic(self):
-        endpoint_main([])
+        endpoint_main([
+            "--s3_bucket=none",
+        ])
 
     def test_ssl(self):
         endpoint_main([
             "--ssl_dh_param=keys/dhparam.pem",
             "--ssl_cert=keys/server.crt",
             "--ssl_key=keys/server.key",
+            "--s3_bucket=none",
         ])
 
     def test_bad_senderidlist(self):
