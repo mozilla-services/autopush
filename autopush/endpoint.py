@@ -20,11 +20,8 @@ will not be able to perform any additional router data registration.
 HTTP API
 ========
 
-API methods requiring Authorization must include a HMAC, generated with SHA256
-of the secret key sent on the original register ``POST`` and the message
-payload being the raw content of the body (if any).
-
-Hash: ``HMAC(key=secret, message=RAW_CONTENT_PAYLOAD)``
+API methods requiring Authorization must use a standard HAWK Authorization
+header (See https://github.com/hueniverse/hawk)
 
 All message bodies must be UTF-8 encoded.
 
@@ -110,7 +107,7 @@ The current application-level error numbers are:
 
         GET /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
         Host: endpoint.push.com
-        Authorization: HASH
+        Authorization: HAWK ...
 
     **Example Response**
 
@@ -128,7 +125,7 @@ The current application-level error numbers are:
             }
         }
 
-    :reqheader Authorization: Hash with message set to an empty string.
+    :reqheader Authorization: HAWK ...
 
 .. http:post:: /register/(uuid:uaid)
 
@@ -181,7 +178,7 @@ The current application-level error numbers are:
 
         POST /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
         Host: endpoint.push.com
-        Authorization: HASH
+        Authorization: HAWK ...
         Content-Type: application/json
 
         {}
@@ -199,8 +196,7 @@ The current application-level error numbers are:
             "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
         }
 
-    :reqheader Authorization: Hash with message set to raw body content
-                              required for existing UAID's.
+    :reqheader Authorization: HAWK ...
 
 .. http:put:: /register/(uuid:uaid)
 
@@ -217,7 +213,7 @@ The current application-level error numbers are:
 
         PUT /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
         Host: endpoint.push.com
-        Authorization: HASH
+        Authorization: HAWK ...
         Content-Type: application/json
 
         {
@@ -238,8 +234,7 @@ The current application-level error numbers are:
 
         {}
 
-    :reqheader Authorization: Hash with message set to raw body content
-                              required for existing UAID's.
+    :reqheader Authorization: HAWK ...
 
 """
 import hashlib
@@ -247,6 +242,9 @@ import json
 import time
 import urlparse
 import uuid
+import hawkauthlib
+import requests as prequests
+
 from collections import namedtuple
 from base64 import urlsafe_b64encode
 
@@ -263,7 +261,7 @@ from twisted.python import failure, log
 from autopush.router.interface import RouterException
 from autopush.utils import (
     generate_hash,
-    validate_hash,
+    validate_uaid,
 )
 
 # Our max TTL is 60 days realistically with table rotation, so we hard-code it
@@ -716,7 +714,13 @@ class EndpointHandler(AutoendpointHandler):
 
 
 class RegistrationHandler(AutoendpointHandler):
-    cors_methods = "GET,PUT"
+    cors_methods = "GET,PUT,DELETE"
+    _base_tags = []
+
+    def base_tags(self):
+        tags = self._base_tags
+        tags.append("user-agent:%s" %
+                    self.request.headers.get("user-agent"))
 
     #############################################################
     #                    Cyclone HTTP Methods
@@ -754,10 +758,12 @@ class RegistrationHandler(AutoendpointHandler):
         # If the client didn't provide a CHID, make one up.
         if "channelID" not in params:
             params["channelID"] = uuid.uuid4().hex
-
+        self.ap_settings.metrics.increment("updates.client.register",
+                                           tags=self.base_tags())
         # If there's a UAID, ensure its valid, otherwise we ensure the hash
         # matches up
         new_uaid = False
+
         if uaid:
             if not self._validate_auth(uaid):
                 return self._write_response(
@@ -766,6 +772,7 @@ class RegistrationHandler(AutoendpointHandler):
             # No UAID supplied, make our own
             uaid = uuid.uuid4().hex
             new_uaid = True
+            # Should this be different than websocket?
         self.uaid = uaid
         router_type = params.get("type")
         if new_uaid and router_type not in self.ap_settings.routers:
@@ -820,6 +827,45 @@ class RegistrationHandler(AutoendpointHandler):
         d.addErrback(self._router_fail_err)
         d.addErrback(self._response_err)
         d.callback(uaid)
+
+    def _deleteChannel(self, message, uaid, chid):
+        message.delete_messages_for_channel(uaid, chid)
+        message.unregister_channel(uaid, chid)
+
+    def _deleteUaid(self, message, uaid, router):
+        message.delete_all_for_user(uaid)
+        router.drop_user(uaid)
+
+    @cyclone.web.asynchronous
+    def delete(self, combo):
+        """HTTP DELETE
+
+        Invalidate a UAID (and all channels associated with it).
+
+        """
+        combo = combo.strip("/")
+        if "/" in combo:
+            (uaid, chid) = combo.split("/", 2)
+        else:
+            uaid = combo
+            chid = None
+        # what is request
+        if not self._validate_auth(uaid):
+            return self._write_response(
+                401, 109, message="Invalid Authentication")
+        message = self.ap_settings.message
+        if chid:
+            # mark channel as dead
+            self.ap_settings.metrics.increment("updates.client.unregister",
+                                               tags=self.base_tags())
+            d = deferToThread(self._deleteChannel, message, uaid, chid)
+            d.addErrback(self._response_err)
+            return d
+        # nuke uaid
+        d = deferToThread(self._deleteUaid, message, uaid,
+                          self.ap_settings.router)
+        d.addErrback(self._response_err)
+        return d
 
     #############################################################
     #                    Callbacks
@@ -877,11 +923,24 @@ class RegistrationHandler(AutoendpointHandler):
     #                    Utility Methods
     #############################################################
     def _validate_auth(self, uaid):
-        """Validates the Authorization header in a request"""
-        secret = self.ap_settings.crypto_key
-        hashed = self.request.headers.get("Authorization", "").strip()
-        key = generate_hash(secret, uaid)
-        return validate_hash(key, self.request.body, hashed)
+        """Validates the Authorization header in a request
+
+        Validate the given request using HAWK.
+        """
+
+        test, _ = validate_uaid(uaid)
+        if not test:
+            return False
+        secret = generate_hash(self.ap_settings.crypto_key, uaid)
+
+        fReq = prequests.Request(
+            self.request.method,
+            "%s://%s%s" % (self.request.protocol, self.request.host,
+                           self.request.uri),
+            headers=self.request.headers,
+            data=self.request.body).prepare()
+        return hawkauthlib.check_signature(fReq,
+                                           secret)
 
     def _load_params(self):
         """Load and parse a JSON body out of the request body, or return an
