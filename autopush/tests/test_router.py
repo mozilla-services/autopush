@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from unittest import TestCase
 import uuid
+import time
 
 from mock import Mock, PropertyMock, patch
 from moto import mock_dynamodb2, mock_s3
@@ -106,7 +107,9 @@ class APNSRouterTestCase(unittest.TestCase):
         return d
 
     def test_message_pruning(self):
-        self.router.messages = {1: {'token': 'dump', 'payload': {}}}
+        now = int(time.time())
+        self.router.messages = {now: {'token': 'dump', 'payload': {}},
+                                now-60: {'token': 'dump', 'payload': {}}}
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):

@@ -223,6 +223,26 @@ class MessageTestCase(unittest.TestCase):
         all_messages = list(message.fetch_messages(self.uaid))
         eq_(len(all_messages), 0)
 
+    def test_delete_all_for_user(self):
+        chid = str(uuid.uuid4())
+        chid2 = str(uuid.uuid4())
+        m = get_message_table()
+        message = Message(m, SinkMetrics())
+        message.register_channel(self.uaid, chid)
+        message.register_channel(self.uaid, chid2)
+
+        data1 = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        ttl = int(time.time())+100
+        time1, time2, time3 = self._nstime(), self._nstime(), self._nstime()+1
+        message.store_message(self.uaid, chid, time1, ttl, data1, {})
+        message.store_message(self.uaid, chid2, time2, ttl, data2, {})
+        message.store_message(self.uaid, chid2, time3, ttl, data1, {})
+
+        message.delete_all_for_user(self.uaid)
+        all_messages = list(message.fetch_messages(self.uaid))
+        eq_(len(all_messages), 0)
+
     def test_message_delete_pagination(self):
         def make_messages(channel_id, count):
             m = []
@@ -266,6 +286,40 @@ class MessageTestCase(unittest.TestCase):
         result = message.delete_message(uaid="asdf", channel_id="asdf",
                                         message_id="asdf", updateid="asdf")
         eq_(result, False)
+
+    def test_update_message(self):
+        chid = uuid.uuid4().hex
+        m = get_message_table()
+        message = Message(m, SinkMetrics())
+        data1 = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        time1 = self._nstime()
+        time2 = self._nstime()+100
+        ttl = self._nstime()+1000
+        message.store_message(self.uaid, chid, time1, ttl, data1, {})
+        message.update_message(self.uaid, chid, time2, ttl, data2, {})
+        messages = list(message.fetch_messages(self.uaid))
+        eq_(data2, messages[0]['#dd'])
+
+    def test_update_message_fail(self):
+        message = Message(get_message_table(), SinkMetrics)
+        message.store_message(self.uaid,
+                              uuid.uuid4().hex,
+                              self._nstime(),
+                              str(uuid.uuid4()),
+                              {})
+        u = message.table.connection.update_item = Mock()
+
+        def raise_condition(*args, **kwargs):
+            raise ConditionalCheckFailedException(None, None)
+
+        u.side_effect = raise_condition
+        b = message.update_message(self.uaid,
+                                   uuid.uuid4().hex,
+                                   self._nstime(),
+                                   str(uuid.uuid4()),
+                                   {})
+        eq_(b, False)
 
 
 class RouterTestCase(unittest.TestCase):
@@ -407,3 +461,12 @@ class RouterTestCase(unittest.TestCase):
         data = dict(uaid="asdf", node_id="asdf", connected_at=1234)
         result = router.clear_node(Item(r, data))
         eq_(result, False)
+
+    def test_drop_user(self):
+        uaid = str(uuid.uuid4())
+        r = get_router_table()
+        router = Router(r, SinkMetrics())
+        # Register a node user
+        router.register_user(dict(uaid=uaid, node_id="asdf",
+                                  connected_at=1234))
+        router.drop_user(uaid)

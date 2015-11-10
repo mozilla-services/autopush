@@ -10,19 +10,20 @@ Features
 
 * Server provided SenderID values for GCM router using clients
   The GCM router will randomly select one of a list of SenderIDs stored in
-  S3 under the "org.mozilla.services.autopush"/"senderids" key. The values can
+  S3 under the "oms-autopush"/"senderids" key. The values can
   be loaded into S3 either via the S3 console, or by running an instance of
   autopush and passing the values as the "senderid_list" argument. Issue #185.
 * REST Registration will now return a valid ChannelID if one is not specified.
   Issue #182.
 * Add hello timeout. Issue #169.
+* Convert proprietary AUTH to use HAWK for client REST interfaces. Issue #201.
+* Add DELETE /uaid[/chid] functions to client REST interfaces. Issue #183.
 * Add .editorconfig for consistent styling in editors. Issue #218.
 * Added --human_logs to display more human friendly logging.
 * If you specify the --s3_bucket=None, the app will only use local memory
   and will not call out to the S3 repository. It is STRONGLY suggested that
   you specify the full --senderid_list data set.
 
-=======
 
 Bug Fixes
 ---------
@@ -33,6 +34,7 @@ Bug Fixes
   exceptions ignored. Issue #208.
 * Fix improper attribute reference in delete call. Issue #211.
 * Always include TTL header in response to a WebPush notification. Issue #194.
+* Increased unit test coverage due to removal of proprietary AUTH.
 * Fixed issue with local senderid data cache. (discovered while debugging.)
 
 WebPush

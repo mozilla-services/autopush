@@ -246,7 +246,7 @@ class Message(object):
         return True
 
     @track_provisioned
-    def unregister_channel(self, uaid, channel_id):
+    def unregister_channel(self, uaid, channel_id, **kwargs):
         """Remove a channel registration for a given uaid"""
         conn = self.table.connection
         db_key = self.encode({"uaid": uaid, "chidmessageid": " "})
@@ -371,6 +371,19 @@ class Message(object):
             self.delete_messages(uaid, chidmessageids)
 
     @track_provisioned
+    def delete_all_for_user(self, uaid):
+        """Deletes all messages and channel info for a given uaid"""
+        results = self.table.query_2(
+            uaid__eq=uaid,
+            chidmessageid__gt=" ",
+            consistent=True,
+            attributes=("chidmessageid",),
+        )
+        chidmessageids = [x["chidmessageid"] for x in results]
+        if chidmessageids:
+            self.delete_messages(uaid, chidmessageids)
+
+    @track_provisioned
     def fetch_messages(self, uaid, limit=10):
         """Fetches messages for a uaid"""
         # Eagerly fetches all results in the result set.
@@ -466,6 +479,10 @@ class Router(object):
             return (True, result)
         except ConditionalCheckFailedException:
             return (False, {})
+
+    @track_provisioned
+    def drop_user(self, uaid):
+        return self.table.delete_item(uaid=uaid)
 
     @track_provisioned
     def clear_node(self, item):
