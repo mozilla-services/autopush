@@ -94,7 +94,7 @@ class AutopushSettings(object):
             self.metrics = SinkMetrics()
         if not crypto_key:
             crypto_key = [Fernet.generate_key()]
-        if not isinstance(crypto_key, type([])):
+        if not isinstance(crypto_key, list):
             crypto_key = [crypto_key]
         self.update(crypto_key=crypto_key)
         self.crypto_key = crypto_key
@@ -171,7 +171,7 @@ class AutopushSettings(object):
         for key, val in kwargs.items():
             if key == "crypto_key":
                 fkeys = []
-                if not isinstance(val, type([])):
+                if not isinstance(val, list):
                     val = [val]
                 for v in val:
                     fkeys.append(Fernet(v))
