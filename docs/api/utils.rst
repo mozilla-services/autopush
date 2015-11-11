@@ -11,6 +11,4 @@
 
 .. autofunction:: validate_uaid
 
-.. autofunction:: validate_hash
-
 .. autofunction:: generate_hash
