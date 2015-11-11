@@ -3,6 +3,7 @@ import json
 from autopush.senderids import SenderIDs
 from mock import Mock
 from boto.exception import S3ResponseError
+from boto.s3.key import Key
 from moto import mock_s3, mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
@@ -99,6 +100,12 @@ class SenderIDsTestCase(unittest.TestCase):
         eq_(senderIDs._senderIDs, test_list)
         senderIDs.update([123])
         eq_(senderIDs._senderIDs, test_list)
+        # Try a valid, but incorrectly formatted set of senderIDs
+        tkey = Key(senderIDs.conn.get_bucket(TEST_BUCKET))
+        tkey.key = senderIDs.KEYNAME
+        tkey.set_contents_from_string("[123,456]")
+        senderIDs._update_senderIDs()
+        eq_(senderIDs._senderIDs, test_list)
         return senderIDs.stop()
 
     def test_get_record(self):
@@ -129,11 +136,9 @@ class SenderIDsTestCase(unittest.TestCase):
             senderid_list=test_list,
             )
         senderIDs = SenderIDs(settings)
-        bucket = senderIDs.conn.get_bucket(senderIDs.ID)
-        senderIDs._write(bucket, "[Invalid")
         senderIDs._senderIDs = {}
         senderIDs._expry = 0
         twisted.internet.base.DelayedCall.debug = True
         senderIDs._refresh()
-        eq_(senderIDs._senderIDs, {})
+        eq_(senderIDs._senderIDs, test_list)
         return senderIDs.stop()

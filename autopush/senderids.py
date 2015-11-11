@@ -27,12 +27,11 @@ overwritten with older, less accurate values.
 import json
 import random
 
-from boto.exception import S3ResponseError
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from twisted.python import log
+from twisted.internet.defer import Deferred
 from twisted.application.internet import TimerService
-from twisted.internet.defer import inlineCallbacks
 
 # re-read from source every 15 minutes or so.
 SENDERID_EXPRY = 15*60
@@ -64,38 +63,39 @@ class SenderIDs(object):
             self.service = TimerService(self._expry, self._refresh)
             self.service.startService()
 
-    @inlineCallbacks
-    def _write(self, bucket, senderIDs):
+    def _write(self, senderIDs, *args):
         """Write a list of SenderIDs to S3"""
+        bucket = self.conn.get_bucket(self.ID)
         key = Key(bucket)
         key.key = self.KEYNAME
-        yield key.set_contents_from_string(json.dumps(senderIDs))
+        key.set_contents_from_string(json.dumps(senderIDs))
         self._senderIDs = senderIDs
 
-    @inlineCallbacks
-    def _create(self, senderIDs):
+    def _create(self, *args):
         """Create a new bucket containing the senderIDs"""
-        bucket = yield self.conn.create_bucket(self.ID)
-        self._write(bucket, senderIDs)
+        self.conn.create_bucket(self.ID)
+        self._write(self._senderIDs)
 
-    @inlineCallbacks
+    def _update_senderIDs(self, *args):
+        bucket = self.conn.get_bucket(self.ID)
+        key = Key(bucket)
+        key.key = self.KEYNAME
+        candidates = json.loads(key.get_contents_as_string())
+        if candidates:
+            if type(candidates) is not dict:
+                log.err("Wrong data type stored for senderIDs. "
+                        "Should be dict. Ignoring.")
+                return
+            self._senderIDs = candidates
+
     def _refresh(self):
         """Refresh the senderIDs from the S3 bucket"""
         if not self._use_s3:
             return
-        try:
-            bucket = yield self.conn.get_bucket(self.ID)
-            key = Key(bucket)
-            key.key = self.KEYNAME
-            candidates = json.loads(key.get_contents_as_string())
-            if candidates:
-                if type(candidates) is not dict:
-                    log.err("Wrong data type stored for senderIDs. "
-                            "Should be dict. Ignoring.")
-                    return
-                self._senderIDs = candidates
-        except S3ResponseError:
-            self._create(self._senderIDs)
+        d = Deferred()
+        d.addCallback(self._update_senderIDs)
+        d.addErrback(self._create)
+        d.callback(self._senderIDs)
 
     def update(self, senderIDs):
         """Update the S3 bucket containing the SenderIDs"""
@@ -109,11 +109,11 @@ class SenderIDs(object):
             if senderIDs:
                 self._senderIDs = senderIDs
             return
-        try:
-            bucket = self.conn.get_bucket(self.ID)
-            self._write(bucket, senderIDs)
-        except S3ResponseError:
-            self._create(senderIDs)
+        self._senderIDs = senderIDs
+        d = Deferred()
+        d.addCallback(self._write)
+        d.addErrback(self._create)
+        d.callback(senderIDs)
 
     def senderIDs(self):
         """Return a list of senderIDs"""
