@@ -32,6 +32,7 @@ from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from twisted.python import log
 from twisted.application.internet import TimerService
+from twisted.internet.defer import inlineCallbacks
 
 # re-read from source every 15 minutes or so.
 SENDERID_EXPRY = 15*60
@@ -63,24 +64,27 @@ class SenderIDs(object):
             self.service = TimerService(self._expry, self._refresh)
             self.service.startService()
 
+    @inlineCallbacks
     def _write(self, bucket, senderIDs):
         """Write a list of SenderIDs to S3"""
         key = Key(bucket)
         key.key = self.KEYNAME
-        key.set_contents_from_string(json.dumps(senderIDs))
+        yield key.set_contents_from_string(json.dumps(senderIDs))
         self._senderIDs = senderIDs
 
+    @inlineCallbacks
     def _create(self, senderIDs):
         """Create a new bucket containing the senderIDs"""
-        bucket = self.conn.create_bucket(self.ID)
+        bucket = yield self.conn.create_bucket(self.ID)
         self._write(bucket, senderIDs)
 
+    @inlineCallbacks
     def _refresh(self):
         """Refresh the senderIDs from the S3 bucket"""
         if not self._use_s3:
             return
         try:
-            bucket = self.conn.get_bucket(self.ID)
+            bucket = yield self.conn.get_bucket(self.ID)
             key = Key(bucket)
             key.key = self.KEYNAME
             candidates = json.loads(key.get_contents_as_string())
