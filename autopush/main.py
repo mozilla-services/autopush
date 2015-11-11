@@ -263,12 +263,12 @@ def make_settings(args, **kwargs):
                                    "key_file": args.apns_key_file}
         if args.gcm_enabled:
             # Create a common gcmclient
-            list = json.loads(args.senderid_list)
+            slist = json.loads(args.senderid_list)
             senderIDs = SenderIDs(dict(
                 s3_bucket=args.s3_bucket,
                 senderid_expry=args.senderid_expry,
                 use_s3=args.s3_bucket.lower() != "none",
-                senderid_list=list))
+                senderid_list=slist))
             # This is an init check to verify that things are configured
             # correctly. Otherwise errors may creep in later that go
             # unaccounted.
