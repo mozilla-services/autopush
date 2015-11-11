@@ -1151,3 +1151,11 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         d = self.reg.delete("/%s/" % dummy_uaid)
         return d
+
+    @patch('hawkauthlib.check_signature')
+    def test_validate_auth(self, fhawk):
+        self.reg.ap_settings.crypto_key = ['aaaa', 'bbbb']
+        fhawk.side_effect = [False, False]
+        eq_(False, self.reg._validate_auth(dummy_uaid))
+        fhawk.side_effect = [False, True]
+        ok_(self.reg._validate_auth(dummy_uaid))
