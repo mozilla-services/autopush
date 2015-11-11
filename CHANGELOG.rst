@@ -23,7 +23,8 @@ Features
 * If you specify the --s3_bucket=None, the app will only use local memory
   and will not call out to the S3 repository. It is STRONGLY suggested that
   you specify the full --senderid_list data set.
-
+* You may now specify multiple keys for the crypto_key value. Values should
+  be a list ordered from newest to oldest allowed key.
 
 Bug Fixes
 ---------

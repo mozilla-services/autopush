@@ -1,7 +1,7 @@
 """Autopush Settings Object and Setup"""
 import socket
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, MultiFernet
 from twisted.internet import reactor
 from twisted.web.client import Agent, HTTPConnectionPool
 
@@ -92,10 +92,12 @@ class AutopushSettings(object):
             self.metrics = TwistedMetrics(statsd_host, statsd_port)
         else:
             self.metrics = SinkMetrics()
-
-        key = crypto_key or Fernet.generate_key()
-        self.fernet = Fernet(key)
-        self.crypto_key = key
+        if not crypto_key:
+            crypto_key = [Fernet.generate_key()]
+        if not isinstance(crypto_key, list):
+            crypto_key = [crypto_key]
+        self.update(crypto_key=crypto_key)
+        self.crypto_key = crypto_key
 
         self.max_data = max_data
         self.clients = {}
@@ -168,7 +170,12 @@ class AutopushSettings(object):
         ``self.fernet`` attribute will be initialized"""
         for key, val in kwargs.items():
             if key == "crypto_key":
-                self.fernet = Fernet(val)
+                fkeys = []
+                if not isinstance(val, list):
+                    val = [val]
+                for v in val:
+                    fkeys.append(Fernet(v))
+                self.fernet = MultiFernet(fkeys)
             else:
                 setattr(self, key, val)
 

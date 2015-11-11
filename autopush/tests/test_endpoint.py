@@ -750,9 +750,8 @@ class RegistrationTestCase(unittest.TestCase):
         reg.ap_settings.update(banana="fruit")
         eq_(reg.ap_settings.banana, "fruit")
         reg.ap_settings.update(crypto_key=fake)
-        eq_(reg.ap_settings.fernet._encryption_key,
-            '\x00\x00\x00\x00\x00\x00\x00\x00'
-            '\x00\x00\x00\x00\x00\x00\x00\x00')
+        eq_(reg.ap_settings.fernet._fernets[0]._encryption_key,
+            '\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     def test_load_params_arguments(self, u=None):
@@ -1152,3 +1151,11 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         d = self.reg.delete("/%s/" % dummy_uaid)
         return d
+
+    @patch('hawkauthlib.check_signature')
+    def test_validate_auth(self, fhawk):
+        self.reg.ap_settings.crypto_key = ['aaaa', 'bbbb']
+        fhawk.side_effect = [False, False]
+        eq_(False, self.reg._validate_auth(dummy_uaid))
+        fhawk.side_effect = [False, True]
+        ok_(self.reg._validate_auth(dummy_uaid))

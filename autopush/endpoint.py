@@ -898,7 +898,7 @@ class RegistrationHandler(AutoendpointHandler):
         """Called after the endpoint was made and should be returned to the
         requestor"""
         if new_uaid:
-            hashed = generate_hash(self.ap_settings.crypto_key, self.uaid)
+            hashed = generate_hash(self.ap_settings.crypto_key[0], self.uaid)
             msg = dict(
                 uaid=self.uaid,
                 secret=hashed,
@@ -931,16 +931,17 @@ class RegistrationHandler(AutoendpointHandler):
         test, _ = validate_uaid(uaid)
         if not test:
             return False
-        secret = generate_hash(self.ap_settings.crypto_key, uaid)
-
-        fReq = prequests.Request(
-            self.request.method,
-            "%s://%s%s" % (self.request.protocol, self.request.host,
-                           self.request.uri),
-            headers=self.request.headers,
-            data=self.request.body).prepare()
-        return hawkauthlib.check_signature(fReq,
-                                           secret)
+        for key in self.ap_settings.crypto_key:
+            secret = generate_hash(key, uaid)
+            fReq = prequests.Request(
+                self.request.method,
+                "%s://%s%s" % (self.request.protocol, self.request.host,
+                               self.request.uri),
+                headers=self.request.headers,
+                data=self.request.body).prepare()
+            if hawkauthlib.check_signature(fReq, secret):
+                return True
+        return False
 
     def _load_params(self):
         """Load and parse a JSON body out of the request body, or return an
