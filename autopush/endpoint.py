@@ -898,7 +898,7 @@ class RegistrationHandler(AutoendpointHandler):
         """Called after the endpoint was made and should be returned to the
         requestor"""
         if new_uaid:
-            hashed = generate_hash(self.ap_settings.crypto_key, self.uaid)
+            hashed = generate_hash(self.ap_settings.crypto_key[0], self.uaid)
             msg = dict(
                 uaid=self.uaid,
                 secret=hashed,
@@ -931,7 +931,7 @@ class RegistrationHandler(AutoendpointHandler):
         test, _ = validate_uaid(uaid)
         if not test:
             return False
-        secret = generate_hash(self.ap_settings.crypto_key, uaid)
+        secret = generate_hash(self.ap_settings.crypto_key[0], uaid)
 
         fReq = prequests.Request(
             self.request.method,

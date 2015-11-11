@@ -750,9 +750,8 @@ class RegistrationTestCase(unittest.TestCase):
         reg.ap_settings.update(banana="fruit")
         eq_(reg.ap_settings.banana, "fruit")
         reg.ap_settings.update(crypto_key=fake)
-        eq_(reg.ap_settings.fernet._encryption_key,
-            '\x00\x00\x00\x00\x00\x00\x00\x00'
-            '\x00\x00\x00\x00\x00\x00\x00\x00')
+        eq_(reg.ap_settings.fernet._fernets[0]._encryption_key,
+            '\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     def test_load_params_arguments(self, u=None):
