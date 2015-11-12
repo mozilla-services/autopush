@@ -29,8 +29,9 @@ import random
 
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
+from boto.exception import S3ResponseError
 from twisted.python import log
-from twisted.internet.defer import Deferred
+from twisted.internet.threads import deferToThread
 from twisted.application.internet import TimerService
 
 # re-read from source every 15 minutes or so.
@@ -53,13 +54,17 @@ class SenderIDs(object):
         self._expry = args.get("senderid_expry", SENDERID_EXPRY)
         self._use_s3 = args.get("use_s3", True)
         senderIDs = args.get("senderid_list", {})
+        self.service = None
         if senderIDs:
             if type(senderIDs) is not dict:
                 log.err("senderid_list is not a dict. Ignoring")
             else:
+                # We're initializing, so it's ok to block.
                 self.update(senderIDs)
-        # set up auto-refresh for senderIDs
+
+    def start(self):
         if self._use_s3:
+            log.msg("Starting SenderID service...")
             self.service = TimerService(self._expry, self._refresh)
             self.service.startService()
 
@@ -70,6 +75,11 @@ class SenderIDs(object):
         key.key = self.KEYNAME
         key.set_contents_from_string(json.dumps(senderIDs))
         self._senderIDs = senderIDs
+
+    def _err(self, state):
+        if (isinstance(state.value, S3ResponseError) and
+                state.value.reason == 'Not Found'):
+            self._create()
 
     def _create(self, *args):
         """Create a new bucket containing the senderIDs"""
@@ -92,13 +102,12 @@ class SenderIDs(object):
         """Refresh the senderIDs from the S3 bucket"""
         if not self._use_s3:
             return
-        d = Deferred()
-        d.addCallback(self._update_senderIDs)
-        d.addErrback(self._create)
-        d.callback(self._senderIDs)
+        d = deferToThread(self._update_senderIDs, self._senderIDs)
+        d.addErrback(self._err)
+        return d
 
     def update(self, senderIDs):
-        """Update the S3 bucket containing the SenderIDs"""
+        """Initialize the S3 bucket containing the SenderIDs"""
         if not senderIDs:
             return
         if type(senderIDs) is not dict:
@@ -110,10 +119,7 @@ class SenderIDs(object):
                 self._senderIDs = senderIDs
             return
         self._senderIDs = senderIDs
-        d = Deferred()
-        d.addCallback(self._write)
-        d.addErrback(self._create)
-        d.callback(senderIDs)
+        self._create()
 
     def senderIDs(self):
         """Return a list of senderIDs"""
@@ -137,4 +143,5 @@ class SenderIDs(object):
 
     def stop(self):
         if self.service:
+            log.msg("Stopping SenderID service...")
             self.service.stopService()

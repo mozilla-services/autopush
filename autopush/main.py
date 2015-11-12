@@ -269,6 +269,7 @@ def make_settings(args, **kwargs):
                 senderid_expry=args.senderid_expry,
                 use_s3=args.s3_bucket.lower() != "none",
                 senderid_list=list))
+            senderIDs.start()
             # This is an init check to verify that things are configured
             # correctly. Otherwise errors may creep in later that go
             # unaccounted.
@@ -455,6 +456,9 @@ def endpoint_main(sysargs=None):
     mount_health_handlers(site, settings)
 
     settings.metrics.start()
+    # start the timer
+    if settings.routers.get('gcm'):
+        settings.routers['gcm'].senderIDs.start()
 
     if args.ssl_key:
         contextFactory = AutopushSSLContextFactory(args.ssl_key,
