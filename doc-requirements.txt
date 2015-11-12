@@ -21,6 +21,7 @@ enum34==1.0.4
 funcsigs==0.4
 gcm-client==0.1.4
 greenlet==0.4.5
+hawkauthlib==0.1.1
 httpretty==0.8.9
 idna==2.0
 ipaddress==1.0.14
