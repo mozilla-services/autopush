@@ -153,8 +153,8 @@ class SenderIDsTestCase(unittest.TestCase):
         d.addBoth(finish_handler)
         return d
 
-    @patch("autopush.senderids.TimerService",
-           spec=twisted.application.internet.TimerService)
+    @patch("autopush.senderids.LoopingCall",
+           spec=twisted.internet.task.LoopingCall)
     def test_start(self, fts):
         settings = dict(
             s3_bucket=TEST_BUCKET,
@@ -163,6 +163,7 @@ class SenderIDsTestCase(unittest.TestCase):
             )
         self.senderIDs = SenderIDs(settings)
         self.senderIDs.start()
-        ok_(self.senderIDs.service.startService.called)
+        ok_(self.senderIDs.service.start.called)
+        fts.running = True
         self.senderIDs.stop()
-        ok_(self.senderIDs.service.stopService.called)
+        ok_(self.senderIDs.service.stop.called)
