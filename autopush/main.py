@@ -457,7 +457,7 @@ def endpoint_main(sysargs=None):
     settings.metrics.start()
 
     # start the senderIDs refresh timer
-    if settings.routers.get('gcm'):
+    if settings.routers.get('gcm') and settings.routers['gcm'].senderIDs:
         settings.routers['gcm'].senderIDs.start()
 
     if args.ssl_key:

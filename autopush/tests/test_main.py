@@ -181,3 +181,5 @@ class EndpointMainTestCase(unittest.TestCase):
             """--senderid_list={"123":{"auth":"abcd"}}""",
             "--s3_bucket=none",
         ])
+        # Adding this to see if travis will pick up the line
+        eq_(1, 1)
