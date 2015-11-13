@@ -2,7 +2,7 @@ import unittest
 
 from mock import Mock, patch
 from moto import mock_dynamodb2, mock_s3
-from nose.tools import eq_, ok_
+from nose.tools import eq_
 from autopush.senderids import SenderIDs
 
 
