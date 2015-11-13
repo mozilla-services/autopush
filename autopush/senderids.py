@@ -32,7 +32,7 @@ from boto.s3.key import Key
 from boto.exception import S3ResponseError
 from twisted.python import log
 from twisted.internet.threads import deferToThread
-from twisted.application.internet import TimerService
+from twisted.internet.task import LoopingCall
 
 # re-read from source every 15 minutes or so.
 SENDERID_EXPRY = 15*60
@@ -54,7 +54,7 @@ class SenderIDs(object):
         self._expry = args.get("senderid_expry", SENDERID_EXPRY)
         self._use_s3 = args.get("use_s3", True)
         senderIDs = args.get("senderid_list", {})
-        self.service = None
+        self.service = LoopingCall(self._refresh)
         if senderIDs:
             if type(senderIDs) is not dict:
                 log.err("senderid_list is not a dict. Ignoring")
@@ -65,8 +65,7 @@ class SenderIDs(object):
     def start(self):
         if self._use_s3:
             log.msg("Starting SenderID service...")
-            self.service = TimerService(self._expry, self._refresh)
-            self.service.startService()
+            self.service.start(self._expry)
 
     def _write(self, senderIDs, *args):
         """Write a list of SenderIDs to S3"""
@@ -96,13 +95,18 @@ class SenderIDs(object):
                 log.err("Wrong data type stored for senderIDs. "
                         "Should be dict. Ignoring.")
                 return
-            self._senderIDs = candidates
+            return candidates
+
+    def _set_senderIDs(self, senderIDs):
+        if senderIDs:
+            self._senderIDs = senderIDs
 
     def _refresh(self):
         """Refresh the senderIDs from the S3 bucket"""
         if not self._use_s3:
             return
         d = deferToThread(self._update_senderIDs, self._senderIDs)
+        d.addCallback(self._set_senderIDs)
         d.addErrback(self._err)
         return d
 
@@ -142,6 +146,6 @@ class SenderIDs(object):
         return record
 
     def stop(self):
-        if self.service:
+        if self.service and self.service.running:
             log.msg("Stopping SenderID service...")
-            self.service.stopService()
+            self.service.stop()
