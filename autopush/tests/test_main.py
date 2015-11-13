@@ -3,6 +3,8 @@ import unittest
 from mock import Mock, patch
 from moto import mock_dynamodb2, mock_s3
 from nose.tools import eq_
+from autopush.senderids import SenderIDs
+
 
 from autopush.main import (
     connection_main,
@@ -101,7 +103,7 @@ class EndpointMainTestCase(unittest.TestCase):
         hostname = "hostname"
         statsd_host = "statsd_host"
         statsd_port = "statsd_port"
-        router_tablename = "None"
+        router_tablename = "none"
         storage_tablename = "None"
         storage_read_throughput = 0
         storage_write_throughput = 0
@@ -116,7 +118,7 @@ class EndpointMainTestCase(unittest.TestCase):
         message_read_throughput = 0
         message_write_throughput = 0
         senderid_list = '{"12345":{"auth":"abcd"}}'
-        s3_bucket = "None"
+        s3_bucket = "none"
         senderid_expry = 0
 
     def setUp(self):
@@ -138,13 +140,16 @@ class EndpointMainTestCase(unittest.TestCase):
             mock.stop()
 
     def test_basic(self):
-        endpoint_main([])
+        endpoint_main([
+            "--s3_bucket=none",
+        ])
 
     def test_ssl(self):
         endpoint_main([
             "--ssl_dh_param=keys/dhparam.pem",
             "--ssl_cert=keys/server.crt",
             "--ssl_key=keys/server.key",
+            "--s3_bucket=none",
         ])
 
     def test_bad_senderidlist(self):
@@ -168,3 +173,12 @@ class EndpointMainTestCase(unittest.TestCase):
         ap = make_settings(self.test_arg)
         eq_(ap, None)
         self.test_arg.senderid_list = oldList
+
+    @patch("autopush.main.SenderIDs", spec=SenderIDs)
+    def test_gcm_start(self, fsi):
+        fsi.choose_ID.return_value = "123"
+        endpoint_main([
+            "--gcm_enabled",
+            """--senderid_list={"123":{"auth":"abcd"}}""",
+            "--s3_bucket=none",
+        ])

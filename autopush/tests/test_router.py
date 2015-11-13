@@ -155,7 +155,7 @@ class GCMRouterTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
-        gcm_config = {'s3_bucket': 'oms_autopush_test',
+        gcm_config = {'s3_bucket': 'None',
                       'senderid_list': {'test123':
                                         {"auth": "12345678abcdefg"}}}
         self.gcm = fgcm
@@ -172,6 +172,9 @@ class GCMRouterTestCase(unittest.TestCase):
         mock_result.needs_retry.return_value = False
         self.mock_result = mock_result
         fgcm.send.return_value = mock_result
+
+    def tearDown(self):
+        self.router.senderIDs.stop()
 
     def _check_error_call(self, exc, code):
         ok_(isinstance(exc, RouterException))
