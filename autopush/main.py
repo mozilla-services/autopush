@@ -458,7 +458,9 @@ def endpoint_main(sysargs=None):
 
     # start the senderIDs refresh timer
     if settings.routers.get('gcm') and settings.routers['gcm'].senderIDs:
-        settings.routers['gcm'].senderIDs.start()
+        # The following shows coverage on my local machine, but not
+        # travis.
+        settings.routers['gcm'].senderIDs.start()  # pragma: nocover
 
     if args.ssl_key:
         contextFactory = AutopushSSLContextFactory(args.ssl_key,
