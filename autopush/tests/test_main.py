@@ -176,10 +176,9 @@ class EndpointMainTestCase(unittest.TestCase):
 
     @patch("autopush.main.SenderIDs", spec=SenderIDs)
     def test_gcm_start(self, fsi):
+        fsi.choose_ID.return_value = "123"
         endpoint_main([
             "--gcm_enabled",
             """--senderid_list={"123":{"auth":"abcd"}}""",
             "--s3_bucket=none",
         ])
-        # Adding this to see if travis will pick up the line
-        eq_(1, 1)
