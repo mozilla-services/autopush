@@ -2,7 +2,9 @@ import unittest
 
 from mock import Mock, patch
 from moto import mock_dynamodb2, mock_s3
-from nose.tools import eq_
+from nose.tools import eq_, ok_
+from autopush.senderids import SenderIDs
+
 
 from autopush.main import (
     connection_main,
@@ -171,3 +173,13 @@ class EndpointMainTestCase(unittest.TestCase):
         ap = make_settings(self.test_arg)
         eq_(ap, None)
         self.test_arg.senderid_list = oldList
+
+    @patch("autopush.main.SenderIDs", spec=SenderIDs)
+    def test_gcm_start(self, fsi):
+        endpoint_main([
+            "--gcm_enabled",
+            """--senderid_list={"123":{"auth":"abcd"}}""",
+            "--s3_bucket=none",
+        ])
+
+
