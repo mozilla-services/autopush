@@ -3,10 +3,11 @@ Autopush Changelog
 ==================
 
 1.8.1 (2015-11-16)
-===============
+==================
 
 Features
 --------
+
 * Convert proprietary AUTH to use Bearer Token for client REST interfaces.
   Issue #238.
 
@@ -18,6 +19,7 @@ WebPush
 
 Configuration Changes
 ---------------------
+
 * Please include the new `--auth_key` which is the base token set for
   generating bearer tokens. This uses the same format as the `--crypto_key`,
   but should be a different value to prevent possible key detection. The key
