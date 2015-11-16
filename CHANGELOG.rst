@@ -14,6 +14,20 @@ Bug Fixes
 WebPush
 -------
 
+1.8.1
+===============
+
+Features
+--------
+* Convert proprietary AUTH to use Bearer Token for client REST interfaces.
+  Issue #238.
+
+Bug Fixes
+---------
+
+WebPush
+-------
+
 1.8.0 (2015-11-13)
 ==================
 
@@ -62,6 +76,9 @@ Backwards Incompatibilities
   values in S3. The data may still be written as a JSON string such as:
   ' "`_senderID_`": {"auth": "`_api_key`"}}'
   activate the GCM bridge by specifying --gcm_enabled.
+* Please include the new --auth_key which is the base token set for
+  generating bearer tokens. This uses the same format as the --crypto_key, but
+  should be a different value to prevent possible key detection.
 
 1.7.2 (2015-10-24)
 ==================

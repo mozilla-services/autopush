@@ -240,6 +240,8 @@ def _parse_endpoint(sysargs):
                         env_var='SENDERID_EXPRY')
     parser.add_argument('--senderid_list', help='SenderIDs to load to S3',
                         type=str, default="{}")
+    parser.add_argument('--auth_key', help='Bearer Token source key',
+                        type=str, default='', env_var='AUTH_KEY')
     add_shared_args(parser)
     add_external_router_args(parser)
 
@@ -426,6 +428,9 @@ def endpoint_main(sysargs=None):
         except (ValueError, TypeError), x:
             log.err("Invalid JSON specified for senderid_list.", x)
             return
+
+    if not args.auth_key:
+        args.auth_key = args.crypto_key
 
     setup_logging("Autoendpoint", args.human_logs)
 
