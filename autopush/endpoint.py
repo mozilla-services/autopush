@@ -20,8 +20,9 @@ will not be able to perform any additional router data registration.
 HTTP API
 ========
 
-API methods requiring Authorization must use a standard HAWK Authorization
-header (See https://github.com/hueniverse/hawk)
+API methods requiring Authorization must provide the Authorization
+header containing the authrorization token. The Authorization token is returned
+as "secret" in the registration response.
 
 All message bodies must be UTF-8 encoded.
 
@@ -107,7 +108,7 @@ The current application-level error numbers are:
 
         GET /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
         Host: endpoint.push.com
-        Authorization: HAWK ...
+        Authorization: Bearer ...
 
     **Example Response**
 
@@ -125,7 +126,7 @@ The current application-level error numbers are:
             }
         }
 
-    :reqheader Authorization: HAWK ...
+    :reqheader Authorization: Bearer ...
 
 .. http:post:: /register/(uuid:uaid)
 
@@ -178,7 +179,7 @@ The current application-level error numbers are:
 
         POST /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
         Host: endpoint.push.com
-        Authorization: HAWK ...
+        Authorization: Bearer ...
         Content-Type: application/json
 
         {}
@@ -196,7 +197,7 @@ The current application-level error numbers are:
             "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
         }
 
-    :reqheader Authorization: HAWK ...
+    :reqheader Authorization: Bearer ...
 
 .. http:put:: /register/(uuid:uaid)
 
@@ -213,7 +214,7 @@ The current application-level error numbers are:
 
         PUT /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
         Host: endpoint.push.com
-        Authorization: HAWK ...
+        Authorization: Bearer ...
         Content-Type: application/json
 
         {
@@ -234,7 +235,7 @@ The current application-level error numbers are:
 
         {}
 
-    :reqheader Authorization: HAWK ...
+    :reqheader Authorization: Bearer ...
 
 """
 import hashlib
@@ -242,8 +243,7 @@ import json
 import time
 import urlparse
 import uuid
-import hawkauthlib
-import requests as prequests
+import re
 
 from collections import namedtuple
 from base64 import urlsafe_b64encode
@@ -925,21 +925,24 @@ class RegistrationHandler(AutoendpointHandler):
     def _validate_auth(self, uaid):
         """Validates the Authorization header in a request
 
-        Validate the given request using HAWK.
+        Validate the given request bearer token
         """
-
         test, _ = validate_uaid(uaid)
         if not test:
             return False
-        for key in self.ap_settings.crypto_key:
-            secret = generate_hash(key, uaid)
-            fReq = prequests.Request(
-                self.request.method,
-                "%s://%s%s" % (self.request.protocol, self.request.host,
-                               self.request.uri),
-                headers=self.request.headers,
-                data=self.request.body).prepare()
-            if hawkauthlib.check_signature(fReq, secret):
+        header = self.request.headers.get("Authorization")
+        if header is None:
+            return False
+        try:
+            token_type, rtoken = re.sub(r' +', ' ',
+                                        header.strip()).split(" ", 2)
+        except ValueError:
+            return False
+        if "bearer" != token_type.lower():
+            return False
+        for key in self.ap_settings.auth_key:
+            token = generate_hash(key, uaid)
+            if rtoken == token:
                 return True
         return False
 
