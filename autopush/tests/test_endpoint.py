@@ -26,6 +26,7 @@ from autopush.db import (
 from autopush.settings import AutopushSettings
 from autopush.router.interface import IRouter, RouterResponse
 from autopush.senderids import SenderIDs
+from autopush.utils import generate_hash
 
 mock_dynamodb2 = mock_dynamodb2()
 
@@ -707,6 +708,7 @@ class RegistrationTestCase(unittest.TestCase):
             AutopushSettings(
                 hostname="localhost",
                 statsd_host=None,
+                auth_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
             )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
         self.metrics_mock = settings.metrics = Mock(spec=Metrics)
@@ -722,6 +724,9 @@ class RegistrationTestCase(unittest.TestCase):
 
         self.status_mock = self.reg.set_status = Mock()
         self.write_mock = self.reg.write = Mock()
+        self.auth = ("Bearer %s" %
+                     generate_hash(self.reg.ap_settings.auth_key[0],
+                                   dummy_uaid))
 
         d = self.finish_deferred = Deferred()
         self.reg.finish = lambda: d.callback(True)
@@ -815,7 +820,6 @@ class RegistrationTestCase(unittest.TestCase):
         eq_(reg._headers[ch2], CORS_HEAD)
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_get_valid(self, *args):
         # All is well check.
         self.fernet_mock.configure_mock(**{
@@ -826,7 +830,7 @@ class RegistrationTestCase(unittest.TestCase):
             router_data={},
         )
         self.reg.ap_settings.endpoint_url = "http://localhost"
-        self.reg.request.headers["Authorization"] = "something else"
+        self.reg.request.headers["Authorization"] = self.auth
         self.router_mock.get_uaid.return_value = user_item
 
         def handle_finish(value):
@@ -843,7 +847,6 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_get_no_uuid(self, *args):
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
@@ -858,7 +861,6 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_get_bad_uuid(self, *args):
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
@@ -873,7 +875,6 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_post(self, *args):
         self.reg.ap_settings.routers["test"] = self.router_mock
         self.reg.request.body = json.dumps(dict(
@@ -884,6 +885,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
+        self.reg.request.headers["Authorization"] = self.auth
 
         def handle_finish(value):
             call_args = self.reg.write.call_args
@@ -899,7 +901,6 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_post_invalid_args(self, *args):
         self.reg.request.body = json.dumps(dict(
             type="test",
@@ -910,11 +911,11 @@ class RegistrationTestCase(unittest.TestCase):
             self._check_error(400, 108, "Bad Request")
 
         self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
         self.reg.post()
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_post_bad_router_type(self, *args):
         self.reg.request.body = json.dumps(dict(
             type="test",
@@ -926,11 +927,11 @@ class RegistrationTestCase(unittest.TestCase):
             self._check_error(400, 108, "Bad Request")
 
         self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
         self.reg.post()
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_post_existing_uaid(self, *args):
         self.reg.request.headers["Authorization"] = "Fred Smith"
         self.reg.request.body = json.dumps(dict(
@@ -949,11 +950,11 @@ class RegistrationTestCase(unittest.TestCase):
             eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
 
         self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
         self.reg.post(dummy_uaid)
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_post_bad_uaid(self, *args):
         self.reg.ap_settings.routers["test"] = self.router_mock
         self.reg.request.body = json.dumps(dict(
@@ -966,11 +967,11 @@ class RegistrationTestCase(unittest.TestCase):
             self._check_error(401, 109, "Unauthorized")
 
         self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
         self.reg.post('invalid')
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
-    @patch('hawkauthlib.check_signature', return_value=False)
     def test_post_bad_params(self, *args):
         self.reg.ap_settings.routers["test"] = self.router_mock
         self.reg.request.body = json.dumps(dict(
@@ -981,11 +982,11 @@ class RegistrationTestCase(unittest.TestCase):
             self._check_error(401, 109, 'Unauthorized')
 
         self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = "Bearer Invalid"
         self.reg.post(dummy_uaid)
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_post_uaid_chid(self, *args):
         self.reg.request.body = json.dumps(dict(
             type="simplepush",
@@ -1007,11 +1008,11 @@ class RegistrationTestCase(unittest.TestCase):
             ok_("secret" in call_arg)
 
         self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
         self.reg.post()
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_post_nochid(self, *args):
         self.reg.request.body = json.dumps(dict(
             type="simplepush",
@@ -1032,11 +1033,11 @@ class RegistrationTestCase(unittest.TestCase):
             ok_("secret" in call_arg)
 
         self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
         self.reg.post()
         return self.finish_deferred
 
     @patch('autopush.endpoint.log')
-    @patch('hawkauthlib.check_signature', return_value=False)
     def test_post_bad(self, *args):
         from autopush.router.interface import RouterException
         self.reg.ap_settings.routers["test"] = router_mock = Mock(spec=IRouter)
@@ -1059,11 +1060,11 @@ class RegistrationTestCase(unittest.TestCase):
             self.flushLoggedErrors()
 
         self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = "Bearer Invalid"
         self.reg.post()
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_put(self, *args):
         self.reg.ap_settings.routers["apns"] = mock_apns = Mock(spec=IRouter)
         data = dict(token="some_token")
@@ -1078,12 +1079,11 @@ class RegistrationTestCase(unittest.TestCase):
             mock_apns.register.assert_called_with(dummy_uaid, data)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.request.headers["Authorization"] = "HAWK debug"
+        self.reg.request.headers["Authorization"] = self.auth
         self.reg.put(dummy_uaid)
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
-    @patch('hawkauthlib.check_signature', return_value=False)
     def test_put_bad_auth(self, *args):
         self.reg.request.headers["Authorization"] = "Fred Smith"
 
@@ -1095,9 +1095,8 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_put_bad_arguments(self, *args):
-        self.reg.request.headers["Authorization"] = "Fred"
+        self.reg.request.headers["Authorization"] = self.auth
         data = dict(token="some_token")
         self.reg.request.body = json.dumps(dict(
             type="apns",
@@ -1111,14 +1110,12 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.put(dummy_uaid)
         return self.finish_deferred
 
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_delete_chid(self, *args):
-        self.reg.request.headers["Authorization"] = "HAWK test"
+        self.reg.request.headers["Authorization"] = self.auth
         path = "%s/%s" % (dummy_uaid, dummy_chid)
         d = self.reg.delete(path)
         return d
 
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_delete_uaid(self, *args):
         self.reg.ap_settings.message.store_message(
             dummy_uaid,
@@ -1130,20 +1127,18 @@ class RegistrationTestCase(unittest.TestCase):
             "test",
             "2",
             10000)
-        self.reg.request.headers["Authorization"] = "HAWK test"
+        self.reg.request.headers["Authorization"] = self.auth
         path = "%s" % dummy_uaid
         d = self.reg.delete(path)
         return d
 
-    @patch('hawkauthlib.check_signature', return_value=True)
     def test_delete_bad_uaid(self, *args):
-        self.reg.request.headers["Authorization"] = "HAWK test"
+        self.reg.request.headers["Authorization"] = self.auth
         d = self.reg.delete("/%s/" % dummy_uaid)
         return d
 
-    @patch('hawkauthlib.check_signature', return_value=False)
     def test_delete_bad_auth(self, *args):
-        self.reg.request.headers["Authorization"] = "HAWK test"
+        self.reg.request.headers["Authorization"] = "Invalid"
 
         def handle_finish(value):
             self.reg.set_status.assert_called_with(401)
@@ -1152,10 +1147,7 @@ class RegistrationTestCase(unittest.TestCase):
         d = self.reg.delete("/%s/" % dummy_uaid)
         return d
 
-    @patch('hawkauthlib.check_signature')
-    def test_validate_auth(self, fhawk):
-        self.reg.ap_settings.crypto_key = ['aaaa', 'bbbb']
-        fhawk.side_effect = [False, False]
+    def test_validate_auth(self):
         eq_(False, self.reg._validate_auth(dummy_uaid))
-        fhawk.side_effect = [False, True]
-        ok_(self.reg._validate_auth(dummy_uaid))
+        self.reg.request.headers['Authorization'] = self.auth
+        eq_(True, self.reg._validate_auth(dummy_uaid))
