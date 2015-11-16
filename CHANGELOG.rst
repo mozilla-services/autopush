@@ -14,6 +14,20 @@ Bug Fixes
 WebPush
 -------
 
+1.8.1
+===============
+
+Features
+--------
+* Convert proprietary AUTH to use Bearer Token for client REST interfaces.
+  Issue #238.
+
+Bug Fixes
+---------
+
+WebPush
+-------
+
 1.8.0 (2015-11-13)
 ==================
 
@@ -28,8 +42,7 @@ Features
 * REST Registration will now return a valid ChannelID if one is not specified.
   Issue #182.
 * Add hello timeout. Issue #169.
-* Convert proprietary AUTH to use Bearer Token for client REST interfaces.
-  Issue #238.
+* Convert proprietary AUTH to use HAWK for client REST interfaces. Issue #201.
 * Add DELETE /uaid[/chid] functions to client REST interfaces. Issue #183.
 * Add .editorconfig for consistent styling in editors. Issue #218.
 * Added --human_logs to display more human friendly logging.

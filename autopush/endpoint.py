@@ -934,10 +934,11 @@ class RegistrationHandler(AutoendpointHandler):
         if header is None:
             return False
         try:
-            type, rtoken = re.sub(r' +', ' ', header.strip()).split(" ", 2)
+            token_type, rtoken = re.sub(r' +', ' ',
+                                        header.strip()).split(" ", 2)
         except ValueError:
             return False
-        if "bearer" != type.lower():
+        if "bearer" != token_type.lower():
             return False
         for key in self.ap_settings.auth_key:
             token = generate_hash(key, uaid)
