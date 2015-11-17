@@ -28,11 +28,11 @@ Tables are post-fixed with the year/month they are meant for, ie:
     messages-2015-02
 
 Tables must be created and have their read/write units properly allocated by a
-separate process in advance of the month swith-over as autopush nodes will
+separate process in advance of the month switch-over as autopush nodes will
 assume the tables already exist. Scripts are provided that can be run weekly to
 ensure all necessary tables are present, and tables old enough are dropped.
 
-Within a few days of the new month, the loads on the prior months table will
+Within a few days of the new month, the load on the prior months table will
 fall as all clients transition solely to the new month. The read/write units
 on the prior month then may be lowered.
 
@@ -40,10 +40,7 @@ Message Table
 -------------
 
 Due to the complexity of having notifications spread across two tables, several
-rules are used to avoid losing messages during the month transition. These rules
-are important to follow as its unlikely perfect time will be kept and connection
-nodes need to ensure they don't miss notifications that may be in a table they
-weren't expecting.
+rules are used to avoid losing messages during the month transition.
 
 The logic for connection nodes is more complex, since only the connection node
 knows when the client connects, and how many messages it has read through.
@@ -61,8 +58,8 @@ notifications for the prior month.
 **Rules for Endpoints**
 
 1. Check the router table to see the current_month the client is on.
-2. Read the ' ' entry from the appropriate month message table to see if its
-   a valid channel.
+2. Read the chan list entry from the appropriate month message table to see if
+   its a valid channel.
 
    If its valid, move to step 3.
 3. Store the notification in the current months table if valid. (Note that this
