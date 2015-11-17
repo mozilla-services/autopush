@@ -1,6 +1,6 @@
 """HTTP Endpoints for Notifications
 
-This is the primary running code of the ``autoendpoint`` script that handles
+This is the primary running code of the `autoendpoint` script that handles
 the reception of HTTP notification requests for AppServers.
 
 Three HTTP endpoints are exposed by default:
@@ -17,72 +17,156 @@ Three HTTP endpoints are exposed by default:
 If no external routers are configured then the :class:`RegistrationHandler`
 will not be able to perform any additional router data registration.
 
-HTTP API
-========
+Push Service HTTP API
+=====================
 
-API methods requiring Authorization must use a standard HAWK Authorization
-header (See https://github.com/hueniverse/hawk)
+The following section describes how remote servers can send Push Notifications to
+apps running on remote User Agents.
 
-All message bodies must be UTF-8 encoded.
+Lexicon
+-------
 
-Response Format
----------------
+   :{UAID}: The Push User Agent Registration ID
 
-All responses will be of the content-type `application/json`, the structure of
-which depends on whether the requests was successful or not. In the case of
-success, the status code will be in the 2XX family.
+Push assigns each remote recipient a unique identifier. This value is
+assigned during **Registration**
 
-Error responses will be in the following format:
+   :{CHID}: The Channel Subscription ID
+
+Push assigns each channel subscription for a given {UAID} a unique
+identifier. This value is assigned during **Channel Subscription**
+
+   :{message-id}: The unique Message ID
+
+Push assigns each message for a given Channel Subscription a unique
+identifier. This value is assigned during **Send Notification**
+
+Response
+--------
+
+The responses will be JSON formatted objects. In addition, API calls
+will return valid HTTP error codes (see *Errors* sub-section for
+descriptions of specific errors).
+
+For non-success responses, an extended error code object will be
+returned with the following format:
 
 .. code-block:: json
 
     {
-        "code": 404, // matches the HTTP status code
+        "code": 404,  // matches the HTTP status code
         "errno": 103, // stable application-level error number
         "error": "Not Found", // string representation of the status
-        "message": "No message found" // Optional additional error information
+        "message": "No message found" // optional additional error information
     }
 
-The current application-level error numbers are:
+Unless otherwise specified, all calls return the following error codes:
 
-* status code 400, errno 101: missing necessary crypto keys
-* status code 404, errno 102: invalid URL endpoint
-* status code 404, errno 103: expired URL endpoint
-* status code 413, errno 104: data payload is too large
-* status code 404, errno 105: endpoint became unavailable during request
-* status code 404, errno 106: invalid subscription
-* status code 404, errno 107: message not found
-* status code 400, errno 108: router type is invalid
-* status code 401, errno 109: invalid authentication
-* status code 503, errno 201: service temporarily unavailable due to high
-  load (use exponential back-off for retries)
-* status code 503, errno 202: temporary failure, immediate retry ok
-* status code 500, errno 999: unknown error
+-  20x - Success
+-  301 - Moved + `Location:` if `{token}` is invalid
+-  400 - Bad Parameters
 
+   - errno 101 - Missing neccessary crypto keys
+   - errno 108 - Router type is invalid
 
-.. http:put:: /push/(uuid:token)
+-  401 - Bad Authorization
 
-    Send a notification to the given endpoint `token`.
+   - errno 109 - Invalid authentication
+
+-  404 - `{UAID}` not found or invalid
+
+   - errno 102 - Invalid URL endpoint
+   - errno 103 - Expired URL endpoint
+   - errno 105 - Endpoint became unavailable during request
+   - errno 106 - Invalid subscription
+   - errno 107 - Message not found
+
+-  500 - Unknown server error
+
+   - errno 999 - Unknown error
+
+-  503 - Server temporarily unavaliable.
+
+   -  errno 201 - Use exponential back-off for retries
+   -  errno 202 - Immediate retry ok
+
+Calls
+-----
+
+Send Notification
+~~~~~~~~~~~~~~~~~
+
+Send a notification to the given endpoint identified by it's `token`.
+
+Call:
+^^^^^
+.. http:put:: /push/{token}
 
     If the client is using webpush style data delivery, then the body in its
     entirety will be regarded as the data payload for the message per
     `the WebPush spec
     <https://tools.ietf.org/html/draft-thomson-webpush-http2-02#section-5>`_.
 
+Parameters:
+^^^^^^^^^^^
+
     :form version: (*Optional*) Version of notification, defaults to current
                    time
+
+Reply:
+^^^^^^
+
+.. code-block:: json
+
+    {"message-id": {message-id}}
+
+Errors:
+^^^^^^^
     :statuscode 404: `token` is invalid.
     :statuscode 202: Message stored for delivery to client at a later
                      time.
     :statuscode 200: Message delivered to node client is connected to.
 
-.. http:delete:: /m/(string:message_id)
+Cancel Notification
+~~~~~~~~~~~~~~~~~~~
 
-    Delete the message given the `message_id`.
+Delete the message given the `message_id`.
+
+Call:
+^^^^^
+.. http:delete:: /m/{message_id}
+
+Parameters:
+^^^^^^^^^^^
+
+    None
+
+Reply:
+^^^^^^
+
+.. code-block:: json
+
+    {}
+
+Errors:
+^^^^^^^
+
+    Standard error codes apply
+
+
+Update Notification
+~~~~~~~~~~~~~~~~~~~
+
+Update the message at the given `{message_id}`.
+
+
+Call:
+^^^^^
 
 .. http:put:: /m/(string/message_id)
 
-    Update the message at the given `message_id`.
+Parameters:
+^^^^^^^^^^^
 
     This method takes the same arguments as WebPush PUT, with values
     replacing that for the provided message.
@@ -94,148 +178,257 @@ The current application-level error numbers are:
         the client will not get the updated message until reconnect. This
         should be considered a rare edge-case.
 
+Reply:
+^^^^^^
+
+.. code-block:: json
+
+    {}
+
+Errors:
+^^^^^^^
+
     :statuscode 404: `message_id` is not found.
     :statuscode 200: Message has been updated.
 
-.. http:get:: /register/(uuid:uaid)
 
-    Returns registered router data for the UAID.
+Push Service Bridge HTTP Interface
+==================================
 
-    **Example Request**
+Push allows for remote devices to perform some functions using an HTTP
+interface. This is mostly used by devices that are bridging via an
+external protocol like
+`GCM <https://developers.google.com/cloud-messaging/>`__ or
+`APNs <https://developer.apple.com/library/ios/documentation/NetworkingIntern\
+et/Conceptual/RemoteNotificationsPG/Introduction.html#//apple_ref/doc/uid/TP4\
+0008196-CH1-SW1>`__. All message bodies must be UTF-8 encoded.
 
-    .. code-block:: http
+Lexicon
+-------
 
-        GET /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
-        Host: endpoint.push.com
-        Authorization: HAWK ...
+For the following call definitions:
 
-    **Example Response**
+   :{type}: The bridge type.
 
-    .. code-block:: http
+Allowed bridges are `gcm` (Google Cloud Messaging) and `apns` (Apple
+Push Notification system)
 
-        HTTP/1.1 200 OK
-        Content-Type: application/json
-        Content-Length: nnn
+   :{token}: The bridge specific public exchange token
 
-        {
-            "type": "apns",
-            "data": {
-                "token": "APNS_TOKEN_DATA",
-                ...
-            }
-        }
+Each protocol requires a unique token that addresses the remote device.
+For GCM, this is the `SenderID`.
 
-    :reqheader Authorization: HAWK ...
+   :{auth_token}: The Authorization token
 
-.. http:post:: /register/(uuid:uaid)
+Most calls to the HTTP interface require a Authorization header. The
+Authorization header is a bearer token, which has been provided by the
+**Registration** call and is preceded by the token type word "Bearer"
 
-    Create a new endpoint for a given UAID, or register a new UAID and
-    return a new endpoint.
+An example of the Authorization header would be:
 
-    .. note::
+::
 
-      If a ``channelID`` field is not supplied then one will be generated.
-      Supplied ``channelID`` fields must be valid UUID hex strings.
+    Authorization: Bearer 0123abcdef
 
-    **1. Endpoint w/New Registration**
+Calls
+-----
 
-    **Example Request (for APNS router)**:
+Registration
+~~~~~~~~~~~~
 
-    .. code-block:: http
+Request a new UAID registration, Channel ID, and optionally set a bridge
+type and token for this connection.
 
-        POST /register
-        Host: endpoint.push.com
-        Content-Type: application/json
+Call:
+^^^^^
 
-        {
-            "type": "apns",
-            "data": {
-                "token": "APNS_TOKEN_DATA",
-                ...
-            }
-        }
+This call requires no Authorization for first time use.
 
-    **Example Response**:
+.. http:post:: /v1/{type}/{token}/registration
 
-    .. code-block:: http
+Parameters:
+^^^^^^^^^^^
 
-        HTTP/1.1 200 OK
-        Content-Type: application/json
-        Content-Length: nnn
+{"type":{BridgeType}, "token":{BridgeToken}}
 
-        {
-            "uaid": "5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63",
-            "secret": "4526e381eb6c191cf783da5d6df248e7",
-            "channelID": "a13872c9-5cba-48ab-a8e5-955264647303",
-            "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
-        }
 
-    **2. Endpoint w/Existing UAID**
+    :{BridgeType}: the type of bridge this endpoint defines. \
+("gcm" or "apns")
 
-    **Example Request**:
+    :{BridgeToken}: the bridge specific recipient token.
 
-    .. code-block:: http
+example:
 
-        POST /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
-        Host: endpoint.push.com
-        Authorization: HAWK ...
-        Content-Type: application/json
+.. code-block:: json
 
-        {}
+    {"type": "gcm", "token": "0123abcdef..."}
 
-    **Example Response**:
 
-    .. code-block:: http
+Reply:
+^^^^^^
 
-        HTTP/1.1 200 OK
-        Content-Type: application/json
-        Content-Length: nnn
+.. code-block:: json
 
-        {
-            "channelID": "8a90e38a-f36c-4c77-901a-c11d02c1516f",
-            "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
-        }
+    `{"uaid": {UAID}, "secret": {auth_token},
+    "endpoint": "https://updates-push...", "channelID": {CHID}}`
 
-    :reqheader Authorization: HAWK ...
+example:
 
-.. http:put:: /register/(uuid:uaid)
+.. code-block:: json
 
-    Update router data for an existing UAID.
+    {"uaid": "a1cc58b98ffe4505aa39f5be29c04744",
+    "secret": "bb640e9f4bd268bb08e4a2e57de7d0ed2a2efa373df3ce2474ef...",
+    "endpoint": "https://updates-push.services.mozaws.net/push/...",
+    "channelID": "58af8cfbfdf140c492ece546417217c5"}
 
-    This endpoint handles updating the router data/type for an existing
-    UAID and requires the nonce/hash for the UAID given.
+Errors:
+^^^^^^^
 
-    **Update Router Data**
+Standard error codes apply
 
-    **Example Request**:
+Token updates
+~~~~~~~~~~~~~
 
-    .. code-block:: http
+Update the current bridge token value
 
-        PUT /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
-        Host: endpoint.push.com
-        Authorization: HAWK ...
-        Content-Type: application/json
+Call:
+^^^^^
 
-        {
-            "type": "gcm",
-            "data": {
-                "token": "TOKEN_DATA_FOR_ROUTER_TYPE",
-                ...
-            }
-        }
+::
 
-    **Example Response**:
+    Authorization: Bearer *{auth_token}*
 
-    .. code-block:: http
+.. http:put:: /v1/{type}/{token}/registration/{uaid}
 
-        HTTP/1.1 200 OK
-        Content-Type: application/json
-        Content-Length: nnn
+Parameters:
+^^^^^^^^^^^
 
-        {}
+{"type":{BridgeType}, "token":{BridgeToken}}
 
-    :reqheader Authorization: HAWK ...
 
+    :{BridgeType}: the type of bridge this endpoint defines. \
+("gcm" or "apns")
+
+    :{BridgeToken}: the bridge specific recipient token.
+
+example:
+
+.. code-block:: json
+
+    {"type": "gcm", "token": "0123abcdef..."}
+
+Reply:
+^^^^^^
+
+.. code-block:: json
+
+    {}
+
+Errors:
+^^^^^^^
+
+Standard error codes apply
+
+Channel Subscription
+~~~~~~~~~~~~~~~~~~~~
+
+Acquire a new ChannelID for a given UAID.
+
+Call:
+^^^^^
+
+::
+
+    Authorization: Bearer *{auth_token}*
+
+.. http:post:: /v1/{type}/{token}/{uaid}/subscription
+
+Parameters:
+^^^^^^^^^^^
+
+{}
+
+Reply:
+^^^^^^
+
+.. code-block:: json
+
+    {"channelID": {CHID}, "endpoint": "https://updates-push..."}
+
+example:
+
+.. code-block:: json
+
+    {"channelID": "58af8cfbfdf140c492ece546417217c5",
+    "endpoint": "https://updates-push.services.mozaws.net/push/..."}
+
+Errors:
+^^^^^^^
+
+Standard error codes apply
+
+Unregister UAID (and all associated ChannelID subscriptions)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Indicate that the UAID, and by extension all associated subscriptions,
+is no longer valid.
+
+Call:
+^^^^^
+
+::
+
+    Authorization: Bearer *{auth_token}*
+
+.. http:delete:: /v1/{type}/{token}/registration/{uaid}
+
+Parameters:
+^^^^^^^^^^^
+
+{}
+
+Reply:
+^^^^^^
+
+.. code-block:: json
+
+    {}
+
+Errors:
+^^^^^^^
+
+Standard error codes apply
+
+Unsubscribe Channel
+~~~~~~~~~~~~~~~~~~~
+
+Remove a given ChannelID subscription from a UAID.
+
+Call:
+^^^^^
+
+::
+
+    Authorization: Bearer *{auth_token}*
+
+.. http:delete:: /v1/{type}/{token}/registration/{UAID}/subscription/{CHID}
+
+Parameters:
+^^^^^^^^^^^
+
+    {}
+
+Reply:
+^^^^^^
+
+.. code-block:: json
+
+    {}
+
+Errors:
+^^^^^^^
+
+Standard error codes apply
 """
 import hashlib
 import json
