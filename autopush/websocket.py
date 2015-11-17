@@ -353,12 +353,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if data == {}:
             return self.process_ping()
 
-        # Message needs a type
-        if "messageType" not in data:
-            self.sendClose()
-            return
-
-        cmd = data["messageType"]
+        cmd = data.get("messageType")
         # We're no longer idle, prevent early connection closure.
         self.resetTimeout()
         try:
@@ -652,7 +647,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                              extra="Failed to delete old node")
         timeout = self.ap_settings.wake_timeout if self.ps.wake_data else None
         self.setTimeout(timeout)
-
         self.finish_hello()
 
     def finish_hello(self, *args):
