@@ -1151,3 +1151,5 @@ class RegistrationTestCase(unittest.TestCase):
         eq_(False, self.reg._validate_auth(dummy_uaid))
         self.reg.request.headers['Authorization'] = self.auth
         eq_(True, self.reg._validate_auth(dummy_uaid))
+        self.reg.ap_settings.auth_key = []
+        eq_(True, self.reg._validate_auth(dummy_uaid))
