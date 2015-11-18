@@ -1,6 +1,7 @@
 """Database Interaction"""
 from __future__ import absolute_import
 
+import datetime
 import logging
 import time
 import uuid
@@ -19,6 +20,51 @@ from boto.dynamodb2.types import NUMBER
 
 
 log = logging.getLogger(__file__)
+
+
+def next_month(delta=1):
+    """Basic helper function to get a datetime.date object iterations months
+    ahead/behind of now."""
+    new = last = datetime.date.today()
+    # Move  until we hit a new month, this avoids having to manually
+    # check year changes as we push forward or backward since the Python
+    # timedelta math handles it for us
+    for _ in range(abs(delta)):
+        while new.month == last.month:
+            if delta < 0:
+                new -= datetime.timedelta(days=14)
+            else:
+                new += datetime.timedelta(days=14)
+        last = new
+    return new
+
+
+def make_rotating_tablename(prefix, delta=0):
+    """Creates a tablename for table rotation based on a prefix with a given
+    month delta."""
+    date = next_month(delta=delta)
+    return "{}_{}_{}".format(prefix, date.year, date.month)
+
+
+def create_rotating_message_table(prefix="message", read_throughput=5,
+                                  write_throughput=5, delta=0):
+    """Create a new message table for webpush style message storage"""
+    tablename = make_rotating_tablename(prefix, delta)
+    return Table.create(tablename,
+                        schema=[HashKey("uaid"),
+                                RangeKey("chidmessageid")],
+                        throughput=dict(read=read_throughput,
+                                        write=write_throughput),
+                        )
+
+
+def get_rotating_message_table(prefix="message", delta=0):
+    """Gets the message table for the current month.
+
+    This requires the table to already exist or errors will occur.
+
+    """
+    return Table(make_rotating_tablename(prefix, delta))
 
 
 def create_router_table(tablename="router", read_throughput=5,
