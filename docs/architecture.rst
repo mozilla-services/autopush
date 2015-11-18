@@ -8,7 +8,7 @@ Endpoint nodes handle all notification PUT requests, looking up in DynamoDB to
 see what Push server the UAID is connected to. The Endpoint nodes then attempt
 delivery to the Push server.
 
-Push connection nodess accept websocket connections (this can easily be HTTP/2
+Push connection nodes accept websocket connections (this can easily be HTTP/2
 for WebPush), and deliver notifications to connected clients. They check
 DynamoDB for missed notifications as necessary.
 
@@ -19,9 +19,8 @@ Table Rotation
 ==============
 
 To avoid costly table scans, autopush uses a rotating message and router table.
-As clients remain disconnected for over 60 days, they will be forgotten
-entirely and their router and message table entries will drop out of the
-system.
+Clients that haven't connected in 30-60 days will have heir router and message
+table entries will dropped and need to re-register.
 
 Tables are post-fixed with the year/month they are meant for, ie:
 
@@ -32,9 +31,9 @@ separate process in advance of the month switch-over as autopush nodes will
 assume the tables already exist. Scripts are provided that can be run weekly to
 ensure all necessary tables are present, and tables old enough are dropped.
 
-Within a few days of the new month, the load on the prior months table will
-fall as all clients transition solely to the new month. The read/write units
-on the prior month then may be lowered.
+Within a few days of the new month, the load on the prior months table will fall
+as clients transition to the new table. The read/write units on the prior
+month may then be lowered.
 
 Message Table
 -------------
@@ -48,7 +47,8 @@ knows when the client connects, and how many messages it has read through.
 A new field will be added to the router table to indicate the last month the
 client has read connections through. This is independent of the last_connected
 since it is possible for a client to connect, fail to read its notifications,
-then reconnect.
+then reconnect. This field is updated for a new month when the client connects
+**after** it has ack'd all the notifications out of the last month.
 
 To avoid issues with time synchronization, the node the client is connected to
 acts as the source of truth for when the month has flipped over. Clients are
@@ -72,8 +72,8 @@ After Identification:
 1. Check to see if the current_month matches the current month, if it does then
    proceed normally using the current months message table.
 
-   If the connection node month does not match stored current_month, proceed to
-   step 2.
+   If the connection node month does not match stored current_month in the
+   clients router table entry, proceed to step 2.
 2. Read notifications from prior month and send to client.
 
    Once all acks are received for all the notifications for that month proceed
