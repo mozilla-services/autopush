@@ -21,7 +21,8 @@ from autopush.db import (
     Router,
     Storage,
     Message,
-    ItemNotFound
+    ItemNotFound,
+    create_rotating_message_table,
 )
 from autopush.settings import AutopushSettings
 from autopush.router.interface import IRouter, RouterResponse
@@ -33,6 +34,7 @@ mock_dynamodb2 = mock_dynamodb2()
 def setUp():
     mock_dynamodb2.start()
     mock_s3().start()
+    create_rotating_message_table()
 
 
 def tearDown():

@@ -312,9 +312,9 @@ class Message(object):
         try:
             result = self.table.get_item(consistent=True, uaid=uaid,
                                          chidmessageid=" ")
-            return result["chids"] or set([])
+            return (True, result["chids"] or set([]))
         except ItemNotFound:
-            return set([])
+            return False, set([])
 
     @track_provisioned
     def save_channels(self, uaid, channels):

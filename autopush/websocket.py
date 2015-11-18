@@ -868,12 +868,13 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         d.addErrback(self.err_overload)
         d.addErrback(self.log_err)
 
-    def _register_rotated_channels(self, channels):
+    def _register_rotated_channels(self, result):
         """Register the channels into a new entry in the current month"""
         # Update the current month now, so that we can save the channels into
         # the right location
         self.ps.message_month = self.ap_settings.current_msg_month
 
+        _, channels = result
         if not channels:
             # No previously registered channels, skip to updating the router
             # table

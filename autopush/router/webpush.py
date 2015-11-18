@@ -9,6 +9,10 @@ import json
 import time
 from StringIO import StringIO
 
+from twisted.internet.defer import (
+    inlineCallbacks,
+    returnValue,
+)
 from twisted.internet.threads import deferToThread
 from twisted.web.client import FileBodyProducer
 
@@ -41,16 +45,25 @@ class WebPushRouter(SimpleRouter):
             data["encryption_key"] = headers["encryption-key"]
         return data
 
-    def _verify_channel(self, result, channel_id):
-        if channel_id not in result:
+    @inlineCallbacks
+    def preflight_check(self, uaid, channel_id):
+        """Verifies this routing call can be done successfully"""
+        # Locate the user agent's message table
+        record = yield deferToThread(self.ap_settings.router.get_uaid, uaid)
+
+        if 'current_month' not in record:
             raise RouterException("No such subscription", status_code=404,
                                   log_exception=False, errno=106)
 
-    def preflight_check(self, uaid, channel_id):
-        """Verifies this routing call can be done successfully"""
-        d = deferToThread(self.ap_settings.message.all_channels, uaid=uaid)
-        d.addCallback(self._verify_channel, channel_id)
-        return d
+        month_table = record["current_month"]
+        exists, chans = yield deferToThread(
+            self.ap_settings.message_tables[month_table].all_channels,
+            uaid=uaid)
+
+        if not exists or channel_id not in chans:
+            raise RouterException("No such subscription", status_code=404,
+                                  log_exception=False, errno=106)
+        returnValue(month_table)
 
     def _send_notification(self, uaid, node_id, notification):
         """Send a notification to a specific node_id
@@ -76,7 +89,7 @@ class WebPushRouter(SimpleRouter):
         d.addCallback(IgnoreBody.ignore)
         return d
 
-    def _save_notification(self, uaid, notification):
+    def _save_notification(self, uaid, notification, month_table):
         """Saves a notification, returns a deferred.
 
         This version of the overridden method saves each individual message
@@ -92,7 +105,7 @@ class WebPushRouter(SimpleRouter):
         if notification.data:
             headers = self._crypto_headers(notification)
         return deferToThread(
-            self.ap_settings.message.store_message,
+            self.ap_settings.message_tables[month_table].store_message,
             uaid=uaid,
             channel_id=notification.channel_id,
             data=notification.data,

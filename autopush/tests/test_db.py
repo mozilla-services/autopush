@@ -182,19 +182,20 @@ class MessageTestCase(unittest.TestCase):
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
 
-        chans = message.all_channels(self.uaid)
+        exists, chans = message.all_channels(self.uaid)
         assert(chid in chans)
         assert(chid2 in chans)
 
         message.unregister_channel(self.uaid, chid2)
-        chans = message.all_channels(self.uaid)
+        exists, chans = message.all_channels(self.uaid)
         assert(chid2 not in chans)
         assert(chid in chans)
 
     def test_all_channels_no_uaid(self):
         m = get_message_table()
         message = Message(m, SinkMetrics())
-        assert(message.all_channels("asdf") == set([]))
+        exists, chans = message.all_channels("asdf")
+        assert(chans == set([]))
 
     def test_message_storage(self):
         chid = str(uuid.uuid4())
