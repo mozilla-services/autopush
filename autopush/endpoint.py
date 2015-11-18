@@ -455,6 +455,12 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         log.msg("UAID not found in AWS.", **self._client_info())
         self._write_response(404, 103)
 
+    def _chid_not_found_err(self, fail):
+        """errBack for chid lookup not finding the channel"""
+        fail.trap(ItemNotFound)
+        log.msg("chid not found in AWS.", **self._client_info())
+        self._write_response(404, 103)
+
     def _token_err(self, fail):
         """errBack for token decryption fail"""
         fail.trap(InvalidToken, ValueError)
@@ -829,12 +835,15 @@ class RegistrationHandler(AutoendpointHandler):
         d.callback(uaid)
 
     def _deleteChannel(self, message, uaid, chid):
+        if chid not in message.all_channels(uaid):
+            raise ItemNotFound("chid not found")
         message.delete_messages_for_channel(uaid, chid)
         message.unregister_channel(uaid, chid)
 
     def _deleteUaid(self, message, uaid, router):
         message.delete_all_for_user(uaid)
-        router.drop_user(uaid)
+        if not router.drop_user(uaid):
+            raise ItemNotFound("uaid not found")
 
     @cyclone.web.asynchronous
     def delete(self, combo):
@@ -859,14 +868,16 @@ class RegistrationHandler(AutoendpointHandler):
             self.ap_settings.metrics.increment("updates.client.unregister",
                                                tags=self.base_tags())
             d = deferToThread(self._deleteChannel, message, uaid, chid)
-            d.addErrback(self._response_err)
             d.addCallback(self._success)
+            d.addErrback(self._chid_not_found_err)
+            d.addErrback(self._response_err)
             return d
         # nuke uaid
         d = deferToThread(self._deleteUaid, message, uaid,
                           self.ap_settings.router)
-        d.addErrback(self._response_err)
         d.addCallback(self._success)
+        d.addErrback(self._uaid_not_found_err)
+        d.addErrback(self._response_err)
         return d
 
     #############################################################
@@ -895,6 +906,13 @@ class RegistrationHandler(AutoendpointHandler):
         """Called to create a new endpoint"""
         return deferToThread(self.ap_settings.make_endpoint,
                              self.uaid, self.chid)
+        d = deferToThread(self.ap_settings.make_endpoint, self.uaid, self.chid)
+        d.addCallback(self._register_channel)
+        return d
+
+    def _register_channel(self, result):
+        self.ap_settings.message.register_channel(self.uaid, self.chid)
+        return result
 
     def _return_endpoint(self, endpoint, new_uaid, router=None):
         """Called after the endpoint was made and should be returned to the
