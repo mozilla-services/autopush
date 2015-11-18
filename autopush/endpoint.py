@@ -23,6 +23,10 @@ Push Service HTTP API
 The following section describes how remote servers can send Push Notifications to
 apps running on remote User Agents.
 
+API methods requiring Authorization must provide the Authorization
+header containing the authrorization token. The Authorization token is returned
+as "secret" in the registration response.
+
 Lexicon
 -------
 
@@ -215,14 +219,21 @@ Push Notification system)
 
    :{token}: The bridge specific public exchange token
 
-Each protocol requires a unique token that addresses the remote device.
-For GCM, this is the `SenderID`.
+Each protocol requires a unique token that addresses the remote application.
+For GCM, this is the `SenderID` and is pre-negotiated outside of the push
+service.
+
+   :{instanceid}: The bridge specific private identifier token
+
+Each protocol requires a unique token that addresses the instance of the
+application on a given user's device. This is usually the product of the
+application registering the token with the native bridge protocol agent.
 
    :{auth_token}: The Authorization token
 
 Most calls to the HTTP interface require a Authorization header. The
 Authorization header is a bearer token, which has been provided by the
-**Registration** call and is preceded by the token type word "Bearer"
+**Registration** call and is preceded by the token type word "Bearer".
 
 An example of the Authorization header would be:
 
@@ -242,27 +253,20 @@ type and token for this connection.
 Call:
 ^^^^^
 
-This call requires no Authorization for first time use.
-
 .. http:post:: /v1/{type}/{token}/registration
+
+This call requires no Authorization for first time use.
 
 Parameters:
 ^^^^^^^^^^^
 
-{"type":{BridgeType}, "token":{BridgeToken}}
+    {"token":{instanceid}}
 
+    .. note::
 
-    :{BridgeType}: the type of bridge this endpoint defines. \
-("gcm" or "apns")
-
-    :{BridgeToken}: the bridge specific recipient token.
-
-example:
-
-.. code-block:: json
-
-    {"type": "gcm", "token": "0123abcdef..."}
-
+        If additional information is required for the bridge, it may be
+        included in the paramters as JSON elements. Currently, no additional
+        information is required.
 
 Reply:
 ^^^^^^
@@ -274,12 +278,18 @@ Reply:
 
 example:
 
+.. code-block:: http
+
+    > POST /v1/gcm/a1b2c3/registration
+    >
+    > {"token": "1ab2c3"}
+
 .. code-block:: json
 
-    {"uaid": "a1cc58b98ffe4505aa39f5be29c04744",
-    "secret": "bb640e9f4bd268bb08e4a2e57de7d0ed2a2efa373df3ce2474ef...",
-    "endpoint": "https://updates-push.services.mozaws.net/push/...",
-    "channelID": "58af8cfbfdf140c492ece546417217c5"}
+    < {"uaid": "abcdef012345",
+    < "secret": "0123abcdef",
+    < "endpoint": "https://updates-push.services.mozaws.net/push/...",
+    < "channelID": "01234abcd"}
 
 Errors:
 ^^^^^^^
@@ -294,28 +304,22 @@ Update the current bridge token value
 Call:
 ^^^^^
 
+.. http:put:: /v1/{type}/{token}/registration/{uaid}
+
 ::
 
-    Authorization: Bearer *{auth_token}*
-
-.. http:put:: /v1/{type}/{token}/registration/{uaid}
+    Authorization: Bearer {auth_token}
 
 Parameters:
 ^^^^^^^^^^^
 
-{"type":{BridgeType}, "token":{BridgeToken}}
+    {"token": {instanceid}}
 
+    .. note::
 
-    :{BridgeType}: the type of bridge this endpoint defines. \
-("gcm" or "apns")
-
-    :{BridgeToken}: the bridge specific recipient token.
-
-example:
-
-.. code-block:: json
-
-    {"type": "gcm", "token": "0123abcdef..."}
+        If additional information is required for the bridge, it may be
+        included in the paramters as JSON elements. Currently, no additional
+        information is required.
 
 Reply:
 ^^^^^^
@@ -323,6 +327,19 @@ Reply:
 .. code-block:: json
 
     {}
+
+example:
+
+.. code-block:: http
+
+    > PUT /v1/gcm/a1b2c3/registration/abcdef012345
+    > Authorization: Bearer 0123abcdef
+    >
+    > {"token": "5e6g7h8i"}
+
+.. code-block:: json
+
+    < {}
 
 Errors:
 ^^^^^^^
@@ -337,16 +354,16 @@ Acquire a new ChannelID for a given UAID.
 Call:
 ^^^^^
 
+.. http:post:: /v1/{type}/{token}/registration/{uaid}/subscription
+
 ::
 
-    Authorization: Bearer *{auth_token}*
-
-.. http:post:: /v1/{type}/{token}/{uaid}/subscription
+    Authorization: Bearer {auth_token}
 
 Parameters:
 ^^^^^^^^^^^
 
-{}
+     {}
 
 Reply:
 ^^^^^^
@@ -357,10 +374,17 @@ Reply:
 
 example:
 
+.. code-block:: http
+
+    > POST /v1/gcm/a1b2c3/registration/abcdef012345/subscription
+    > Authorization: Bearer 0123abcdef
+    >
+    > {}
+
 .. code-block:: json
 
-    {"channelID": "58af8cfbfdf140c492ece546417217c5",
-    "endpoint": "https://updates-push.services.mozaws.net/push/..."}
+    < {"channelID": "43210efgh"
+    < "endpoint": "https://updates-push.services.mozaws.net/push/..."}
 
 Errors:
 ^^^^^^^
@@ -376,16 +400,16 @@ is no longer valid.
 Call:
 ^^^^^
 
+.. http:delete:: /v1/{type}/{token}/registration/{uaid}
+
 ::
 
-    Authorization: Bearer *{auth_token}*
-
-.. http:delete:: /v1/{type}/{token}/registration/{uaid}
+    Authorization: Bearer {auth_token}
 
 Parameters:
 ^^^^^^^^^^^
 
-{}
+    {}
 
 Reply:
 ^^^^^^
@@ -407,11 +431,11 @@ Remove a given ChannelID subscription from a UAID.
 Call:
 ^^^^^
 
+.. http:delete:: /v1/{type}/{token}/registration/{UAID}/subscription/{CHID}
+
 ::
 
-    Authorization: Bearer *{auth_token}*
-
-.. http:delete:: /v1/{type}/{token}/registration/{UAID}/subscription/{CHID}
+    Authorization: Bearer {auth_token}
 
 Parameters:
 ^^^^^^^^^^^
@@ -435,8 +459,7 @@ import json
 import time
 import urlparse
 import uuid
-import hawkauthlib
-import requests as prequests
+import re
 
 from collections import namedtuple
 from base64 import urlsafe_b64encode
@@ -907,7 +930,7 @@ class EndpointHandler(AutoendpointHandler):
 
 
 class RegistrationHandler(AutoendpointHandler):
-    cors_methods = "GET,PUT,DELETE"
+    cors_methods = "POST,PUT,DELETE"
     _base_tags = []
 
     def base_tags(self):
@@ -919,36 +942,19 @@ class RegistrationHandler(AutoendpointHandler):
     #                    Cyclone HTTP Methods
     #############################################################
     @cyclone.web.asynchronous
-    def get(self, uaid=""):
-        """HTTP GET
-
-        Retrieves the router type/data for a UAID.
-
-        """
-        if not self._validate_auth(uaid):
-            return self._write_response(401, 109,
-                                        message="Invalid authentication")
-
-        self.uaid = uaid
-        self.chid = uuid.uuid4().hex
-        d = deferToThread(self.ap_settings.router.get_uaid, uaid)
-        d.addCallback(self._return_router_data)
-        d.addErrback(self._overload_err)
-        d.addErrback(self._uaid_not_found_err)
-        d.addErrback(self._response_err)
-        return d
-
-    @cyclone.web.asynchronous
-    def post(self, uaid=""):
+    def post(self, router_type="", router_token="", uaid="", chid=""):
         """HTTP POST
 
         Endpoint generation and optionally router type/data registration.
 
         """
+
         self.start_time = time.time()
         self.add_header("Content-Type", "application/json")
         params = self._load_params()
         # If the client didn't provide a CHID, make one up.
+        if chid:
+            params["channelID"] = chid
         if "channelID" not in params:
             params["channelID"] = uuid.uuid4().hex
         self.ap_settings.metrics.increment("updates.client.register",
@@ -956,6 +962,10 @@ class RegistrationHandler(AutoendpointHandler):
         # If there's a UAID, ensure its valid, otherwise we ensure the hash
         # matches up
         new_uaid = False
+
+        # normalize the path vars into parameters
+        params['router_token'] = router_token
+        params['type'] = router_type
 
         if uaid:
             if not self._validate_auth(uaid):
@@ -967,7 +977,6 @@ class RegistrationHandler(AutoendpointHandler):
             new_uaid = True
             # Should this be different than websocket?
         self.uaid = uaid
-        router_type = params.get("type")
         if new_uaid and router_type not in self.ap_settings.routers:
             log.msg("Invalid parameters", **self._client_info())
             return self._write_response(
@@ -989,7 +998,7 @@ class RegistrationHandler(AutoendpointHandler):
             d.addErrback(self._response_err)
 
     @cyclone.web.asynchronous
-    def put(self, uaid=""):
+    def put(self, router_type="", router_token="", uaid="", chid=""):
         """HTTP PUT
 
         Update router type/data for a UAID.
@@ -1002,9 +1011,9 @@ class RegistrationHandler(AutoendpointHandler):
                 401, 109, message="Invalid Authentication")
 
         params = self._load_params()
+        params['token'] = router_token
         self.uaid = uaid
-        router_type = params.get("type")
-        router_data = params.get("data")
+        router_data = params
         if router_type not in self.ap_settings.routers or not router_data:
             log.msg("Invalid parameters", **self._client_info())
             return self._write_response(
@@ -1091,7 +1100,9 @@ class RegistrationHandler(AutoendpointHandler):
         """Called after the endpoint was made and should be returned to the
         requestor"""
         if new_uaid:
-            hashed = generate_hash(self.ap_settings.crypto_key[0], self.uaid)
+            if self.ap_settings.auth_key:
+                hashed = generate_hash(self.ap_settings.auth_key[0],
+                                       self.uaid)
             msg = dict(
                 uaid=self.uaid,
                 secret=hashed,
@@ -1118,23 +1129,30 @@ class RegistrationHandler(AutoendpointHandler):
     def _validate_auth(self, uaid):
         """Validates the Authorization header in a request
 
-        Validate the given request using HAWK.
+        Validate the given request bearer token
         """
 
         test, _ = validate_uaid(uaid)
         if not test:
             return False
-        for key in self.ap_settings.crypto_key:
-            secret = generate_hash(key, uaid)
-            fReq = prequests.Request(
-                self.request.method,
-                "%s://%s%s" % (self.request.protocol, self.request.host,
-                               self.request.uri),
-                headers=self.request.headers,
-                data=self.request.body).prepare()
-            if hawkauthlib.check_signature(fReq, secret):
-                return True
-        return False
+        header = self.request.headers.get("Authorization")
+        if header is None:
+            return False
+        try:
+            token_type, rtoken = re.sub(r' +', ' ',
+                                        header.strip()).split(" ", 2)
+        except ValueError:
+            return False
+        if "bearer" != token_type.lower():
+            return False
+        if self.ap_settings.auth_key:
+            for key in self.ap_settings.auth_key:
+                token = generate_hash(key, uaid)
+                if rtoken == token:
+                    return True
+            return False
+        else:
+            return True
 
     def _load_params(self):
         """Load and parse a JSON body out of the request body, or return an

@@ -14,6 +14,30 @@ Bug Fixes
 WebPush
 -------
 
+1.8.1 (2015-11-16)
+==================
+
+Features
+--------
+
+* Convert proprietary AUTH to use Bearer Token for client REST interfaces.
+  Issue #238.
+
+Bug Fixes
+---------
+
+WebPush
+-------
+
+Configuration Changes
+---------------------
+
+* Please include the new `--auth_key` which is the base token set for
+  generating bearer tokens. This uses the same format as the `--crypto_key`,
+  but should be a different value to prevent possible key detection. The key
+  can be generated using the same `bin/autokey` tool used to generate the
+  crypto_key
+
 1.8.0 (2015-11-13)
 ==================
 
