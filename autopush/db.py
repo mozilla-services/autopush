@@ -317,6 +317,15 @@ class Message(object):
             return set([])
 
     @track_provisioned
+    def save_channels(self, uaid, channels):
+        """Save out a set of channels"""
+        self.table.put_item(data=dict(
+            uaid=uaid,
+            chidmessageid=" ",
+            chids=channels
+        ))
+
+    @track_provisioned
     def store_message(self, uaid, channel_id, message_id, ttl, data=None,
                       headers=None, timestamp=None):
         """Stores a message in the message table for the given uaid/channel with
@@ -529,6 +538,21 @@ class Router(object):
     @track_provisioned
     def drop_user(self, uaid):
         return self.table.delete_item(uaid=uaid)
+
+    @track_provisioned
+    def update_message_month(self, uaid, month):
+        """Update the route tables current_message_month"""
+        conn = self.table.connection
+        db_key = self.encode(uaid)
+        expr = "SET current_month=:curmonth"
+        expr_values = self.encode(dict(curmonth=month))
+        conn.update_item(
+            self.table.table_name,
+            db_key,
+            update_expression=expr,
+            expression_attribute_values=expr_values,
+        )
+        return True
 
     @track_provisioned
     def clear_node(self, item):
