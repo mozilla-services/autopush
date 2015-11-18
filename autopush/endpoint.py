@@ -860,11 +860,13 @@ class RegistrationHandler(AutoendpointHandler):
                                                tags=self.base_tags())
             d = deferToThread(self._deleteChannel, message, uaid, chid)
             d.addErrback(self._response_err)
+            d.addCallback(self._success)
             return d
         # nuke uaid
         d = deferToThread(self._deleteUaid, message, uaid,
                           self.ap_settings.router)
         d.addErrback(self._response_err)
+        d.addCallback(self._success)
         return d
 
     #############################################################
