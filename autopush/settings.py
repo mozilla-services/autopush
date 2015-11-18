@@ -142,9 +142,7 @@ class AutopushSettings(object):
             storage_read_throughput,
             storage_write_throughput)
         self.message_table = get_rotating_message_table(
-            message_tablename,
-            message_read_throughput,
-            message_write_throughput)
+            message_tablename)
         self._message_prefix = message_tablename
         self.storage = Storage(self.storage_table, self.metrics)
         self.router = Router(self.router_table, self.metrics)

@@ -715,7 +715,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # Proceed with hello response
         self._finish_webpush_hello()
 
-    def _finish_webpush_hello(self):
+    def _finish_webpush_hello(self, *ignored_result):
         self.transport.resumeProducing()
         msg = {"messageType": "hello", "uaid": self.ps.uaid, "status": 200}
         if self.autoPingInterval:

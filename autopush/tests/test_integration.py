@@ -22,6 +22,7 @@ from twisted.internet.threads import deferToThread
 from twisted.web.client import Agent
 from twisted.test.proto_helpers import AccumulatingProtocol
 from autopush import __version__
+from autopush.db import create_rotating_message_table
 from autopush.settings import AutopushSettings
 from base64 import urlsafe_b64encode
 
@@ -49,6 +50,11 @@ def setUp():
         "-jar", ddb_jar, "-sharedDb", "-inMemory"
     ])
     ddb_process = subprocess.Popen(cmd, shell=True, env=os.environ)
+
+    # Setup the necessary message tables
+    message_table = os.environ.get("MESSAGE_TABLE", "message_int_test")
+    create_rotating_message_table(prefix=message_table, delta=-1)
+    create_rotating_message_table(prefix=message_table)
 
 
 def tearDown():

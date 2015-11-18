@@ -543,9 +543,9 @@ class Router(object):
     def update_message_month(self, uaid, month):
         """Update the route tables current_message_month"""
         conn = self.table.connection
-        db_key = self.encode(uaid)
+        db_key = self.encode({"uaid": uaid})
         expr = "SET current_month=:curmonth"
-        expr_values = self.encode(dict(curmonth=month))
+        expr_values = self.encode({":curmonth": month})
         conn.update_item(
             self.table.table_name,
             db_key,
