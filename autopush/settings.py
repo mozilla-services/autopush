@@ -179,6 +179,16 @@ class AutopushSettings(object):
 
         self.hello_timeout = hello_timeout
 
+    @property
+    def message(self):
+        """Property that access the current message table"""
+        return self.message_tables[self.current_msg_month]
+
+    @message.setter
+    def message(self, value):
+        """Setter to set the current message table"""
+        self.message_tables[self.current_msg_month] = value
+
     def create_initial_message_tables(self):
         """Initializes a dict of the initial rotating messages tables.
 
