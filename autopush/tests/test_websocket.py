@@ -113,8 +113,6 @@ class WebsocketTestCase(unittest.TestCase):
         with self.assertRaises(Exception):
             self.proto.onConnect(req)
 
-        req.headers.get.assert_called_with("user-agent")
-
     @patch("autopush.websocket.reactor")
     def test_autoping_no_uaid(self, mock_reactor):
         # restore our sendClose
