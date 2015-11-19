@@ -8,6 +8,8 @@ Autopush Changelog
 Features
 --------
 
+* Add message table rotation for webpush users. Issue #191.
+
 Bug Fixes
 ---------
 

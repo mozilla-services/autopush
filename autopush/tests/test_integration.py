@@ -22,6 +22,7 @@ from twisted.internet.threads import deferToThread
 from twisted.web.client import Agent
 from twisted.test.proto_helpers import AccumulatingProtocol
 from autopush import __version__
+from autopush.db import create_rotating_message_table
 from autopush.settings import AutopushSettings
 from base64 import urlsafe_b64encode
 
@@ -49,6 +50,11 @@ def setUp():
         "-jar", ddb_jar, "-sharedDb", "-inMemory"
     ])
     ddb_process = subprocess.Popen(cmd, shell=True, env=os.environ)
+
+    # Setup the necessary message tables
+    message_table = os.environ.get("MESSAGE_TABLE", "message_int_test")
+    create_rotating_message_table(prefix=message_table, delta=-1)
+    create_rotating_message_table(prefix=message_table)
 
 
 def tearDown():
@@ -989,6 +995,155 @@ class TestWebPush(IntegrationBase):
         ok_(result is not None)
         ok_(result != {})
         eq_(result["data"], urlsafe_b64encode(data2))
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_webpush_monthly_rotation(self):
+        from autopush.db import make_rotating_tablename
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+
+        # Move the client back one month to the past
+        last_month = make_rotating_tablename(
+            prefix=self._settings._message_prefix, delta=-1)
+        lm_message = self._settings.message_tables[last_month]
+        yield deferToThread(
+            self._settings.router.update_message_month,
+            client.uaid,
+            last_month
+        )
+
+        # Verify the move
+        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
+        eq_(c["current_month"], last_month)
+
+        # Move the clients channels back one month
+        exists, chans = yield deferToThread(
+            self._settings.message.all_channels, client.uaid
+        )
+        eq_(exists, True)
+        eq_(len(chans), 1)
+        yield deferToThread(
+            lm_message.save_channels,
+            client.uaid,
+            chans
+        )
+
+        # Remove the channels entry entirely from this month
+        yield deferToThread(self._settings.message.table.delete_item,
+                            uaid=client.uaid,
+                            chidmessageid=" "
+                            )
+
+        # Verify the channel is gone
+        exists, chans = yield deferToThread(
+            self._settings.message.all_channels,
+            client.uaid
+        )
+        eq_(exists, False)
+        eq_(len(chans), 0)
+
+        # Send in a notification, verify it landed in last months notification
+        # table
+        data = uuid.uuid4().hex
+        yield client.send_notification(data=data)
+        notifs = yield deferToThread(lm_message.fetch_messages, client.uaid)
+        eq_(len(notifs), 1)
+
+        # Connect the client, verify the migration
+        yield client.connect()
+        yield client.hello()
+
+        # Pull down the notification
+        result = yield client.get_notification()
+        chan = client.channels.keys()[0]
+        ok_(result is not None)
+        eq_(chan, result["channelID"])
+
+        # Check that the client is going to rotate the month
+        server_client = self._settings.clients[client.uaid]
+        eq_(server_client.ps.rotate_message_table, True)
+
+        # Acknowledge the notification, which triggers the migration
+        yield client.ack(chan, result["version"])
+
+        # Wait up to 2 seconds for the table rotation to occur
+        start = time.time()
+        while time.time()-start < 2:
+            c = yield deferToThread(self._settings.router.get_uaid,
+                                    client.uaid)
+            if c["current_month"] == self._settings.current_msg_month:
+                break
+            else:
+                yield deferToThread(time.sleep, 0.2)
+
+        # Verify the month update in the router table
+        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
+        eq_(c["current_month"], self._settings.current_msg_month)
+        eq_(server_client.ps.rotate_message_table, False)
+
+        # Verify the channels were moved
+        exists, chans = yield deferToThread(
+            self._settings.message.all_channels,
+            client.uaid
+        )
+        eq_(exists, True)
+        eq_(len(chans), 1)
+
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_webpush_monthly_rotation_no_channels(self):
+        from autopush.db import make_rotating_tablename
+        client = Client("ws://localhost:9010/", use_webpush=True)
+        yield client.connect()
+        yield client.hello()
+        yield client.disconnect()
+
+        # Move the client back one month to the past
+        last_month = make_rotating_tablename(
+            prefix=self._settings._message_prefix, delta=-1)
+        yield deferToThread(
+            self._settings.router.update_message_month,
+            client.uaid,
+            last_month
+        )
+
+        # Verify the move
+        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
+        eq_(c["current_month"], last_month)
+
+        # Verify there's no channels
+        exists, chans = yield deferToThread(
+            self._settings.message.all_channels,
+            client.uaid
+        )
+        eq_(exists, False)
+        eq_(len(chans), 0)
+
+        # Connect the client, verify the migration
+        yield client.connect()
+        yield client.hello()
+
+        # Check that the client is going to rotate the month
+        server_client = self._settings.clients[client.uaid]
+        eq_(server_client.ps.rotate_message_table, True)
+
+        # Wait up to 2 seconds for the table rotation to occur
+        start = time.time()
+        while time.time()-start < 2:
+            c = yield deferToThread(self._settings.router.get_uaid,
+                                    client.uaid)
+            if c["current_month"] == self._settings.current_msg_month:
+                break
+            else:
+                yield deferToThread(time.sleep, 0.2)
+
+        # Verify the month update in the router table
+        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
+        eq_(c["current_month"], self._settings.current_msg_month)
+        eq_(server_client.ps.rotate_message_table, False)
+
         yield self.shut_down(client)
 
 

@@ -414,6 +414,10 @@ def connection_main(sysargs=None):
 
     l = task.LoopingCall(periodic_reporter, settings)
     l.start(1.0)
+
+    # Start the table rotation checker/updater
+    l = task.LoopingCall(settings.update_rotating_tables)
+    l.start(60)
     reactor.run()
 
 

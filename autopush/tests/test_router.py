@@ -18,6 +18,7 @@ from autopush.db import (
     Message,
     ProvisionedThroughputExceededException,
     ItemNotFound,
+    create_rotating_message_table,
 )
 from autopush.endpoint import Notification
 from autopush.router import APNSRouter, GCMRouter, SimpleRouter, WebPushRouter
@@ -32,6 +33,7 @@ mock_dynamodb2 = mock_dynamodb2()
 def setUp():
     mock_s3().start()
     mock_dynamodb2.start()
+    create_rotating_message_table()
 
 
 def tearDown():
@@ -572,6 +574,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         self.agent_mock = Mock(spec=settings.agent)
         settings.agent = self.agent_mock
         self.router.metrics = Mock()
+        self.settings = settings
 
     def test_route_to_busy_node_saves_looks_up_and_sends_check_201(self):
         self.agent_mock.request.return_value = response_mock = Mock()
@@ -579,8 +582,9 @@ class WebPushRouterTestCase(unittest.TestCase):
         type(response_mock).code = PropertyMock(
             side_effect=MockAssist([202, 200]))
         self.message_mock.store_message.return_value = True
-        self.message_mock.all_channels.return_value = [dummy_chid]
-        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
+        self.message_mock.all_channels.return_value = (True, [dummy_chid])
+        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
+                           current_month=self.settings.current_msg_month)
         self.router_mock.get_uaid.return_value = router_data
         self.router.message_id = uuid.uuid4().hex
 
@@ -603,8 +607,9 @@ class WebPushRouterTestCase(unittest.TestCase):
         type(response_mock).code = PropertyMock(
             side_effect=MockAssist([202, 200]))
         self.message_mock.store_message.return_value = True
-        self.message_mock.all_channels.return_value = [dummy_chid]
-        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
+        self.message_mock.all_channels.return_value = (True, [dummy_chid])
+        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
+                           current_month=self.settings.current_msg_month)
         self.router_mock.get_uaid.return_value = router_data
         self.router.message_id = uuid.uuid4().hex
 
@@ -625,7 +630,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         type(response_mock).code = PropertyMock(
             side_effect=MockAssist([202, 200]))
         self.message_mock.store_message.return_value = True
-        self.message_mock.all_channels.return_value = []
+        self.message_mock.all_channels.return_value = (True, [])
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
         self.router_mock.get_uaid.return_value = router_data
         self.router.message_id = uuid.uuid4().hex

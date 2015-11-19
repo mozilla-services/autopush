@@ -113,6 +113,13 @@ class PushState(object):
         'router_type',
         'wake_data',
         'connected_at',
+        'settings',
+
+        # Table rotation
+        'message_month',
+        'message',
+        'rotate_message_table',
+
         'ping_time_out',
         '_check_notifications',
         '_more_notifications',
@@ -120,6 +127,8 @@ class PushState(object):
         '_register',
         'updates_sent',
         'direct_updates',
+
+        # iProducer methods
         'pauseProducing',
         'resumeProducing',
         'stopProducing',
@@ -127,6 +136,7 @@ class PushState(object):
 
     def __init__(self, settings, request):
         self._callbacks = []
+        self.settings = settings
 
         if request:
             self._user_agent = request.headers.get("user-agent")
@@ -149,6 +159,10 @@ class PushState(object):
         self.connected_at = ms_time()
         self.ping_time_out = False
 
+        # Message table rotation initial settings
+        self.message_month = settings.current_msg_month
+        self.rotate_message_table = False
+
         self._check_notifications = False
         self._more_notifications = False
 
@@ -161,6 +175,11 @@ class PushState(object):
 
         # Track Notification's we don't need to delete separately
         self.direct_updates = {}
+
+    @property
+    def message(self):
+        """Property to access the currently used message table"""
+        return self.settings.message_tables[self.message_month]
 
     def pauseProducing(self):
         """IProducer implementation tracking if we should pause output"""
@@ -353,12 +372,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if data == {}:
             return self.process_ping()
 
-        # Message needs a type
-        if "messageType" not in data:
-            self.sendClose()
-            return
-
-        cmd = data["messageType"]
+        cmd = data.get("messageType")
         # We're no longer idle, prevent early connection closure.
         self.resetTimeout()
         try:
@@ -446,7 +460,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def _save_webpush_notif(self, notif):
         """Save a direct_update webpush style notification"""
         return deferToThread(
-            self.ap_settings.message.store_message,
+            self.ps.message.store_message,
             uaid=self.ps.uaid,
             channel_id=notif.channel_id,
             data=notif.data,
@@ -606,7 +620,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def _check_collision(self, result):
         """callback to reset the UAID if router registration fails"""
         registered, previous = result
-        if registered:
+        existing_webpush_rotator = self.ps.use_webpush and \
+            "current_month" in previous
+
+        # If registered and not a webpush user, continue
+        if not self.ps.use_webpush and registered:
+            return self._check_other_nodes(result)
+        # Or if we are a webpush user and have table rotation already
+        if existing_webpush_rotator:
             return self._check_other_nodes(result)
 
         # If registration fails, try resetting the UAID.
@@ -627,6 +648,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.sendMessage(json.dumps(msg).encode('utf8'), False)
             return
 
+        # Handle dupes on the same node
         existing = self.ap_settings.clients.get(self.ps.uaid)
         if existing:
             if self.ps.connected_at <= existing.ps.connected_at:
@@ -635,6 +657,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             else:
                 existing.sendClose()
 
+        # TODO: Remove this block, issue #245.
         if previous and "node_id" in previous:
             # Get the previous information returned from dynamodb.
             node_id = previous["node_id"]
@@ -650,19 +673,61 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                                               UserError))
                 d.addErrback(self.log_err,
                              extra="Failed to delete old node")
+
+        # UDP clients are done at this point and timed out to ensure they
+        # drop their connection
         timeout = self.ap_settings.wake_timeout if self.ps.wake_data else None
         self.setTimeout(timeout)
 
-        self.finish_hello()
+        self.finish_hello(previous)
 
-    def finish_hello(self, *args):
+    def finish_hello(self, previous):
         """callback for successful hello message, that sends hello reply"""
         self.ps._register = None
+        if self.ps.use_webpush:
+            return self._check_message_table_rotation(previous)
+
         msg = {"messageType": "hello", "uaid": self.ps.uaid, "status": 200}
         if self.autoPingInterval:
             msg["ping"] = self.autoPingInterval
-        if self.ps.use_webpush:
-            msg["use_webpush"] = True
+
+        msg['env'] = self.ap_settings.env
+        self.ap_settings.clients[self.ps.uaid] = self
+        self.sendJSON(msg)
+        self.ps.metrics.increment("updates.client.hello", tags=self.base_tags)
+        self.process_notifications()
+
+    def _check_message_table_rotation(self, previous):
+        """Check for webpush users if we need to rotate the message table"""
+        self.transport.pauseProducing()
+        # Check for table rotation
+        cur_month = previous.get("current_month")
+        if not cur_month:
+            # New user, write out the current_month and say hello
+            d = self.deferToThread(
+                self.ap_settings.router.update_message_month,
+                self.ps.uaid, self.ps.message_month)
+            d.addCallback(self._finish_webpush_hello)
+            d.addErrback(self.trap_cancel)
+            d.addErrback(self.err_overload, "hello")
+            d.addErrback(self.err_hello)
+            return d
+
+        if cur_month != self.ps.message_month:
+            # Previous month user or new user, flag for message rotation and
+            # set the message_month to the router month
+            self.ps.message_month = cur_month
+            self.ps.rotate_message_table = True
+
+        # Proceed with hello response
+        self._finish_webpush_hello()
+
+    def _finish_webpush_hello(self, *ignored_result):
+        self.transport.resumeProducing()
+        msg = {"messageType": "hello", "uaid": self.ps.uaid, "status": 200}
+        if self.autoPingInterval:
+            msg["ping"] = self.autoPingInterval
+        msg["use_webpush"] = True
         msg['env'] = self.ap_settings.env
         self.ap_settings.clients[self.ps.uaid] = self
         self.sendJSON(msg)
@@ -696,7 +761,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.ps._more_notifications = True
 
         if self.ps.use_webpush:
-            d = self.deferToThread(self.ap_settings.message.fetch_messages,
+            d = self.deferToThread(self.ps.message.fetch_messages,
                                    self.ps.uaid)
         else:
             d = self.deferToThread(
@@ -761,6 +826,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                 self.ps._check_notifications = False
                 d = self.deferToLater(1, self.process_notifications)
                 d.addErrback(self.trap_cancel)
+                return
+
+            # Not told to check for notifications, do we need to now rotate
+            # the message table?
+            if self.ps.rotate_message_table:
+                self.transport.pauseProducing()
+                self.ps.rotate_message_table = False
+                self._rotate_message_table()
             return
 
         # Send out all the notifications
@@ -772,7 +845,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # If the TTL is too old, don't deliver and fire a delete off
             if now >= (notif["ttl"]+notif["timestamp"]):
                 self.force_retry(
-                    self.ap_settings.message.delete_message, self.ps.uaid,
+                    self.ps.message.delete_message, self.ps.uaid,
                     chid, version, updateid=notif["updateid"])
                 continue
 
@@ -791,6 +864,43 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                              ttl=notif["ttl"], timestamp=notif["timestamp"])
             )
             self.sendJSON(msg)
+
+    def _rotate_message_table(self):
+        """Function to fire off a message table copy of channels + update the
+        router current_month entry"""
+        self.transport.pauseProducing()
+        d = self.deferToThread(self.ps.message.all_channels, self.ps.uaid)
+        d.addCallback(self._register_rotated_channels)
+        d.addErrback(self.trap_cancel)
+        d.addErrback(self.err_overload, "notif")
+        d.addErrback(self.log_err)
+
+    def _register_rotated_channels(self, result):
+        """Register the channels into a new entry in the current month"""
+        # Update the current month now, so that we can save the channels into
+        # the right location
+        self.ps.message_month = self.ap_settings.current_msg_month
+
+        _, channels = result
+        if not channels:
+            # No previously registered channels, skip to updating the router
+            # table
+            return self._update_router_for_message_month(None)
+
+        # Register the channels, then update the router
+        d = self.deferToThread(self.ps.message.save_channels, self.ps.uaid,
+                               channels)
+        d.addCallback(self._update_router_for_message_month)
+        return d
+
+    def _update_router_for_message_month(self, result):
+        """Update the router for the message month"""
+        # This is returned so that the error handling in _rotate_message_table
+        # still applies since the deferred chain is fully followed.
+        d = self.deferToThread(self.ap_settings.router.update_message_month,
+                               self.ps.uaid, self.ps.message_month)
+        d.addCallback(lambda x: self.transport.resumeProducing())
+        return d
 
     def _send_ping(self):
         """Helper for ping sending that tracks when the ping was sent"""
@@ -935,7 +1045,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         found = filter(ver_filter, self.ps.updates_sent[chid])
         if found:
-            d = self.force_retry(self.ap_settings.message.delete_message,
+            d = self.force_retry(self.ps.message.delete_message,
                                  uaid=self.ps.uaid,
                                  channel_id=chid,
                                  message_id=version,
@@ -945,6 +1055,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # need to make sure this notification is deleted from the db before
             # we query it again (to avoid dupes).
             d.addBoth(self._handle_webpush_update_remove, chid, found[0])
+            return d
 
     def _handle_webpush_update_remove(self, result, chid, notif):
         """Handle clearing out the updates_sent
@@ -995,10 +1106,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # Resume consuming ack's
             self.transport.resumeProducing()
 
+        # Abort if stopped
+        if self.ps._should_stop:
+            return
+
         # When using webpush, we don't check again if we have outstanding
         # notifications
         if self.ps.use_webpush and any(self.ps.updates_sent.values()):
-                return
+            return
 
         # Should we check again?
         if self.ps._check_notifications or self.ps._more_notifications:
@@ -1128,7 +1243,7 @@ class DefaultResource(Resource):
     def getChild(self, path, request):
         return self.resource
 
-    def render(self, request):
+    def render(self, request):  # pragma: nocover
         return self.resource.render(request)
 
 

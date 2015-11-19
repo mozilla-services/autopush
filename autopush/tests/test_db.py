@@ -52,6 +52,12 @@ class DbCheckTestCase(unittest.TestCase):
         with self.assertRaises(Exception):
             preflight_check(storage_table, router_table)
 
+    def test_get_month(self):
+        from autopush.db import get_month
+        month0 = get_month(0)
+        month1 = get_month(1)
+        eq_(month0.month+1, month1.month)
+
 
 class StorageTestCase(unittest.TestCase):
     def setUp(self):
@@ -182,19 +188,34 @@ class MessageTestCase(unittest.TestCase):
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
 
-        chans = message.all_channels(self.uaid)
+        _, chans = message.all_channels(self.uaid)
         assert(chid in chans)
         assert(chid2 in chans)
 
         message.unregister_channel(self.uaid, chid2)
-        chans = message.all_channels(self.uaid)
+        _, chans = message.all_channels(self.uaid)
         assert(chid2 not in chans)
         assert(chid in chans)
+
+    def test_save_channels(self):
+        chid = str(uuid.uuid4())
+        chid2 = str(uuid.uuid4())
+        m = get_message_table()
+        message = Message(m, SinkMetrics())
+        message.register_channel(self.uaid, chid)
+        message.register_channel(self.uaid, chid2)
+
+        exists, chans = message.all_channels(self.uaid)
+        new_uaid = uuid.uuid4().hex
+        message.save_channels(new_uaid, chans)
+        _, new_chans = message.all_channels(new_uaid)
+        eq_(chans, new_chans)
 
     def test_all_channels_no_uaid(self):
         m = get_message_table()
         message = Message(m, SinkMetrics())
-        assert(message.all_channels("asdf") == set([]))
+        exists, chans = message.all_channels("asdf")
+        assert(chans == set([]))
 
     def test_message_storage(self):
         chid = str(uuid.uuid4())
