@@ -11,6 +11,8 @@ Features
 Bug Fixes
 ---------
 
+* Relax endpoint TLS cert requirement for https scheme. Issue #249.
+
 WebPush
 -------
 

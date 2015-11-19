@@ -421,8 +421,6 @@ def endpoint_main(sysargs=None):
     """Main entry point to setup an endpoint node, aka the autoendpoint
     script"""
     args, parser = _parse_endpoint(sysargs)
-    scheme = args.endpoint_scheme or \
-        "https" if args.ssl_key else "http"
     senderid_list = None
     if args.senderid_list:
         try:
@@ -435,9 +433,9 @@ def endpoint_main(sysargs=None):
 
     settings = make_settings(
         args,
-        endpoint_scheme=scheme,
+        endpoint_scheme=args.endpoint_scheme,
         endpoint_hostname=args.endpoint_hostname or args.hostname,
-        endpoint_port=args.port,
+        endpoint_port=args.endpoint_port,
         enable_cors=not args.no_cors,
         s3_bucket=args.s3_bucket,
         senderid_expry=args.senderid_expry,
