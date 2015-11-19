@@ -3,8 +3,7 @@ import unittest
 from mock import Mock, patch
 from moto import mock_dynamodb2, mock_s3
 from nose.tools import eq_
-from autopush.senderids import SenderIDs
-
+from twisted.trial import unittest as trialtest
 
 from autopush.main import (
     connection_main,
@@ -12,6 +11,7 @@ from autopush.main import (
     make_settings,
     skip_request_logging,
 )
+from autopush.senderids import SenderIDs
 from autopush.utils import (
     resolve_ip,
 )
@@ -43,6 +43,66 @@ class SettingsTestCase(unittest.TestCase):
         mock_socket.getaddrinfo.return_value = ""
         ip = resolve_ip("google.com")
         eq_(ip, "google.com")
+
+
+class SettingsAsyncTestCase(trialtest.TestCase):
+    def test_update_rotating_tables(self):
+        from autopush.db import create_rotating_message_table, next_month
+        # Create the rotating table so the test passes
+        create_rotating_message_table()
+        settings = AutopushSettings(
+            hostname="google.com", resolve_hostname=True)
+
+        # Erase the tables it has on init, and move current month back one
+        last_month = next_month(-1)
+        settings.current_month = last_month.month
+        settings.message_tables = {}
+
+        # Get the deferred back
+        d = settings.update_rotating_tables()
+
+        def check_tables(result):
+            eq_(len(settings.message_tables), 1)
+
+        d.addCallback(check_tables)
+        return d
+
+    @patch("autopush.db.datetime")
+    def test_update_rotating_tables_no_such_table(self, mock_date):
+        from autopush.db import next_month
+        mock_date.date.today.return_value = next_month(-7)
+        settings = AutopushSettings(
+            hostname="google.com", resolve_hostname=True)
+
+        # Erase the tables it has on init, and move current month back one
+        last_month = next_month(-1)
+        settings.current_month = last_month.month
+        settings.message_tables = {}
+
+        # Get the deferred back
+        d = settings.update_rotating_tables()
+
+        def check_tables(result):
+            eq_(len(settings.message_tables), 0)
+
+        d.addCallback(check_tables)
+        return d
+
+    def test_update_not_needed(self):
+        settings = AutopushSettings(
+            hostname="google.com", resolve_hostname=True)
+
+        # Erase the tables it has on init, and move current month back one
+        settings.message_tables = {}
+
+        # Get the deferred back
+        d = settings.update_rotating_tables()
+
+        def check_tables(result):
+            eq_(len(settings.message_tables), 0)
+
+        d.addCallback(check_tables)
+        return d
 
 
 class ConnectionMainTestCase(unittest.TestCase):

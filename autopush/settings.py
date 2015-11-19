@@ -214,7 +214,7 @@ class AutopushSettings(object):
         today = datetime.date.today()
         if today.month == self.current_month:
             # No change in month, we're fine.
-            returnValue()
+            returnValue(False)
 
         # Get tables for the new month, and verify they exist before we try to
         # switch over
@@ -225,13 +225,14 @@ class AutopushSettings(object):
         except Exception:
             tblname = make_rotating_tablename(self._message_prefix)
             log.err("Unable to locate new message table: %s" % tblname)
-            returnValue()
+            returnValue(False)
 
         # Both tables found, safe to switch-over
         self.current_month = today.month
-        self.current_msg_month = message_table.table.table_name
+        self.current_msg_month = message_table.table_name
         self.message_tables[self.current_msg_month] = \
-            Message(self.message_table, self.metrics)
+            Message(message_table, self.metrics)
+        returnValue(True)
 
     def update(self, **kwargs):
         """Update the arguments, if a ``crypto_key`` is in kwargs then the
