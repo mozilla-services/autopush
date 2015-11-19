@@ -717,7 +717,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # Previous month user or new user, flag for message rotation and
             # set the message_month to the router month
             self.ps.message_month = cur_month
-            self.rotate_message_table = True
+            self.ps.rotate_message_table = True
 
         # Proceed with hello response
         self._finish_webpush_hello()
@@ -869,10 +869,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         """Function to fire off a message table copy of channels + update the
         router current_month entry"""
         self.transport.pauseProducing()
-        d = self.deferToThread(self.ps.message.all_channels)
+        d = self.deferToThread(self.ps.message.all_channels, self.ps.uaid)
         d.addCallback(self._register_rotated_channels)
         d.addErrback(self.trap_cancel)
-        d.addErrback(self.err_overload)
+        d.addErrback(self.err_overload, "notif")
         d.addErrback(self.log_err)
 
     def _register_rotated_channels(self, result):
@@ -885,7 +885,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if not channels:
             # No previously registered channels, skip to updating the router
             # table
-            return self._update_router_for_message_month()
+            return self._update_router_for_message_month(None)
 
         # Register the channels, then update the router
         d = self.deferToThread(self.ps.message.save_channels, self.ps.uaid,
@@ -893,7 +893,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         d.addCallback(self._update_router_for_message_month)
         return d
 
-    def _update_router_for_message_month(self):
+    def _update_router_for_message_month(self, result):
         """Update the router for the message month"""
         # This is returned so that the error handling in _rotate_message_table
         # still applies since the deferred chain is fully followed.
@@ -1045,7 +1045,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         found = filter(ver_filter, self.ps.updates_sent[chid])
         if found:
-            d = self.force_retry(self.ap_settings.message.delete_message,
+            d = self.force_retry(self.ps.message.delete_message,
                                  uaid=self.ps.uaid,
                                  channel_id=chid,
                                  message_id=version,
@@ -1055,6 +1055,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # need to make sure this notification is deleted from the db before
             # we query it again (to avoid dupes).
             d.addBoth(self._handle_webpush_update_remove, chid, found[0])
+            return d
 
     def _handle_webpush_update_remove(self, result, chid, notif):
         """Handle clearing out the updates_sent
@@ -1105,10 +1106,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # Resume consuming ack's
             self.transport.resumeProducing()
 
+        # Abort if stopped
+        if self.ps._should_stop:
+            return
+
         # When using webpush, we don't check again if we have outstanding
         # notifications
         if self.ps.use_webpush and any(self.ps.updates_sent.values()):
-                return
+            return
 
         # Should we check again?
         if self.ps._check_notifications or self.ps._more_notifications:
@@ -1238,7 +1243,7 @@ class DefaultResource(Resource):
     def getChild(self, path, request):
         return self.resource
 
-    def render(self, request):
+    def render(self, request):  # pragma: nocover
         return self.resource.render(request)
 
 
