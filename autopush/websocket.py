@@ -620,7 +620,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def _check_collision(self, result):
         """callback to reset the UAID if router registration fails"""
         registered, previous = result
-        if registered:
+        existing_webpush_rotator = self.ps.use_webpush and \
+            "current_month" in previous
+
+        # If registered and not a webpush user, continue
+        if not self.ps.use_webpush and registered:
+            return self._check_other_nodes(result)
+        # Or if we are a webpush user and have table rotation already
+        if existing_webpush_rotator:
             return self._check_other_nodes(result)
 
         # If registration fails, try resetting the UAID.
