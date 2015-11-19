@@ -47,14 +47,14 @@ class SettingsTestCase(unittest.TestCase):
 
 class SettingsAsyncTestCase(trialtest.TestCase):
     def test_update_rotating_tables(self):
-        from autopush.db import create_rotating_message_table, next_month
+        from autopush.db import create_rotating_message_table, get_month
         # Create the rotating table so the test passes
         create_rotating_message_table()
         settings = AutopushSettings(
             hostname="google.com", resolve_hostname=True)
 
         # Erase the tables it has on init, and move current month back one
-        last_month = next_month(-1)
+        last_month = get_month(-1)
         settings.current_month = last_month.month
         settings.message_tables = {}
 
@@ -69,13 +69,13 @@ class SettingsAsyncTestCase(trialtest.TestCase):
 
     @patch("autopush.db.datetime")
     def test_update_rotating_tables_no_such_table(self, mock_date):
-        from autopush.db import next_month
-        mock_date.date.today.return_value = next_month(-7)
+        from autopush.db import get_month
+        mock_date.date.today.return_value = get_month(-7)
         settings = AutopushSettings(
             hostname="google.com", resolve_hostname=True)
 
         # Erase the tables it has on init, and move current month back one
-        last_month = next_month(-1)
+        last_month = get_month(-1)
         settings.current_month = last_month.month
         settings.message_tables = {}
 

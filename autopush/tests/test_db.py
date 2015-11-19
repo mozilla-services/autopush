@@ -52,10 +52,10 @@ class DbCheckTestCase(unittest.TestCase):
         with self.assertRaises(Exception):
             preflight_check(storage_table, router_table)
 
-    def test_next_month(self):
-        from autopush.db import next_month
-        month0 = next_month(0)
-        month1 = next_month(1)
+    def test_get_month(self):
+        from autopush.db import get_month
+        month0 = get_month(0)
+        month1 = get_month(1)
         eq_(month0.month+1, month1.month)
 
 

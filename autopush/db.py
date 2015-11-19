@@ -22,11 +22,11 @@ from boto.dynamodb2.types import NUMBER
 log = logging.getLogger(__file__)
 
 
-def next_month(delta=1):
+def get_month(delta=0):
     """Basic helper function to get a datetime.date object iterations months
     ahead/behind of now."""
     new = last = datetime.date.today()
-    # Move  until we hit a new month, this avoids having to manually
+    # Move until we hit a new month, this avoids having to manually
     # check year changes as we push forward or backward since the Python
     # timedelta math handles it for us
     for _ in range(abs(delta)):
@@ -42,7 +42,7 @@ def next_month(delta=1):
 def make_rotating_tablename(prefix, delta=0):
     """Creates a tablename for table rotation based on a prefix with a given
     month delta."""
-    date = next_month(delta=delta)
+    date = get_month(delta=delta)
     return "{}_{}_{}".format(prefix, date.year, date.month)
 
 
