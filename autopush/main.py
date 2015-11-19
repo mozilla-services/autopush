@@ -42,9 +42,9 @@ def add_shared_args(parser):
                         dest='config_file', is_config_file=True)
     parser.add_argument('--debug', help='Debug Info.', action="store_true",
                         default=False, env_var="DEBUG")
-    parser.add_argument('--crypto_key', help="Crypto key for tokens", type=str,
-                        default="i_CYcNKa2YXrF_7V1Y-2MFfoEl7b6KX55y_9uvOKfJQ=",
-                        env_var="CRYPTO_KEY")
+    parser.add_argument('--crypto_key', help="Crypto key for tokens",
+                        default=[], env_var="CRYPTO_KEY", type=str,
+                        action="append")
     parser.add_argument('--datadog_api_key', help="DataDog API Key", type=str,
                         default="", env_var="DATADOG_API_KEY")
     parser.add_argument('--datadog_app_key', help="DataDog App Key", type=str,
@@ -240,6 +240,10 @@ def _parse_endpoint(sysargs):
                         env_var='SENDERID_EXPRY')
     parser.add_argument('--senderid_list', help='SenderIDs to load to S3',
                         type=str, default="{}")
+    parser.add_argument('--auth_key', help='Bearer Token source key',
+                        type=str, default=[], env_var='AUTH_KEY',
+                        action="append")
+
     add_shared_args(parser)
     add_external_router_args(parser)
 
@@ -442,6 +446,7 @@ def endpoint_main(sysargs=None):
         s3_bucket=args.s3_bucket,
         senderid_expry=args.senderid_expry,
         senderid_list=senderid_list,
+        auth_key=args.auth_key,
     )
 
     # Endpoint HTTP router
