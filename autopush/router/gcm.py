@@ -53,6 +53,26 @@ class GCMRouter(object):
 
     def _route(self, notification, router_data):
         """Blocking GCM call to route the notification"""
+        data={"chid": notification.channel_id,
+              "ver": notification.version}
+        # Payload data is optional.  If present, all of Content-Encoding,
+        # Encryption, and Encryption-Key are required.  If one or more are
+        # missing, a 400 response is produced.
+        con = notification.headers.get('content-encoding', None)
+        enc = notification.headers.get('encryption', None)
+        enckey = notification.headers.get('encryption-key', None)
+        if notification.data:
+            if not con:
+                self._error("notification with data is missing header: Content-Encoding", 400)
+            if not enc:
+                self._error("notification with data is missing header: Encryption", 400)
+            if not enckey:
+                self._error("notification with data is missing header: Encryption-Key", 400)
+            data['body'] = notification.data
+            data['con'] = con
+            data['enc'] = enc
+            data['enckey'] = enckey
+
         payload = gcmclient.JSONMessage(
             registration_ids=[router_data["token"]],
             collapse_key=self.collapseKey,

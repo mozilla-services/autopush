@@ -697,7 +697,7 @@ class EndpointTestCase(unittest.TestCase):
 
 dummy_uaid = "00000000123412341234567812345678"
 dummy_chid = "11111111123412341234567812345678"
-CORS_HEAD = "GET,PUT,DELETE"
+CORS_HEAD = "POST,PUT,DELETE"
 
 
 class RegistrationTestCase(unittest.TestCase):

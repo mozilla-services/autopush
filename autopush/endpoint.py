@@ -677,6 +677,12 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         log.msg("Invalid token", **self._client_info())
         self._write_response(404, 102)
 
+    def _chid_not_found_err(self, fail):
+        """errBack for unknown chid"""
+        fail.trap(ItemNotFound)
+        log.msg("CHID not found in AWS.", **self._client_info())
+        self._write_response(404, 103)
+
     #############################################################
     #                    Utility Methods
     #############################################################
@@ -1031,27 +1037,24 @@ class RegistrationHandler(AutoendpointHandler):
         d.callback(uaid)
 
     def _deleteChannel(self, message, uaid, chid):
+        if chid not in message.all_channels(uaid):
+            raise ItemNotFound("CHID not found")
         message.delete_messages_for_channel(uaid, chid)
         message.unregister_channel(uaid, chid)
 
     def _deleteUaid(self, message, uaid, router):
         message.delete_all_for_user(uaid)
-        router.drop_user(uaid)
+        if not router.drop_user(uaid):
+            raise ItemNotFound("UAID not found")
 
     @cyclone.web.asynchronous
-    def delete(self, combo):
+    def delete(self, router_type="", router_token="", uaid="", chid=""):
         """HTTP DELETE
 
         Invalidate a UAID (and all channels associated with it).
 
         """
-        combo = combo.strip("/")
-        if "/" in combo:
-            (uaid, chid) = combo.split("/", 2)
-        else:
-            uaid = combo
-            chid = None
-        # what is request
+        # what is the request
         if not self._validate_auth(uaid):
             return self._write_response(
                 401, 109, message="Invalid Authentication")
@@ -1061,11 +1064,15 @@ class RegistrationHandler(AutoendpointHandler):
             self.ap_settings.metrics.increment("updates.client.unregister",
                                                tags=self.base_tags())
             d = deferToThread(self._deleteChannel, message, uaid, chid)
+            d.addCallback(self._success)
+            d.addErrback(self._chid_not_found_err)
             d.addErrback(self._response_err)
             return d
         # nuke uaid
         d = deferToThread(self._deleteUaid, message, uaid,
                           self.ap_settings.router)
+        d.addCallback(self._success)
+        d.addErrback(self._uaid_not_found_err)
         d.addErrback(self._response_err)
         return d
 
@@ -1093,8 +1100,14 @@ class RegistrationHandler(AutoendpointHandler):
 
     def _make_endpoint(self, result):
         """Called to create a new endpoint"""
-        return deferToThread(self.ap_settings.make_endpoint,
-                             self.uaid, self.chid)
+        d = deferToThread(self.ap_settings.make_endpoint,
+                          self.uaid, self.chid)
+        d.addCallback(self._register_channel)
+        return d
+
+    def _register_channel(self, result):
+        self.ap_settings.message.register_channel(self.uaid, self.chid)
+        return result
 
     def _return_endpoint(self, endpoint, new_uaid, router=None):
         """Called after the endpoint was made and should be returned to the
