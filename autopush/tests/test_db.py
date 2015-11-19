@@ -188,12 +188,12 @@ class MessageTestCase(unittest.TestCase):
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
 
-        exists, chans = message.all_channels(self.uaid)
+        _, chans = message.all_channels(self.uaid)
         assert(chid in chans)
         assert(chid2 in chans)
 
         message.unregister_channel(self.uaid, chid2)
-        exists, chans = message.all_channels(self.uaid)
+        _, chans = message.all_channels(self.uaid)
         assert(chid2 not in chans)
         assert(chid in chans)
 

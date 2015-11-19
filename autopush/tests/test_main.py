@@ -33,16 +33,16 @@ def tearDown():
 
 class SettingsTestCase(unittest.TestCase):
     def test_resolve_host(self):
-        ip = resolve_ip("google.com")
+        ip = resolve_ip("example.com")
         settings = AutopushSettings(
-            hostname="google.com", resolve_hostname=True)
+            hostname="example.com", resolve_hostname=True)
         eq_(settings.hostname, ip)
 
     @patch("autopush.utils.socket")
     def test_resolve_host_no_interface(self, mock_socket):
         mock_socket.getaddrinfo.return_value = ""
-        ip = resolve_ip("google.com")
-        eq_(ip, "google.com")
+        ip = resolve_ip("example.com")
+        eq_(ip, "example.com")
 
 
 class SettingsAsyncTestCase(trialtest.TestCase):
@@ -51,7 +51,7 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         # Create the rotating table so the test passes
         create_rotating_message_table()
         settings = AutopushSettings(
-            hostname="google.com", resolve_hostname=True)
+            hostname="example.com", resolve_hostname=True)
 
         # Erase the tables it has on init, and move current month back one
         last_month = get_month(-1)
