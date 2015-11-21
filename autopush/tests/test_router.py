@@ -70,6 +70,7 @@ class RouterInterfaceTestCase(TestCase):
         self.assertRaises(NotImplementedError, ir.route_notification, "uaid",
                           {})
         self.assertRaises(NotImplementedError, ir.amend_msg, {})
+        self.assertRaises(NotImplementedError, ir.check_token, {})
 
 
 dummy_chid = str(uuid.uuid4())
@@ -146,6 +147,10 @@ class APNSRouterTestCase(unittest.TestCase):
         resp = {"key": "value"}
         eq_(resp, self.router.amend_msg(resp))
 
+    def test_check_token(self):
+        (t, v) = self.router.check_token("")
+        ok_(t)
+
 
 class GCMRouterTestCase(unittest.TestCase):
 
@@ -155,12 +160,15 @@ class GCMRouterTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
-        gcm_config = {'s3_bucket': 'None',
-                      'senderid_list': {'test123':
-                                        {"auth": "12345678abcdefg"}}}
+        self.gcm_config = {'s3_bucket': 'None',
+                           'senderid_list': {'test123':
+                                             {"auth": "12345678abcdefg"}}}
         self.gcm = fgcm
-        self.router = GCMRouter(settings, gcm_config)
-        self.notif = Notification(10, "data", dummy_chid, None, 200)
+        self.router = GCMRouter(settings, self.gcm_config)
+        self.headers = {"content-encoding": "text/plain",
+                        "encryption": "test",
+                        "encryption-key": "test"}
+        self.notif = Notification(10, "data", dummy_chid, self.headers, 200)
         self.router_data = dict(
             router_data=dict(
                 token="connect_data",
@@ -201,6 +209,17 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_register_bad(self):
         self.assertRaises(RouterException, self.router.register, "uaid", {})
 
+    def test_invalid_token(self):
+        self.router.gcm = self.gcm
+
+        (t, v) = self.router.check_token("test123")
+        ok_(t)
+        eq_(v, self.gcm_config['senderid_list'].keys()[0])
+
+        (t, v) = self.router.check_token("invalid")
+        eq_(t, False)
+        eq_(v, self.gcm_config['senderid_list'].keys()[0])
+
     def test_route_notification(self):
         self.router.gcm = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
@@ -209,6 +228,42 @@ class GCMRouterTestCase(unittest.TestCase):
             ok_(isinstance(result, RouterResponse))
             assert(self.router.gcm.send.called)
         d.addCallback(check_results)
+        return d
+
+    def test_router_missing_enc_key_header(self):
+        self.router.gcm = self.gcm
+        del(self.notif.headers['encryption-key'])
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(result):
+            ok_(isinstance(result.value, RouterException))
+            eq_(result.value.status_code, 400)
+
+        d.addBoth(check_results)
+        return d
+
+    def test_router_missing_enc_header(self):
+        self.router.gcm = self.gcm
+        del(self.notif.headers['encryption'])
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(result):
+            ok_(isinstance(result.value, RouterException))
+            eq_(result.value.status_code, 400)
+
+        d.addBoth(check_results)
+        return d
+
+    def test_router_missing_cont_enc_header(self):
+        self.router.gcm = self.gcm
+        del(self.notif.headers['content-encoding'])
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(result):
+            ok_(isinstance(result.value, RouterException))
+            eq_(result.value.status_code, 400)
+
+        d.addBoth(check_results)
         return d
 
     def test_router_notification_gcm_auth_error(self):
@@ -643,3 +698,7 @@ class WebPushRouterTestCase(unittest.TestCase):
     def test_ammend(self):
         resp = {"key": "value"}
         eq_(resp, self.router.amend_msg(resp))
+
+    def test_check_token(self):
+        (t, v) = self.router.check_token("")
+        ok_(t)

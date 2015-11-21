@@ -20,8 +20,8 @@ will not be able to perform any additional router data registration.
 Push Service HTTP API
 =====================
 
-The following section describes how remote servers can send Push Notifications to
-apps running on remote User Agents.
+The following section describes how remote servers can send Push
+Notifications to apps running on remote User Agents.
 
 API methods requiring Authorization must provide the Authorization
 header containing the authrorization token. The Authorization token is returned
@@ -611,7 +611,7 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
     #############################################################
     #                    Error Callbacks
     #############################################################
-    def _write_response(self, status_code, errno, message=None):
+    def _write_response(self, status_code, errno, message=None, headers=None):
         """Writes out a full JSON error and sets the appropriate status"""
         self.set_status(status_code)
         error_data = dict(
@@ -623,6 +623,9 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
             error_data["message"] = message
         self.write(json.dumps(error_data))
         self.set_header("Content-Type", "application/json")
+        if headers:
+            for header in headers.keys():
+                self.set_header(header, headers.get(header))
         self.finish()
 
     def _response_err(self, fail):
@@ -944,6 +947,15 @@ class RegistrationHandler(AutoendpointHandler):
         tags.append("user-agent:%s" %
                     self.request.headers.get("user-agent"))
 
+    def _relocate(self, type, token, uaid="", chid=""):
+        relo = "%s/v1/%s/%s/register" % (self.ap_settings.endpoint_url,
+                                         type, token)
+        if uaid:
+            relo += "/%s" % uaid
+        if chid:
+            relo += "/subscription/%s" % chid
+        return relo
+
     #############################################################
     #                    Cyclone HTTP Methods
     #############################################################
@@ -970,8 +982,19 @@ class RegistrationHandler(AutoendpointHandler):
         new_uaid = False
 
         # normalize the path vars into parameters
-        params['router_token'] = router_token
-        params['type'] = router_type
+        router_token = router_token or params.get('router_token')
+        router_type = router_type or params.get('type')
+        if router_type not in self.ap_settings.routers:
+            log.msg("Invalid parameters", **self._client_info())
+            return self._write_response(
+                400, 108, message="Invalid arguments")
+        router = self.ap_settings.routers[router_type]
+        (valid, router_token) = router.check_token(router_token)
+        if not valid:
+            newUrl = self._relocate(router_type, router_token, uaid, chid)
+            return self._write_response(
+                301, 0, message=("Location: %s" % newUrl),
+                headers={"Location": newUrl})
 
         if uaid:
             if not self._validate_auth(uaid):
@@ -983,13 +1006,8 @@ class RegistrationHandler(AutoendpointHandler):
             new_uaid = True
             # Should this be different than websocket?
         self.uaid = uaid
-        if new_uaid and router_type not in self.ap_settings.routers:
-            log.msg("Invalid parameters", **self._client_info())
-            return self._write_response(
-                400, 108, message="Invalid arguments")
         self.chid = params["channelID"]
         if new_uaid:
-            router = self.ap_settings.routers[router_type]
             d = Deferred()
             d.addCallback(router.register, params.get("data", {}))
             d.addCallback(self._save_router_data, router_type)
@@ -1017,17 +1035,21 @@ class RegistrationHandler(AutoendpointHandler):
                 401, 109, message="Invalid Authentication")
 
         params = self._load_params()
-        params['token'] = router_token
         self.uaid = uaid
         router_data = params
         if router_type not in self.ap_settings.routers or not router_data:
             log.msg("Invalid parameters", **self._client_info())
             return self._write_response(
                 400, 108, message="Invalid arguments")
+        router = self.ap_settings.routers[router_type]
+        (valid, router_token) = router.check_token(router_token)
+        if not valid:
+            newUrl = self._relocate(router_type, router_token, uaid, chid)
+            return self._write_response(
+                301, 0, "Location: %s" % newUrl,
+                headers={"Location": newUrl})
 
         self.add_header("Content-Type", "application/json")
-        router = self.ap_settings.routers[router_type]
-
         d = Deferred()
         d.addCallback(router.register, router_data)
         d.addCallback(self._save_router_data, router_type)
@@ -1058,6 +1080,18 @@ class RegistrationHandler(AutoendpointHandler):
         if not self._validate_auth(uaid):
             return self._write_response(
                 401, 109, message="Invalid Authentication")
+        if router_type not in self.ap_settings.routers:
+            log.msg("Invalid parameters", **self._client_info())
+            return self._write_response(
+                400, 108, message="Invalid arguments")
+        router = self.ap_settings.routers[router_type]
+        (valid, router_token) = router.check_token(router_token)
+        if not valid:
+            newUrl = self._relocate(router_type, router_token, uaid, chid)
+            return self._write_response(
+                301, 0, "Location: %s" % newUrl,
+                headers={"Location": newUrl})
+
         message = self.ap_settings.message
         if chid:
             # mark channel as dead
@@ -1079,15 +1113,6 @@ class RegistrationHandler(AutoendpointHandler):
     #############################################################
     #                    Callbacks
     #############################################################
-    def _return_router_data(self, user_item):
-        """Called after UAID data is retrieved"""
-        msg = dict(
-            type=user_item["router_type"],
-            data=user_item["router_data"],
-        )
-        self.write(json.dumps(msg))
-        self.finish()
-
     def _save_router_data(self, router_data, router_type):
         """Called when new data needs to be saved to a user-record"""
         user_item = dict(
