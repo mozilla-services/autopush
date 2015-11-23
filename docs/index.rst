@@ -27,6 +27,8 @@ Reference Docs
    api
    Changelog <changelog>
 
+* :doc:`Push Service HTTP API <api/endpoint>`
+
 Source Code
 ===========
 

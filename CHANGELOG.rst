@@ -8,11 +8,22 @@ Autopush Changelog
 Features
 --------
 
+* New Bridge HTTP API. Issues #238, #250, #251
+  In cooperation with the GCM client work the HTTP Bridge API has been
+  simplified. The new method has been detailed in /api/endpoint.py.
+  In essence: The API is now bearer token based, and uses the form
+  /v1/{BridgeType}/{BridgeToken}/registration[/{uaid}/[subscription/[{chid}]]]
+
 Bug Fixes
 ---------
+* Fixed some issues around the Bridge API delete functions.
 
 WebPush
 -------
+
+Backwards Incompatibilities
+---------------------------
+* The previous Bridge HTTP API has been immediately deprecated.
 
 1.8.1 (2015-11-16)
 ==================
