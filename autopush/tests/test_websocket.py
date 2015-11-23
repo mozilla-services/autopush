@@ -16,6 +16,7 @@ from twisted.internet.defer import Deferred
 from twisted.internet.error import ConnectError
 from twisted.trial import unittest
 
+from autopush.db import create_rotating_message_table
 from autopush.settings import AutopushSettings
 from autopush.websocket import (
     PushState,
@@ -35,6 +36,7 @@ mock_dynamodb2 = mock_dynamodb2()
 
 def setUp():
     mock_dynamodb2.start()
+    create_rotating_message_table()
 
 
 def tearDown():
@@ -110,8 +112,6 @@ class WebsocketTestCase(unittest.TestCase):
 
         with self.assertRaises(Exception):
             self.proto.onConnect(req)
-
-        req.headers.get.assert_called_with("user-agent")
 
     @patch("autopush.websocket.reactor")
     def test_autoping_no_uaid(self, mock_reactor):

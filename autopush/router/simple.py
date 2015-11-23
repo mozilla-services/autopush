@@ -84,8 +84,9 @@ class SimpleRouter(object):
         self.udp = uaid_data.get("udp")
         router = self.ap_settings.router
 
-        # Preflight check, hook used by webpush to verify channel id
-        yield self.preflight_check(uaid, notification.channel_id)
+        # Preflight check, hook used by webpush to verify channel id, extra
+        # stores any additional data to pass to storing the message
+        extra = yield self.preflight_check(uaid, notification.channel_id)
 
         # Node_id is present, attempt delivery.
         # - Send Notification to node
@@ -114,7 +115,7 @@ class SimpleRouter(object):
         #   - Success (older version): Done, return 202
         #   - Error (db error): Done, return 503
         try:
-            result = yield self._save_notification(uaid, notification)
+            result = yield self._save_notification(uaid, notification, extra)
             if result is False:
                 self.metrics.increment("router.broadcast.miss")
                 returnValue(self.stored_response(notification))
@@ -183,7 +184,7 @@ class SimpleRouter(object):
     ###########################################################
     #                    Blocking Helper Functions
     #############################################################
-    def _save_notification(self, uaid, notification):
+    def _save_notification(self, uaid, notification, extra):
         """Saves a notification, returns a deferred.
 
         This function is split out for the Webpush-style individual

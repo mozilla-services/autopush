@@ -8,6 +8,7 @@ Autopush Changelog
 Features
 --------
 
+* Add message table rotation for webpush users. Issue #191.
 * New Bridge HTTP API. Issues #238, #250, #251
   In cooperation with the GCM client work the HTTP Bridge API has been
   simplified. The new method has been detailed in /api/endpoint.py.
@@ -17,6 +18,8 @@ Features
 Bug Fixes
 ---------
 * Fixed some issues around the Bridge API delete functions.
+
+* Relax endpoint TLS cert requirement for https scheme. Issue #249.
 
 WebPush
 -------
