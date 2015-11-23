@@ -682,7 +682,7 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
 
     def _chid_not_found_err(self, fail):
         """errBack for unknown chid"""
-        fail.trap(ItemNotFound)
+        fail.trap(ItemNotFound, ValueError)
         log.msg("CHID not found in AWS.", **self._client_info())
         self._write_response(404, 103)
 

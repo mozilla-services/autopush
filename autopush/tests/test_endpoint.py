@@ -1051,9 +1051,29 @@ class RegistrationTestCase(unittest.TestCase):
             cl = messages.all_channels(dummy_uaid)
             eq_(len(ml), 1)
             eq_((True, set(['test'])), cl)
+            messages.delete_user(dummy_uaid)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.delete("test", "test", uaid=dummy_uaid, chid=dummy_chid)
+        return self.finish_deferred
+
+    def test_delete_bad_chid(self):
+        messages = self.reg.ap_settings.message
+        messages.register_channel(dummy_uaid, dummy_chid)
+        messages.store_message(
+            dummy_uaid,
+            dummy_chid,
+            "1",
+            10000)
+        # TODO: self.reg.ap_settings.message.all_channels(dummy_uaid) = [] ??
+        self.reg.request.headers["Authorization"] = self.auth
+
+        def handle_finish(value):
+            self._check_error(404, 103, "Not Found")
+            messages.delete_user(dummy_uaid)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.delete("test", "test", uaid=dummy_uaid, chid="invalid")
         return self.finish_deferred
 
     def test_delete_uaid(self):
