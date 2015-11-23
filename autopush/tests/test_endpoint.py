@@ -1050,7 +1050,7 @@ class RegistrationTestCase(unittest.TestCase):
             ml = messages.fetch_messages(dummy_uaid)
             cl = messages.all_channels(dummy_uaid)
             eq_(len(ml), 1)
-            eq_(set(['test']), cl)
+            eq_((True, set(['test'])), cl)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.delete("test", "test", uaid=dummy_uaid, chid=dummy_chid)
@@ -1073,7 +1073,7 @@ class RegistrationTestCase(unittest.TestCase):
             ml = messages.fetch_messages(dummy_uaid)
             cl = messages.all_channels(dummy_uaid)
             eq_(len(ml), 0)
-            eq_(cl, set([]))
+            eq_((False, set([])), cl)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
