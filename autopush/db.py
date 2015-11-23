@@ -369,6 +369,7 @@ class Message(object):
         chidmessageids = [x["chidmessageid"] for x in results]
         if chidmessageids:
             self.delete_messages(uaid, chidmessageids)
+        return len(chidmessageids) > 0
 
     @track_provisioned
     def delete_all_for_user(self, uaid):

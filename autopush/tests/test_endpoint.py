@@ -1040,8 +1040,14 @@ class RegistrationTestCase(unittest.TestCase):
             10000)
         # TODO: self.reg.ap_settings.message.all_channels(dummy_uaid) = [] ??
         self.reg.request.headers["Authorization"] = self.auth
-        d = self.reg.delete("test", "test", uaid=dummy_uaid, chid=dummy_chid)
-        return d
+
+        def handle_finish(value):
+            ml = self.reg.ap_settings.message.fetch_messages(dummy_uaid)
+            eq_(len(ml), 1)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.delete("test", "test", uaid=dummy_uaid, chid=dummy_chid)
+        return self.finish_deferred
 
     def test_delete_uaid(self):
         self.reg.ap_settings.message.store_message(
@@ -1054,8 +1060,15 @@ class RegistrationTestCase(unittest.TestCase):
             "test",
             "2",
             10000)
+
+        def handle_finish(value):
+            ml = self.reg.ap_settings.message.fetch_messages(dummy_uaid)
+            eq_(len(ml), 0)
+
+        self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
         self.reg.delete("test", "test", uaid=dummy_uaid)
+        return self.finish_deferred
 
     def test_delete_bad_uaid(self):
         self.reg.request.headers["Authorization"] = self.auth
@@ -1091,6 +1104,7 @@ class RegistrationTestCase(unittest.TestCase):
 
     def test_delete_bad_router(self):
         self.reg.request.headers['Authorization'] = self.auth
+
         def handle_finish(value):
             self.reg.set_status.assert_called_with(400)
 

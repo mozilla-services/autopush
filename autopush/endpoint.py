@@ -746,7 +746,7 @@ class MessageHandler(AutoendpointHandler):
     def put(self, token):
         """Updates a pending message.
 
-        If the message was already acknowledged, than this will instead create
+        If the message was already acknowledged, then this will instead create
         a new message.
 
         """
@@ -1059,8 +1059,6 @@ class RegistrationHandler(AutoendpointHandler):
         d.callback(uaid)
 
     def _deleteChannel(self, message, uaid, chid):
-        if chid not in message.all_channels(uaid):
-            raise ItemNotFound("CHID not found")
         message.delete_messages_for_channel(uaid, chid)
         message.unregister_channel(uaid, chid)
 
