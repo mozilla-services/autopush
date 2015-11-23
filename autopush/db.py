@@ -263,6 +263,10 @@ class Message(object):
     @track_provisioned
     def all_channels(self, uaid):
         """Retrieve a list of all channels for a given uaid"""
+
+        # Note: This only returns the chids associated with the UAID.
+        # functions that call store_message() would be required to
+        # update that list as well using register_channel()
         try:
             result = self.table.get_item(consistent=True, uaid=uaid,
                                          chidmessageid=" ")
@@ -372,7 +376,7 @@ class Message(object):
         return len(chidmessageids) > 0
 
     @track_provisioned
-    def delete_all_for_user(self, uaid):
+    def delete_user(self, uaid):
         """Deletes all messages and channel info for a given uaid"""
         results = self.table.query_2(
             uaid__eq=uaid,
@@ -383,6 +387,9 @@ class Message(object):
         chidmessageids = [x["chidmessageid"] for x in results]
         if chidmessageids:
             self.delete_messages(uaid, chidmessageids)
+        self.table.delete_item(uaid=uaid,
+                               chidmessageid=" ",
+                               consistent=True)
 
     @track_provisioned
     def fetch_messages(self, uaid, limit=10):

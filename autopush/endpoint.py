@@ -1063,7 +1063,7 @@ class RegistrationHandler(AutoendpointHandler):
         message.unregister_channel(uaid, chid)
 
     def _deleteUaid(self, message, uaid, router):
-        message.delete_all_for_user(uaid)
+        message.delete_user(uaid)
         if not router.drop_user(uaid):
             raise ItemNotFound("UAID not found")
 

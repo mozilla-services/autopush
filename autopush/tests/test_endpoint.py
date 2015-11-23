@@ -1028,12 +1028,15 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_delete_chid(self):
-        self.reg.ap_settings.message.store_message(
+        messages = self.reg.ap_settings.message
+        messages.register_channel(dummy_uaid, dummy_chid)
+        messages.store_message(
             dummy_uaid,
             dummy_chid,
             "1",
             10000)
-        self.reg.ap_settings.message.store_message(
+        messages.register_channel(dummy_uaid, "test")
+        messages.store_message(
             dummy_uaid,
             "test",
             "2",
@@ -1042,28 +1045,33 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.request.headers["Authorization"] = self.auth
 
         def handle_finish(value):
-            ml = self.reg.ap_settings.message.fetch_messages(dummy_uaid)
+            ml = messages.fetch_messages(dummy_uaid)
+            cl = messages.all_channels(dummy_uaid)
             eq_(len(ml), 1)
+            eq_(set(['test']), cl)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.delete("test", "test", uaid=dummy_uaid, chid=dummy_chid)
         return self.finish_deferred
 
     def test_delete_uaid(self):
-        self.reg.ap_settings.message.store_message(
+        messages = self.reg.ap_settings.message
+        messages.store_message(
             dummy_uaid,
             dummy_chid,
             "1",
             10000)
-        self.reg.ap_settings.message.store_message(
+        messages.store_message(
             dummy_uaid,
             "test",
             "2",
             10000)
 
         def handle_finish(value):
-            ml = self.reg.ap_settings.message.fetch_messages(dummy_uaid)
+            ml = messages.fetch_messages(dummy_uaid)
+            cl = messages.all_channels(dummy_uaid)
             eq_(len(ml), 0)
+            eq_(cl, set([]))
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
