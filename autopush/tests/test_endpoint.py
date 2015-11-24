@@ -180,7 +180,7 @@ class MessageTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(413)
             data = self.write_mock.call_args[0][0]
             d = json.loads(data)
-            self.assertEqual(d.get("message"), "Data payload too large")
+            eq_(d.get("message"), "Data payload too large")
 
         self.finish_deferred.addCallback(handle_finish)
         self.message.put("")
