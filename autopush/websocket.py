@@ -57,7 +57,7 @@ from twisted.web.resource import Resource
 
 from autopush import __version__
 from autopush.protocol import IgnoreBody
-from autopush.utils import validate_uaid
+from autopush.utils import (validate_uaid, write_error)
 from autopush.noseplugin import track_object
 
 
@@ -1171,6 +1171,10 @@ class RouterHandler(cyclone.web.RequestHandler):
     Handles routing a notification to a connected client from an endpoint.
 
     """
+
+    def write_error(self, code, **kwargs):
+        write_error(self, code, **kwargs)  # pragma nocover
+
     def put(self, uaid):
         """HTTP Put
 
@@ -1196,6 +1200,10 @@ class RouterHandler(cyclone.web.RequestHandler):
 
 
 class NotificationHandler(cyclone.web.RequestHandler):
+
+    def write_error(self, code, **kwargs):
+        write_error(self, code, **kwargs)   # pragma nocover
+
     def put(self, uaid, *args):
         """HTTP Put
 
