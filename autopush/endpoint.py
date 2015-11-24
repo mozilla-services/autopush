@@ -37,8 +37,8 @@ assigned during **Registration**
 
    :{CHID}: The Channel Subscription ID
 
-Push assigns each channel subscription for a given {UAID} a unique
-identifier. This value is assigned during **Channel Subscription**
+Push assigns a unique identifier for each subscription for a given {UAID}.
+This value is assigned during **Channel Subscription**
 
    :{message-id}: The unique Message ID
 
@@ -67,7 +67,7 @@ returned with the following format:
 Unless otherwise specified, all calls return the following error codes:
 
 -  20x - Success
--  301 - Moved + `Location:` if `{token}` is invalid
+-  301 - Moved + `Location:` if `{token}` is invalid (Bridge API Only)
 -  400 - Bad Parameters
 
    - errno 101 - Missing neccessary crypto keys
@@ -225,9 +225,10 @@ service.
 
    :{instanceid}: The bridge specific private identifier token
 
-Each protocol requires a unique token that addresses the instance of the
+Each protocol requires a unique token that addresses the
 application on a given user's device. This is usually the product of the
-application registering the token with the native bridge protocol agent.
+application registering the {instanceid} with the native bridge protocol
+agent.
 
    :{auth_token}: The Authorization token
 

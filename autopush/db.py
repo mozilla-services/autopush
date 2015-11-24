@@ -408,13 +408,16 @@ class Message(object):
                 channel_id, message_id))
         return True
 
-    def delete_messages(self, uaid, chidmessageids):
+    def delete_messages(self, uaid, chidmessageids, all=False):
         with self.table.batch_write() as batch:
             for chidmessageid in chidmessageids:
                 batch.delete_item(
                     uaid=uaid,
                     chidmessageid=chidmessageid
                 )
+                if all:
+                    batch.delete_item(uaid=uaid,
+                                      chidmessageid=" ")
 
     @track_provisioned
     def delete_messages_for_channel(self, uaid, channel_id):
@@ -435,16 +438,13 @@ class Message(object):
         """Deletes all messages and channel info for a given uaid"""
         results = self.table.query_2(
             uaid__eq=uaid,
-            chidmessageid__gt=" ",
+            chidmessageid__gte=" ",
             consistent=True,
             attributes=("chidmessageid",),
         )
         chidmessageids = [x["chidmessageid"] for x in results]
         if chidmessageids:
-            self.delete_messages(uaid, chidmessageids)
-        self.table.delete_item(uaid=uaid,
-                               chidmessageid=" ",
-                               consistent=True)
+            self.delete_messages(uaid, chidmessageids, True)
 
     @track_provisioned
     def fetch_messages(self, uaid, limit=10):
