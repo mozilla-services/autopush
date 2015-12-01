@@ -399,9 +399,9 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.uaid_hash = "faa"
         d = self.endpoint._client_info()
         eq_(d["uaid_hash"], "faa")
-        self.request_mock.headers["authentication"] = "bearer token fred"
+        self.request_mock.headers["authorization"] = "bearer token fred"
         d = self.endpoint._client_info()
-        eq_(d["authentication"], "bearer token fred")
+        eq_(d["authorization"], "bearer token fred")
 
     def test_load_params_arguments(self):
         args = self.endpoint.request.arguments
