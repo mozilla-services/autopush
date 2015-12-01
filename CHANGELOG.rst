@@ -15,6 +15,7 @@ Bug Fixes
 
 * Fix db test bug with month addition to properly handle December. Issue #261.
 * Relax endpoint TLS cert requirement for https scheme. Issue #249.
+* Add endpoint names to the docs. Issue #223.
 
 WebPush
 -------
