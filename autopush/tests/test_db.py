@@ -57,10 +57,7 @@ class DbCheckTestCase(unittest.TestCase):
         month0 = get_month(0)
         month1 = get_month(1)
         this_month = month0.month
-        if this_month == 12:
-            next_month = 1
-        else:
-            next_month = this_month + 1
+        next_month = 1 if this_month == 12 else this_month + 1
         eq_(next_month, month1.month)
 
 
