@@ -56,7 +56,12 @@ class DbCheckTestCase(unittest.TestCase):
         from autopush.db import get_month
         month0 = get_month(0)
         month1 = get_month(1)
-        eq_(month0.month+1, month1.month)
+        this_month = month0.month
+        if this_month == 12:
+            next_month = 1
+        else:
+            next_month = this_month + 1
+        eq_(next_month, month1.month)
 
 
 class StorageTestCase(unittest.TestCase):
