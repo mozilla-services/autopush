@@ -387,6 +387,7 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
             "user-agent": self.request.headers.get("user-agent", ""),
             "remote-ip": self.request.headers.get("x-forwarded-for",
                                                   self.request.remote_ip),
+            "authentication": self.request.headers.get("authentication", ""),
             "uaid_hash": self.uaid_hash,
             "router_key": getattr(self, "router_key", ""),
             "channel_id": getattr(self, "chid", ""),

@@ -9,6 +9,7 @@ Features
 --------
 
 * Add message table rotation for webpush users. Issue #191.
+* Capture Authentication header for endpoint requests for logging. Issue #232.
 
 Bug Fixes
 ---------
