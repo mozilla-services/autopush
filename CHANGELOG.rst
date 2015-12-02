@@ -27,7 +27,7 @@ WebPush
 
 Backwards Incompatibilities
 ---------------------------
-* The previous Bridge HTTP API has been immediately deprecated.
+* The previous Bridge HTTP API has been removed.
 
 1.8.1 (2015-11-16)
 ==================
