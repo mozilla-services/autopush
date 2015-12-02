@@ -17,7 +17,7 @@ Features
 
 Bug Fixes
 ---------
-* Fixed some issues around the Bridge API delete functions.
+* Fixed scope issue around the Bridge API delete functions.
 
 * Relax endpoint TLS cert requirement for https scheme. Issue #249.
 

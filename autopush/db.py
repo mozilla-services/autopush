@@ -311,7 +311,7 @@ class Message(object):
         """Retrieve a list of all channels for a given uaid"""
 
         # Note: This only returns the chids associated with the UAID.
-        # functions that call store_message() would be required to
+        # Functions that call store_message() would be required to
         # update that list as well using register_channel()
         try:
             result = self.table.get_item(consistent=True, uaid=uaid,

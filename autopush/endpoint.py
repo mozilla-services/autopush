@@ -155,7 +155,7 @@ Reply:
 Errors:
 ^^^^^^^
 
-    Standard error codes apply
+    Standard error codes apply.
 
 
 Update Notification
@@ -295,7 +295,7 @@ example:
 Errors:
 ^^^^^^^
 
-Standard error codes apply
+Standard error codes apply.
 
 Token updates
 ~~~~~~~~~~~~~
@@ -345,7 +345,7 @@ example:
 Errors:
 ^^^^^^^
 
-Standard error codes apply
+Standard error codes apply.
 
 Channel Subscription
 ~~~~~~~~~~~~~~~~~~~~
@@ -390,7 +390,7 @@ example:
 Errors:
 ^^^^^^^
 
-Standard error codes apply
+Standard error codes apply.
 
 Unregister UAID (and all associated ChannelID subscriptions)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -422,7 +422,7 @@ Reply:
 Errors:
 ^^^^^^^
 
-Standard error codes apply
+Standard error codes apply.
 
 Unsubscribe Channel
 ~~~~~~~~~~~~~~~~~~~
@@ -453,7 +453,7 @@ Reply:
 Errors:
 ^^^^^^^
 
-Standard error codes apply
+Standard error codes apply.
 """
 import hashlib
 import json
@@ -948,9 +948,9 @@ class RegistrationHandler(AutoendpointHandler):
         tags.append("user-agent:%s" %
                     self.request.headers.get("user-agent"))
 
-    def _relocate(self, type, token, uaid="", chid=""):
+    def _relocate(self, router_type, router_token, uaid="", chid=""):
         relo = "%s/v1/%s/%s/register" % (self.ap_settings.endpoint_url,
-                                         type, token)
+                                         router_type, router_token)
         if uaid:
             relo += "/%s" % uaid
         if chid:
@@ -983,14 +983,12 @@ class RegistrationHandler(AutoendpointHandler):
         new_uaid = False
 
         # normalize the path vars into parameters
-        router_token = router_token or params.get('router_token')
-        router_type = router_type or params.get('type')
         if router_type not in self.ap_settings.routers:
             log.msg("Invalid parameters", **self._client_info())
             return self._write_response(
                 400, 108, message="Invalid arguments")
         router = self.ap_settings.routers[router_type]
-        (valid, router_token) = router.check_token(router_token)
+        valid, router_token = router.check_token(router_token)
         if not valid:
             newUrl = self._relocate(router_type, router_token, uaid, chid)
             return self._write_response(
@@ -1043,7 +1041,7 @@ class RegistrationHandler(AutoendpointHandler):
             return self._write_response(
                 400, 108, message="Invalid arguments")
         router = self.ap_settings.routers[router_type]
-        (valid, router_token) = router.check_token(router_token)
+        valid, router_token = router.check_token(router_token)
         if not valid:
             newUrl = self._relocate(router_type, router_token, uaid, chid)
             return self._write_response(
@@ -1059,11 +1057,13 @@ class RegistrationHandler(AutoendpointHandler):
         d.addErrback(self._response_err)
         d.callback(uaid)
 
-    def _deleteChannel(self, message, uaid, chid):
+    def _delete_channel(self, uaid, chid):
+        message = self.ap_settings.message
         message.delete_messages_for_channel(uaid, chid)
         message.unregister_channel(uaid, chid)
 
-    def _deleteUaid(self, message, uaid, router):
+    def _delete_uaid(self, uaid, router):
+        message = self.ap_settings.message
         message.delete_user(uaid)
         if not router.drop_user(uaid):
             raise ItemNotFound("UAID not found")
@@ -1075,7 +1075,6 @@ class RegistrationHandler(AutoendpointHandler):
         Invalidate a UAID (and all channels associated with it).
 
         """
-        # what is the request
         if not self._validate_auth(uaid):
             return self._write_response(
                 401, 109, message="Invalid Authentication")
@@ -1084,25 +1083,24 @@ class RegistrationHandler(AutoendpointHandler):
             return self._write_response(
                 400, 108, message="Invalid arguments")
         router = self.ap_settings.routers[router_type]
-        (valid, router_token) = router.check_token(router_token)
+        valid, router_token = router.check_token(router_token)
         if not valid:
             newUrl = self._relocate(router_type, router_token, uaid, chid)
             return self._write_response(
                 301, 0, "Location: %s" % newUrl,
                 headers={"Location": newUrl})
 
-        message = self.ap_settings.message
         if chid:
             # mark channel as dead
             self.ap_settings.metrics.increment("updates.client.unregister",
                                                tags=self.base_tags())
-            d = deferToThread(self._deleteChannel, message, uaid, chid)
+            d = deferToThread(self._delete_channel, uaid, chid)
             d.addCallback(self._success)
             d.addErrback(self._chid_not_found_err)
             d.addErrback(self._response_err)
             return d
         # nuke uaid
-        d = deferToThread(self._deleteUaid, message, uaid,
+        d = deferToThread(self._delete_uaid, uaid,
                           self.ap_settings.router)
         d.addCallback(self._success)
         d.addErrback(self._uaid_not_found_err)
