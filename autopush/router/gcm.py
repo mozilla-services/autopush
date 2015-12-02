@@ -63,15 +63,15 @@ class GCMRouter(object):
         # Payload data is optional.  If present, all of Content-Encoding,
         # Encryption, and Encryption-Key are required.  If one or more are
         # missing, a 400 response is produced.
-        con = notification.headers.get('content-encoding', None)
-        enc = notification.headers.get('encryption', None)
-        enckey = notification.headers.get('encryption-key', None)
         if notification.data:
             lead = "notification with data is missing header:"
+            con = notification.headers.get('content-encoding', None)
             if not con:
                 self._error("%s Content-Encoding" % lead, 400)
+            enc = notification.headers.get('encryption', None)
             if not enc:
                 self._error("%s Encryption" % lead, 400)
+            enckey = notification.headers.get('encryption-key', None)
             if not enckey:
                 self._error("%s Encryption-Key" % lead, 400)
             data['body'] = notification.data

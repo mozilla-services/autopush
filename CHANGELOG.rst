@@ -17,8 +17,9 @@ Features
 
 Bug Fixes
 ---------
-* Fixed some issues around the Bridge API delete functions.
+* Fixed scope issue around the Bridge API delete functions.
 
+* Fix db test bug with month addition to properly handle December. Issue #261.
 * Relax endpoint TLS cert requirement for https scheme. Issue #249.
 
 WebPush
@@ -26,7 +27,7 @@ WebPush
 
 Backwards Incompatibilities
 ---------------------------
-* The previous Bridge HTTP API has been immediately deprecated.
+* The previous Bridge HTTP API has been removed.
 
 1.8.1 (2015-11-16)
 ==================
