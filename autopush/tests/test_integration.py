@@ -411,7 +411,7 @@ class TestSimple(IntegrationBase):
         result = yield client.get_notification()
         self.assertTrue(result != {})
         self.assertTrue(len(result["updates"]) == 1)
-        self.assertEquals(result["updates"][0]["channelID"], chan)
+        eq_(result["updates"][0]["channelID"], chan)
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -426,7 +426,7 @@ class TestSimple(IntegrationBase):
         result = yield client.get_notification()
         self.assertTrue(result != {})
         self.assertTrue(len(result["updates"]) == 1)
-        self.assertEquals(result["updates"][0]["channelID"], chan)
+        eq_(result["updates"][0]["channelID"], chan)
 
         yield client.disconnect()
         yield client.connect()
@@ -434,7 +434,7 @@ class TestSimple(IntegrationBase):
         result = yield client.get_notification()
         self.assertTrue(result != {})
         self.assertTrue(result["updates"] > 0)
-        self.assertEquals(result["updates"][0]["channelID"], chan)
+        eq_(result["updates"][0]["channelID"], chan)
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -465,7 +465,7 @@ class TestSimple(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         update = result["updates"][0]
-        self.assertEquals(update["channelID"], chan)
+        eq_(update["channelID"], chan)
         yield client.ack(chan, update["version"])
         yield client.disconnect()
         time.sleep(0.2)
@@ -486,7 +486,7 @@ class TestSimple(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         update = result["updates"][0]
-        self.assertEquals(update["channelID"], chan)
+        eq_(update["channelID"], chan)
 
         yield client.unregister(chan)
         yield client.disconnect()
@@ -943,7 +943,7 @@ class TestWebPush(IntegrationBase):
         chan = client.channels.keys()[0]
 
         update = yield client.send_notification(data=data)
-        self.assertEquals(update["channelID"], chan)
+        eq_(update["channelID"], chan)
         yield client.ack(chan, update["version"])
         ok_(client.messages.get(chan, []) != [])
         yield client.disconnect()
@@ -975,7 +975,7 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         update = yield client.get_notification()
-        self.assertEquals(update["channelID"], chan)
+        eq_(update["channelID"], chan)
 
         # Update the message as it hasn't been ack'dyet
         location = client.messages[chan][0]

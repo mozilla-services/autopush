@@ -246,7 +246,7 @@ class MessageTestCase(unittest.TestCase):
         all_messages = list(message.fetch_messages(self.uaid))
         eq_(len(all_messages), 0)
 
-    def test_delete_all_for_user(self):
+    def test_delete_user(self):
         chid = str(uuid.uuid4())
         chid2 = str(uuid.uuid4())
         m = get_message_table()
@@ -262,7 +262,7 @@ class MessageTestCase(unittest.TestCase):
         message.store_message(self.uaid, chid2, time2, ttl, data2, {})
         message.store_message(self.uaid, chid2, time3, ttl, data1, {})
 
-        message.delete_all_for_user(self.uaid)
+        message.delete_user(self.uaid)
         all_messages = list(message.fetch_messages(self.uaid))
         eq_(len(all_messages), 0)
 

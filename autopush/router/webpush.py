@@ -117,3 +117,6 @@ class WebPushRouter(SimpleRouter):
 
     def amend_msg(self, msg):
         return msg
+
+    def check_token(self, token):
+        return (True, token)

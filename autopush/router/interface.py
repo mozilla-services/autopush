@@ -67,6 +67,15 @@ class IRouter(object):
         """
         raise NotImplementedError("amend_msg must be implemented")
 
+    def check_token(self, token):
+        """Check if a given token is still valid.
+
+        ":param token: A router base token
+        ":returns: (ValidBool, AlternateToken)
+
+        """
+        raise NotImplementedError("check_token must be implemented")
+
     def route_notification(self, notification, uaid_data):
         """Route a notification
 
