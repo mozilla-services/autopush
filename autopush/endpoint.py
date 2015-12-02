@@ -1,6 +1,6 @@
 """HTTP Endpoints for Notifications
 
-This is the primary running code of the ``autoendpoint`` script that handles
+This is the primary running code of the `autoendpoint` script that handles
 the reception of HTTP notification requests for AppServers.
 
 Three HTTP endpoints are exposed by default:
@@ -17,73 +17,160 @@ Three HTTP endpoints are exposed by default:
 If no external routers are configured then the :class:`RegistrationHandler`
 will not be able to perform any additional router data registration.
 
-HTTP API
-========
+Push Service HTTP API
+=====================
+
+The following section describes how remote servers can send Push
+Notifications to apps running on remote User Agents.
 
 API methods requiring Authorization must provide the Authorization
 header containing the authrorization token. The Authorization token is returned
 as "secret" in the registration response.
 
-All message bodies must be UTF-8 encoded.
+Lexicon
+-------
 
-Response Format
----------------
+   :{UAID}: The Push User Agent Registration ID
 
-All responses will be of the content-type `application/json`, the structure of
-which depends on whether the requests was successful or not. In the case of
-success, the status code will be in the 2XX family.
+Push assigns each remote recipient a unique identifier. This value is
+assigned during **Registration**
 
-Error responses will be in the following format:
+   :{CHID}: The Channel Subscription ID
+
+Push assigns a unique identifier for each subscription for a given {UAID}.
+This value is assigned during **Channel Subscription**
+
+   :{message-id}: The unique Message ID
+
+Push assigns each message for a given Channel Subscription a unique
+identifier. This value is assigned during **Send Notification**
+
+Response
+--------
+
+The responses will be JSON formatted objects. In addition, API calls
+will return valid HTTP error codes (see *Errors* sub-section for
+descriptions of specific errors).
+
+For non-success responses, an extended error code object will be
+returned with the following format:
 
 .. code-block:: json
 
     {
-        "code": 404, // matches the HTTP status code
+        "code": 404,  // matches the HTTP status code
         "errno": 103, // stable application-level error number
         "error": "Not Found", // string representation of the status
-        "message": "No message found" // Optional additional error information
+        "message": "No message found" // optional additional error information
     }
 
-The current application-level error numbers are:
+Unless otherwise specified, all calls return the following error codes:
 
-* status code 400, errno 101: missing necessary crypto keys
-* status code 404, errno 102: invalid URL endpoint
-* status code 404, errno 103: expired URL endpoint
-* status code 413, errno 104: data payload is too large
-* status code 404, errno 105: endpoint became unavailable during request
-* status code 404, errno 106: invalid subscription
-* status code 404, errno 107: message not found
-* status code 400, errno 108: router type is invalid
-* status code 401, errno 109: invalid authentication
-* status code 503, errno 201: service temporarily unavailable due to high
-  load (use exponential back-off for retries)
-* status code 503, errno 202: temporary failure, immediate retry ok
-* status code 500, errno 999: unknown error
+-  20x - Success
+-  301 - Moved + `Location:` if `{token}` is invalid (Bridge API Only)
+-  400 - Bad Parameters
 
+   - errno 101 - Missing neccessary crypto keys
+   - errno 108 - Router type is invalid
 
-.. http:put:: /push/(uuid:token)
+-  401 - Bad Authorization
 
-    Send a notification to the given endpoint `token`.
+   - errno 109 - Invalid authentication
+
+-  404 - `{UAID}` not found or invalid
+
+   - errno 102 - Invalid URL endpoint
+   - errno 103 - Expired URL endpoint
+   - errno 105 - Endpoint became unavailable during request
+   - errno 106 - Invalid subscription
+   - errno 107 - Message not found
+
+-  500 - Unknown server error
+
+   - errno 999 - Unknown error
+
+-  503 - Server temporarily unavaliable.
+
+   -  errno 201 - Use exponential back-off for retries
+   -  errno 202 - Immediate retry ok
+
+Calls
+-----
+
+Send Notification
+~~~~~~~~~~~~~~~~~
+
+Send a notification to the given endpoint identified by it's `token`.
+
+Call:
+^^^^^
+.. http:put:: /push/{token}
 
     If the client is using webpush style data delivery, then the body in its
     entirety will be regarded as the data payload for the message per
     `the WebPush spec
     <https://tools.ietf.org/html/draft-thomson-webpush-http2-02#section-5>`_.
 
+Parameters:
+^^^^^^^^^^^
+
     :form version: (*Optional*) Version of notification, defaults to current
                    time
+
+Reply:
+^^^^^^
+
+.. code-block:: json
+
+    {"message-id": {message-id}}
+
+Errors:
+^^^^^^^
     :statuscode 404: `token` is invalid.
     :statuscode 202: Message stored for delivery to client at a later
                      time.
     :statuscode 200: Message delivered to node client is connected to.
 
-.. http:delete:: /m/(string:message_id)
+Cancel Notification
+~~~~~~~~~~~~~~~~~~~
 
-    Delete the message given the `message_id`.
+Delete the message given the `message_id`.
+
+Call:
+^^^^^
+.. http:delete:: /m/{message_id}
+
+Parameters:
+^^^^^^^^^^^
+
+    None
+
+Reply:
+^^^^^^
+
+.. code-block:: json
+
+    {}
+
+Errors:
+^^^^^^^
+
+    Standard error codes apply.
+
+
+Update Notification
+~~~~~~~~~~~~~~~~~~~
+
+Update the message at the given `{message_id}`.
+
+
+Call:
+^^^^^
 
 .. http:put:: /m/(string/message_id)
 
-    Update the message at the given `message_id`.
+Parameters:
+^^^^^^^^^^^
 
     This method takes the same arguments as WebPush PUT, with values
     replacing that for the provided message.
@@ -95,148 +182,278 @@ The current application-level error numbers are:
         the client will not get the updated message until reconnect. This
         should be considered a rare edge-case.
 
+Reply:
+^^^^^^
+
+.. code-block:: json
+
+    {}
+
+Errors:
+^^^^^^^
+
     :statuscode 404: `message_id` is not found.
     :statuscode 200: Message has been updated.
 
-.. http:get:: /register/(uuid:uaid)
 
-    Returns registered router data for the UAID.
+Push Service Bridge HTTP Interface
+==================================
 
-    **Example Request**
+Push allows for remote devices to perform some functions using an HTTP
+interface. This is mostly used by devices that are bridging via an
+external protocol like
+`GCM <https://developers.google.com/cloud-messaging/>`__ or
+`APNs <https://developer.apple.com/library/ios/documentation/NetworkingIntern\
+et/Conceptual/RemoteNotificationsPG/Introduction.html#//apple_ref/doc/uid/TP4\
+0008196-CH1-SW1>`__. All message bodies must be UTF-8 encoded.
 
-    .. code-block:: http
+Lexicon
+-------
 
-        GET /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
-        Host: endpoint.push.com
-        Authorization: Bearer ...
+For the following call definitions:
 
-    **Example Response**
+   :{type}: The bridge type.
 
-    .. code-block:: http
+Allowed bridges are `gcm` (Google Cloud Messaging) and `apns` (Apple
+Push Notification system)
 
-        HTTP/1.1 200 OK
-        Content-Type: application/json
-        Content-Length: nnn
+   :{token}: The bridge specific public exchange token
 
-        {
-            "type": "apns",
-            "data": {
-                "token": "APNS_TOKEN_DATA",
-                ...
-            }
-        }
+Each protocol requires a unique token that addresses the remote application.
+For GCM, this is the `SenderID` and is pre-negotiated outside of the push
+service.
 
-    :reqheader Authorization: Bearer ...
+   :{instanceid}: The bridge specific private identifier token
 
-.. http:post:: /register/(uuid:uaid)
+Each protocol requires a unique token that addresses the
+application on a given user's device. This is usually the product of the
+application registering the {instanceid} with the native bridge protocol
+agent.
 
-    Create a new endpoint for a given UAID, or register a new UAID and
-    return a new endpoint.
+   :{auth_token}: The Authorization token
+
+Most calls to the HTTP interface require a Authorization header. The
+Authorization header is a bearer token, which has been provided by the
+**Registration** call and is preceded by the token type word "Bearer".
+
+An example of the Authorization header would be:
+
+::
+
+    Authorization: Bearer 0123abcdef
+
+Calls
+-----
+
+Registration
+~~~~~~~~~~~~
+
+Request a new UAID registration, Channel ID, and optionally set a bridge
+type and token for this connection.
+
+Call:
+^^^^^
+
+.. http:post:: /v1/{type}/{token}/registration
+
+This call requires no Authorization for first time use.
+
+Parameters:
+^^^^^^^^^^^
+
+    {"token":{instanceid}}
 
     .. note::
 
-      If a ``channelID`` field is not supplied then one will be generated.
-      Supplied ``channelID`` fields must be valid UUID hex strings.
+        If additional information is required for the bridge, it may be
+        included in the paramters as JSON elements. Currently, no additional
+        information is required.
 
-    **1. Endpoint w/New Registration**
+Reply:
+^^^^^^
 
-    **Example Request (for APNS router)**:
+.. code-block:: json
 
-    .. code-block:: http
+    `{"uaid": {UAID}, "secret": {auth_token},
+    "endpoint": "https://updates-push...", "channelID": {CHID}}`
 
-        POST /register
-        Host: endpoint.push.com
-        Content-Type: application/json
+example:
 
-        {
-            "type": "apns",
-            "data": {
-                "token": "APNS_TOKEN_DATA",
-                ...
-            }
-        }
+.. code-block:: http
 
-    **Example Response**:
+    > POST /v1/gcm/a1b2c3/registration
+    >
+    > {"token": "1ab2c3"}
 
-    .. code-block:: http
+.. code-block:: json
 
-        HTTP/1.1 200 OK
-        Content-Type: application/json
-        Content-Length: nnn
+    < {"uaid": "abcdef012345",
+    < "secret": "0123abcdef",
+    < "endpoint": "https://updates-push.services.mozaws.net/push/...",
+    < "channelID": "01234abcd"}
 
-        {
-            "uaid": "5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63",
-            "secret": "4526e381eb6c191cf783da5d6df248e7",
-            "channelID": "a13872c9-5cba-48ab-a8e5-955264647303",
-            "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
-        }
+Errors:
+^^^^^^^
 
-    **2. Endpoint w/Existing UAID**
+Standard error codes apply.
 
-    **Example Request**:
+Token updates
+~~~~~~~~~~~~~
 
-    .. code-block:: http
+Update the current bridge token value
 
-        POST /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
-        Host: endpoint.push.com
-        Authorization: Bearer ...
-        Content-Type: application/json
+Call:
+^^^^^
 
-        {}
+.. http:put:: /v1/{type}/{token}/registration/{uaid}
 
-    **Example Response**:
+::
 
-    .. code-block:: http
+    Authorization: Bearer {auth_token}
 
-        HTTP/1.1 200 OK
-        Content-Type: application/json
-        Content-Length: nnn
+Parameters:
+^^^^^^^^^^^
 
-        {
-            "channelID": "8a90e38a-f36c-4c77-901a-c11d02c1516f",
-            "endpoint": "https://endpoint.push.com/push/VERYLONGSTRING",
-        }
+    {"token": {instanceid}}
 
-    :reqheader Authorization: Bearer ...
+    .. note::
 
-.. http:put:: /register/(uuid:uaid)
+        If additional information is required for the bridge, it may be
+        included in the paramters as JSON elements. Currently, no additional
+        information is required.
 
-    Update router data for an existing UAID.
+Reply:
+^^^^^^
 
-    This endpoint handles updating the router data/type for an existing
-    UAID and requires the nonce/hash for the UAID given.
+.. code-block:: json
 
-    **Update Router Data**
+    {}
 
-    **Example Request**:
+example:
 
-    .. code-block:: http
+.. code-block:: http
 
-        PUT /register/5bbc4aae-a575-4f6a-a4b3-6f84a4d06a63
-        Host: endpoint.push.com
-        Authorization: Bearer ...
-        Content-Type: application/json
+    > PUT /v1/gcm/a1b2c3/registration/abcdef012345
+    > Authorization: Bearer 0123abcdef
+    >
+    > {"token": "5e6g7h8i"}
 
-        {
-            "type": "gcm",
-            "data": {
-                "token": "TOKEN_DATA_FOR_ROUTER_TYPE",
-                ...
-            }
-        }
+.. code-block:: json
 
-    **Example Response**:
+    < {}
 
-    .. code-block:: http
+Errors:
+^^^^^^^
 
-        HTTP/1.1 200 OK
-        Content-Type: application/json
-        Content-Length: nnn
+Standard error codes apply.
 
-        {}
+Channel Subscription
+~~~~~~~~~~~~~~~~~~~~
 
-    :reqheader Authorization: Bearer ...
+Acquire a new ChannelID for a given UAID.
 
+Call:
+^^^^^
+
+.. http:post:: /v1/{type}/{token}/registration/{uaid}/subscription
+
+::
+
+    Authorization: Bearer {auth_token}
+
+Parameters:
+^^^^^^^^^^^
+
+     {}
+
+Reply:
+^^^^^^
+
+.. code-block:: json
+
+    {"channelID": {CHID}, "endpoint": "https://updates-push..."}
+
+example:
+
+.. code-block:: http
+
+    > POST /v1/gcm/a1b2c3/registration/abcdef012345/subscription
+    > Authorization: Bearer 0123abcdef
+    >
+    > {}
+
+.. code-block:: json
+
+    < {"channelID": "43210efgh"
+    < "endpoint": "https://updates-push.services.mozaws.net/push/..."}
+
+Errors:
+^^^^^^^
+
+Standard error codes apply.
+
+Unregister UAID (and all associated ChannelID subscriptions)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Indicate that the UAID, and by extension all associated subscriptions,
+is no longer valid.
+
+Call:
+^^^^^
+
+.. http:delete:: /v1/{type}/{token}/registration/{uaid}
+
+::
+
+    Authorization: Bearer {auth_token}
+
+Parameters:
+^^^^^^^^^^^
+
+    {}
+
+Reply:
+^^^^^^
+
+.. code-block:: json
+
+    {}
+
+Errors:
+^^^^^^^
+
+Standard error codes apply.
+
+Unsubscribe Channel
+~~~~~~~~~~~~~~~~~~~
+
+Remove a given ChannelID subscription from a UAID.
+
+Call:
+^^^^^
+
+.. http:delete:: /v1/{type}/{token}/registration/{UAID}/subscription/{CHID}
+
+::
+
+    Authorization: Bearer {auth_token}
+
+Parameters:
+^^^^^^^^^^^
+
+    {}
+
+Reply:
+^^^^^^
+
+.. code-block:: json
+
+    {}
+
+Errors:
+^^^^^^^
+
+Standard error codes apply.
 """
 import hashlib
 import json
@@ -395,7 +612,7 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
     #############################################################
     #                    Error Callbacks
     #############################################################
-    def _write_response(self, status_code, errno, message=None):
+    def _write_response(self, status_code, errno, message=None, headers=None):
         """Writes out a full JSON error and sets the appropriate status"""
         self.set_status(status_code)
         error_data = dict(
@@ -407,6 +624,9 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
             error_data["message"] = message
         self.write(json.dumps(error_data))
         self.set_header("Content-Type", "application/json")
+        if headers:
+            for header in headers.keys():
+                self.set_header(header, headers.get(header))
         self.finish()
 
     def _response_err(self, fail):
@@ -460,6 +680,12 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         fail.trap(InvalidToken, ValueError)
         log.msg("Invalid token", **self._client_info())
         self._write_response(404, 102)
+
+    def _chid_not_found_err(self, fail):
+        """errBack for unknown chid"""
+        fail.trap(ItemNotFound, ValueError)
+        log.msg("CHID not found in AWS.", **self._client_info())
+        self._write_response(404, 103)
 
     #############################################################
     #                    Utility Methods
@@ -521,7 +747,7 @@ class MessageHandler(AutoendpointHandler):
     def put(self, token):
         """Updates a pending message.
 
-        If the message was already acknowledged, than this will instead create
+        If the message was already acknowledged, then this will instead create
         a new message.
 
         """
@@ -714,7 +940,7 @@ class EndpointHandler(AutoendpointHandler):
 
 
 class RegistrationHandler(AutoendpointHandler):
-    cors_methods = "GET,PUT,DELETE"
+    cors_methods = "POST,PUT,DELETE"
     _base_tags = []
 
     def base_tags(self):
@@ -722,40 +948,32 @@ class RegistrationHandler(AutoendpointHandler):
         tags.append("user-agent:%s" %
                     self.request.headers.get("user-agent"))
 
+    def _relocate(self, router_type, router_token, uaid="", chid=""):
+        relo = "%s/v1/%s/%s/register" % (self.ap_settings.endpoint_url,
+                                         router_type, router_token)
+        if uaid:
+            relo += "/%s" % uaid
+        if chid:
+            relo += "/subscription/%s" % chid
+        return relo
+
     #############################################################
     #                    Cyclone HTTP Methods
     #############################################################
     @cyclone.web.asynchronous
-    def get(self, uaid=""):
-        """HTTP GET
-
-        Retrieves the router type/data for a UAID.
-
-        """
-        if not self._validate_auth(uaid):
-            return self._write_response(401, 109,
-                                        message="Invalid authentication")
-
-        self.uaid = uaid
-        self.chid = uuid.uuid4().hex
-        d = deferToThread(self.ap_settings.router.get_uaid, uaid)
-        d.addCallback(self._return_router_data)
-        d.addErrback(self._overload_err)
-        d.addErrback(self._uaid_not_found_err)
-        d.addErrback(self._response_err)
-        return d
-
-    @cyclone.web.asynchronous
-    def post(self, uaid=""):
+    def post(self, router_type="", router_token="", uaid="", chid=""):
         """HTTP POST
 
         Endpoint generation and optionally router type/data registration.
 
         """
+
         self.start_time = time.time()
         self.add_header("Content-Type", "application/json")
         params = self._load_params()
         # If the client didn't provide a CHID, make one up.
+        if chid:
+            params["channelID"] = chid
         if "channelID" not in params:
             params["channelID"] = uuid.uuid4().hex
         self.ap_settings.metrics.increment("updates.client.register",
@@ -763,6 +981,19 @@ class RegistrationHandler(AutoendpointHandler):
         # If there's a UAID, ensure its valid, otherwise we ensure the hash
         # matches up
         new_uaid = False
+
+        # normalize the path vars into parameters
+        if router_type not in self.ap_settings.routers:
+            log.msg("Invalid parameters", **self._client_info())
+            return self._write_response(
+                400, 108, message="Invalid arguments")
+        router = self.ap_settings.routers[router_type]
+        valid, router_token = router.check_token(router_token)
+        if not valid:
+            newUrl = self._relocate(router_type, router_token, uaid, chid)
+            return self._write_response(
+                301, 0, message=("Location: %s" % newUrl),
+                headers={"Location": newUrl})
 
         if uaid:
             if not self._validate_auth(uaid):
@@ -774,14 +1005,8 @@ class RegistrationHandler(AutoendpointHandler):
             new_uaid = True
             # Should this be different than websocket?
         self.uaid = uaid
-        router_type = params.get("type")
-        if new_uaid and router_type not in self.ap_settings.routers:
-            log.msg("Invalid parameters", **self._client_info())
-            return self._write_response(
-                400, 108, message="Invalid arguments")
         self.chid = params["channelID"]
         if new_uaid:
-            router = self.ap_settings.routers[router_type]
             d = Deferred()
             d.addCallback(router.register, params.get("data", {}))
             d.addCallback(self._save_router_data, router_type)
@@ -796,7 +1021,7 @@ class RegistrationHandler(AutoendpointHandler):
             d.addErrback(self._response_err)
 
     @cyclone.web.asynchronous
-    def put(self, uaid=""):
+    def put(self, router_type="", router_token="", uaid="", chid=""):
         """HTTP PUT
 
         Update router type/data for a UAID.
@@ -810,16 +1035,20 @@ class RegistrationHandler(AutoendpointHandler):
 
         params = self._load_params()
         self.uaid = uaid
-        router_type = params.get("type")
-        router_data = params.get("data")
+        router_data = params
         if router_type not in self.ap_settings.routers or not router_data:
             log.msg("Invalid parameters", **self._client_info())
             return self._write_response(
                 400, 108, message="Invalid arguments")
+        router = self.ap_settings.routers[router_type]
+        valid, router_token = router.check_token(router_token)
+        if not valid:
+            newUrl = self._relocate(router_type, router_token, uaid, chid)
+            return self._write_response(
+                301, 0, "Location: %s" % newUrl,
+                headers={"Location": newUrl})
 
         self.add_header("Content-Type", "application/json")
-        router = self.ap_settings.routers[router_type]
-
         d = Deferred()
         d.addCallback(router.register, router_data)
         d.addCallback(self._save_router_data, router_type)
@@ -828,57 +1057,59 @@ class RegistrationHandler(AutoendpointHandler):
         d.addErrback(self._response_err)
         d.callback(uaid)
 
-    def _deleteChannel(self, message, uaid, chid):
+    def _delete_channel(self, uaid, chid):
+        message = self.ap_settings.message
         message.delete_messages_for_channel(uaid, chid)
         message.unregister_channel(uaid, chid)
 
-    def _deleteUaid(self, message, uaid, router):
-        message.delete_all_for_user(uaid)
-        router.drop_user(uaid)
+    def _delete_uaid(self, uaid, router):
+        message = self.ap_settings.message
+        message.delete_user(uaid)
+        if not router.drop_user(uaid):
+            raise ItemNotFound("UAID not found")
 
     @cyclone.web.asynchronous
-    def delete(self, combo):
+    def delete(self, router_type="", router_token="", uaid="", chid=""):
         """HTTP DELETE
 
         Invalidate a UAID (and all channels associated with it).
 
         """
-        combo = combo.strip("/")
-        if "/" in combo:
-            (uaid, chid) = combo.split("/", 2)
-        else:
-            uaid = combo
-            chid = None
-        # what is request
         if not self._validate_auth(uaid):
             return self._write_response(
                 401, 109, message="Invalid Authentication")
-        message = self.ap_settings.message
+        if router_type not in self.ap_settings.routers:
+            log.msg("Invalid parameters", **self._client_info())
+            return self._write_response(
+                400, 108, message="Invalid arguments")
+        router = self.ap_settings.routers[router_type]
+        valid, router_token = router.check_token(router_token)
+        if not valid:
+            newUrl = self._relocate(router_type, router_token, uaid, chid)
+            return self._write_response(
+                301, 0, "Location: %s" % newUrl,
+                headers={"Location": newUrl})
+
         if chid:
             # mark channel as dead
             self.ap_settings.metrics.increment("updates.client.unregister",
                                                tags=self.base_tags())
-            d = deferToThread(self._deleteChannel, message, uaid, chid)
+            d = deferToThread(self._delete_channel, uaid, chid)
+            d.addCallback(self._success)
+            d.addErrback(self._chid_not_found_err)
             d.addErrback(self._response_err)
             return d
         # nuke uaid
-        d = deferToThread(self._deleteUaid, message, uaid,
+        d = deferToThread(self._delete_uaid, uaid,
                           self.ap_settings.router)
+        d.addCallback(self._success)
+        d.addErrback(self._uaid_not_found_err)
         d.addErrback(self._response_err)
         return d
 
     #############################################################
     #                    Callbacks
     #############################################################
-    def _return_router_data(self, user_item):
-        """Called after UAID data is retrieved"""
-        msg = dict(
-            type=user_item["router_type"],
-            data=user_item["router_data"],
-        )
-        self.write(json.dumps(msg))
-        self.finish()
-
     def _save_router_data(self, router_data, router_type):
         """Called when new data needs to be saved to a user-record"""
         user_item = dict(
@@ -891,8 +1122,14 @@ class RegistrationHandler(AutoendpointHandler):
 
     def _make_endpoint(self, result):
         """Called to create a new endpoint"""
-        return deferToThread(self.ap_settings.make_endpoint,
-                             self.uaid, self.chid)
+        d = deferToThread(self.ap_settings.make_endpoint,
+                          self.uaid, self.chid)
+        d.addCallback(self._register_channel)
+        return d
+
+    def _register_channel(self, result):
+        self.ap_settings.message.register_channel(self.uaid, self.chid)
+        return result
 
     def _return_endpoint(self, endpoint, new_uaid, router=None):
         """Called after the endpoint was made and should be returned to the

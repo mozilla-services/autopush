@@ -9,9 +9,15 @@ Features
 --------
 
 * Add message table rotation for webpush users. Issue #191.
+* New Bridge HTTP API. Issues #238, #250, #251
+  In cooperation with the GCM client work the HTTP Bridge API has been
+  simplified. The new method has been detailed in /api/endpoint.py.
+  In essence: The API is now bearer token based, and uses the form
+  /v1/{BridgeType}/{BridgeToken}/registration[/{uaid}/[subscription/[{chid}]]]
 
 Bug Fixes
 ---------
+* Fixed scope issue around the Bridge API delete functions.
 
 * Fix db test bug with month addition to properly handle December. Issue #261.
 * Relax endpoint TLS cert requirement for https scheme. Issue #249.
@@ -19,11 +25,15 @@ Bug Fixes
 WebPush
 -------
 
+Backwards Incompatibilities
+---------------------------
+* The previous Bridge HTTP API has been removed.
+
 1.8.1 (2015-11-16)
 ==================
 
- Features
- --------
+Features
+--------
 
 * Convert proprietary AUTH to use Bearer Token for client REST interfaces.
   Issue #238.

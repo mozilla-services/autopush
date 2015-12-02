@@ -33,6 +33,11 @@ class GCMRouter(object):
             raise IOError("GCM Bridge not initiated in main")
         log.msg("Starting GCM router...")
 
+    def check_token(self, token):
+        if token not in self.senderIDs.senderIDs():
+            return (False, self.senderIDs.choose_ID().get('senderID'))
+        return (True, token)
+
     def amend_msg(self, msg):
         msg["senderid"] = self.creds.get("senderID")
         return msg
@@ -53,14 +58,33 @@ class GCMRouter(object):
 
     def _route(self, notification, router_data):
         """Blocking GCM call to route the notification"""
+        data = {"chid": notification.channel_id,
+                "ver": notification.version}
+        # Payload data is optional.  If present, all of Content-Encoding,
+        # Encryption, and Encryption-Key are required.  If one or more are
+        # missing, a 400 response is produced.
+        if notification.data:
+            lead = "notification with data is missing header:"
+            con = notification.headers.get('content-encoding', None)
+            if not con:
+                self._error("%s Content-Encoding" % lead, 400)
+            enc = notification.headers.get('encryption', None)
+            if not enc:
+                self._error("%s Encryption" % lead, 400)
+            enckey = notification.headers.get('encryption-key', None)
+            if not enckey:
+                self._error("%s Encryption-Key" % lead, 400)
+            data['body'] = notification.data
+            data['con'] = con
+            data['enc'] = enc
+            data['enckey'] = enckey
+
         payload = gcmclient.JSONMessage(
             registration_ids=[router_data["token"]],
             collapse_key=self.collapseKey,
             time_to_live=self.ttl,
             dry_run=self.dryRun,
-            data={"Msg": notification.data,
-                  "Chid": notification.channel_id,
-                  "Ver": notification.version}
+            data=data,
         )
         creds = router_data.get("creds", {"senderID": "missing id"})
         try:

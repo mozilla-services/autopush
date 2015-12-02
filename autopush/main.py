@@ -453,7 +453,9 @@ def endpoint_main(sysargs=None):
         (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
         # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint
-        (r"/register(?:/(.+))?", RegistrationHandler,
+        (r"/v1/([^\/]+)/([^\/]+)/registration(?:/([^\/]+))"
+            "?(?:/subscription)?(?:/([^\/]+))?",
+         RegistrationHandler,
          dict(ap_settings=settings)),
     ],
         default_host=settings.hostname, debug=args.debug,
