@@ -15,6 +15,7 @@ Features
   simplified. The new method has been detailed in /api/endpoint.py.
   In essence: The API is now bearer token based, and uses the form
   /v1/{BridgeType}/{BridgeToken}/registration[/{uaid}/[subscription/[{chid}]]]
+* Tag endpoint requests with a unique ID. Issue #268.
 
 Bug Fixes
 ---------
