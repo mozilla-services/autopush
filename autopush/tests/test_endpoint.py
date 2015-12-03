@@ -186,9 +186,12 @@ class MessageTestCase(unittest.TestCase):
         self.message.put("")
         return self.finish_deferred
 
+dummy_request_id = "11111111-1234-1234-1234-567812345678"
+
 
 class EndpointTestCase(unittest.TestCase):
-    def setUp(self):
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
+    def setUp(self, t):
         self.timeout = 0.5
 
         twisted.internet.base.DelayedCall.debug = True
@@ -387,6 +390,8 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_client_info(self):
+        d = self.endpoint._client_info()
+        eq_(d["request_id"], dummy_request_id)
         h = self.request_mock.headers
         h["user-agent"] = "myself"
         d = self.endpoint._client_info()

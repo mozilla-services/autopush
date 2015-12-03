@@ -548,6 +548,7 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
         self._uaid = ""
         self.ap_settings = ap_settings
         self.metrics = ap_settings.metrics
+        self.request_id = str(uuid.uuid4())
 
     def prepare(self):
         """Common request preparation"""
@@ -601,6 +602,7 @@ class AutoendpointHandler(cyclone.web.RequestHandler):
     def _client_info(self):
         """Returns a dict of additional client data"""
         return {
+            "request_id": self.request_id,
             "user-agent": self.request.headers.get("user-agent", ""),
             "remote-ip": self.request.headers.get("x-forwarded-for",
                                                   self.request.remote_ip),
