@@ -13,6 +13,7 @@ from twisted.python import log
 from twisted.web.client import Agent, HTTPConnectionPool
 
 from autopush.db import (
+    create_rotating_message_table,
     get_router_table,
     get_storage_table,
     get_rotating_message_table,
@@ -204,6 +205,13 @@ class AutopushSettings(object):
         """
         last_month = get_rotating_message_table(self._message_prefix, -1)
         this_month = get_rotating_message_table(self._message_prefix)
+        # Verify the table exists
+        try:
+            this_month.describe()
+        except Exception:
+            # Create the message table
+            create_rotating_message_table(prefix=self._message_prefix)
+            this_month = get_rotating_message_table(self._message_prefix)
         self.message_tables = {
             last_month.table_name: Message(last_month, self.metrics),
             this_month.table_name: Message(this_month, self.metrics),

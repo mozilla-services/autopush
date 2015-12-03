@@ -19,6 +19,7 @@ Features
 Bug Fixes
 ---------
 
+* Ensure rotating message table exists on startup. Issue #266.
 * Fix Running documents to reflect usage of local DynamoDB JAR server. Issue
   #265.
 * Fixed scope issue around the Bridge API delete functions.

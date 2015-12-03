@@ -604,6 +604,36 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.post(dummy_uaid)
         return self.finish_deferred
 
+    @patch("twisted.python.log")
+    def test_post_db_error_in_routing(self, mock_log):
+        from autopush.router.interface import RouterException
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+
+        def raise_error(*args):
+            raise RouterException(
+                "Provisioned throughput error",
+                status_code=503,
+                response_body="Retry Request",
+                errno=201
+            )
+
+        self.wp_router_mock.route_notification.side_effect = raise_error
+
+        def handle_finish(result):
+            self.flushLoggedErrors()
+            self.endpoint.set_status.assert_called_with(503)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.post(dummy_uaid)
+        return self.finish_deferred
+
     def test_put_db_error(self):
         self.fernet_mock.decrypt.return_value = "123:456"
         self.router_mock.get_uaid.side_effect = self._throw_provisioned_error

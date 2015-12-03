@@ -897,7 +897,6 @@ class EndpointHandler(AutoendpointHandler):
         return d
 
     def _route_notification(self, version, result, data, ttl=None):
-
         notification = Notification(version=version, data=data,
                                     channel_id=self.chid,
                                     headers=self.request.headers,
