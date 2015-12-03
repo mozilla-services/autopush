@@ -44,6 +44,31 @@ Bugs should be reported on the `autopush github issue tracker
 The developers of ``autopush`` can frequently be found on the Mozilla IRC
 network (irc.mozilla.org) in the `\#push`_ channel.
 
+autopush Endpoints
+==================
+
+autopush is automatically deployed from master to a dev environment for testing,
+a stage environment for tagged releases, and the production environment used by
+Firefox/FirefoxOS.
+
+dev
+---
+
+Websocket: wss://autopush-dev.stage.mozaws.net/
+Endpoint: https://updates-autopush-dev.stage.mozaws.net/
+
+stage
+-----
+
+Websocket: wss://autopush.stage.mozaws.net/
+Endpoint: https://updates-autopush.stage.mozaws.net/
+
+production
+----------
+
+Websocket: wss://push.services.mozilla.com/
+Endpoint: https://updates.push.services.mozilla.com/
+
 Indices and tables
 ==================
 
