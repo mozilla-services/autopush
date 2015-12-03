@@ -18,8 +18,10 @@ Features
 
 Bug Fixes
 ---------
-* Fixed scope issue around the Bridge API delete functions.
 
+* Fix Running documents to reflect usage of local DynamoDB JAR server. Issue
+  #265.
+* Fixed scope issue around the Bridge API delete functions.
 * Fix db test bug with month addition to properly handle December. Issue #261.
 * Relax endpoint TLS cert requirement for https scheme. Issue #249.
 * Add endpoint names to the docs. Issue #223.
