@@ -22,16 +22,24 @@ You can then test that this works by using the `simplepush tester
 
     ~/simplepush_test/ $ PUSH_SERVER=ws://localhost:8080/ ./bin/nosetests
 
-Using a Moto Mock Server
-========================
+Using a Local DynamoDB Server
+=============================
 
-To use a mock DynamoDB server (and run entirely locally), first install
-``moto`` with pip, and run a dynamodb moto server:
+Amazon supplies a `Local DynamoDB Java server
+<http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Tools.DynamoDBLocal.html>`_
+to use for local testing that implements the complete DynamoDB API. This is used
+for automated unit testing on Travis and can be used to run autopush locally for
+testing.
+
+You will need the Java JDK 6.x or newer.
+
+To setup the server locally:
 
 .. code-block:: bash
 
-    $ ./pypy/bin/pip install moto
-    $ ./pypy/bin/moto_server dynamodb2 -p 5000
+    $ mkdir ddb
+    $ curl -sSL http://dynamodb-local.s3-website-us-west-2.amazonaws.com/dynamodb_local_latest.tar.gz | tar xzvC ddb/
+    $ java -Djava.library.path=./ddb/DynamoDBLocal_lib -jar ./ddb/DynamoDBLocal.jar -sharedDb -inMemory
     $ cp automock/boto.cfg ~/.boto
 
 Note the last line copies a boto config over ``~/.boto`` in your home dir. If
