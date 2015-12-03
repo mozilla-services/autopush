@@ -9,6 +9,7 @@ Features
 --------
 
 * Add message table rotation for webpush users. Issue #191.
+* Capture Authorization header for endpoint requests for logging. Issue #232.
 * New Bridge HTTP API. Issues #238, #250, #251
   In cooperation with the GCM client work the HTTP Bridge API has been
   simplified. The new method has been detailed in /api/endpoint.py.
