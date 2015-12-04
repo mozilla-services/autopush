@@ -20,6 +20,7 @@ Features
 Bug Fixes
 ---------
 
+* Fix bug in GCM router call not getting appropriate params dict. Issue #271.
 * Ensure rotating message table exists on startup. Issue #266.
 * Fix Running documents to reflect usage of local DynamoDB JAR server. Issue
   #265.

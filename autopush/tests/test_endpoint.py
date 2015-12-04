@@ -774,6 +774,7 @@ class RegistrationTestCase(unittest.TestCase):
 
         d = self.finish_deferred = Deferred()
         self.reg.finish = lambda: d.callback(True)
+        self.settings = settings
 
     def _check_error(self, code, errno, error, message=None):
         d = json.loads(self.write_mock.call_args[0][0])
@@ -890,6 +891,45 @@ class RegistrationTestCase(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.post("simplepush", "")
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
+    def test_post_gcm(self, *args):
+        from autopush.router.gcm import GCMRouter
+        from autopush.senderids import SenderIDs
+        sids = {"182931248179192": {"auth": "aailsjfilajdflijdsilfjsliaj"}}
+        senderIDs = SenderIDs(
+            dict(
+                s3_bucket="",
+                senderid_expry=15*60,
+                use_s3=False,
+                senderid_list=sids
+            )
+        )
+        gcm = GCMRouter(self.settings,
+                        {"dryrun": True, "senderIDs": senderIDs})
+        self.reg.ap_settings.routers["gcm"] = gcm
+        self.reg.request.body = json.dumps(dict(
+            channelID=dummy_chid,
+            token="token",
+        ))
+        self.fernet_mock.configure_mock(**{
+            'encrypt.return_value': 'abcd123',
+        })
+        self.reg.request.headers["Authorization"] = self.auth
+
+        def handle_finish(value):
+            call_args = self.reg.write.call_args
+            ok_(call_args is not None)
+            args = call_args[0]
+            call_arg = json.loads(args[0])
+            eq_(call_arg["uaid"], dummy_uaid)
+            eq_(call_arg["channelID"], dummy_chid)
+            eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
+            ok_("secret" in call_arg)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.post("gcm", "182931248179192")
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
