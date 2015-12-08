@@ -53,6 +53,7 @@ def generate_hash(key, payload):
     h = hmac.new(key=key, msg=payload, digestmod=hashlib.sha256)
     return h.hexdigest()
 
+
 class Utils (object):
 
     def write_error(self, code, **kwargs):
