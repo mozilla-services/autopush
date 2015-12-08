@@ -181,7 +181,7 @@ class SimpleRouter(object):
                     log.err("Could not send UDP wake request:", str(x))
             returnValue(retVal)
 
-    ###########################################################
+    #############################################################
     #                    Blocking Helper Functions
     #############################################################
     def _save_notification(self, uaid, notification, extra):

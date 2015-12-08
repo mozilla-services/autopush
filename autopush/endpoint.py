@@ -549,6 +549,7 @@ class AutoendpointHandler(Utils, cyclone.web.RequestHandler):
         self._uaid = ""
         self.ap_settings = ap_settings
         self.metrics = ap_settings.metrics
+        self.request_id = str(uuid.uuid4())
 
     def prepare(self):
         """Common request preparation"""
@@ -587,9 +588,11 @@ class AutoendpointHandler(Utils, cyclone.web.RequestHandler):
     def _client_info(self):
         """Returns a dict of additional client data"""
         return {
+            "request_id": self.request_id,
             "user-agent": self.request.headers.get("user-agent", ""),
             "remote-ip": self.request.headers.get("x-forwarded-for",
                                                   self.request.remote_ip),
+            "authorization": self.request.headers.get("authorization", ""),
             "uaid_hash": self.uaid_hash,
             "router_key": getattr(self, "router_key", ""),
             "channel_id": getattr(self, "chid", ""),
@@ -882,7 +885,6 @@ class EndpointHandler(AutoendpointHandler):
         return d
 
     def _route_notification(self, version, result, data, ttl=None):
-
         notification = Notification(version=version, data=data,
                                     channel_id=self.chid,
                                     headers=self.request.headers,
@@ -994,15 +996,15 @@ class RegistrationHandler(AutoendpointHandler):
         self.chid = params["channelID"]
         if new_uaid:
             d = Deferred()
-            d.addCallback(router.register, params.get("data", {}))
+            d.addCallback(router.register, params)
             d.addCallback(self._save_router_data, router_type)
-            d.addCallback(self._make_endpoint)
+            d.addCallback(self._create_endpoint)
             d.addCallback(self._return_endpoint, new_uaid, router)
             d.addErrback(self._router_fail_err)
             d.addErrback(self._response_err)
             d.callback(uaid)
         else:
-            d = self._make_endpoint(None)
+            d = self._create_endpoint()
             d.addCallback(self._return_endpoint, new_uaid)
             d.addErrback(self._response_err)
 
@@ -1053,6 +1055,11 @@ class RegistrationHandler(AutoendpointHandler):
         message.delete_user(uaid)
         if not router.drop_user(uaid):
             raise ItemNotFound("UAID not found")
+
+    def _register_channel(self):
+        self.ap_settings.message.register_channel(self.uaid, self.chid)
+        endpoint = self.ap_settings.make_endpoint(self.uaid, self.chid)
+        return endpoint
 
     @cyclone.web.asynchronous
     def delete(self, router_type="", router_token="", uaid="", chid=""):
@@ -1106,16 +1113,9 @@ class RegistrationHandler(AutoendpointHandler):
         )
         return deferToThread(self.ap_settings.router.register_user, user_item)
 
-    def _make_endpoint(self, result):
-        """Called to create a new endpoint"""
-        d = deferToThread(self.ap_settings.make_endpoint,
-                          self.uaid, self.chid)
-        d.addCallback(self._register_channel)
-        return d
-
-    def _register_channel(self, result):
-        self.ap_settings.message.register_channel(self.uaid, self.chid)
-        return result
+    def _create_endpoint(self, result=None):
+        """Called to register a new channel and create its endpoint."""
+        return deferToThread(self._register_channel)
 
     def _return_endpoint(self, endpoint, new_uaid, router=None):
         """Called after the endpoint was made and should be returned to the

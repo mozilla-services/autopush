@@ -47,9 +47,7 @@ class SettingsTestCase(unittest.TestCase):
 
 class SettingsAsyncTestCase(trialtest.TestCase):
     def test_update_rotating_tables(self):
-        from autopush.db import create_rotating_message_table, get_month
-        # Create the rotating table so the test passes
-        create_rotating_message_table()
+        from autopush.db import get_month
         settings = AutopushSettings(
             hostname="example.com", resolve_hostname=True)
 
@@ -73,6 +71,9 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         mock_date.date.today.return_value = get_month(-7)
         settings = AutopushSettings(
             hostname="google.com", resolve_hostname=True)
+
+        # Drop the table created during the creation of autopush settings
+        settings.message.table.delete()
 
         # Erase the tables it has on init, and move current month back one
         last_month = get_month(-1)

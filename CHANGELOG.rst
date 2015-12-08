@@ -9,18 +9,25 @@ Features
 --------
 
 * Add message table rotation for webpush users. Issue #191.
+* Capture Authorization header for endpoint requests for logging. Issue #232.
 * New Bridge HTTP API. Issues #238, #250, #251
   In cooperation with the GCM client work the HTTP Bridge API has been
   simplified. The new method has been detailed in /api/endpoint.py.
   In essence: The API is now bearer token based, and uses the form
   /v1/{BridgeType}/{BridgeToken}/registration[/{uaid}/[subscription/[{chid}]]]
+* Tag endpoint requests with a unique ID. Issue #268.
 
 Bug Fixes
 ---------
-* Fixed scope issue around the Bridge API delete functions.
 
+* Fix bug in GCM router call not getting appropriate params dict. Issue #271.
+* Ensure rotating message table exists on startup. Issue #266.
+* Fix Running documents to reflect usage of local DynamoDB JAR server. Issue
+  #265.
+* Fixed scope issue around the Bridge API delete functions.
 * Fix db test bug with month addition to properly handle December. Issue #261.
 * Relax endpoint TLS cert requirement for https scheme. Issue #249.
+* Add endpoint names to the docs. Issue #223.
 
 WebPush
 -------
