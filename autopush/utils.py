@@ -53,18 +53,19 @@ def generate_hash(key, payload):
     h = hmac.new(key=key, msg=payload, digestmod=hashlib.sha256)
     return h.hexdigest()
 
+class Utils (object):
 
-def write_error(this, code, **kwargs):
-    """Write the error (otherwise unhandled exception when dealing with
-    unknown method specifications.)
+    def write_error(self, code, **kwargs):
+        """Write the error (otherwise unhandled exception when dealing with
+        unknown method specifications.)
 
-    This is a Cyclone API Override method used by endpoint and websocket.
+        This is a Cyclone API Override method used by endpoint and websocket.
 
-    """
-    this.set_status(code)
-    if "exc_info" in kwargs:
-        log.err(failure.Failure(*kwargs["exc_info"]),
-                **this._client_info())
-    else:
-        log.err("Error in handler: %s" % code, **this._client_info())
-    this.finish()
+        """
+        self.set_status(code)
+        if "exc_info" in kwargs:
+            log.err(failure.Failure(*kwargs["exc_info"]),
+                    **self._client_info())
+        else:
+            log.err("Error in handler: %s" % code, **self._client_info())
+        self.finish()
