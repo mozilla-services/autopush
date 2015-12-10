@@ -195,6 +195,7 @@ Errors:
     :statuscode 404: `message_id` is not found.
     :statuscode 200: Message has been updated.
 
+.. _bridge_api:
 
 Push Service Bridge HTTP Interface
 ==================================
