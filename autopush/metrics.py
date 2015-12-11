@@ -38,7 +38,7 @@ class IMetrics(object):
 
 class SinkMetrics(IMetrics):
     """Exists to ignore metrics when metrics are not active"""
-    def increment(name, count=1, **kwargs):
+    def increment(self, name, count=1, **kwargs):
         pass
 
     def gauge(self, name, count, **kwargs):
