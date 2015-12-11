@@ -27,7 +27,7 @@ Reference Docs
    api
    Changelog <changelog>
 
-* :doc:`Push Service HTTP API <api/endpoint>`
+* :ref:`bridge_api`
 
 Source Code
 ===========

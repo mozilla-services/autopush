@@ -16,6 +16,7 @@ Features
   In essence: The API is now bearer token based, and uses the form
   /v1/{BridgeType}/{BridgeToken}/registration[/{uaid}/[subscription/[{chid}]]]
 * Tag endpoint requests with a unique ID. Issue #268.
+* Fixed document reference to HTTP API to be a deep link.
 
 Bug Fixes
 ---------
