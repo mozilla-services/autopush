@@ -479,7 +479,7 @@ from autopush.router.interface import RouterException
 from autopush.utils import (
     generate_hash,
     validate_uaid,
-    Utils
+    ErrorLogger
 )
 
 # Our max TTL is 60 days realistically with table rotation, so we hard-code it
@@ -534,7 +534,7 @@ def parse_request_params(request):
     return version, data
 
 
-class AutoendpointHandler(Utils, cyclone.web.RequestHandler):
+class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     """Common overrides for Autoendpoint handlers"""
     cors_methods = ""
     cors_request_headers = []

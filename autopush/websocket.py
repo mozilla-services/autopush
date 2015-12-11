@@ -57,7 +57,7 @@ from twisted.web.resource import Resource
 
 from autopush import __version__
 from autopush.protocol import IgnoreBody
-from autopush.utils import (validate_uaid, Utils)
+from autopush.utils import validate_uaid, ErrorLogger
 from autopush.noseplugin import track_object
 
 
@@ -1165,7 +1165,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.sendJSON(msg)
 
 
-class RouterHandler(cyclone.web.RequestHandler, Utils):
+class RouterHandler(cyclone.web.RequestHandler, ErrorLogger):
     """Router Handler
 
     Handles routing a notification to a connected client from an endpoint.
@@ -1196,7 +1196,7 @@ class RouterHandler(cyclone.web.RequestHandler, Utils):
         return self.write("Client accepted for delivery")
 
 
-class NotificationHandler(cyclone.web.RequestHandler, Utils):
+class NotificationHandler(cyclone.web.RequestHandler, ErrorLogger):
 
     def put(self, uaid, *args):
         """HTTP Put

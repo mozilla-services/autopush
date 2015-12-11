@@ -54,7 +54,7 @@ def generate_hash(key, payload):
     return h.hexdigest()
 
 
-class Utils (object):
+class ErrorLogger (object):
 
     def write_error(self, code, **kwargs):
         """Write the error (otherwise unhandled exception when dealing with
