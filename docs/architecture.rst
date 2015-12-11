@@ -134,3 +134,28 @@ Push Characteristics
   attempt to tell the node_id for that client to check storage. Further action
   isn't required, since any more reconnects in this period will have seen the
   stored notification.
+
+Push Endpoint Length
+--------------------
+
+The Endpoint URL may seem excessively long. This may seem needless and
+confusing since the URL consists of the unique User Agent Identifier (UAID)
+and the Subscription Channel Identifier (CHID). Both of these are class 4
+Universially Unique Identifiers (UUID) meaning that an endpoint contains
+256 bits of entropy (2 * 128 bits).
+
+Unfortunately, since the endpoint contains an identifier that can be
+easily traced back to a specific device, and therefore a specific user,
+there is the risk that a user might inadvertently disclose personal
+information via their metadata. To prevent this, the server obscures the
+UAID and CHID pair to prevent casual determination.
+
+As an example, it is possible for a user to get a Push endpoint for
+two different accounts from the same User Agent. If the UAID were disclosed,
+then a site may be able to associate a single user to both of those
+accounts. In addition, there are reasons that storing the UAID and CHID in
+the URL makes operating the server more efficient.
+
+Naturally, we're always looking at ways to improve and reduce the length
+of the URL. This is why it's important to store the entire length of the
+endpoint URL, rather than try and optimize in some manner.

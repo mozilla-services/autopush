@@ -16,6 +16,7 @@ from twisted.web.client import Agent, Response
 from txstatsd.metrics.metrics import Metrics
 
 import autopush.endpoint as endpoint
+import autopush.utils as utils
 from autopush.db import (
     ProvisionedThroughputExceededException,
     Router,
@@ -62,6 +63,7 @@ def patch_logger(test):
     def wrapper(self, *args, **kwargs):
         log_mock = Mock()
         self.patch(endpoint, 'log', log_mock)
+        self.patch(utils, 'log', log_mock)
         params = args + (log_mock,)
         return test(self, *params, **kwargs)
     return wrapper
