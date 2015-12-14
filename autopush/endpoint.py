@@ -691,7 +691,8 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
 class MessageHandler(AutoendpointHandler):
     cors_methods = "DELETE,PUT"
     cors_request_headers = ["content-encoding", "encryption",
-                            "encryption-key", "content-type"]
+                            "crypto-key", "encryption-key",
+                            "content-type"]
     cors_response_headers = ["location"]
 
     def _token_valid(self, result, func):
@@ -774,11 +775,16 @@ class MessageHandler(AutoendpointHandler):
                 encryption=self.request.headers["encryption"],
             )
             data = urlsafe_b64encode(self.request.body)
-            # AWS cannot store empty strings, so we only add the encryption-key
-            # if its present to avoid empty strings.
-            if "encryption-key" in self.request.headers:
-                headers["encryption_key"] = \
+            # encryption-key is an older label for crypto-key
+            if ("crypto-key" not in self.request.headers and
+                    "encryption-key" in self.request.headers):
+                self.request.headers["crypto-key"] = \
                     self.request.headers["encryption-key"]
+            # AWS cannot store empty strings, so we only add the crypto-key
+            # if its present to avoid empty strings.
+            if "crypto-key" in self.request.headers:
+                headers["crypto-key"] = \
+                    self.request.headers["crypto-key"]
 
         d = deferToThread(self.ap_settings.message.update_message, uaid,
                           chid, self.version, ttl=ttl, data=data,
@@ -799,6 +805,7 @@ class MessageHandler(AutoendpointHandler):
 class EndpointHandler(AutoendpointHandler):
     cors_methods = "POST,PUT"
     cors_request_headers = ["content-encoding", "encryption",
+                            "crypto-key",
                             "encryption-key", "content-type"]
     cors_response_headers = ["location"]
 
@@ -854,6 +861,12 @@ class EndpointHandler(AutoendpointHandler):
         else:
             data = self.request.body
             if router_key == "webpush":
+                # Update the headers if required.
+                if ('encryption-key' in self.request.headers and
+                        'crypto-key' not in self.request.headers):
+                    self.request.headers['crypto-key'] =\
+                        self.request.headers['encryption-key']
+                    del(self.request.headers['encryption-key'])
                 # We need crypto headers for messages with payloads.
                 req_fields = ["content-encoding", "encryption"]
                 if data and not all([x in self.request.headers

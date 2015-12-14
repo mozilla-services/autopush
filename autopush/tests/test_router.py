@@ -169,7 +169,7 @@ class GCMRouterTestCase(unittest.TestCase):
         self.router = GCMRouter(settings, self.gcm_config)
         self.headers = {"content-encoding": "text/plain",
                         "encryption": "test",
-                        "encryption-key": "test"}
+                        "crypto-key": "test"}
         self.notif = Notification(10, "data", dummy_chid, self.headers, 200)
         self.router_data = dict(
             router_data=dict(
@@ -234,7 +234,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_router_missing_enc_key_header(self):
         self.router.gcm = self.gcm
-        del(self.notif.headers['encryption-key'])
+        del(self.notif.headers['crypto-key'])
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):

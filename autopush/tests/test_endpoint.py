@@ -170,6 +170,25 @@ class MessageTestCase(unittest.TestCase):
         self.message.put("")
         return self.finish_deferred
 
+    def test_put_fix_header(self):
+        self.fernet_mock.decrypt.return_value = "m:123:456"
+        self.request_mock.headers = {
+            "content-encoding": "text",
+            "encryption": "enc",
+            "encryption-key": "enckey"}
+        self.request_mock.body = b' '
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            cal = self.message_mock.update_message.call_args_list
+            ok_(cal[0][1].get('headers'), {'crypto-key': 'enckey',
+                                           'content-encoding': 'text',
+                                           'encryption': 'enc'})
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.message.put('')
+        return self.finish_deferred
+
     def test_update_too_much_data(self):
         self.fernet_mock.decrypt.return_value = "m:123:456"
         self.ap_settings.max_data = 2
@@ -587,6 +606,34 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.put(dummy_uaid)
         return self.finish_deferred
 
+    def test_put_old_header(self):
+        self.request_mock.headers["encryption"] = "ignored"
+        self.request_mock.headers["content-encoding"] = 'text'
+        self.request_mock.headers["encryption-key"] = "encKey"
+        self.request_mock.body = b' '
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=200,
+            router_data={},
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(200)
+            ss = self.wp_router_mock.route_notification
+            eq_(ss.call_args_list[0][0][0].headers,
+                {'encryption': 'ignored',
+                 'crypto-key': 'encKey',
+                 'content-encoding': 'text'})
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.put(dummy_uaid)
+        return self.finish_deferred
+
     def test_post_webpush_with_headers_in_response(self):
         self.fernet_mock.decrypt.return_value = "123:456"
         self.endpoint.set_header = Mock()
@@ -663,6 +710,7 @@ class EndpointTestCase(unittest.TestCase):
         assert endpoint._headers.get(ch1) != "*"
         assert endpoint._headers.get(ch2) != "POST,PUT"
         assert endpoint._headers.get(ch3) != ("content-encoding,encryption,"
+                                              "crypto-key,"
                                               "encryption-key,content-type")
         assert endpoint._headers.get(ch4) != "location"
 
@@ -673,7 +721,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(endpoint._headers[ch1], "*")
         eq_(endpoint._headers[ch2], "POST,PUT")
         eq_(endpoint._headers[ch3], "content-encoding,encryption,"
-            "encryption-key,content-type")
+            "crypto-key,encryption-key,content-type")
         eq_(endpoint._headers[ch4], "location")
 
     def test_cors_head(self):
@@ -688,7 +736,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(endpoint._headers[ch1], "*")
         eq_(endpoint._headers[ch2], "POST,PUT")
         eq_(endpoint._headers[ch3], "content-encoding,encryption,"
-            "encryption-key,content-type")
+            "crypto-key,encryption-key,content-type")
         eq_(endpoint._headers[ch4], "location")
 
     def test_cors_options(self):
@@ -703,7 +751,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(endpoint._headers[ch1], "*")
         eq_(endpoint._headers[ch2], "POST,PUT")
         eq_(endpoint._headers[ch3], "content-encoding,encryption,"
-            "encryption-key,content-type")
+            "crypto-key,encryption-key,content-type")
         eq_(endpoint._headers[ch4], "location")
 
     @patch_logger
