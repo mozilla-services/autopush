@@ -169,7 +169,7 @@ class GCMRouterTestCase(unittest.TestCase):
         self.router = GCMRouter(settings, self.gcm_config)
         self.headers = {"content-encoding": "text/plain",
                         "encryption": "test",
-                        "encryption-key": "test"}
+                        "crypto-key": "test"}
         self.notif = Notification(10, "data", dummy_chid, self.headers, 200)
         self.router_data = dict(
             router_data=dict(
@@ -232,9 +232,15 @@ class GCMRouterTestCase(unittest.TestCase):
         d.addCallback(check_results)
         return d
 
-    def test_router_missing_enc_key_header(self):
+    def test_router_enc_key_header(self):
+        del(self.notif.headers['crypto-key'])
+        self.notif.headers['encryption-key'] = 'test'
+        d = self.test_route_notification()
+        return d
+
+    def test_router_missing_crypto_key_header(self):
         self.router.gcm = self.gcm
-        del(self.notif.headers['encryption-key'])
+        del(self.notif.headers['crypto-key'])
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -615,7 +621,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         self.headers = headers = {
             "content-encoding": "aes128",
             "encryption": "awesomecrypto",
-            "encryption-key": "niftykey"
+            "crypto-key": "niftykey"
         }
         self.router = WebPushRouter(settings, {})
         self.notif = Notification(10, "data", dummy_chid, headers, 20)
