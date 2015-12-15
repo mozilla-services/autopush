@@ -71,13 +71,17 @@ class GCMRouter(object):
             enc = notification.headers.get('encryption', None)
             if not enc:
                 self._error("%s Encryption" % lead, 400)
-            enckey = notification.headers.get('encryption-key', None)
-            if not enckey:
-                self._error("%s Encryption-Key" % lead, 400)
+            ckey = notification.headers.get('crypto-key', None)
+            if not ckey:
+                enckey = notification.headers.get('encryption-key', None)
+                if not enckey:
+                    self._error("%s Crypto-Key or Encryption-Key" % lead, 400)
+                data['enckey'] = enckey
+            else:
+                data['ckey'] = ckey
             data['body'] = notification.data
             data['con'] = con
             data['enc'] = enc
-            data['enckey'] = enckey
 
         payload = gcmclient.JSONMessage(
             registration_ids=[router_data["token"]],
