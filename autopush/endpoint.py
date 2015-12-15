@@ -72,6 +72,7 @@ Unless otherwise specified, all calls return the following error codes:
 
    - errno 101 - Missing neccessary crypto keys
    - errno 108 - Router type is invalid
+   - errno 110 - Invalid crypto keys specified
 
 -  401 - Bad Authorization
 
@@ -775,16 +776,17 @@ class MessageHandler(AutoendpointHandler):
                 encryption=self.request.headers["encryption"],
             )
             data = urlsafe_b64encode(self.request.body)
-            # encryption-key is an older label for crypto-key
-            if ("crypto-key" not in self.request.headers and
-                    "encryption-key" in self.request.headers):
-                self.request.headers["crypto-key"] = \
-                    self.request.headers["encryption-key"]
-            # AWS cannot store empty strings, so we only add the crypto-key
+            # AWS cannot store empty strings, so we only add the key
             # if its present to avoid empty strings.
-            if "crypto-key" in self.request.headers:
-                headers["crypto-key"] = \
-                    self.request.headers["crypto-key"]
+            if ("encryption-key" in self.request.headers and
+                    "crypto-key" in self.request.headers):
+                log.msg("Both encryption and crypto keys present",
+                        **self._client_info())
+                return self._write_response(400, 110,
+                                            message="Invalid crypto headers")
+            for h in ("encryption-key", "crypto-key"):
+                if h in self.request.headers:
+                    headers[h] = self.request.headers[h]
 
         d = deferToThread(self.ap_settings.message.update_message, uaid,
                           chid, self.version, ttl=ttl, data=data,
@@ -861,18 +863,18 @@ class EndpointHandler(AutoendpointHandler):
         else:
             data = self.request.body
             if router_key == "webpush":
-                # Update the headers if required.
-                if ('encryption-key' in self.request.headers and
-                        'crypto-key' not in self.request.headers):
-                    self.request.headers['crypto-key'] =\
-                        self.request.headers['encryption-key']
-                    del(self.request.headers['encryption-key'])
                 # We need crypto headers for messages with payloads.
                 req_fields = ["content-encoding", "encryption"]
                 if data and not all([x in self.request.headers
                                      for x in req_fields]):
                     log.msg("Missing Crypto headers", **self._client_info())
                     return self._write_response(400, 101)
+                if ("encryption-key" in self.request.headers and
+                        "crypto-key" in self.request.headers):
+                    log.msg("Both encryption and crypto keys in headers",
+                            **self._client_info())
+                    return self._write_response(
+                        400, 110, message="Invalid crypto headers")
 
         try:
             ttl = int(self.request.headers.get("ttl", "0"))

@@ -170,20 +170,34 @@ class MessageTestCase(unittest.TestCase):
         self.message.put("")
         return self.finish_deferred
 
-    def test_put_fix_header(self):
+    def test_put_bogus_headers(self):
         self.fernet_mock.decrypt.return_value = "m:123:456"
         self.request_mock.headers = {
             "content-encoding": "text",
             "encryption": "enc",
-            "encryption-key": "enckey"}
+            "encryption-key": "enckey",
+            "crypto-key": "crypkey"}
         self.request_mock.body = b' '
 
         def handle_finish(result):
             self.assertTrue(result)
-            cal = self.message_mock.update_message.call_args_list
-            ok_(cal[0][1].get('headers'), {'crypto-key': 'enckey',
-                                           'content-encoding': 'text',
-                                           'encryption': 'enc'})
+            self.status_mock.assert_called_with(400)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.message.put('')
+        return self.finish_deferred
+
+    def test_put_with_headers(self):
+        self.fernet_mock.decrypt.return_value = "m:123:456"
+        self.request_mock.headers = {
+            "content-encoding": "text",
+            "encryption": "enc",
+            "crypto-key": "crypkey"}
+        self.request_mock.body = b' '
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.status_mock.assert_called_with(201)
 
         self.finish_deferred.addCallback(handle_finish)
         self.message.put('')
@@ -566,6 +580,29 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.put(dummy_uaid)
         return self.finish_deferred
 
+    def test_put_router_with_headers(self):
+        self.request_mock.headers["encryption"] = "ignored"
+        self.request_mock.headers["content-encoding"] = 'text'
+        self.request_mock.headers["encryption-key"] = "encKey"
+        self.request_mock.body = b' '
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=200,
+            router_data={},
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(200)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.put(dummy_uaid)
+        return self.finish_deferred
+
     def test_put_router_needs_change(self):
         self.fernet_mock.decrypt.return_value = "123:456"
         self.router_mock.get_uaid.return_value = dict(
@@ -606,10 +643,11 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.put(dummy_uaid)
         return self.finish_deferred
 
-    def test_put_old_header(self):
+    def test_put_bogus_headers(self):
         self.request_mock.headers["encryption"] = "ignored"
         self.request_mock.headers["content-encoding"] = 'text'
         self.request_mock.headers["encryption-key"] = "encKey"
+        self.request_mock.headers["crypto-key"] = "crypKey"
         self.request_mock.body = b' '
         self.fernet_mock.decrypt.return_value = "123:456"
         self.router_mock.get_uaid.return_value = dict(
@@ -623,12 +661,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.assertTrue(result)
-            self.endpoint.set_status.assert_called_with(200)
-            ss = self.wp_router_mock.route_notification
-            eq_(ss.call_args_list[0][0][0].headers,
-                {'encryption': 'ignored',
-                 'crypto-key': 'encKey',
-                 'content-encoding': 'text'})
+            self.endpoint.set_status.assert_called_with(400)
 
         self.finish_deferred.addCallback(handle_finish)
         self.endpoint.put(dummy_uaid)
