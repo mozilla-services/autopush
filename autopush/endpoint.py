@@ -1054,8 +1054,6 @@ class RegistrationHandler(AutoendpointHandler):
 
     def _delete_uaid(self, uaid, router):
         message = self.ap_settings.message
-        # The following will always return "True" unless something
-        # very odd has happened in dynamodb.
         message.delete_user(uaid)
         if not router.drop_user(uaid):
             raise ItemNotFound("UAID not found")
