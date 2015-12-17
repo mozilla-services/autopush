@@ -232,9 +232,33 @@ class GCMRouterTestCase(unittest.TestCase):
         d.addCallback(check_results)
         return d
 
+    def test_route_crypto_notification(self):
+        self.router.gcm = self.gcm
+        del(self.notif.headers['encryption-key'])
+        self.notif.headers['crypto-key'] = 'crypto'
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(result):
+            ok_(isinstance(result, RouterResponse))
+            assert(self.router.gcm.send.called)
+        d.addCallback(check_results)
+        return d
+
     def test_router_missing_enc_key_header(self):
         self.router.gcm = self.gcm
         del(self.notif.headers['encryption-key'])
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(result):
+            ok_(isinstance(result.value, RouterException))
+            eq_(result.value.status_code, 400)
+
+        d.addBoth(check_results)
+        return d
+
+    def test_router_bogus_headers(self):
+        self.router.gcm = self.gcm
+        self.notif.headers['crypto-key'] = "crypto"
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):

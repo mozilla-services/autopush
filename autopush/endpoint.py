@@ -72,6 +72,7 @@ Unless otherwise specified, all calls return the following error codes:
 
    - errno 101 - Missing neccessary crypto keys
    - errno 108 - Router type is invalid
+   - errno 110 - Invalid crypto keys specified
 
 -  401 - Bad Authorization
 
@@ -691,7 +692,8 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
 class MessageHandler(AutoendpointHandler):
     cors_methods = "DELETE,PUT"
     cors_request_headers = ["content-encoding", "encryption",
-                            "encryption-key", "content-type"]
+                            "crypto-key", "encryption-key",
+                            "content-type"]
     cors_response_headers = ["location"]
 
     def _token_valid(self, result, func):
@@ -774,11 +776,17 @@ class MessageHandler(AutoendpointHandler):
                 encryption=self.request.headers["encryption"],
             )
             data = urlsafe_b64encode(self.request.body)
-            # AWS cannot store empty strings, so we only add the encryption-key
+            # AWS cannot store empty strings, so we only add the key
             # if its present to avoid empty strings.
-            if "encryption-key" in self.request.headers:
-                headers["encryption_key"] = \
-                    self.request.headers["encryption-key"]
+            if ("encryption-key" in self.request.headers and
+                    "crypto-key" in self.request.headers):
+                log.msg("Both encryption and crypto keys present",
+                        **self._client_info())
+                return self._write_response(400, 110,
+                                            message="Invalid crypto headers")
+            for h in ("encryption-key", "crypto-key"):
+                if h in self.request.headers:
+                    headers[h] = self.request.headers[h]
 
         d = deferToThread(self.ap_settings.message.update_message, uaid,
                           chid, self.version, ttl=ttl, data=data,
@@ -799,6 +807,7 @@ class MessageHandler(AutoendpointHandler):
 class EndpointHandler(AutoendpointHandler):
     cors_methods = "POST,PUT"
     cors_request_headers = ["content-encoding", "encryption",
+                            "crypto-key",
                             "encryption-key", "content-type"]
     cors_response_headers = ["location"]
 
@@ -860,6 +869,12 @@ class EndpointHandler(AutoendpointHandler):
                                      for x in req_fields]):
                     log.msg("Missing Crypto headers", **self._client_info())
                     return self._write_response(400, 101)
+                if ("encryption-key" in self.request.headers and
+                        "crypto-key" in self.request.headers):
+                    log.msg("Both encryption and crypto keys in headers",
+                            **self._client_info())
+                    return self._write_response(
+                        400, 110, message="Invalid crypto headers")
 
         try:
             ttl = int(self.request.headers.get("ttl", "0"))

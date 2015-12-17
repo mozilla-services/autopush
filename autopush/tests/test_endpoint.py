@@ -170,6 +170,39 @@ class MessageTestCase(unittest.TestCase):
         self.message.put("")
         return self.finish_deferred
 
+    def test_put_bogus_headers(self):
+        self.fernet_mock.decrypt.return_value = "m:123:456"
+        self.request_mock.headers = {
+            "content-encoding": "text",
+            "encryption": "enc",
+            "encryption-key": "enckey",
+            "crypto-key": "crypkey"}
+        self.request_mock.body = b' '
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.status_mock.assert_called_with(400)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.message.put('')
+        return self.finish_deferred
+
+    def test_put_with_headers(self):
+        self.fernet_mock.decrypt.return_value = "m:123:456"
+        self.request_mock.headers = {
+            "content-encoding": "text",
+            "encryption": "enc",
+            "crypto-key": "crypkey"}
+        self.request_mock.body = b' '
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.status_mock.assert_called_with(201)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.message.put('')
+        return self.finish_deferred
+
     def test_update_too_much_data(self):
         self.fernet_mock.decrypt.return_value = "m:123:456"
         self.ap_settings.max_data = 2
@@ -547,6 +580,29 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.put(dummy_uaid)
         return self.finish_deferred
 
+    def test_put_router_with_headers(self):
+        self.request_mock.headers["encryption"] = "ignored"
+        self.request_mock.headers["content-encoding"] = 'text'
+        self.request_mock.headers["encryption-key"] = "encKey"
+        self.request_mock.body = b' '
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=200,
+            router_data={},
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(200)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.put(dummy_uaid)
+        return self.finish_deferred
+
     def test_put_router_needs_change(self):
         self.fernet_mock.decrypt.return_value = "123:456"
         self.router_mock.get_uaid.return_value = dict(
@@ -584,6 +640,30 @@ class EndpointTestCase(unittest.TestCase):
             assert(self.router_mock.register_user.called)
         self.finish_deferred.addCallback(handle_finish)
 
+        self.endpoint.put(dummy_uaid)
+        return self.finish_deferred
+
+    def test_put_bogus_headers(self):
+        self.request_mock.headers["encryption"] = "ignored"
+        self.request_mock.headers["content-encoding"] = 'text'
+        self.request_mock.headers["encryption-key"] = "encKey"
+        self.request_mock.headers["crypto-key"] = "crypKey"
+        self.request_mock.body = b' '
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=200,
+            router_data={},
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(400)
+
+        self.finish_deferred.addCallback(handle_finish)
         self.endpoint.put(dummy_uaid)
         return self.finish_deferred
 
@@ -663,6 +743,7 @@ class EndpointTestCase(unittest.TestCase):
         assert endpoint._headers.get(ch1) != "*"
         assert endpoint._headers.get(ch2) != "POST,PUT"
         assert endpoint._headers.get(ch3) != ("content-encoding,encryption,"
+                                              "crypto-key,"
                                               "encryption-key,content-type")
         assert endpoint._headers.get(ch4) != "location"
 
@@ -673,7 +754,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(endpoint._headers[ch1], "*")
         eq_(endpoint._headers[ch2], "POST,PUT")
         eq_(endpoint._headers[ch3], "content-encoding,encryption,"
-            "encryption-key,content-type")
+            "crypto-key,encryption-key,content-type")
         eq_(endpoint._headers[ch4], "location")
 
     def test_cors_head(self):
@@ -688,7 +769,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(endpoint._headers[ch1], "*")
         eq_(endpoint._headers[ch2], "POST,PUT")
         eq_(endpoint._headers[ch3], "content-encoding,encryption,"
-            "encryption-key,content-type")
+            "crypto-key,encryption-key,content-type")
         eq_(endpoint._headers[ch4], "location")
 
     def test_cors_options(self):
@@ -703,7 +784,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(endpoint._headers[ch1], "*")
         eq_(endpoint._headers[ch2], "POST,PUT")
         eq_(endpoint._headers[ch3], "content-encoding,encryption,"
-            "encryption-key,content-type")
+            "crypto-key,encryption-key,content-type")
         eq_(endpoint._headers[ch4], "location")
 
     @patch_logger
