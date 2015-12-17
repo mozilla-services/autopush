@@ -182,6 +182,14 @@ class MessageTestCase(unittest.TestCase):
         assert(len(results) == 1)
         eq_(results[0]["chids"], set([]))
 
+        # Test for the very unlikely case that there's no 'chid'
+        m.connection.update_item = Mock()
+        m.connection.update_item.return_value = {
+            'Attributes': {'uaid': {'S': self.uaid}},
+            'ConsumedCapacityUnits': 0.5}
+        r = message.unregister_channel(self.uaid, "test")
+        eq_(r, False)
+
     def test_all_channels(self):
         chid = str(uuid.uuid4())
         chid2 = str(uuid.uuid4())
@@ -492,4 +500,8 @@ class RouterTestCase(unittest.TestCase):
         # Register a node user
         router.register_user(dict(uaid=uaid, node_id="asdf",
                                   connected_at=1234))
-        router.drop_user(uaid)
+        result = router.drop_user(uaid)
+        eq_(result, True)
+        # Deleting already deleted record should return false.
+        result = router.drop_user(uaid)
+        eq_(result, False)

@@ -1124,7 +1124,6 @@ class RegistrationTestCase(unittest.TestCase):
             "test",
             "2",
             10000)
-        # TODO: self.reg.ap_settings.message.all_channels(dummy_uaid) = [] ??
         self.reg.request.headers["Authorization"] = self.auth
 
         def handle_finish(value):
@@ -1135,7 +1134,7 @@ class RegistrationTestCase(unittest.TestCase):
             messages.delete_user(dummy_uaid)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete("test", "test", uaid=dummy_uaid, chid=dummy_chid)
+        self.reg.delete("simplepush", "test", uaid=dummy_uaid, chid=dummy_chid)
         return self.finish_deferred
 
     def test_delete_bad_chid(self):
@@ -1146,11 +1145,10 @@ class RegistrationTestCase(unittest.TestCase):
             dummy_chid,
             "1",
             10000)
-        # TODO: self.reg.ap_settings.message.all_channels(dummy_uaid) = [] ??
         self.reg.request.headers["Authorization"] = self.auth
 
         def handle_finish(value):
-            self._check_error(404, 103, "Not Found")
+            self._check_error(404, 106, "Not Found")
             messages.delete_user(dummy_uaid)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -1169,16 +1167,24 @@ class RegistrationTestCase(unittest.TestCase):
             "test",
             "2",
             10000)
+        self.reg.ap_settings.router.drop_user = Mock()
+        self.reg.ap_settings.router.drop_user.return_value = True
 
         def handle_finish(value):
             ml = messages.fetch_messages(dummy_uaid)
             cl = messages.all_channels(dummy_uaid)
             eq_(len(ml), 0)
-            eq_((False, set([])), cl)
+            # Note: Router is mocked, so the UAID is never actually
+            # dropped. Normally, this should messages.all_channels
+            # would come back as empty
+            ok_(self.reg.ap_settings.router.drop_user.called)
+            eq_(self.reg.ap_settings.router.drop_user.call_args_list[0][0],
+                (dummy_uaid,))
+            eq_((True, set(["test"])), cl)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
-        self.reg.delete("test", "test", uaid=dummy_uaid)
+        self.reg.delete("simplepush", "test", uaid=dummy_uaid)
         return self.finish_deferred
 
     def test_delete_bad_uaid(self):
