@@ -37,6 +37,7 @@ WebPush
 Backwards Incompatibilities
 ---------------------------
 * The previous Bridge HTTP API has been removed.
+* The Push message update mechanism has been removed. Issue #279.
 
 1.8.1 (2015-11-16)
 ==================
