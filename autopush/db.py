@@ -298,13 +298,22 @@ class Message(object):
         db_key = self.encode({"uaid": uaid, "chidmessageid": " "})
         expr = "DELETE chids :channel_id"
         expr_values = self.encode({":channel_id": set([channel_id])})
-        conn.update_item(
+
+        result = conn.update_item(
             self.table.table_name,
             db_key,
             update_expression=expr,
             expression_attribute_values=expr_values,
+            return_values="UPDATED_OLD",
         )
-        return True
+        chids = result.get('Attributes', {}).get('chids', {})
+        if chids:
+            try:
+                return channel_id in self.table._dynamizer.decode(chids)
+            except (TypeError, AttributeError):  # pragma: nocover
+                pass
+        # if, for some reason, there are no chids defined, return False.
+        return False
 
     @track_provisioned
     def all_channels(self, uaid):
@@ -408,16 +417,14 @@ class Message(object):
                 channel_id, message_id))
         return True
 
-    def delete_messages(self, uaid, chidmessageids, all=False):
+    def delete_messages(self, uaid, chidmessageids):
         with self.table.batch_write() as batch:
             for chidmessageid in chidmessageids:
-                batch.delete_item(
-                    uaid=uaid,
-                    chidmessageid=chidmessageid
-                )
-                if all:
-                    batch.delete_item(uaid=uaid,
-                                      chidmessageid=" ")
+                if chidmessageid:
+                    batch.delete_item(
+                        uaid=uaid,
+                        chidmessageid=chidmessageid
+                    )
 
     @track_provisioned
     def delete_messages_for_channel(self, uaid, channel_id):
@@ -444,7 +451,7 @@ class Message(object):
         )
         chidmessageids = [x["chidmessageid"] for x in results]
         if chidmessageids:
-            self.delete_messages(uaid, chidmessageids, True)
+            self.delete_messages(uaid, chidmessageids)
 
     @track_provisioned
     def fetch_messages(self, uaid, limit=10):
@@ -545,7 +552,9 @@ class Router(object):
 
     @track_provisioned
     def drop_user(self, uaid):
-        return self.table.delete_item(uaid=uaid)
+        # The following hack ensures that only uaids that exist and are
+        # deleted return true.
+        return self.table.delete_item(uaid=uaid, expected={"uaid__eq": uaid})
 
     @track_provisioned
     def update_message_month(self, uaid, month):

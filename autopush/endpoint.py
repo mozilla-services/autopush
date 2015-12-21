@@ -676,7 +676,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         """errBack for unknown chid"""
         fail.trap(ItemNotFound, ValueError)
         log.msg("CHID not found in AWS.", **self._client_info())
-        self._write_response(404, 103)
+        self._write_response(404, 106)
 
     #############################################################
     #                    Utility Methods
@@ -1064,10 +1064,13 @@ class RegistrationHandler(AutoendpointHandler):
     def _delete_channel(self, uaid, chid):
         message = self.ap_settings.message
         message.delete_messages_for_channel(uaid, chid)
-        message.unregister_channel(uaid, chid)
+        if not message.unregister_channel(uaid, chid):
+            raise ItemNotFound("ChannelID not found")
 
     def _delete_uaid(self, uaid, router):
         message = self.ap_settings.message
+        # The following will always return "True" unless something
+        # very odd has happened in dynamodb.
         message.delete_user(uaid)
         if not router.drop_user(uaid):
             raise ItemNotFound("UAID not found")
