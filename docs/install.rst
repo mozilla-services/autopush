@@ -42,7 +42,7 @@ You will need ``virtualenv`` installed per the above requirements. Set up your v
 
 .. code-block:: bash
 
-    $ virutalenv .
+    $ virtualenv .
 
 Then run the Makefile with ``make`` to setup the application.
 
