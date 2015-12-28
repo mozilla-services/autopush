@@ -17,6 +17,7 @@ Features
   /v1/{BridgeType}/{BridgeToken}/registration[/{uaid}/[subscription/[{chid}]]]
 * Tag endpoint requests with a unique ID. Issue #268.
 * Fixed document reference to HTTP API to be a deep link.
+* Pass either Encryption-Key or Crypto-Key per WebPush spec change. Issue #258
 
 Bug Fixes
 ---------
@@ -36,6 +37,7 @@ WebPush
 Backwards Incompatibilities
 ---------------------------
 * The previous Bridge HTTP API has been removed.
+* The Push message update mechanism has been removed. Issue #279.
 
 1.8.1 (2015-11-16)
 ==================

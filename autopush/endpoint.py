@@ -72,6 +72,7 @@ Unless otherwise specified, all calls return the following error codes:
 
    - errno 101 - Missing neccessary crypto keys
    - errno 108 - Router type is invalid
+   - errno 110 - Invalid crypto keys specified
 
 -  401 - Bad Authorization
 
@@ -83,7 +84,6 @@ Unless otherwise specified, all calls return the following error codes:
    - errno 103 - Expired URL endpoint
    - errno 105 - Endpoint became unavailable during request
    - errno 106 - Invalid subscription
-   - errno 107 - Message not found
 
 -  500 - Unknown server error
 
@@ -689,9 +689,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
 
 
 class MessageHandler(AutoendpointHandler):
-    cors_methods = "DELETE,PUT"
-    cors_request_headers = ["content-encoding", "encryption",
-                            "encryption-key", "content-type"]
+    cors_methods = "DELETE"
     cors_response_headers = ["location"]
 
     def _token_valid(self, result, func):
@@ -733,72 +731,11 @@ class MessageHandler(AutoendpointHandler):
         self.set_status(204)
         self.finish()
 
-    @cyclone.web.asynchronous
-    def put(self, token):
-        """Updates a pending message.
-
-        If the message was already acknowledged, then this will instead create
-        a new message.
-
-        """
-        self.version = token
-        d = deferToThread(self.ap_settings.fernet.decrypt,
-                          self.version.encode('utf8'))
-        d.addCallback(self._token_valid, self._put_message)
-        d.addErrback(self._token_err)
-        d.addErrback(self._response_err)
-        return d
-
-    def _put_message(self, kind, uaid, chid):
-        try:
-            ttl = int(self.request.headers.get("ttl", "0"))
-            # Cap the TTL to our MAX_TTL
-            ttl = min(ttl, MAX_TTL)
-        except ValueError:
-            ttl = 0
-        data = self.request.body
-        if data and len(data) > self.ap_settings.max_data:
-            log.msg("Data too large", **self._client_info())
-            return self._write_response(
-                413, 104, message="Data payload too large")
-
-        headers = None
-        if data:
-            req_fields = ["content-encoding", "encryption"]
-            if not all([x in self.request.headers for x in req_fields]):
-                log.msg("Missing Crypto headers", **self._client_info())
-                return self._write_response(400, 101)
-
-            headers = dict(
-                encoding=self.request.headers["content-encoding"],
-                encryption=self.request.headers["encryption"],
-            )
-            data = urlsafe_b64encode(self.request.body)
-            # AWS cannot store empty strings, so we only add the encryption-key
-            # if its present to avoid empty strings.
-            if "encryption-key" in self.request.headers:
-                headers["encryption_key"] = \
-                    self.request.headers["encryption-key"]
-
-        d = deferToThread(self.ap_settings.message.update_message, uaid,
-                          chid, self.version, ttl=ttl, data=data,
-                          headers=headers)
-        d.addCallback(self._put_completed, uaid, chid, data, ttl, headers)
-        self._db_error_handling(d)
-
-    def _put_completed(self, result, uaid, chid, data, ttl, headers):
-        if result:
-            self.set_header("TTL", str(ttl))
-            self.set_status(201)
-            self.write("Accepted")
-            return self.finish()
-        else:
-            return self._write_response(404, 107, message="Message not found")
-
 
 class EndpointHandler(AutoendpointHandler):
     cors_methods = "POST,PUT"
     cors_request_headers = ["content-encoding", "encryption",
+                            "crypto-key",
                             "encryption-key", "content-type"]
     cors_response_headers = ["location"]
 
@@ -860,6 +797,12 @@ class EndpointHandler(AutoendpointHandler):
                                      for x in req_fields]):
                     log.msg("Missing Crypto headers", **self._client_info())
                     return self._write_response(400, 101)
+                if ("encryption-key" in self.request.headers and
+                        "crypto-key" in self.request.headers):
+                    log.msg("Both encryption and crypto keys in headers",
+                            **self._client_info())
+                    return self._write_response(
+                        400, 110, message="Invalid crypto headers")
 
         try:
             ttl = int(self.request.headers.get("ttl", "0"))

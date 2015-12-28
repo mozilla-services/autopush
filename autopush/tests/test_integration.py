@@ -181,7 +181,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                     "Content-Type": "application/octet-stream",
                     "Content-Encoding": "aesgcm-128",
                     "Encryption": self._crypto_key,
-                    "Encryption-Key":
+                    "Crypto-Key":
                         'keyid="a1"; key="JcqK-OLkJZlJ3sJJWstJCA"',
                 })
             body = data or ""
@@ -225,40 +225,6 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         # Pull the notification if connected
         if self.ws and self.ws.connected:
             return object.__getattribute__(self, "get_notification")(timeout)
-
-    def update_notification(self, location, data=None, status=None, ttl=200):
-        url = urlparse.urlparse(location)
-        http = None
-        if url.scheme == "https":  # pragma: nocover
-            http = httplib.HTTPSConnection(url.netloc)
-        else:
-            http = httplib.HTTPConnection(url.netloc)
-
-        assert self.use_webpush is True
-
-        headers = {"TTL": str(ttl)}
-        if data:
-            headers.update({
-                "Content-Type": "application/octet-stream",
-                "Content-Encoding": "aesgcm-128",
-                "Encryption": self._crypto_key,
-                "Encryption-Key":
-                    'keyid="a1"; key="JcqK-OLkJZlJ3sJJWstJCA"',
-            })
-        body = data or ""
-        method = "PUT"
-        status = status or 201
-
-        log.debug("%s body: %s", method, body)
-        http.request(method, url.path.encode("utf-8"), body, headers)
-        resp = http.getresponse()
-        log.debug("%s Response (%s): %s", method, resp.status, resp.read())
-        http.close()
-        eq_(resp.status, status)
-        log.debug("Response Headers: %s", resp.getheaders())
-        if status == 201:
-            ttl_header = resp.getheader("TTL")
-            eq_(ttl_header, str(ttl))
 
     def get_notification(self, timeout=1):
         self.ws.settimeout(timeout)
@@ -891,110 +857,6 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         eq_(result, None)
-        yield self.shut_down(client)
-
-    @inlineCallbacks
-    def test_message_update(self):
-        data = uuid.uuid4().hex
-        data2 = uuid.uuid4().hex
-        client = yield self.quick_register(use_webpush=True)
-        yield client.disconnect()
-        ok_(client.channels)
-        chan = client.channels.keys()[0]
-        yield client.send_notification(data=data)
-        ok_(client.messages.get(chan, []) != [])
-        location = client.messages[chan][0]
-        yield client.update_notification(location=location, data=data2)
-
-        yield client.connect()
-        yield client.hello()
-        result = yield client.get_notification()
-        ok_(result is not None)
-        ok_(result != {})
-        eq_(result["data"], urlsafe_b64encode(data2))
-        yield self.shut_down(client)
-
-    @inlineCallbacks
-    def test_message_update_remove_data(self):
-        data = uuid.uuid4().hex
-        client = yield self.quick_register(use_webpush=True)
-        yield client.disconnect()
-        ok_(client.channels)
-        chan = client.channels.keys()[0]
-        yield client.send_notification(data=data)
-        ok_(client.messages.get(chan, []) != [])
-        location = client.messages[chan][0]
-        yield client.update_notification(location=location)
-
-        yield client.connect()
-        yield client.hello()
-        result = yield client.get_notification()
-        ok_(result is not None)
-        ok_(result != {})
-        ok_("data" not in result)
-        yield self.shut_down(client)
-
-    @inlineCallbacks
-    def test_message_update_invalid_message(self):
-        data = uuid.uuid4().hex
-        data2 = uuid.uuid4().hex
-        client = yield self.quick_register(use_webpush=True)
-        ok_(client.channels)
-        chan = client.channels.keys()[0]
-
-        update = yield client.send_notification(data=data)
-        eq_(update["channelID"], chan)
-        yield client.ack(chan, update["version"])
-        ok_(client.messages.get(chan, []) != [])
-        yield client.disconnect()
-
-        # Update the message
-        location = client.messages[chan][0]
-        yield client.update_notification(location=location, data=data2,
-                                         status=404)
-
-        yield client.connect()
-        yield client.hello()
-        result = yield client.get_notification()
-        ok_(result is None)
-        yield self.shut_down(client)
-
-    @inlineCallbacks
-    def test_message_update_unackd_delivered_message(self):
-        data = uuid.uuid4().hex
-        data2 = uuid.uuid4().hex
-        client = yield self.quick_register(use_webpush=True)
-        yield client.disconnect()
-
-        ok_(client.channels)
-        chan = client.channels.keys()[0]
-
-        # Send in the notification, so its stored
-        yield client.send_notification(data=data)
-
-        yield client.connect()
-        yield client.hello()
-        update = yield client.get_notification()
-        eq_(update["channelID"], chan)
-
-        # Update the message as it hasn't been ack'dyet
-        location = client.messages[chan][0]
-        yield client.update_notification(location=location, data=data2)
-
-        # Ack the message
-        yield client.ack(chan, update["version"])
-
-        # We won't get the new message yet, because client has no way to
-        # know it should check, so we'll reconnect it
-        yield client.disconnect()
-        yield client.connect()
-        yield client.hello()
-
-        # We should now get the new one
-        result = yield client.get_notification()
-        ok_(result is not None)
-        ok_(result != {})
-        eq_(result["data"], urlsafe_b64encode(data2))
         yield self.shut_down(client)
 
     @inlineCallbacks
