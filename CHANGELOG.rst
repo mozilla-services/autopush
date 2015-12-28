@@ -18,6 +18,7 @@ Features
 * Tag endpoint requests with a unique ID. Issue #268.
 * Fixed document reference to HTTP API to be a deep link.
 * Pass either Encryption-Key or Crypto-Key per WebPush spec change. Issue #258
+* Removed refences to obsolete simplepush_test package.
 
 Bug Fixes
 ---------

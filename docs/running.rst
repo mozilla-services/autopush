@@ -15,13 +15,6 @@ before either of these will run properly. By default they will create a router
 and storage DynamoDB table named ``storage`` and ``router`` with provisioned
 throughputs of ``5``.
 
-You can then test that this works by using the `simplepush tester
-<https://github.com/mozilla-services/simplepush_test>`_, like so:
-
-.. code-block:: bash
-
-    ~/simplepush_test/ $ PUSH_SERVER=ws://localhost:8080/ ./bin/nosetests
-
 Using a Local DynamoDB Server
 =============================
 
