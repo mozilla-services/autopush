@@ -299,8 +299,6 @@ class IntegrationBase(unittest.TestCase):
         factory.protocol.ap_settings = settings
         factory.setProtocolOptions(
             webStatus=False,
-            maxFramePayloadSize=2048,
-            maxMessagePayloadSize=2048,
             openHandshakeTimeout=5,
         )
         settings.factory = factory

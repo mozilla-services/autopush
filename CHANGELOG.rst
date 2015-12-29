@@ -31,9 +31,25 @@ Bug Fixes
 * Fix db test bug with month addition to properly handle December. Issue #261.
 * Relax endpoint TLS cert requirement for https scheme. Issue #249.
 * Add endpoint names to the docs. Issue #223.
+* Moved Obsolete command arguments out of required path, and allow tester to ignore local configuration files. Issue #246
 
 WebPush
 -------
+
+Configuration Changes
+---------------------
+
+* The following configuration options have been deprecated and will soon
+  be removed:
+  --log_level
+  --external_router (replaced by --apns_enabled)
+  --max_message_size
+* It is recommended that the following config options be moved to
+  .autopush_shared.ini
+  --gcm_enabled
+  --senderid_list
+  --senderid_expry
+
 
 Backwards Incompatibilities
 ---------------------------

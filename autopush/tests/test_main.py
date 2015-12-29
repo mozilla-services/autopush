@@ -125,7 +125,7 @@ class ConnectionMainTestCase(unittest.TestCase):
             mock.stop()
 
     def test_basic(self):
-        connection_main([])
+        connection_main([], False)
 
     def test_ssl(self):
         connection_main([
@@ -134,7 +134,7 @@ class ConnectionMainTestCase(unittest.TestCase):
             "--ssl_key=keys/server.key",
             "--router_ssl_cert=keys/server.crt",
             "--router_ssl_key=keys/server.key",
-        ])
+        ], False)
 
     def test_skip_logging(self):
         # Should skip setting up logging on the handler
@@ -146,7 +146,7 @@ class ConnectionMainTestCase(unittest.TestCase):
 class EndpointMainTestCase(unittest.TestCase):
     class test_arg:
         # important stuff
-        external_router = True
+        apns_enabled = True
         apns_cert_file = "cert.file"
         apns_key_file = "key.file"
         gcm_enabled = True
