@@ -341,8 +341,8 @@ class Message(object):
     @track_provisioned
     def store_message(self, uaid, channel_id, message_id, ttl, data=None,
                       headers=None, timestamp=None):
-        """Stores a message in the message table for the given uaid/channel with
-        the message id"""
+        """Stores a message in the message table for the given uaid/channel
+        with the message id"""
         item = dict(
             uaid=uaid,
             chidmessageid="%s:%s" % (channel_id, message_id),

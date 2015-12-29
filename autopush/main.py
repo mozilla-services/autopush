@@ -114,6 +114,7 @@ def add_shared_args(parser):
     add_external_router_args(parser)
     obsolete_args(parser)
 
+
 def obsolete_args(parser):
     """ Obsolete and soon to be disabled configuration arguments.
     These are included to prevent startup errors with old config files.
@@ -123,6 +124,7 @@ def obsolete_args(parser):
     parser.add_argument('--external_router', action="store_true",
                         help='OBSOLETE')
     parser.add_argument('--max_message_size', type=int, help="OBSOLETE")
+
 
 def add_external_router_args(parser):
     """Parses out external router arguments"""
@@ -186,7 +188,7 @@ def _parse_connection(sysargs, use_files=True):
             '.autopush_connection.ini'
         ]
     else:
-        config_files = [] # pragma: nocover
+        config_files = []  # pragma: nocover
     parser = configargparse.ArgumentParser(
         description='Runs a Connection Node.',
         default_config_files=shared_config_files + config_files)
@@ -240,7 +242,7 @@ def _parse_endpoint(sysargs, use_files=True):
             '.autopush_endpoint.ini'
         ]
     else:
-        config_files = [] # pragma: nocover
+        config_files = []  # pragma: nocover
     parser = configargparse.ArgumentParser(
         description='Runs an Endpoint Node.',
         default_config_files=shared_config_files + config_files)
@@ -295,7 +297,7 @@ def make_settings(args, **kwargs):
                               "dryrun": args.gcm_dryrun,
                               "collapsekey": args.gcm_collapsekey,
                               "senderIDs": senderIDs,
-                                  "senderid_list": list}
+                              "senderid_list": list}
 
     return AutopushSettings(
         crypto_key=args.crypto_key,
