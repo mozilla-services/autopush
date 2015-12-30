@@ -181,8 +181,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                     "Content-Type": "application/octet-stream",
                     "Content-Encoding": "aesgcm-128",
                     "Encryption": self._crypto_key,
-                    "Crypto-Key":
-                        'keyid="a1"; key="JcqK-OLkJZlJ3sJJWstJCA"',
+                    "Crypto-Key": 'keyid="a1"; key="JcqK-OLkJZlJ3sJJWstJCA"',
                 })
             body = data or ""
             method = "POST"
@@ -299,8 +298,6 @@ class IntegrationBase(unittest.TestCase):
         factory.protocol.ap_settings = settings
         factory.setProtocolOptions(
             webStatus=False,
-            maxFramePayloadSize=2048,
-            maxMessagePayloadSize=2048,
             openHandshakeTimeout=5,
         )
         settings.factory = factory

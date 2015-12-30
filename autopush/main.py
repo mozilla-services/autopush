@@ -97,8 +97,6 @@ def add_shared_args(parser):
     parser.add_argument('--router_write_throughput',
                         help="DynamoDB router write throughput",
                         type=int, default=5, env_var="ROUTER_WRITE_THROUGHPUT")
-    parser.add_argument('--log_level', type=int, default=40,
-                        env_var="LOG_LEVEL")
     parser.add_argument('--max_data', help="Max data segment length in bytes",
                         default=4096, env_var='MAX_DATA')
     parser.add_argument('--env',
@@ -110,20 +108,30 @@ def add_shared_args(parser):
                         type=str, default=None, env_var="ENDPOINT_HOSTNAME")
     parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
                         type=int, default=8082, env_var="ENDPOINT_PORT")
-    parser.add_argument('--gcm_enabled', help="Enable GCM Bridge",
-                        action="store_true", default=False,
-                        env_var="GCM_ENABLED")
     parser.add_argument('--human_logs', help="Enable human readable logs",
                         action="store_true", default=False)
     # No ENV because this is for humans
+    add_external_router_args(parser)
+    obsolete_args(parser)
+
+
+def obsolete_args(parser):
+    """ Obsolete and soon to be disabled configuration arguments.
+    These are included to prevent startup errors with old config files.
+
+    """
+    parser.add_argument('--log_level', help="OBSOLETE", type=int)
+    parser.add_argument('--external_router', action="store_true",
+                        help='OBSOLETE')
+    parser.add_argument('--max_message_size', type=int, help="OBSOLETE")
 
 
 def add_external_router_args(parser):
     """Parses out external router arguments"""
     # GCM
-    parser.add_argument('--external_router', help='enable external routers',
+    parser.add_argument('--gcm_enabled', help="Enable GCM Bridge",
                         action="store_true", default=False,
-                        env_var='EXTERNAL_ROUTER')
+                        env_var="GCM_ENABLED")
     label = "GCM Router:"
     parser.add_argument('--gcm_ttl', help="%s Time to Live" % label,
                         type=int, default=60, env_var="GCM_TTL")
@@ -135,7 +143,18 @@ def add_external_router_args(parser):
                         help="%s string to collapse messages" % label,
                         type=str, default="simplepush",
                         env_var="GCM_COLLAPSEKEY")
+    parser.add_argument('--s3_bucket', help='S3 Bucket for SenderIDs',
+                        type=str, default=DEFAULT_BUCKET,
+                        env_var='S3-BUCKET')
+    parser.add_argument('--senderid_expry', help='Cache expry for senderIDs',
+                        type=int, default=SENDERID_EXPRY,
+                        env_var='SENDERID_EXPRY')
+    parser.add_argument('--senderid_list', help='SenderIDs to load to S3',
+                        type=str, default="{}")
     # Apple Push Notification system (APNs) for iOS
+    parser.add_argument('--apns_enabled', help="Enable APNS Bridge",
+                        action="store_true", default=False,
+                        env_var="APNS_ENABLED")
     label = "APNS Router:"
     parser.add_argument('--apns_sandbox', help="%s Use Dev Sandbox" % label,
                         action="store_true", default=False,
@@ -158,13 +177,18 @@ def add_external_router_args(parser):
                         env_var="WAKE_SERVER")
 
 
-def _parse_connection(sysargs):
+def _parse_connection(sysargs, use_files=True):
     """Parse out connection node arguments for an autopush node"""
-    config_files = [
-        '/etc/autopush_connection.ini',
-        '~/.autopush_connection.ini',
-        '.autopush_connection.ini'
-    ]
+    # For testing, do not use the configuration files since they can
+    # produce unexpected results.
+    if use_files:  # pragma: nocover
+        config_files = [
+            '/etc/autopush_connection.ini',
+            '~/.autopush_connection.ini',
+            '.autopush_connection.ini'
+        ]
+    else:
+        config_files = []  # pragma: nocover
     parser = configargparse.ArgumentParser(
         description='Runs a Connection Node.',
         default_config_files=shared_config_files + config_files)
@@ -195,10 +219,6 @@ def _parse_connection(sysargs):
     parser.add_argument('--max_connections',
                         help="The maximum number of concurrent connections.",
                         default=0, type=int, env_var="MAX_CONNECTIONS")
-    parser.add_argument('--max_message_size',
-                        help="The maximum size that messages from client " +
-                        "can be (e.g. header, data, json formatting, etc.)",
-                        default=2048, type=int, env_var="MAX_MESSAGE_SIZE")
     parser.add_argument('--close_handshake_timeout',
                         help="The WebSocket closing handshake timeout. Set to "
                         "0 to disable.", default=0, type=int,
@@ -208,19 +228,21 @@ def _parse_connection(sysargs):
                         "disable.", default=0, type=int,
                         env_var="HELLO_TIMEOUT")
 
-    add_external_router_args(parser)
     add_shared_args(parser)
     args = parser.parse_args(sysargs)
     return args, parser
 
 
-def _parse_endpoint(sysargs):
+def _parse_endpoint(sysargs, use_files=True):
     """Parses out endpoint arguments for an autoendpoint node"""
-    config_files = [
-        '/etc/autopush_endpoint.ini',
-        '~/.autopush_endpoint.ini',
-        '.autopush_endpoint.ini'
-    ]
+    if use_files:
+        config_files = [
+            '/etc/autopush_endpoint.ini',
+            '~/.autopush_endpoint.ini',
+            '.autopush_endpoint.ini'
+        ]
+    else:
+        config_files = []  # pragma: nocover
     parser = configargparse.ArgumentParser(
         description='Runs an Endpoint Node.',
         default_config_files=shared_config_files + config_files)
@@ -232,20 +254,11 @@ def _parse_endpoint(sysargs):
     parser.add_argument('--no_cors', help='Disallow CORS PUTs for update.',
                         action="store_true",
                         default=False, env_var='ALLOW_CORS')
-    parser.add_argument('--s3_bucket', help='S3 Bucket for SenderIDs',
-                        type=str, default=DEFAULT_BUCKET,
-                        env_var='S3-BUCKET')
-    parser.add_argument('--senderid_expry', help='Cache expry for senderIDs',
-                        type=int, default=SENDERID_EXPRY,
-                        env_var='SENDERID_EXPRY')
-    parser.add_argument('--senderid_list', help='SenderIDs to load to S3',
-                        type=str, default="{}")
     parser.add_argument('--auth_key', help='Bearer Token source key',
                         type=str, default=[], env_var='AUTH_KEY',
                         action="append")
 
     add_shared_args(parser)
-    add_external_router_args(parser)
 
     args = parser.parse_args(sysargs)
     return args, parser
@@ -259,32 +272,32 @@ def make_settings(args, **kwargs):
         router_conf["simplepush"] = {"idle": args.wake_timeout,
                                      "server": args.wake_server,
                                      "cert": args.wake_pem}
-    if args.external_router:
+    if args.apns_enabled:
         # if you have the critical elements for each external router, create it
         if args.apns_cert_file is not None and args.apns_key_file is not None:
             router_conf["apns"] = {"sandbox": args.apns_sandbox,
                                    "cert_file": args.apns_cert_file,
                                    "key_file": args.apns_key_file}
-        if args.gcm_enabled:
-            # Create a common gcmclient
-            slist = json.loads(args.senderid_list)
-            senderIDs = SenderIDs(dict(
-                s3_bucket=args.s3_bucket,
-                senderid_expry=args.senderid_expry,
-                use_s3=args.s3_bucket.lower() != "none",
-                senderid_list=slist))
-            # This is an init check to verify that things are configured
-            # correctly. Otherwise errors may creep in later that go
-            # unaccounted.
-            senderID = senderIDs.choose_ID()
-            if senderID is None:
-                log.err("No GCM SenderIDs specified or found.")
-                return
-            router_conf["gcm"] = {"ttl": args.gcm_ttl,
-                                  "dryrun": args.gcm_dryrun,
-                                  "collapsekey": args.gcm_collapsekey,
-                                  "senderIDs": senderIDs,
-                                  "senderid_list": list}
+    if args.gcm_enabled:
+        # Create a common gcmclient
+        slist = json.loads(args.senderid_list)
+        senderIDs = SenderIDs(dict(
+            s3_bucket=args.s3_bucket,
+            senderid_expry=args.senderid_expry,
+            use_s3=args.s3_bucket.lower() != "none",
+            senderid_list=slist))
+        # This is an init check to verify that things are configured
+        # correctly. Otherwise errors may creep in later that go
+        # unaccounted.
+        senderID = senderIDs.choose_ID()
+        if senderID is None:
+            log.err("No GCM SenderIDs specified or found.")
+            return
+        router_conf["gcm"] = {"ttl": args.gcm_ttl,
+                              "dryrun": args.gcm_dryrun,
+                              "collapsekey": args.gcm_collapsekey,
+                              "senderIDs": senderIDs,
+                              "senderid_list": list}
 
     return AutopushSettings(
         crypto_key=args.crypto_key,
@@ -327,9 +340,9 @@ def mount_health_handlers(site, settings):
     ])
 
 
-def connection_main(sysargs=None):
+def connection_main(sysargs=None, use_files=True):
     """Main entry point to setup a connection node, aka the autopush script"""
-    args, parser = _parse_connection(sysargs)
+    args, parser = _parse_connection(sysargs, use_files)
     setup_logging("Autopush", args.human_logs)
     settings = make_settings(
         args,
@@ -370,8 +383,6 @@ def connection_main(sysargs=None):
     factory.protocol.ap_settings = settings
     factory.setProtocolOptions(
         webStatus=False,
-        maxFramePayloadSize=args.max_message_size,
-        maxMessagePayloadSize=args.max_message_size,
         openHandshakeTimeout=5,
         autoPingInterval=args.auto_ping_interval,
         autoPingTimeout=args.auto_ping_timeout,
@@ -421,10 +432,10 @@ def connection_main(sysargs=None):
     reactor.run()
 
 
-def endpoint_main(sysargs=None):
+def endpoint_main(sysargs=None, use_files=True):
     """Main entry point to setup an endpoint node, aka the autoendpoint
     script"""
-    args, parser = _parse_endpoint(sysargs)
+    args, parser = _parse_endpoint(sysargs, use_files)
     senderid_list = None
     if args.senderid_list:
         try:
