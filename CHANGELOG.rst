@@ -39,11 +39,6 @@ WebPush
 Configuration Changes
 ---------------------
 
-* The following configuration options have been deprecated and will soon
-  be removed:
-  --log_level
-  --external_router (replaced by --apns_enabled)
-  --max_message_size
 * It is recommended that the following config options be moved to
   .autopush_shared.ini
   --gcm_enabled
@@ -53,8 +48,18 @@ Configuration Changes
 
 Backwards Incompatibilities
 ---------------------------
+
 * The previous Bridge HTTP API has been removed.
 * The Push message update mechanism has been removed. Issue #279.
+
+Deprecated
+----------
+
+* The following configuration options have been deprecated and will soon
+  be removed:
+  --log_level
+  --external_router (replaced by --apns_enabled)
+  --max_message_size
 
 1.8.1 (2015-11-16)
 ==================
