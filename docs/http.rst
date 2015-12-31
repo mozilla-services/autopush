@@ -101,6 +101,10 @@ Unless otherwise specified, all calls return the following error codes:
    - errno 105 - Endpoint became unavailable during request
    - errno 106 - Invalid subscription
 
+- 413 - Payload too large
+
+   - errno 104 - Data payload too large
+
 -  500 - Unknown server error
 
    - errno 999 - Unknown error
@@ -120,8 +124,8 @@ Send Notification
 
 Send a notification to the given endpoint identified by it's `token`.
 
-Call:
-^^^^^
+**Call:**
+
 .. http:put:: /push/{token}
 
     If the client is using webpush style data delivery, then the body in its
@@ -129,21 +133,19 @@ Call:
     `the WebPush spec
     <https://tools.ietf.org/html/draft-thomson-webpush-http2-02#section-5>`_.
 
-Parameters:
-^^^^^^^^^^^
+**Parameters:**
 
     :form version: (*Optional*) Version of notification, defaults to current
                    time
 
-Reply:
-^^^^^^
+**Reply:**
 
 .. code-block:: json
 
     {"message-id": {message-id}}
 
-Errors:
-^^^^^^^
+**Return Codes:**
+
     :statuscode 404: `token` is invalid.
     :statuscode 202: Message stored for delivery to client at a later
                      time.
@@ -156,24 +158,24 @@ Cancel Notification
 
 Delete the message given the `message_id`.
 
-Call:
-^^^^^
+**Call:**
+
 .. http:delete:: /m/{message_id}
 
-Parameters:
-^^^^^^^^^^^
+**Parameters:**
+
 
     None
 
-Reply:
-^^^^^^
+**Reply:**
+
 
 .. code-block:: json
 
     {}
 
-Errors:
-^^^^^^^
+**Return Codes:**
+
 
     See :ref:`errors`.
 
@@ -186,13 +188,12 @@ Update Notification
 Update the message at the given `{message_id}`.
 
 
-Call:
-^^^^^
+**Call:**
+
 
 .. http:put:: /m/(string/message_id)
 
-Parameters:
-^^^^^^^^^^^
+**Parameters:**
 
     This method takes the same arguments as WebPush PUT, with values
     replacing that for the provided message.
@@ -204,15 +205,13 @@ Parameters:
         the client will not get the updated message until reconnect. This
         should be considered a rare edge-case.
 
-Reply:
-^^^^^^
+**Reply:**
 
 .. code-block:: json
 
     {}
 
-Errors:
-^^^^^^^
+**Return Codes:**
 
     :statuscode 404: `message_id` is not found.
     :statuscode 200: Message has been updated.
@@ -274,15 +273,15 @@ Registration
 Request a new UAID registration, Channel ID, and optionally set a bridge
 type and token for this connection.
 
-Call:
-^^^^^
+**Call:**
+
 
 .. http:post:: /v1/{type}/{token}/registration
 
 This call requires no Authorization for first time use.
 
-Parameters:
-^^^^^^^^^^^
+**Parameters:**
+
 
     {"token":{instanceid}}
 
@@ -292,8 +291,8 @@ Parameters:
         included in the paramters as JSON elements. Currently, no additional
         information is required.
 
-Reply:
-^^^^^^
+**Reply:**
+
 
 .. code-block:: json
 
@@ -315,8 +314,8 @@ example:
     < "endpoint": "https://updates-push.services.mozaws.net/push/...",
     < "channelID": "01234abcd"}
 
-Errors:
-^^^^^^^
+**Return Codes:**
+
 
 See :ref:`errors`.
 
@@ -325,8 +324,8 @@ Token updates
 
 Update the current bridge token value
 
-Call:
-^^^^^
+**Call:**
+
 
 .. http:put:: /v1/{type}/{token}/registration/{uaid}
 
@@ -334,8 +333,8 @@ Call:
 
     Authorization: Bearer {auth_token}
 
-Parameters:
-^^^^^^^^^^^
+**Parameters:**
+
 
     {"token": {instanceid}}
 
@@ -345,8 +344,8 @@ Parameters:
         included in the paramters as JSON elements. Currently, no additional
         information is required.
 
-Reply:
-^^^^^^
+**Reply:**
+
 
 .. code-block:: json
 
@@ -365,8 +364,8 @@ example:
 
     < {}
 
-Errors:
-^^^^^^^
+**Return Codes:**
+
 
 See :ref:`errors`.
 
@@ -375,8 +374,8 @@ Channel Subscription
 
 Acquire a new ChannelID for a given UAID.
 
-Call:
-^^^^^
+**Call:**
+
 
 .. http:post:: /v1/{type}/{token}/registration/{uaid}/subscription
 
@@ -384,13 +383,13 @@ Call:
 
     Authorization: Bearer {auth_token}
 
-Parameters:
-^^^^^^^^^^^
+**Parameters:**
+
 
      {}
 
-Reply:
-^^^^^^
+**Reply:**
+
 
 .. code-block:: json
 
@@ -410,8 +409,8 @@ example:
     < {"channelID": "43210efgh"
     < "endpoint": "https://updates-push.services.mozaws.net/push/..."}
 
-Errors:
-^^^^^^^
+**Return Codes:**
+
 
 See :ref:`errors`.
 
@@ -421,8 +420,8 @@ Unregister UAID (and all associated ChannelID subscriptions)
 Indicate that the UAID, and by extension all associated subscriptions,
 is no longer valid.
 
-Call:
-^^^^^
+**Call:**
+
 
 .. http:delete:: /v1/{type}/{token}/registration/{uaid}
 
@@ -430,20 +429,18 @@ Call:
 
     Authorization: Bearer {auth_token}
 
-Parameters:
-^^^^^^^^^^^
+**Parameters:**
+
 
     {}
 
-Reply:
-^^^^^^
+**Reply:**
 
 .. code-block:: json
 
     {}
 
-Errors:
-^^^^^^^
+**Return Codes:**
 
 See :ref:`errors`.
 
@@ -452,8 +449,7 @@ Unsubscribe Channel
 
 Remove a given ChannelID subscription from a UAID.
 
-Call:
-^^^^^
+**Call:**
 
 .. http:delete:: /v1/{type}/{token}/registration/{UAID}/subscription/{CHID}
 
@@ -461,19 +457,17 @@ Call:
 
     Authorization: Bearer {auth_token}
 
-Parameters:
-^^^^^^^^^^^
+**Parameters:**
 
     {}
 
-Reply:
-^^^^^^
+**Reply:**
+
 
 .. code-block:: json
 
     {}
 
-Errors:
-^^^^^^^
+**Return Codes:**
 
 See :ref:`errors`.
