@@ -26,8 +26,7 @@ Reference Docs
    architecture
    api
    Changelog <changelog>
-
-* :ref:`bridge_api`
+   http
 
 Source Code
 ===========
@@ -54,20 +53,20 @@ Firefox/FirefoxOS.
 dev
 ---
 
-Websocket: wss://autopush-dev.stage.mozaws.net/
-Endpoint: https://updates-autopush-dev.stage.mozaws.net/
+* Websocket: wss://autopush-dev.stage.mozaws.net/
+* Endpoint: https://updates-autopush-dev.stage.mozaws.net/
 
 stage
 -----
 
-Websocket: wss://autopush.stage.mozaws.net/
-Endpoint: https://updates-autopush.stage.mozaws.net/
+* Websocket: wss://autopush.stage.mozaws.net/
+* Endpoint: https://updates-autopush.stage.mozaws.net/
 
 production
 ----------
 
-Websocket: wss://push.services.mozilla.com/
-Endpoint: https://updates.push.services.mozilla.com/
+* Websocket: wss://push.services.mozilla.com/
+* Endpoint: https://updates.push.services.mozilla.com/
 
 Indices and tables
 ==================
