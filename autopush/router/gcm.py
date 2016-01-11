@@ -1,6 +1,7 @@
 """GCM Router"""
 import gcmclient
 import json
+from base64 import urlsafe_b64encode
 
 from twisted.python import log
 from twisted.internet.threads import deferToThread
@@ -84,7 +85,13 @@ class GCMRouter(object):
                 data['enckey'] = notification.headers.get('encryption-key')
             if ('crypto-key' in notification.headers):
                 data['cryptokey'] = notification.headers.get('crypto-key')
-            data['body'] = notification.data
+            udata = urlsafe_b64encode(notification.data)
+            mdata = self.config.get('max_data', 4096)
+            if len(udata) > mdata:
+                self._error("Converted buffer too long by %d bytes" % (
+                    len(udata) - mdata), 413)
+            # TODO: if the data is longer than max_data, raise error
+            data['body'] = udata
             data['con'] = con
             data['enc'] = enc
 
@@ -93,7 +100,7 @@ class GCMRouter(object):
             collapse_key=self.collapseKey,
             time_to_live=self.ttl,
             dry_run=self.dryRun,
-            data=data,
+            data=udata,
         )
         creds = router_data.get("creds", {"senderID": "missing id"})
         try:

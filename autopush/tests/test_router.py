@@ -163,6 +163,7 @@ class GCMRouterTestCase(unittest.TestCase):
             statsd_host=None,
         )
         self.gcm_config = {'s3_bucket': 'None',
+                           'max_data': 32,
                            'senderid_list': {'test123':
                                              {"auth": "12345678abcdefg"}}}
         self.gcm = fgcm
@@ -170,7 +171,9 @@ class GCMRouterTestCase(unittest.TestCase):
         self.headers = {"content-encoding": "text/plain",
                         "encryption": "test",
                         "encryption-key": "test"}
-        self.notif = Notification(10, "data", dummy_chid, self.headers, 200)
+        # Data will most likely be binary values.
+        self.notif = Notification(10, "\xab\xad\x1d\xea", dummy_chid,
+                                  self.headers, 200)
         self.router_data = dict(
             router_data=dict(
                 token="connect_data",
@@ -229,7 +232,23 @@ class GCMRouterTestCase(unittest.TestCase):
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             assert(self.router.gcm.send.called)
+            # Make sure the data was encoded as base64
+            eq_(self.router.gcm.send.call_args[0][0].data, 'q60d6g==')
         d.addCallback(check_results)
+        return d
+
+    def test_long_data(self):
+        self.router.gcm = self.gcm
+        badNotif = Notification(
+            10, "\x01abcdefghijklmnopqrstuvwxyz0123456789", dummy_chid,
+            self.headers, 200)
+        d = self.router.route_notification(badNotif, self.router_data)
+
+        def check_results(result):
+            ok_(isinstance(result.value, RouterException))
+            eq_(result.value.status_code, 413)
+
+        d.addBoth(check_results)
         return d
 
     def test_route_crypto_notification(self):
