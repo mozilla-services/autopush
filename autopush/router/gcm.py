@@ -46,7 +46,7 @@ class GCMRouter(object):
     def register(self, uaid, router_data):
         """Validate that a token is in the ``router_data``"""
         if not router_data.get("token"):
-            self._error("connect info missing 'token'", status=401)
+            raise self._error("connect info missing 'token'", status=401)
         # Assign a senderid
         router_data["creds"] = self.creds = self.senderIDs.choose_ID()
         return router_data
@@ -68,19 +68,19 @@ class GCMRouter(object):
             lead = "notification with data is missing header:"
             con = notification.headers.get('content-encoding', None)
             if not con:
-                self._error("%s Content-Encoding" % lead, 400)
+                raise self._error("%s Content-Encoding" % lead, 400)
             enc = notification.headers.get('encryption', None)
             if not enc:
-                self._error("%s Encryption" % lead, 400)
+                raise self._error("%s Encryption" % lead, 400)
             if ('crypto-key' in notification.headers and
                     'encryption-key' in notification.headers):
-                self._error("notification with data has both"
-                            "crypto-key and encryption-key headers",
-                            400)
+                raise self._error("notification with data has both"
+                                  "crypto-key and encryption-key headers",
+                                  400)
             if not ('crypto-key' in notification.headers or
                     'encryption-key' in notification.headers):
-                self._error("notification with data is missing key header",
-                            400)
+                raise self._error("notification with data is missing " +
+                                  "key header", 400)
             if ('encryption-key' in notification.headers):
                 data['enckey'] = notification.headers.get('encryption-key')
             if ('crypto-key' in notification.headers):
@@ -88,7 +88,7 @@ class GCMRouter(object):
             udata = urlsafe_b64encode(notification.data)
             mdata = self.config.get('max_data', 4096)
             if len(udata) > mdata:
-                self._error("Converted buffer too long by %d bytes" % (
+                raise self._error("Converted buffer too long by %d bytes" % (
                     len(udata) - mdata), 413)
             # TODO: if the data is longer than max_data, raise error
             data['body'] = udata
@@ -107,18 +107,19 @@ class GCMRouter(object):
             self.gcm.api_key = creds["auth"]
             result = self.gcm.send(payload)
         except KeyError:
-            self._error("Server error, missing bridge credentials for %s" %
-                        creds.get("senderID"), 500)
+            raise self._error("Server error, missing bridge credentials " +
+                              "for %s" % creds.get("senderID"), 500)
         except gcmclient.GCMAuthenticationError, e:
-            self._error("Authentication Error: %s" % e, 500)
+            raise self._error("Authentication Error: %s" % e, 500)
         except Exception, e:
-            self._error("Unhandled exception in GCM Routing: %s" % e, 500)
+            raise self._error("Unhandled exception in GCM Routing: %s" % e,
+                              500)
         return self._process_reply(result)
 
     def _error(self, err, status, **kwargs):
         """Error handler that raises the RouterException"""
         log.err(err, **kwargs)
-        raise RouterException(err, status_code=status, response_body=err)
+        return RouterException(err, status_code=status, response_body=err)
 
     def _process_reply(self, reply):
         """Process GCM send reply"""
