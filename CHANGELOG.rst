@@ -19,6 +19,8 @@ Features
 * Fixed document reference to HTTP API to be a deep link.
 * Pass either Encryption-Key or Crypto-Key per WebPush spec change. Issue #258
 * Removed refences to obsolete simplepush_test package.
+* Add key hash for UAIDs NOTE: enabling this will break all currently stored
+  UAID records.
 
 Bug Fixes
 ---------

@@ -18,8 +18,12 @@ from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table
 from boto.dynamodb2.types import NUMBER
 
+from autopush.utils import generate_hash
+
 
 log = logging.getLogger(__file__)
+
+key_hash=""
 
 
 def get_month(delta=0):
@@ -37,6 +41,12 @@ def get_month(delta=0):
                 new += datetime.timedelta(days=14)
         last = new
     return new
+
+
+def hasher(uaid):
+    if key_hash:
+        return generate_hash(key_hash, uaid)
+    return uaid
 
 
 def make_rotating_tablename(prefix, delta=0):
@@ -214,7 +224,7 @@ class Storage(object):
             exceeds throughput.
 
         """
-        notifs = self.table.query_2(consistent=True, uaid__eq=uaid,
+        notifs = self.table.query_2(consistent=True, uaid__eq=hasher(uaid),
                                     chid__gt=" ")
         return list(notifs)
 
@@ -232,7 +242,8 @@ class Storage(object):
             cond = "attribute_not_exists(version) or version < :ver"
             conn.put_item(
                 self.table.table_name,
-                item=self.encode(dict(uaid=uaid, chid=chid, version=version)),
+                item=self.encode(dict(uaid=hasher(uaid), chid=chid,
+                                      version=version)),
                 condition_expression=cond,
                 expression_attribute_values={
                     ":ver": {'N': str(version)}
@@ -251,10 +262,10 @@ class Storage(object):
         """
         try:
             if version:
-                self.table.delete_item(uaid=uaid, chid=chid,
+                self.table.delete_item(uaid=hasher(uaid), chid=chid,
                                        expected={"version__eq": version})
             else:
-                self.table.delete_item(uaid=uaid, chid=chid)
+                self.table.delete_item(uaid=hasher(uaid), chid=chid)
             return True
         except ProvisionedThroughputExceededException:
             self.metrics.increment("error.provisioned.delete_notification")
@@ -279,7 +290,7 @@ class Message(object):
     def register_channel(self, uaid, channel_id):
         """Register a channel for a given uaid"""
         conn = self.table.connection
-        db_key = self.encode({"uaid": uaid, "chidmessageid": " "})
+        db_key = self.encode({"uaid": hasher(uaid), "chidmessageid": " "})
         # Generate our update expression
         expr = "ADD chids :channel_id"
         expr_values = self.encode({":channel_id": set([channel_id])})
@@ -295,7 +306,7 @@ class Message(object):
     def unregister_channel(self, uaid, channel_id, **kwargs):
         """Remove a channel registration for a given uaid"""
         conn = self.table.connection
-        db_key = self.encode({"uaid": uaid, "chidmessageid": " "})
+        db_key = self.encode({"uaid": hasher(uaid), "chidmessageid": " "})
         expr = "DELETE chids :channel_id"
         expr_values = self.encode({":channel_id": set([channel_id])})
 
@@ -323,7 +334,7 @@ class Message(object):
         # Functions that call store_message() would be required to
         # update that list as well using register_channel()
         try:
-            result = self.table.get_item(consistent=True, uaid=uaid,
+            result = self.table.get_item(consistent=True, uaid=hasher(uaid),
                                          chidmessageid=" ")
             return (True, result["chids"] or set([]))
         except ItemNotFound:
@@ -333,7 +344,7 @@ class Message(object):
     def save_channels(self, uaid, channels):
         """Save out a set of channels"""
         self.table.put_item(data=dict(
-            uaid=uaid,
+            uaid=hasher(uaid),
             chidmessageid=" ",
             chids=channels
         ))
@@ -344,7 +355,7 @@ class Message(object):
         """Stores a message in the message table for the given uaid/channel
         with the message id"""
         item = dict(
-            uaid=uaid,
+            uaid=hasher(uaid),
             chidmessageid="%s:%s" % (channel_id, message_id),
             data=data,
             headers=headers,
@@ -378,7 +389,7 @@ class Message(object):
             item["data"] = data
         try:
             chidmessageid = "%s:%s" % (channel_id, message_id)
-            db_key = self.encode({"uaid": uaid,
+            db_key = self.encode({"uaid": hasher(uaid),
                                   "chidmessageid": chidmessageid})
             expr = ("SET #tl=:ttl, #ts=:timestamp,"
                     " updateid=:updateid")
@@ -407,14 +418,16 @@ class Message(object):
         """Deletes a specific message"""
         if updateid:
             try:
-                self.table.delete_item(uaid=uaid, chidmessageid="%s:%s" % (
-                    channel_id, message_id),
+                self.table.delete_item(
+                    uaid=hasher(uaid),
+                    chidmessageid="%s:%s" % (channel_id, message_id),
                     expected={'updateid__eq': updateid})
             except ConditionalCheckFailedException:
                 return False
         else:
-            self.table.delete_item(uaid=uaid, chidmessageid="%s:%s" % (
-                channel_id, message_id))
+            self.table.delete_item(
+                uaid=hasher(uaid),
+                chidmessageid="%s:%s" % (channel_id, message_id))
         return True
 
     def delete_messages(self, uaid, chidmessageids):
@@ -422,7 +435,7 @@ class Message(object):
             for chidmessageid in chidmessageids:
                 if chidmessageid:
                     batch.delete_item(
-                        uaid=uaid,
+                        uaid=hasher(uaid),
                         chidmessageid=chidmessageid
                     )
 
@@ -430,7 +443,7 @@ class Message(object):
     def delete_messages_for_channel(self, uaid, channel_id):
         """Deletes all messages for a uaid/channel_id"""
         results = self.table.query_2(
-            uaid__eq=uaid,
+            uaid__eq=hasher(uaid),
             chidmessageid__beginswith="%s:" % channel_id,
             consistent=True,
             attributes=("chidmessageid",),
@@ -444,7 +457,7 @@ class Message(object):
     def delete_user(self, uaid):
         """Deletes all messages and channel info for a given uaid"""
         results = self.table.query_2(
-            uaid__eq=uaid,
+            uaid__eq=hasher(uaid),
             chidmessageid__gte=" ",
             consistent=True,
             attributes=("chidmessageid",),
@@ -457,7 +470,8 @@ class Message(object):
     def fetch_messages(self, uaid, limit=10):
         """Fetches messages for a uaid"""
         # Eagerly fetches all results in the result set.
-        return list(self.table.query_2(uaid__eq=uaid, chidmessageid__gt=" ",
+        return list(self.table.query_2(uaid__eq=hasher(uaid),
+                                       chidmessageid__gt=" ",
                                        consistent=True, limit=limit))
 
 
@@ -487,7 +501,7 @@ class Router(object):
 
         """
         try:
-            return self.table.get_item(consistent=True, uaid=uaid)
+            return self.table.get_item(consistent=True, uaid=hasher(uaid))
         except ProvisionedThroughputExceededException:
             # We unfortunately have to catch this here, as track_provisioned
             # will not see this, since JSONResponseError is a subclass and
@@ -516,7 +530,7 @@ class Router(object):
         """
         # Fetch a senderid for this user
         conn = self.table.connection
-        db_key = self.encode({"uaid": data.pop("uaid")})
+        db_key = self.encode({"uaid": hasher(data.pop("uaid"))})
         # Generate our update expression
         expr = "SET " + ", ".join(["%s=:%s" % (x, x) for x in data.keys()])
         expr_values = self.encode({":%s" % k: v for k, v in data.items()})
@@ -554,13 +568,15 @@ class Router(object):
     def drop_user(self, uaid):
         # The following hack ensures that only uaids that exist and are
         # deleted return true.
-        return self.table.delete_item(uaid=uaid, expected={"uaid__eq": uaid})
+        huaid = hasher(uaid)
+        return self.table.delete_item(uaid=huaid,
+                                      expected={"uaid__eq": huaid})
 
     @track_provisioned
     def update_message_month(self, uaid, month):
         """Update the route tables current_message_month"""
         conn = self.table.connection
-        db_key = self.encode({"uaid": uaid})
+        db_key = self.encode({"uaid": hasher(uaid)})
         expr = "SET current_month=:curmonth"
         expr_values = self.encode({":curmonth": month})
         conn.update_item(

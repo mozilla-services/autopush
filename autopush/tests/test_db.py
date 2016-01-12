@@ -60,6 +60,14 @@ class DbCheckTestCase(unittest.TestCase):
         next_month = 1 if this_month == 12 else this_month + 1
         eq_(next_month, month1.month)
 
+    def test_hasher(self):
+        import autopush.db as db
+        db.key_hash = "SuperSikkret"
+        v = db.hasher("01234567123401234123456789ABCDEF")
+        eq_(v, '0530bb351921e7b4be66831e4c126c6' +
+            'd8f614d06cdd592cb8470f31177c8331a')
+        db.key_hash = ""
+
 
 class StorageTestCase(unittest.TestCase):
     def setUp(self):

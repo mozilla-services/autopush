@@ -2,6 +2,7 @@
 import configargparse
 import cyclone.web
 import json
+import autopush.db as db
 from autobahn.twisted.websocket import WebSocketServerFactory
 from autobahn.twisted.resource import WebSocketResource
 from twisted.internet import reactor, task
@@ -45,6 +46,8 @@ def add_shared_args(parser):
     parser.add_argument('--crypto_key', help="Crypto key for tokens",
                         default=[], env_var="CRYPTO_KEY", type=str,
                         action="append")
+    parser.add_argument('--key_hash', help="Key to hash IDs for storage",
+                        default="", env_var="KEY_HASH", type=str)
     parser.add_argument('--datadog_api_key', help="DataDog API Key", type=str,
                         default="", env_var="DATADOG_API_KEY")
     parser.add_argument('--datadog_app_key', help="DataDog App Key", type=str,
@@ -267,6 +270,8 @@ def _parse_endpoint(sysargs, use_files=True):
 def make_settings(args, **kwargs):
     """Helper function to make a :class:`AutopushSettings` object"""
     router_conf = {}
+    if args.key_hash:
+        db.key_hash = args.key_hash
     # Some routers require a websocket to timeout on idle (e.g. UDP)
     if args.wake_pem is not None and args.wake_timeout != 0:
         router_conf["simplepush"] = {"idle": args.wake_timeout,
