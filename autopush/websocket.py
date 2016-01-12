@@ -56,6 +56,7 @@ from zope.interface import implements
 from twisted.web.resource import Resource
 
 from autopush import __version__
+from autopush.db import has_connected_this_month
 from autopush.protocol import IgnoreBody
 from autopush.utils import validate_uaid, ErrorLogger
 from autopush.noseplugin import track_object
@@ -681,12 +682,22 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         self.finish_hello(previous)
 
+    def _update_last_connect(self, previous):
+        """Update last_connect given old router values if needed"""
+        if has_connected_this_month(previous):
+            return
+
+        self.force_retry(self.ap_settings.router.update_last_connect,
+                         self.ps.uaid)
+
     def finish_hello(self, previous):
         """callback for successful hello message, that sends hello reply"""
         self.ps._register = None
         if self.ps.use_webpush:
             return self._check_message_table_rotation(previous)
 
+        # Check and update last connect
+        self._update_last_connect(previous)
         msg = {"messageType": "hello", "uaid": self.ps.uaid, "status": 200}
         if self.autoPingInterval:
             msg["ping"] = self.autoPingInterval
@@ -1037,7 +1048,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # Split off the updateid if its not a direct update
         version, updateid = version.split(":")
 
-        ver_filter = lambda x: x.version == version
+        def ver_filter(update):
+            return update.version == version
+
         found = filter(ver_filter, self.ps.direct_updates[chid])
         if found:
             self.ps.direct_updates[chid].remove(found[0])

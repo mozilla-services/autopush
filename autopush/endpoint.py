@@ -41,6 +41,7 @@ from twisted.internet.defer import Deferred
 from twisted.internet.threads import deferToThread
 from twisted.python import log
 
+from autopush.db import generate_last_connect
 from autopush.router.interface import RouterException
 from autopush.utils import (
     generate_hash,
@@ -620,6 +621,7 @@ class RegistrationHandler(AutoendpointHandler):
             router_type=router_type,
             router_data=router_data,
             connected_at=int(time.time() * 1000),
+            last_connect=generate_last_connect(),
         )
         return deferToThread(self.ap_settings.router.register_user, user_item)
 
