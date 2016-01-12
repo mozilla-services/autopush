@@ -23,7 +23,7 @@ from autopush.utils import generate_hash
 
 log = logging.getLogger(__file__)
 
-key_hash=""
+key_hash = ""
 
 
 def get_month(delta=0):
