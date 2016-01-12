@@ -14,7 +14,7 @@ from moto import mock_dynamodb2
 from nose.tools import eq_
 
 from autopush.db import (
-    get_message_table,
+    get_rotating_message_table,
     get_router_table,
     get_storage_table,
     create_router_table,
@@ -140,7 +140,7 @@ class StorageTestCase(unittest.TestCase):
 
 class MessageTestCase(unittest.TestCase):
     def setUp(self):
-        table = get_message_table()
+        table = get_rotating_message_table()
         self.real_table = table
         self.real_connection = table.connection
         self.uaid = str(uuid.uuid4())
@@ -153,7 +153,7 @@ class MessageTestCase(unittest.TestCase):
 
     def test_register(self):
         chid = str(uuid.uuid4())
-        m = get_message_table()
+        m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
         message.register_channel(self.uaid, chid)
 
@@ -164,7 +164,7 @@ class MessageTestCase(unittest.TestCase):
 
     def test_unregister(self):
         chid = str(uuid.uuid4())
-        m = get_message_table()
+        m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
         message.register_channel(self.uaid, chid)
 
@@ -193,7 +193,7 @@ class MessageTestCase(unittest.TestCase):
     def test_all_channels(self):
         chid = str(uuid.uuid4())
         chid2 = str(uuid.uuid4())
-        m = get_message_table()
+        m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
@@ -210,7 +210,7 @@ class MessageTestCase(unittest.TestCase):
     def test_save_channels(self):
         chid = str(uuid.uuid4())
         chid2 = str(uuid.uuid4())
-        m = get_message_table()
+        m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
@@ -222,7 +222,7 @@ class MessageTestCase(unittest.TestCase):
         eq_(chans, new_chans)
 
     def test_all_channels_no_uaid(self):
-        m = get_message_table()
+        m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
         exists, chans = message.all_channels("asdf")
         assert(chans == set([]))
@@ -230,7 +230,7 @@ class MessageTestCase(unittest.TestCase):
     def test_message_storage(self):
         chid = str(uuid.uuid4())
         chid2 = str(uuid.uuid4())
-        m = get_message_table()
+        m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
@@ -257,7 +257,7 @@ class MessageTestCase(unittest.TestCase):
     def test_delete_user(self):
         chid = str(uuid.uuid4())
         chid2 = str(uuid.uuid4())
-        m = get_message_table()
+        m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
@@ -286,7 +286,7 @@ class MessageTestCase(unittest.TestCase):
             return m
 
         chid = str(uuid.uuid4())
-        m = get_message_table()
+        m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
         message.register_channel(self.uaid, chid)
 
@@ -306,7 +306,7 @@ class MessageTestCase(unittest.TestCase):
         eq_(len(all_messages), 0)
 
     def test_message_delete_fail_condition(self):
-        m = get_message_table()
+        m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
 
         def raise_condition(*args, **kwargs):
@@ -320,7 +320,7 @@ class MessageTestCase(unittest.TestCase):
 
     def test_update_message(self):
         chid = uuid.uuid4().hex
-        m = get_message_table()
+        m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
         data1 = str(uuid.uuid4())
         data2 = str(uuid.uuid4())
@@ -333,7 +333,7 @@ class MessageTestCase(unittest.TestCase):
         eq_(data2, messages[0]['#dd'])
 
     def test_update_message_fail(self):
-        message = Message(get_message_table(), SinkMetrics)
+        message = Message(get_rotating_message_table(), SinkMetrics)
         message.store_message(self.uaid,
                               uuid.uuid4().hex,
                               self._nstime(),

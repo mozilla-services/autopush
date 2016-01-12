@@ -8,7 +8,8 @@ Autopush Changelog
 Features
 --------
 
-* Add router table rotation for all users. Issue #253.
+* Utilize router last_connect index to track whether a user has connected in
+  the current month. Issue #253.
 * Add message table rotation for webpush users. Issue #191.
 * Capture Authorization header for endpoint requests for logging. Issue #232.
 * New Bridge HTTP API. Issues #238, #250, #251

@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 import datetime
 import logging
+import random
 import time
 import uuid
 from functools import wraps
@@ -59,17 +60,31 @@ def create_rotating_message_table(prefix="message", read_throughput=5,
 
 
 def get_rotating_message_table(prefix="message", delta=0):
-    """Gets the message table for the current month.
-
-    This requires the table to already exist or errors will occur.
-
-    """
-    return Table(make_rotating_tablename(prefix, delta))
+    """Gets the message table for the current month."""
+    db = DynamoDBConnection()
+    dblist = db.list_tables()["TableNames"]
+    tablename = make_rotating_tablename(prefix, delta)
+    if tablename not in dblist:
+        return create_rotating_message_table(prefix=prefix, delta=delta)
+    else:
+        return Table(tablename)
 
 
 def create_router_table(tablename="router", read_throughput=5,
                         write_throughput=5):
-    """Create a new router table"""
+    """Create a new router table
+
+    The last_connect index is a value used to determine the last month a user
+    was seen in. To prevent hot-keys on this table during month switchovers the
+    key is determined based on the following scheme:
+
+        (YEAR)(MONTH)(DAY)(HOUR)(0001-0010)
+
+    Note that the random key is only between 1-10 at the moment, if the key is
+    still too hot during production the random range can be increased at the
+    cost of additional queries during GC to locate expired users.
+
+    """
     return Table.create(tablename,
                         schema=[HashKey("uaid")],
                         throughput=dict(read=read_throughput,
@@ -88,17 +103,6 @@ def create_storage_table(tablename="storage", read_throughput=5,
     """Create a new storage table for simplepush style notification storage"""
     return Table.create(tablename,
                         schema=[HashKey("uaid"), RangeKey("chid")],
-                        throughput=dict(read=read_throughput,
-                                        write=write_throughput),
-                        )
-
-
-def create_message_table(tablename="message", read_throughput=5,
-                         write_throughput=5):
-    """Create a new message table for webpush style message storage"""
-    return Table.create(tablename,
-                        schema=[HashKey("uaid"),
-                                RangeKey("chidmessageid")],
                         throughput=dict(read=read_throughput,
                                         write=write_throughput),
                         )
@@ -135,18 +139,6 @@ def get_storage_table(tablename="storage", read_throughput=5,
 
     """
     return _make_table(create_storage_table, tablename, read_throughput,
-                       write_throughput)
-
-
-def get_message_table(tablename="message", read_throughput=5,
-                      write_throughput=5):
-    """Get the main message table object
-
-    Creates the table if it doesn't already exist, otherwise returns the
-    existing table.
-
-    """
-    return _make_table(create_message_table, tablename, read_throughput,
                        write_throughput)
 
 
@@ -189,6 +181,29 @@ def track_provisioned(func):
             self.metrics.increment("error.provisioned.%s" % func.__name__)
             raise
     return wrapper
+
+
+def has_connected_this_month(item):
+    """Whether or not a router item has connected this month"""
+    last_connect = item.get("last_connect")
+    if not last_connect:
+        return False
+
+    today = datetime.datetime.today()
+    val = "%s%s" % (today.year, str(today.month).zfill(2))
+    return str(last_connect).startswith(val)
+
+
+def generate_last_connect():
+    """Generate a last_connect"""
+    today = datetime.datetime.today()
+    val = "".join([
+                  str(today.year),
+                  str(today.month).zfill(2),
+                  str(today.hour).zfill(2),
+                  str(random.randint(0, 10)).zfill(4),
+                  ])
+    return int(val)
 
 
 class Storage(object):
@@ -551,6 +566,22 @@ class Router(object):
             return (False, {})
 
     @track_provisioned
+    def update_last_connect(self, uaid):
+        """Update the last_connect value for a user to this month"""
+        conn = self.table.connection
+        db_key = self.encode({"uaid": uaid})
+        val = generate_last_connect()
+        expr = "SET last_connect=:last_connect"
+        expr_values = self.encode({":last_connect": val})
+        conn.update_item(
+            self.table.table_name,
+            db_key,
+            update_expression=expr,
+            expression_attribute_values=expr_values,
+        )
+        return True
+
+    @track_provisioned
     def drop_user(self, uaid):
         # The following hack ensures that only uaids that exist and are
         # deleted return true.
@@ -558,11 +589,18 @@ class Router(object):
 
     @track_provisioned
     def update_message_month(self, uaid, month):
-        """Update the route tables current_message_month"""
+        """Update the route tables current_message_month
+
+        Note that we also update the last_connect at this point since webpush
+        users when connecting will always call this once that month.
+
+        """
         conn = self.table.connection
         db_key = self.encode({"uaid": uaid})
-        expr = "SET current_month=:curmonth"
-        expr_values = self.encode({":curmonth": month})
+        expr = "SET current_month=:curmonth, last_connect=:last_connect"
+        expr_values = self.encode({":curmonth": month,
+                                   ":last_connect": generate_last_connect()
+                                   })
         conn.update_item(
             self.table.table_name,
             db_key,
