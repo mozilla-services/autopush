@@ -247,6 +247,7 @@ class GCMRouterTestCase(unittest.TestCase):
         def check_results(result):
             ok_(isinstance(result.value, RouterException))
             eq_(result.value.status_code, 413)
+            eq_(result.value.errno, 104)
 
         d.addBoth(check_results)
         return d

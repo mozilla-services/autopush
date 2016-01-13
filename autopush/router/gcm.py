@@ -88,8 +88,11 @@ class GCMRouter(object):
             udata = urlsafe_b64encode(notification.data)
             mdata = self.config.get('max_data', 4096)
             if len(udata) > mdata:
-                raise self._error("Converted buffer too long by %d bytes" % (
-                    len(udata) - mdata), 413)
+                raise self._error("This message is intended for a " +
+                                  "constrained device and is limited " +
+                                  "to 3070 bytes. Converted buffer too " +
+                                  "long by %d bytes" % (len(udata) - mdata),
+                                  413, errno=104)
             # TODO: if the data is longer than max_data, raise error
             data['body'] = udata
             data['con'] = con
@@ -119,7 +122,8 @@ class GCMRouter(object):
     def _error(self, err, status, **kwargs):
         """Error handler that raises the RouterException"""
         log.err(err, **kwargs)
-        return RouterException(err, status_code=status, response_body=err)
+        return RouterException(err, status_code=status, response_body=err,
+                               **kwargs)
 
     def _process_reply(self, reply):
         """Process GCM send reply"""
