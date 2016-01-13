@@ -179,7 +179,7 @@ class EndpointTestCase(unittest.TestCase):
         self.senderIDs_mock.get_ID.return_value = "test_senderid"
 
         self.request_mock = Mock(body=b'', arguments={}, headers={},
-                                 host='1.2.3.4')
+                                 host='example.com:8080')
         self.endpoint = endpoint.EndpointHandler(Application(),
                                                  self.request_mock,
                                                  ap_settings=settings)
@@ -796,9 +796,9 @@ class RegistrationTestCase(unittest.TestCase):
 
     def test_base_tags(self):
         self.reg.request = Mock(headers={'user-agent': 'test'},
-                                host='1.2.3.4:8080')
+                                host='example.com:8080')
         tags = self.reg.base_tags()
-        eq_(tags, ['user-agent:test', 'host:1.2.3.4:8080'])
+        eq_(tags, ['user-agent:test', 'host:example.com:8080'])
 
     def _check_error(self, code, errno, error, message=None):
         d = json.loads(self.write_mock.call_args[0][0])

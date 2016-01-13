@@ -21,6 +21,7 @@ Features
 * Fixed document reference to HTTP API to be a deep link.
 * Pass either Encryption-Key or Crypto-Key per WebPush spec change. Issue #258
 * Removed refences to obsolete simplepush_test package.
+* Record Requesting Hostname to metrics. Issue #228
 
 Bug Fixes
 ---------
