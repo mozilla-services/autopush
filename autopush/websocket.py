@@ -138,20 +138,19 @@ class PushState(object):
     def __init__(self, settings, request):
         self._callbacks = []
         self.settings = settings
-        remote_host = ""
+        host = ""
 
         if request:
             self._user_agent = request.headers.get("user-agent")
-            # Peer returns the remote protocol, IP & socket.
-            # e.g. "tcp4:127.0.0.1:32767"
-            remote_host = request.peer
+            # Get the name of the server the request asked for.
+            host = request.host
         else:
             self._user_agent = None
         self._base_tags = []
         if self._user_agent:
             self._base_tags.append("user-agent:%s" % self._user_agent)
-        if remote_host:
-            self._base_tags.append("remote-host:%s" % remote_host)
+        if host:
+            self._base_tags.append("host:%s" % host)
 
         self._should_stop = False
         self._paused = False
