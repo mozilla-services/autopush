@@ -13,6 +13,7 @@ from unittest.case import SkipTest
 import boto
 import psutil
 import websocket
+import twisted.internet.base
 from autobahn.twisted.websocket import WebSocketServerFactory
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
@@ -22,7 +23,11 @@ from twisted.internet.threads import deferToThread
 from twisted.web.client import Agent
 from twisted.test.proto_helpers import AccumulatingProtocol
 from autopush import __version__
-from autopush.db import create_rotating_message_table
+from autopush.db import (
+    create_rotating_message_table,
+    get_month,
+    has_connected_this_month
+)
 from autopush.settings import AutopushSettings
 from base64 import urlsafe_b64encode
 
@@ -34,7 +39,6 @@ ddb_lib_dir = os.path.join(ddb_dir, "DynamoDBLocal_lib")
 ddb_jar = os.path.join(ddb_dir, "DynamoDBLocal.jar")
 ddb_process = None
 
-import twisted.internet.base
 twisted.internet.base.DelayedCall.debug = True
 
 
@@ -475,6 +479,29 @@ class TestSimple(IntegrationBase):
         eq_(result["updates"][0]["version"], 12)
         yield self.shut_down(client)
 
+    @inlineCallbacks
+    def test_basic_last_connect(self):
+        client = yield self.quick_register()
+        yield client.disconnect()
+
+        # Verify the last_connect is there and the current month
+        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
+        eq_(True, has_connected_this_month(c))
+
+        # Move it back
+        today = get_month(delta=-1)
+        c["last_connect"] = "%s%s020001" % (today.year,
+                                            str(today.month).zfill(2))
+        yield deferToThread(c.partial_save)
+        eq_(False, has_connected_this_month(c))
+
+        # Connect/disconnect again and verify last_connect move
+        yield client.connect()
+        yield client.hello()
+        yield client.disconnect()
+        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
+        eq_(True, has_connected_this_month(c))
+
 
 class TestData(IntegrationBase):
     @inlineCallbacks
@@ -876,6 +903,14 @@ class TestWebPush(IntegrationBase):
         c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
         eq_(c["current_month"], last_month)
 
+        # Verify last_connect is current, then move that back
+        ok_(has_connected_this_month(c))
+        today = get_month(delta=-1)
+        c["last_connect"] = "%s%s020001" % (today.year,
+                                            str(today.month).zfill(2))
+        yield deferToThread(c.partial_save)
+        eq_(False, has_connected_this_month(c))
+
         # Move the clients channels back one month
         exists, chans = yield deferToThread(
             self._settings.message.all_channels, client.uaid
@@ -940,6 +975,9 @@ class TestWebPush(IntegrationBase):
         c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
         eq_(c["current_month"], self._settings.current_msg_month)
         eq_(server_client.ps.rotate_message_table, False)
+
+        # Verify the client moved last_connect
+        eq_(True, has_connected_this_month(c))
 
         # Verify the channels were moved
         exists, chans = yield deferToThread(

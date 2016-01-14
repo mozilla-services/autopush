@@ -65,30 +65,6 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         d.addCallback(check_tables)
         return d
 
-    @patch("autopush.db.datetime")
-    def test_update_rotating_tables_no_such_table(self, mock_date):
-        from autopush.db import get_month
-        mock_date.date.today.return_value = get_month(-7)
-        settings = AutopushSettings(
-            hostname="google.com", resolve_hostname=True)
-
-        # Drop the table created during the creation of autopush settings
-        settings.message.table.delete()
-
-        # Erase the tables it has on init, and move current month back one
-        last_month = get_month(-1)
-        settings.current_month = last_month.month
-        settings.message_tables = {}
-
-        # Get the deferred back
-        d = settings.update_rotating_tables()
-
-        def check_tables(result):
-            eq_(len(settings.message_tables), 0)
-
-        d.addCallback(check_tables)
-        return d
-
     def test_update_not_needed(self):
         settings = AutopushSettings(
             hostname="google.com", resolve_hostname=True)
