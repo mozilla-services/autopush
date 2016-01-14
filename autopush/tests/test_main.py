@@ -131,7 +131,7 @@ class EndpointMainTestCase(unittest.TestCase):
         gcm_ttl = 999
         gcm_dryrun = False
         gcm_collapsekey = "collapse"
-
+        max_data = 4096
         # filler
         crypto_key = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
         datadog_api_key = "datadog_api_key"

@@ -133,6 +133,14 @@ Send a notification to the given endpoint identified by it's `token`.
     `the WebPush spec
     <https://tools.ietf.org/html/draft-thomson-webpush-http2-02#section-5>`_.
 
+    .. note::
+
+        Some bridged connections require data transcription and may limit the
+        length of data that can be sent. For instance, using a GCM bridge
+        will require that the data be converted to base64. This means that
+        data may be limited to only 2744 bytes instead of the normal 4096
+        bytes.
+
 **Parameters:**
 
     :form version: (*Optional*) Version of notification, defaults to current
