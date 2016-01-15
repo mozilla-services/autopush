@@ -21,6 +21,9 @@ Features
 * Fixed document reference to HTTP API to be a deep link.
 * Pass either Encryption-Key or Crypto-Key per WebPush spec change. Issue #258
 * Removed refences to obsolete simplepush_test package.
+* Convert outbound GCM data to base64. This should resolve potential
+  transcription issues with binary encoded data going over the bridge.
+  Issue #289
 * Record Requesting Hostname to metrics. Issue #228
 
 Bug Fixes
