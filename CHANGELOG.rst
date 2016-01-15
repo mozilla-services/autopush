@@ -25,6 +25,8 @@ Features
   transcription issues with binary encoded data going over the bridge.
   Issue #289
 * Record Requesting Hostname to metrics. Issue #228
+* Add key hash for UAIDs NOTE: enabling this will break all currently stored
+  UAID records.
 
 Bug Fixes
 ---------
