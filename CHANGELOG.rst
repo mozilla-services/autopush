@@ -8,6 +8,8 @@ Autopush Changelog
 Features
 --------
 
+* Utilize router last_connect index to track whether a user has connected in
+  the current month. Issue #253.
 * Add message table rotation for webpush users. Issue #191.
 * Capture Authorization header for endpoint requests for logging. Issue #232.
 * New Bridge HTTP API. Issues #238, #250, #251
@@ -19,6 +21,10 @@ Features
 * Fixed document reference to HTTP API to be a deep link.
 * Pass either Encryption-Key or Crypto-Key per WebPush spec change. Issue #258
 * Removed refences to obsolete simplepush_test package.
+* Convert outbound GCM data to base64. This should resolve potential
+  transcription issues with binary encoded data going over the bridge.
+  Issue #289
+* Record Requesting Hostname to metrics. Issue #228
 * Add key hash for UAIDs NOTE: enabling this will break all currently stored
   UAID records.
 
@@ -46,7 +52,6 @@ Configuration Changes
   --gcm_enabled
   --senderid_list
   --senderid_expry
-
 
 Backwards Incompatibilities
 ---------------------------

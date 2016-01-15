@@ -56,6 +56,7 @@ from zope.interface import implements
 from twisted.web.resource import Resource
 
 from autopush import __version__
+from autopush.db import has_connected_this_month
 from autopush.protocol import IgnoreBody
 from autopush.utils import validate_uaid, ErrorLogger
 from autopush.noseplugin import track_object
@@ -137,14 +138,20 @@ class PushState(object):
     def __init__(self, settings, request):
         self._callbacks = []
         self.settings = settings
+        host = ""
 
         if request:
             self._user_agent = request.headers.get("user-agent")
+            # Get the name of the server the request asked for.
+            host = request.host
         else:
             self._user_agent = None
         self._base_tags = []
         if self._user_agent:
             self._base_tags.append("user-agent:%s" % self._user_agent)
+        if host:
+            self._base_tags.append("host:%s" % host)
+
         self._should_stop = False
         self._paused = False
         self.metrics = settings.metrics
@@ -681,12 +688,22 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         self.finish_hello(previous)
 
+    def _update_last_connect(self, previous):
+        """Update last_connect given old router values if needed"""
+        if has_connected_this_month(previous):
+            return
+
+        self.force_retry(self.ap_settings.router.update_last_connect,
+                         self.ps.uaid)
+
     def finish_hello(self, previous):
         """callback for successful hello message, that sends hello reply"""
         self.ps._register = None
         if self.ps.use_webpush:
             return self._check_message_table_rotation(previous)
 
+        # Check and update last connect
+        self._update_last_connect(previous)
         msg = {"messageType": "hello", "uaid": self.ps.uaid, "status": 200}
         if self.autoPingInterval:
             msg["ping"] = self.autoPingInterval
@@ -1037,7 +1054,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # Split off the updateid if its not a direct update
         version, updateid = version.split(":")
 
-        ver_filter = lambda x: x.version == version
+        def ver_filter(update):
+            return update.version == version
+
         found = filter(ver_filter, self.ps.direct_updates[chid])
         if found:
             self.ps.direct_updates[chid].remove(found[0])

@@ -300,6 +300,7 @@ def make_settings(args, **kwargs):
             return
         router_conf["gcm"] = {"ttl": args.gcm_ttl,
                               "dryrun": args.gcm_dryrun,
+                              "max_data": args.max_data,
                               "collapsekey": args.gcm_collapsekey,
                               "senderIDs": senderIDs,
                               "senderid_list": list}

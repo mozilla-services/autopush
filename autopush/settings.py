@@ -9,11 +9,9 @@ from twisted.internet.defer import (
     returnValue,
 )
 from twisted.internet.threads import deferToThread
-from twisted.python import log
 from twisted.web.client import Agent, HTTPConnectionPool
 
 from autopush.db import (
-    create_rotating_message_table,
     get_router_table,
     get_storage_table,
     get_rotating_message_table,
@@ -205,13 +203,6 @@ class AutopushSettings(object):
         """
         last_month = get_rotating_message_table(self._message_prefix, -1)
         this_month = get_rotating_message_table(self._message_prefix)
-        # Verify the table exists
-        try:
-            this_month.describe()
-        except Exception:
-            # Create the message table
-            create_rotating_message_table(prefix=self._message_prefix)
-            this_month = get_rotating_message_table(self._message_prefix)
         self.message_tables = {
             last_month.table_name: Message(last_month, self.metrics),
             this_month.table_name: Message(this_month, self.metrics),
@@ -233,14 +224,8 @@ class AutopushSettings(object):
 
         # Get tables for the new month, and verify they exist before we try to
         # switch over
-        message_table = get_rotating_message_table(self._message_prefix)
-
-        try:
-            yield deferToThread(message_table.describe)
-        except Exception:
-            tblname = make_rotating_tablename(self._message_prefix)
-            log.err("Unable to locate new message table: %s" % tblname)
-            returnValue(False)
+        message_table = yield deferToThread(get_rotating_message_table,
+                                            self._message_prefix)
 
         # Both tables found, safe to switch-over
         self.current_month = today.month
