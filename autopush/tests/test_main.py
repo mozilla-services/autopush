@@ -180,7 +180,7 @@ class EndpointMainTestCase(unittest.TestCase):
         message_write_throughput = 0
         senderid_list = '{"12345":{"auth":"abcd"}}'
         s3_bucket = "none"
-        key_hash = ""
+        key_hash = "supersikkret"
         senderid_expry = 0
 
     def setUp(self):
