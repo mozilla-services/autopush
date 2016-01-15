@@ -138,14 +138,20 @@ class PushState(object):
     def __init__(self, settings, request):
         self._callbacks = []
         self.settings = settings
+        host = ""
 
         if request:
             self._user_agent = request.headers.get("user-agent")
+            # Get the name of the server the request asked for.
+            host = request.host
         else:
             self._user_agent = None
         self._base_tags = []
         if self._user_agent:
             self._base_tags.append("user-agent:%s" % self._user_agent)
+        if host:
+            self._base_tags.append("host:%s" % host)
+
         self._should_stop = False
         self._paused = False
         self.metrics = settings.metrics

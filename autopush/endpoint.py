@@ -445,6 +445,8 @@ class RegistrationHandler(AutoendpointHandler):
         tags = self._base_tags
         tags.append("user-agent:%s" %
                     self.request.headers.get("user-agent"))
+        tags.append("host:%s" % self.request.host)
+        return tags
 
     def _relocate(self, router_type, router_token, uaid="", chid=""):
         relo = "%s/v1/%s/%s/register" % (self.ap_settings.endpoint_url,

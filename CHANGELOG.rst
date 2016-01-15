@@ -24,6 +24,7 @@ Features
 * Convert outbound GCM data to base64. This should resolve potential
   transcription issues with binary encoded data going over the bridge.
   Issue #289
+* Record Requesting Hostname to metrics. Issue #228
 
 Bug Fixes
 ---------

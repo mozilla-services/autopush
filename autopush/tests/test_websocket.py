@@ -173,6 +173,14 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.onConnect(req)
         eq_(self.proto.ps._user_agent, "Me")
 
+    def test_base_tags(self):
+        req = Mock()
+        req.headers = {'user-agent': "tester"}
+        req.host = "example.com:8080"
+        ps = PushState(settings=self.proto.ap_settings, request=req)
+        eq_(ps._base_tags, ['user-agent:tester',
+                            'host:example.com:8080'])
+
     def test_reporter(self):
         from autopush.websocket import periodic_reporter
         self.proto.ap_settings.factory = Mock()
