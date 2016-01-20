@@ -569,10 +569,10 @@ class RegistrationHandler(AutoendpointHandler):
         if not router.drop_user(uaid):
             raise ItemNotFound("UAID not found")
 
-    def _register_channel(self):
+    def _register_channel(self, router_data=None):
         self.ap_settings.message.register_channel(self.uaid, self.chid)
         endpoint = self.ap_settings.make_endpoint(self.uaid, self.chid)
-        return endpoint
+        return endpoint, router_data
 
     @cyclone.web.asynchronous
     def delete(self, router_type="", router_token="", uaid="", chid=""):
@@ -628,10 +628,15 @@ class RegistrationHandler(AutoendpointHandler):
         return deferToThread(self.ap_settings.router.register_user, user_item)
 
     def _create_endpoint(self, result=None):
+        router_data = None
+        try:
+            router_data = result[2]
+        except (IndexError, TypeError):
+            pass
         """Called to register a new channel and create its endpoint."""
-        return deferToThread(self._register_channel)
+        return deferToThread(self._register_channel, router_data)
 
-    def _return_endpoint(self, endpoint, new_uaid, router=None):
+    def _return_endpoint(self, endpoint_data, new_uaid, router=None):
         """Called after the endpoint was made and should be returned to the
         requestor"""
         if new_uaid:
@@ -642,13 +647,14 @@ class RegistrationHandler(AutoendpointHandler):
                 uaid=self.uaid,
                 secret=hashed,
                 channelID=self.chid,
-                endpoint=endpoint,
+                endpoint=endpoint_data[0],
             )
             # Apply any router specific fixes to the outbound response.
             if router is not None:
-                msg = router.amend_msg(msg)
+                msg = router.amend_msg(msg,
+                                       endpoint_data[1].get('router_data'))
         else:
-            msg = dict(channelID=self.chid, endpoint=endpoint)
+            msg = dict(channelID=self.chid, endpoint=endpoint_data[0])
         self.write(json.dumps(msg))
         log.msg("Endpoint registered via HTTP", **self._client_info())
         self.finish()

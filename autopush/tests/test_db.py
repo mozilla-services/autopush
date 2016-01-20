@@ -465,9 +465,9 @@ class RouterTestCase(unittest.TestCase):
 
         router.table.connection = Mock()
         router.table.connection.update_item.side_effect = raise_condition
-        result = router.register_user(dict(uaid="asdf", node_id="asdf",
-                                           connected_at=1234))
-        eq_(result, (False, {}))
+        router_data = dict(uaid="asdf", node_id="asdf", connected_at=1234)
+        result = router.register_user(router_data)
+        eq_(result, (False, {}, router_data))
 
     def test_node_clear(self):
         r = get_router_table()

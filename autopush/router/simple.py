@@ -58,7 +58,7 @@ class SimpleRouter(object):
         """Return no additional routing data"""
         return {}
 
-    def amend_msg(self, msg):
+    def amend_msg(self, msg, router_data=None):
         return msg
 
     def check_token(self, token):

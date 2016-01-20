@@ -396,7 +396,8 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_ammend(self):
         self.router.register("uaid", {"token": "connect_data"})
         resp = {"key": "value"}
-        result = self.router.amend_msg(resp)
+        result = self.router.amend_msg(resp,
+                                       self.router_data.get('router_data'))
         eq_({"key": "value", "senderid": "test123"},
             result)
 

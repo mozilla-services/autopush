@@ -16,7 +16,6 @@ class GCMRouter(object):
     ttl = 60
     dryRun = 0
     collapseKey = "simplepush"
-    creds = {}
 
     def __init__(self, ap_settings, router_conf):
         """Create a new GCM router and connect to GCM"""
@@ -39,18 +38,18 @@ class GCMRouter(object):
             return (False, self.senderIDs.choose_ID().get('senderID'))
         return (True, token)
 
-    def amend_msg(self, msg):
-        msg["senderid"] = self.creds.get("senderID")
+    def amend_msg(self, msg, data=None):
+        if data is not None:
+            msg["senderid"] = data.get('creds', {}).get('senderID')
         return msg
 
     def register(self, uaid, router_data, router_token=None, *kwargs):
-        """ Validate that the GCM Instance Token is in the ``router_data``"""
+        """Validate that the GCM Instance Token is in the ``router_data``"""
         if "token" not in router_data:
             raise self._error("connect info missing GCM Instance 'token'",
                               status=401)
         # Assign a senderid
-        router_data["creds"] = self.creds = \
-            self.senderIDs.get_ID(router_token)
+        router_data["creds"] = self.senderIDs.get_ID(router_token)
         return router_data
 
     def route_notification(self, notification, uaid_data):

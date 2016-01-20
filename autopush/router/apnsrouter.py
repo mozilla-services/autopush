@@ -49,7 +49,7 @@ class APNSRouter(object):
                                   response_body="No token registered")
         return router_data
 
-    def amend_msg(self, msg):
+    def amend_msg(self, msg, router_data=None):
         return msg
 
     def check_token(self, token):
