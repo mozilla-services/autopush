@@ -134,8 +134,6 @@ class SenderIDs(object):
         if id is None:
             return self.choose_ID()
         record = self._senderIDs.get(id)
-        if record is None:
-            return None
         return record
 
     def choose_ID(self):

@@ -124,6 +124,8 @@ class SenderIDsTestCase(unittest.TestCase):
         self.senderIDs = SenderIDs(settings)
         fetch = self.senderIDs.get_ID('test123')
         eq_(fetch, {"senderID": "test123", "auth": "abc"})
+        fetch = self.senderIDs.get_ID()
+        ok_(fetch is not None)
         return self.senderIDs.stop()
 
     def test_get_norecord(self):
