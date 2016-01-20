@@ -129,11 +129,13 @@ class SenderIDs(object):
         """Return a list of senderIDs"""
         return self._senderIDs
 
-    def get_ID(self, id):
+    def get_ID(self, id=None):
         """Return the associated record for a given SenderID"""
+        if id is None:
+            return self.choose_ID()
         record = self._senderIDs.get(id)
-        if record:
-            record["senderID"] = id
+        if record is None:
+            return None
         return record
 
     def choose_ID(self):

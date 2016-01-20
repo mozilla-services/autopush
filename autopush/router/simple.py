@@ -54,7 +54,7 @@ class SimpleRouter(object):
         self.conf = router_conf
         self.waker = None
 
-    def register(self, uaid, connect):
+    def register(self, uaid, connect, *kwargs):
         """Return no additional routing data"""
         return {}
 

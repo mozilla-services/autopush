@@ -43,12 +43,14 @@ class GCMRouter(object):
         msg["senderid"] = self.creds.get("senderID")
         return msg
 
-    def register(self, uaid, router_data):
-        """Validate that a token is in the ``router_data``"""
-        if not router_data.get("token"):
-            raise self._error("connect info missing 'token'", status=401)
+    def register(self, uaid, router_data, router_token=None, *kwargs):
+        """ Validate that the GCM Instance Token is in the ``router_data``"""
+        if "token" not in router_data:
+            raise self._error("connect info missing GCM Instance 'token'",
+                              status=401)
         # Assign a senderid
-        router_data["creds"] = self.creds = self.senderIDs.choose_ID()
+        router_data["creds"] = self.creds = \
+            self.senderIDs.get_ID(router_token)
         return router_data
 
     def route_notification(self, notification, uaid_data):
@@ -98,12 +100,14 @@ class GCMRouter(object):
             data['con'] = con
             data['enc'] = enc
 
+        # registration_ids are the GCM instance tokens (specified during
+        # registration.
         payload = gcmclient.JSONMessage(
-            registration_ids=[router_data["token"]],
+            registration_ids=[router_data.get("token")],
             collapse_key=self.collapseKey,
             time_to_live=self.ttl,
-            dry_run=self.dryRun,
-            data=udata,
+            dry_run=self.dryRun or "dryrun" in router_data,
+            data=data,
         )
         creds = router_data.get("creds", {"senderID": "missing id"})
         try:

@@ -508,7 +508,7 @@ class RegistrationHandler(AutoendpointHandler):
         self.chid = params["channelID"]
         if new_uaid:
             d = Deferred()
-            d.addCallback(router.register, params)
+            d.addCallback(router.register, params, router_token)
             d.addCallback(self._save_router_data, router_type)
             d.addCallback(self._create_endpoint)
             d.addCallback(self._return_endpoint, new_uaid, router)

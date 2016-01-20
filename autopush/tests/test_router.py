@@ -168,7 +168,7 @@ class GCMRouterTestCase(unittest.TestCase):
                                              {"auth": "12345678abcdefg"}}}
         self.gcm = fgcm
         self.router = GCMRouter(settings, self.gcm_config)
-        self.headers = {"content-encoding": "text/plain",
+        self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
         # Data will most likely be binary values.
@@ -233,7 +233,11 @@ class GCMRouterTestCase(unittest.TestCase):
             ok_(isinstance(result, RouterResponse))
             assert(self.router.gcm.send.called)
             # Make sure the data was encoded as base64
-            eq_(self.router.gcm.send.call_args[0][0].data, 'q60d6g==')
+            data = self.router.gcm.send.call_args[0][0].data
+            eq_(data['body'], 'q60d6g==')
+            eq_(data['enc'], 'test')
+            eq_(data['enckey'], 'test')
+            eq_(data['con'], 'aesgcm')
         d.addCallback(check_results)
         return d
 
@@ -392,8 +396,9 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_ammend(self):
         self.router.register("uaid", {"token": "connect_data"})
         resp = {"key": "value"}
+        result = self.router.amend_msg(resp)
         eq_({"key": "value", "senderid": "test123"},
-            self.router.amend_msg(resp))
+            result)
 
 
 class SimplePushRouterTestCase(unittest.TestCase):
