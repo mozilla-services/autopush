@@ -11,7 +11,7 @@ Features
 Bug Fixes
 ---------
 
-* Fixes for GCM JSON encoding rejections. Issue #297
+* Fixes for GCM JSON encoding rejections and ID assignment. Issue #297
 
 
 1.9.0 (2016-01-15)
