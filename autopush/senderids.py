@@ -131,7 +131,7 @@ class SenderIDs(object):
 
     def get_ID(self, id=None):
         """Return the associated record for a given SenderID"""
-        if id is None:
+        if not id:
             return self.choose_ID()
         record = self._senderIDs.get(id)
         return record

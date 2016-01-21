@@ -105,7 +105,7 @@ class GCMRouter(object):
             registration_ids=[router_data.get("token")],
             collapse_key=self.collapseKey,
             time_to_live=self.ttl,
-            dry_run=self.dryRun or "dryrun" in router_data,
+            dry_run=self.dryRun or ("dryrun" in router_data),
             data=data,
         )
         creds = router_data.get("creds", {"senderID": "missing id"})
