@@ -910,6 +910,7 @@ class RegistrationTestCase(unittest.TestCase):
             ok_(call_args is not None)
             args = call_args[0]
             call_arg = json.loads(args[0])
+            eq_(call_arg["uaid"], dummy_uaid)
             eq_(call_arg["channelID"], dummy_chid)
             eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
             ok_("secret" in call_arg)
