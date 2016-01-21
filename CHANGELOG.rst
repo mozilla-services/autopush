@@ -2,6 +2,18 @@
 Autopush Changelog
 ==================
 
+1.10.0 *dev*
+============
+
+Features
+--------
+
+Bug Fixes
+---------
+
+* Fixes for GCM JSON encoding rejections and ID assignment. Issue #297
+
+
 1.9.0 (2016-01-15)
 ==================
 

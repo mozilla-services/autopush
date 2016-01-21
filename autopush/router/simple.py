@@ -54,11 +54,11 @@ class SimpleRouter(object):
         self.conf = router_conf
         self.waker = None
 
-    def register(self, uaid, connect):
+    def register(self, uaid, connect, *kwargs):
         """Return no additional routing data"""
         return {}
 
-    def amend_msg(self, msg):
+    def amend_msg(self, msg, router_data=None):
         return msg
 
     def check_token(self, token):

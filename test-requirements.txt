@@ -14,7 +14,7 @@ apns==2.0.1
 argparse==1.2.1
 autobahn==0.10.4
 boto==2.38.0
-cffi==1.1.2
+#cffi==1.1.2
 characteristic==14.3.0
 cryptography==0.9.1
 cyclone==1.1

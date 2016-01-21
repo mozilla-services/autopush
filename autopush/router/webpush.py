@@ -115,7 +115,7 @@ class WebPushRouter(SimpleRouter):
             timestamp=int(time.time()),
         )
 
-    def amend_msg(self, msg):
+    def amend_msg(self, msg, router_data=None):
         return msg
 
     def check_token(self, token):

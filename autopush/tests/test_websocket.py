@@ -496,7 +496,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         def register_user(data):
             registered = len(mock_register.mock_calls) > 1
-            return (registered, {})
+            return (registered, {}, {})
 
         mock_register.side_effect = register_user
 
@@ -514,7 +514,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Fail out the register_user call
         self.proto.ap_settings.router.register_user = \
-            Mock(return_value=(False, {}))
+            Mock(return_value=(False, {}, None))
 
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
@@ -859,7 +859,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = uaid
         connected = int(time.time())
         res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
-        self.proto._check_other_nodes((True, res))
+        self.proto._check_other_nodes((True, res, None))
         mock_agent.request.assert_called_with(
             "DELETE",
             "%s/notif/%s/%s" % (nodeId, uaid, connected))
@@ -874,7 +874,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = uaid
         connected = int(time.time())
         res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
-        self.proto._check_other_nodes((True, res))
+        self.proto._check_other_nodes((True, res, None))
         d.errback(ConnectError())
         return d
 
@@ -894,7 +894,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.sendClose = Mock()
         self.proto.ps.uaid = uaid
         res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
-        self.proto._check_other_nodes((True, res))
+        self.proto._check_other_nodes((True, res, None))
         # the current one should be dropped.
         eq_(ff.sendClose.call_count, 0)
         eq_(self.proto.sendClose.call_count, 1)
@@ -914,7 +914,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.sendClose = Mock()
         self.proto.ps.uaid = uaid
         res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
-        self.proto._check_other_nodes((True, res))
+        self.proto._check_other_nodes((True, res, None))
         # the existing one should be dropped.
         eq_(ff.sendClose.call_count, 1)
         eq_(self.proto.sendClose.call_count, 0)

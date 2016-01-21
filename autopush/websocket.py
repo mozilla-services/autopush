@@ -626,7 +626,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def _check_collision(self, result):
         """callback to reset the UAID if router registration fails"""
-        registered, previous = result
+        registered, previous, data = result
         existing_webpush_rotator = self.ps.use_webpush and \
             "current_month" in previous
 
@@ -647,7 +647,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         """callback to check other nodes for clients and send them a delete as
         needed"""
         self.transport.resumeProducing()
-        registered, previous = result
+        registered, previous, _ = result
         if not registered:
             # Registration failed
             msg = {"messageType": "hello", "reason": "already_connected",

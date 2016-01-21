@@ -42,14 +42,14 @@ class APNSRouter(object):
         self._connect()
         log.msg("Starting APNS router...")
 
-    def register(self, uaid, router_data):
-        """Validate that a token is in the ``router_data``"""
+    def register(self, uaid, router_data, *kwargs):
+        """Validate that an APNs instance token is in the ``router_data``"""
         if not router_data.get("token"):
             raise RouterException("No token registered", status_code=500,
                                   response_body="No token registered")
         return router_data
 
-    def amend_msg(self, msg):
+    def amend_msg(self, msg, router_data=None):
         return msg
 
     def check_token(self, token):

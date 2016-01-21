@@ -777,6 +777,8 @@ class RegistrationTestCase(unittest.TestCase):
         self.senderIDs_mock.get_ID.return_value = "test_senderid"
         self.router_mock.check_token = Mock()
         self.router_mock.check_token.return_value = (True, 'test')
+        self.router_mock.register_user = Mock()
+        self.router_mock.register_user.return_value = (True, {}, {})
         settings.routers["test"] = self.router_mock
 
         self.request_mock = Mock(body=b'', arguments={}, headers={})

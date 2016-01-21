@@ -43,7 +43,7 @@ class IRouter(object):
         the given settings and router conf."""
         raise NotImplementedError("__init__ must be implemented")
 
-    def register(self, uaid, routing_data):
+    def register(self, uaid, routing_data, *kwargs):
         """Register the uaid with the connect dict however is preferred and
         return a dict that will be stored as routing_data for this user in the
         future.
@@ -56,10 +56,11 @@ class IRouter(object):
         """
         raise NotImplementedError("register must be implemented")
 
-    def amend_msg(self, msg):
+    def amend_msg(self, msg, router_data=None):
         """Modify an outbound response message to include router info
 
         :param msg: A dict of the response data to be sent to the client
+        :param router_data: a dictionary of router data
         :returns: A potentially modified dict to return to the client
 
         Some routers may require additional info to be returned to clients.

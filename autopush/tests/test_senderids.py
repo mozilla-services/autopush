@@ -11,7 +11,8 @@ from twisted.trial import unittest
 
 TEST_BUCKET = "oma_test"
 
-test_list = {"test123": {"auth": "abc"}, "test456": {"auth": "def"}}
+test_list = {"test123": {"senderID": "test123", "auth": "abc"},
+             "test456": {"senderID": "test456", "auth": "def"}}
 
 
 class SenderIDsTestCase(unittest.TestCase):
@@ -123,6 +124,8 @@ class SenderIDsTestCase(unittest.TestCase):
         self.senderIDs = SenderIDs(settings)
         fetch = self.senderIDs.get_ID('test123')
         eq_(fetch, {"senderID": "test123", "auth": "abc"})
+        fetch = self.senderIDs.get_ID()
+        ok_(fetch is not None)
         return self.senderIDs.stop()
 
     def test_get_norecord(self):

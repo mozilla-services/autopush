@@ -575,9 +575,9 @@ class Router(object):
                         # this not work
                         r[key] = value
                 result = r
-            return (True, result)
+            return (True, result, data)
         except ConditionalCheckFailedException:
-            return (False, {})
+            return (False, {}, data)
 
     @track_provisioned
     def update_last_connect(self, uaid):
