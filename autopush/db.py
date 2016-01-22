@@ -25,6 +25,8 @@ from autopush.utils import generate_hash
 log = logging.getLogger(__file__)
 
 key_hash = ""
+TRACK_DB_CALLS = False
+DB_CALLS = []
 
 
 def get_month(delta=0):
@@ -185,6 +187,8 @@ def track_provisioned(func):
     after the function decorated"""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
+        if TRACK_DB_CALLS:
+            DB_CALLS.append(func.__name__)
         try:
             return func(self, *args, **kwargs)
         except ProvisionedThroughputExceededException:
