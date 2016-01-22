@@ -8,6 +8,7 @@ import subprocess
 import time
 import urlparse
 import uuid
+from base64 import urlsafe_b64encode
 from unittest.case import SkipTest
 
 import boto
@@ -22,14 +23,15 @@ from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.threads import deferToThread
 from twisted.web.client import Agent
 from twisted.test.proto_helpers import AccumulatingProtocol
+
 from autopush import __version__
+import autopush.db as db
 from autopush.db import (
     create_rotating_message_table,
     get_month,
     has_connected_this_month
 )
 from autopush.settings import AutopushSettings
-from base64 import urlsafe_b64encode
 
 log = logging.getLogger(__name__)
 here_dir = os.path.abspath(os.path.dirname(__file__))
@@ -605,6 +607,20 @@ class TestLoop(IntegrationBase):
 
 
 class TestWebPush(IntegrationBase):
+    @inlineCallbacks
+    def test_hello_only_has_two_calls(self):
+        db.TRACK_DB_CALLS = True
+        client = Client(self._ws_url, use_webpush=True)
+        yield client.connect()
+        result = yield client.hello()
+        ok_(result != {})
+        eq_(result["use_webpush"], True)
+        eq_(db.DB_CALLS, ['register_user', 'fetch_messages'])
+        db.DB_CALLS = []
+        db.TRACK_DB_CALLS = False
+
+        yield self.shut_down(client)
+
     @inlineCallbacks
     def test_hello_echo(self):
         client = Client(self._ws_url, use_webpush=True)
