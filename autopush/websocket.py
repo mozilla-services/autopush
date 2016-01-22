@@ -636,11 +636,18 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         """callback to reset the UAID if router registration fails"""
         registered, previous, data = result
 
+        # We always copy any last_connect or current_month into previous
+        # as that is checked elsewhere to determine if the record needs
+        # updating. Moto returns values here that are bogus.
+        if "last_connect" in data:
+            previous["last_connect"] = data["last_connect"]
+        if "current_month" in data:
+            previous["current_month"] = data["current_month"]
+
         # Existing user with rotation, or new user getting rotation get to
         # keep their UAID
         existing_webpush_rotator = self.ps.use_webpush and \
-            ("current_month" in previous or
-             "current_month" in data)
+            previous.get("current_month")
 
         # If registered and not a webpush user, continue
         if not self.ps.use_webpush and registered:
@@ -732,17 +739,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.transport.pauseProducing()
         # Check for table rotation
         cur_month = previous.get("current_month")
-        if not cur_month:
-            # New user, write out the current_month and say hello
-            d = self.deferToThread(
-                self.ap_settings.router.update_message_month,
-                self.ps.uaid, self.ps.message_month)
-            d.addCallback(self._finish_webpush_hello)
-            d.addErrback(self.trap_cancel)
-            d.addErrback(self.err_overload, "hello")
-            d.addErrback(self.err_hello)
-            return d
-
         if cur_month != self.ps.message_month:
             # Previous month user or new user, flag for message rotation and
             # set the message_month to the router month

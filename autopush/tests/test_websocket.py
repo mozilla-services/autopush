@@ -528,7 +528,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Fail out the register_user call
         self.proto.ap_settings.router.register_user = \
-            Mock(return_value=(False, {}, None))
+            Mock(return_value=(False, {}, {}))
 
         self._send_message(dict(messageType="hello", channelIDs=[]))
 

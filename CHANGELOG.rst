@@ -2,6 +2,14 @@
 Autopush Changelog
 ==================
 
+1.9.2 (2016-01-22)
+==================
+
+Bug Fixes
+---------
+
+* Reduce new UAID's to a single write, this time for real. Issue #300.
+
 1.9.1 (2016-01-22)
 ==================
 
