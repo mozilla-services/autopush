@@ -2,6 +2,12 @@
 Autopush Changelog
 ==================
 
+1.9.3 (2016-01-23)
+==================
+
+* Fix issue with users connecting with an invalid UAID that didn't exist in
+  the database. Issue #304.
+
 1.9.2 (2016-01-22)
 ==================
 

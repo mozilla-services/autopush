@@ -106,12 +106,12 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         self.ws = websocket.create_connection(self.url)
         return self.ws.connected
 
-    def hello(self):
+    def hello(self, uaid=None):
         if self.channels:
             chans = self.channels.keys()
         else:
             chans = []
-        hello_dict = dict(messageType="hello", uaid=self.uaid or "",
+        hello_dict = dict(messageType="hello", uaid=uaid or self.uaid or "",
                           channelIDs=chans)
         if self.use_webpush:
             hello_dict["use_webpush"] = True
@@ -627,6 +627,17 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         result = yield client.hello()
         ok_(result != {})
+        eq_(result["use_webpush"], True)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_hello_with_bad_prior_uaid(self):
+        non_uaid = uuid.uuid4().hex
+        client = Client(self._ws_url, use_webpush=True)
+        yield client.connect()
+        result = yield client.hello(uaid=non_uaid)
+        ok_(result != {})
+        ok_(result["uaid"] != non_uaid)
         eq_(result["use_webpush"], True)
         yield self.shut_down(client)
 

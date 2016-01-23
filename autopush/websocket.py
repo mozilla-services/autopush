@@ -597,6 +597,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.transport.pauseProducing()
 
         d = self._register_user(existing_user)
+        d.addCallback(self._copy_new_data)
         d.addCallback(self._check_collision)
         d.addErrback(self.trap_cancel)
         d.addErrback(self.err_overload, "hello")
@@ -632,17 +633,19 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.log_err(failure)
         self.returnError("hello", "error", 503)
 
-    def _check_collision(self, result):
-        """callback to reset the UAID if router registration fails"""
-        registered, previous, data = result
-
-        # We always copy any last_connect or current_month into previous
-        # as that is checked elsewhere to determine if the record needs
-        # updating. Moto returns values here that are bogus.
+    def _copy_new_data(self, result):
+        """Copies data for a new user to the previous record for later
+        checks"""
+        _, previous, data = result
         if "last_connect" in data:
             previous["last_connect"] = data["last_connect"]
         if "current_month" in data:
             previous["current_month"] = data["current_month"]
+        return result
+
+    def _check_collision(self, result):
+        """callback to reset the UAID if router registration fails"""
+        registered, previous, _ = result
 
         # Existing user with rotation, or new user getting rotation get to
         # keep their UAID
@@ -660,6 +663,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # If registration fails, try resetting the UAID.
         self.ps.uaid = uuid.uuid4().hex
         d = self._register_user(existing_user=False)
+        d.addCallback(self._copy_new_data)
         d.addCallback(self._check_other_nodes)
         return d
 
