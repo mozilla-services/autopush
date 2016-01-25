@@ -433,6 +433,7 @@ class WebsocketTestCase(unittest.TestCase):
         def check_result(msg):
             eq_(msg["status"], 200)
             assert("use_webpush" in msg)
+        eq_(self.proto.base_tags, ['use_webpush:True'])
         return self._check_response(check_result)
 
     def test_hello_with_uaid(self):
