@@ -573,6 +573,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         uaid = data.get("uaid")
         self.ps.use_webpush = data.get("use_webpush", False)
+        self.ps._base_tags.append("use_webpush:%s" %
+                                  self.ps.use_webpush)
         self.ps.router_type = "webpush" if self.ps.use_webpush\
                               else "simplepush"
         if self.ps.use_webpush:

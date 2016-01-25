@@ -2,6 +2,15 @@
 Autopush Changelog
 ==================
 
+1.10.0 *dev*
+===========
+
+Features
+--------
+
+* Add use_webpush base tag for websocket connections using web_push.
+  Issue #205.
+
 1.9.3 (2016-01-23)
 ==================
 
