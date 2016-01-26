@@ -69,6 +69,6 @@ devices. You will need to set up a valid GCM `account <http://developer.android.
 
 * create a new project. Record the Project Number as "SENDER_ID". You will need this value for your android application.
 * create a new Auth Credential Key for your project. This is available under **APIs & Auth** >> **Credentials** of the Google Developer Console. Store this value as ``gcm_apikey`` in ``.autopush_endpoint`` server configuration file.
-* add ``external_router=t`` to the ``.autopush_endpoint`` server configuration file to enable GCM routing.
+* add ``gcm_enabled`` to the ``.autopush_shared`` server configuration file to enable GCM routing.
 
 Additional notes on using the GCM bridge are available `on the wiki <https://github.com/mozilla-services/autopush/wiki/Bridging-Via-GCM>`_.
