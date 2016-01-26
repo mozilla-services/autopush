@@ -3,11 +3,12 @@ Autopush Changelog
 ==================
 
 1.10.0 *dev*
-===========
+============
 
 Features
 --------
 
+* Add maintenance.py script for use in AWS Lambda. Issue #254.
 * Add use_webpush base tag for websocket connections using web_push.
   Issue #205.
 
