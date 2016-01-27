@@ -98,11 +98,13 @@ class SimpleRouter(object):
             try:
                 result = yield self._send_notification(uaid, node_id,
                                                        notification)
-            except (ConnectError, UserError, ConnectionRefusedError):
+            except (ConnectError, UserError, ConnectionRefusedError), e:
                 self.metrics.increment("updates.client.host_gone")
                 dead_cache.put(node_key(node_id), True)
                 yield deferToThread(router.clear_node,
                                     uaid_data).addErrback(self._eat_db_err)
+                if type(e) is ConnectionRefusedError:
+                    log.err("Could not route message: %s" % repr(e))
                 raise RouterException("Node was invalid", status_code=503,
                                       response_body="Retry Request",
                                       log_exception=False, errno=202)
@@ -153,9 +155,11 @@ class SimpleRouter(object):
             returnValue(self.stored_response(notification))
         try:
             result = yield self._send_notification_check(uaid, node_id)
-        except (ConnectError, UserError, ConnectionRefusedError):
+        except (ConnectError, UserError, ConnectionRefusedError), e:
             self.metrics.increment("updates.client.host_gone")
             dead_cache.put(node_key(node_id), True)
+            if type(e) is ConnectionRefusedError:
+                log.err("Could not route message: %s" % repr(e))
             yield deferToThread(
                 router.clear_node,
                 uaid_data).addErrback(self._eat_db_err)
