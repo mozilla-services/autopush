@@ -7,7 +7,7 @@ from mock import Mock, PropertyMock, patch
 from moto import mock_dynamodb2, mock_s3
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
-from twisted.internet.error import ConnectionRefusedError
+from twisted.internet.error import ConnectError, ConnectionRefusedError
 from twisted.python import log
 
 import apns
@@ -428,6 +428,9 @@ class SimplePushRouterTestCase(unittest.TestCase):
         dead_cache.clear()
 
     def _raise_connect_error(self):
+        raise ConnectError()
+
+    def _raise_connection_refused_error(self):
         raise ConnectionRefusedError()
 
     def _raise_db_error(self):
@@ -461,9 +464,9 @@ class SimplePushRouterTestCase(unittest.TestCase):
                 return True
         return False  # pragma: nocover
 
-    def test_route_connect_error(self):
+    def test_route_connection_refused_error(self):
         self.agent_mock.request.side_effect = MockAssist(
-            [self._raise_connect_error])
+            [self._raise_connection_refused_error])
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
         self.router_mock.clear_node.return_value = None
         log.addObserver(self._mockObserver)
