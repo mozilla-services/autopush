@@ -8,6 +8,7 @@ import subprocess
 import time
 import urlparse
 import uuid
+from base64 import urlsafe_b64encode
 from unittest.case import SkipTest
 
 import boto
@@ -22,14 +23,15 @@ from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.threads import deferToThread
 from twisted.web.client import Agent
 from twisted.test.proto_helpers import AccumulatingProtocol
+
 from autopush import __version__
+import autopush.db as db
 from autopush.db import (
     create_rotating_message_table,
     get_month,
     has_connected_this_month
 )
 from autopush.settings import AutopushSettings
-from base64 import urlsafe_b64encode
 
 log = logging.getLogger(__name__)
 here_dir = os.path.abspath(os.path.dirname(__file__))
@@ -104,12 +106,12 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         self.ws = websocket.create_connection(self.url)
         return self.ws.connected
 
-    def hello(self):
+    def hello(self, uaid=None):
         if self.channels:
             chans = self.channels.keys()
         else:
             chans = []
-        hello_dict = dict(messageType="hello", uaid=self.uaid or "",
+        hello_dict = dict(messageType="hello", uaid=uaid or self.uaid or "",
                           channelIDs=chans)
         if self.use_webpush:
             hello_dict["use_webpush"] = True
@@ -606,11 +608,36 @@ class TestLoop(IntegrationBase):
 
 class TestWebPush(IntegrationBase):
     @inlineCallbacks
+    def test_hello_only_has_two_calls(self):
+        db.TRACK_DB_CALLS = True
+        client = Client(self._ws_url, use_webpush=True)
+        yield client.connect()
+        result = yield client.hello()
+        ok_(result != {})
+        eq_(result["use_webpush"], True)
+        eq_(db.DB_CALLS, ['register_user', 'fetch_messages'])
+        db.DB_CALLS = []
+        db.TRACK_DB_CALLS = False
+
+        yield self.shut_down(client)
+
+    @inlineCallbacks
     def test_hello_echo(self):
         client = Client(self._ws_url, use_webpush=True)
         yield client.connect()
         result = yield client.hello()
         ok_(result != {})
+        eq_(result["use_webpush"], True)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_hello_with_bad_prior_uaid(self):
+        non_uaid = uuid.uuid4().hex
+        client = Client(self._ws_url, use_webpush=True)
+        yield client.connect()
+        result = yield client.hello(uaid=non_uaid)
+        ok_(result != {})
+        ok_(result["uaid"] != non_uaid)
         eq_(result["use_webpush"], True)
         yield self.shut_down(client)
 

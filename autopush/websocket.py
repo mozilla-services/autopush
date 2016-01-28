@@ -56,7 +56,7 @@ from zope.interface import implements
 from twisted.web.resource import Resource
 
 from autopush import __version__
-from autopush.db import has_connected_this_month
+from autopush.db import has_connected_this_month, generate_last_connect
 from autopush.protocol import IgnoreBody
 from autopush.utils import validate_uaid, ErrorLogger
 from autopush.noseplugin import track_object
@@ -573,13 +573,15 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         uaid = data.get("uaid")
         self.ps.use_webpush = data.get("use_webpush", False)
+        self.ps._base_tags.append("use_webpush:%s" %
+                                  self.ps.use_webpush)
         self.ps.router_type = "webpush" if self.ps.use_webpush\
                               else "simplepush"
         if self.ps.use_webpush:
             self.ps.updates_sent = defaultdict(lambda: [])
             self.ps.direct_updates = defaultdict(lambda: [])
 
-        _, uaid = validate_uaid(uaid)
+        existing_user, uaid = validate_uaid(uaid)
         self.ps.uaid = uaid
         # Check for the special wakeup commands
         if "wakeup_host" in data and "mobilenetwork" in data:
@@ -596,7 +598,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         self.transport.pauseProducing()
 
-        d = self._register_user()
+        d = self._register_user(existing_user)
+        d.addCallback(self._copy_new_data)
         d.addCallback(self._check_collision)
         d.addErrback(self.trap_cancel)
         d.addErrback(self.err_overload, "hello")
@@ -604,13 +607,21 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.ps._register = d
         return d
 
-    def _register_user(self):
+    def _register_user(self, existing_user=True):
         user_item = dict(
             uaid=self.ps.uaid,
             node_id=self.ap_settings.router_url,
             connected_at=self.ps.connected_at,
             router_type=self.ps.router_type,
         )
+
+        # Write out the last_connect and current_month as applicable for new
+        # users
+        if not existing_user:
+            user_item["last_connect"] = generate_last_connect()
+            if self.ps.use_webpush:
+                user_item["current_month"] = self.ps.message_month
+
         # If this connection uses the wakeup mechanism, add it.
         if self.ps.wake_data:
             user_item["wake_data"] = self.ps.wake_data
@@ -624,22 +635,37 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.log_err(failure)
         self.returnError("hello", "error", 503)
 
+    def _copy_new_data(self, result):
+        """Copies data for a new user to the previous record for later
+        checks"""
+        _, previous, data = result
+        if "last_connect" in data:
+            previous["last_connect"] = data["last_connect"]
+        if "current_month" in data:
+            previous["current_month"] = data["current_month"]
+        return result
+
     def _check_collision(self, result):
         """callback to reset the UAID if router registration fails"""
-        registered, previous, data = result
+        registered, previous, _ = result
+
+        # Existing user with rotation, or new user getting rotation get to
+        # keep their UAID
         existing_webpush_rotator = self.ps.use_webpush and \
-            "current_month" in previous
+            previous.get("current_month")
 
         # If registered and not a webpush user, continue
         if not self.ps.use_webpush and registered:
             return self._check_other_nodes(result)
+
         # Or if we are a webpush user and have table rotation already
         if existing_webpush_rotator:
             return self._check_other_nodes(result)
 
         # If registration fails, try resetting the UAID.
         self.ps.uaid = uuid.uuid4().hex
-        d = self._register_user()
+        d = self._register_user(existing_user=False)
+        d.addCallback(self._copy_new_data)
         d.addCallback(self._check_other_nodes)
         return d
 
@@ -652,7 +678,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # Registration failed
             msg = {"messageType": "hello", "reason": "already_connected",
                    "status": 500}
-            self.sendMessage(json.dumps(msg).encode('utf8'), False)
+            self.sendJSON(msg)
             return
 
         # Handle dupes on the same node
@@ -719,17 +745,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.transport.pauseProducing()
         # Check for table rotation
         cur_month = previous.get("current_month")
-        if not cur_month:
-            # New user, write out the current_month and say hello
-            d = self.deferToThread(
-                self.ap_settings.router.update_message_month,
-                self.ps.uaid, self.ps.message_month)
-            d.addCallback(self._finish_webpush_hello)
-            d.addErrback(self.trap_cancel)
-            d.addErrback(self.err_overload, "hello")
-            d.addErrback(self.err_hello)
-            return d
-
         if cur_month != self.ps.message_month:
             # Previous month user or new user, flag for message rotation and
             # set the message_month to the router month

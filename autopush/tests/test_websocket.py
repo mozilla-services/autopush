@@ -16,6 +16,7 @@ from twisted.internet.defer import Deferred
 from twisted.internet.error import ConnectError
 from twisted.trial import unittest
 
+import autopush.db as db
 from autopush.db import create_rotating_message_table
 from autopush.settings import AutopushSettings
 from autopush.websocket import (
@@ -411,6 +412,19 @@ class WebsocketTestCase(unittest.TestCase):
             eq_(msg["status"], 200)
         return self._check_response(check_result)
 
+    def test_hello_webpush_uses_one_db_call(self):
+        db.TRACK_DB_CALLS = True
+        self._connect()
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
+
+        def check_result(msg):
+            eq_(db.DB_CALLS, ['register_user', 'fetch_messages'])
+            eq_(msg["status"], 200)
+            db.DB_CALLS = []
+            db.TRACK_DB_CALLS = False
+        return self._check_response(check_result)
+
     def test_hello_with_webpush(self):
         self._connect()
         self._send_message(dict(messageType="hello", use_webpush=True,
@@ -419,6 +433,7 @@ class WebsocketTestCase(unittest.TestCase):
         def check_result(msg):
             eq_(msg["status"], 200)
             assert("use_webpush" in msg)
+        eq_(self.proto.base_tags, ['use_webpush:True'])
         return self._check_response(check_result)
 
     def test_hello_with_uaid(self):
@@ -514,7 +529,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Fail out the register_user call
         self.proto.ap_settings.router.register_user = \
-            Mock(return_value=(False, {}, None))
+            Mock(return_value=(False, {}, {}))
 
         self._send_message(dict(messageType="hello", channelIDs=[]))
 

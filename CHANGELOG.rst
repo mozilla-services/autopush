@@ -8,10 +8,32 @@ Autopush Changelog
 Features
 --------
 
+* Add maintenance.py script for use in AWS Lambda. Issue #254.
+* Add use_webpush base tag for websocket connections using web_push.
+  Issue #205.
+
+1.9.3 (2016-01-23)
+==================
+
+* Fix issue with users connecting with an invalid UAID that didn't exist in
+  the database. Issue #304.
+
+1.9.2 (2016-01-22)
+==================
+
 Bug Fixes
 ---------
 
-* Fixes for GCM JSON encoding rejections and ID assignment. Issue #297
+* Reduce new UAID's to a single write, this time for real. Issue #300.
+
+1.9.1 (2016-01-22)
+==================
+
+Bug Fixes
+---------
+
+* Reduce new UAID's to a single write on connect. Issue #300.
+* Fixes for GCM JSON encoding rejections and ID assignment. Issue #297.
 
 
 1.9.0 (2016-01-15)
@@ -24,19 +46,19 @@ Features
   the current month. Issue #253.
 * Add message table rotation for webpush users. Issue #191.
 * Capture Authorization header for endpoint requests for logging. Issue #232.
-* New Bridge HTTP API. Issues #238, #250, #251
+* New Bridge HTTP API. Issues #238, #250, #251.
   In cooperation with the GCM client work the HTTP Bridge API has been
   simplified. The new method has been detailed in /api/endpoint.py.
   In essence: The API is now bearer token based, and uses the form
   /v1/{BridgeType}/{BridgeToken}/registration[/{uaid}/[subscription/[{chid}]]]
 * Tag endpoint requests with a unique ID. Issue #268.
 * Fixed document reference to HTTP API to be a deep link.
-* Pass either Encryption-Key or Crypto-Key per WebPush spec change. Issue #258
+* Pass either Encryption-Key or Crypto-Key per WebPush spec change. Issue #258.
 * Removed refences to obsolete simplepush_test package.
 * Convert outbound GCM data to base64. This should resolve potential
   transcription issues with binary encoded data going over the bridge.
-  Issue #289
-* Record Requesting Hostname to metrics. Issue #228
+  Issue #289.
+* Record Requesting Hostname to metrics. Issue #228.
 * Add key hash for UAIDs NOTE: enabling this will break all currently stored
   UAID records.
 
