@@ -585,7 +585,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         import autopush.router.simple as simple
         response_mock = Mock()
         self.agent_mock.request.side_effect = MockAssist(
-            [response_mock, self._raise_connect_error])
+            [response_mock, self._raise_connection_refused_error])
         response_mock.code = 202
         self.storage_mock.save_notification.return_value = True
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
