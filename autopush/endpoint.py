@@ -222,6 +222,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
             log.err(fail, **self._client_info())
         if 200 <= exc.status_code < 300:
             log.msg("Success", status_code=exc.status_code,
+                    logged_status=exc.logged_status or "",
                     **self._client_info())
         self._router_response(exc)
 
@@ -428,9 +429,9 @@ class EndpointHandler(AutoendpointHandler):
                                                            uaid_data))
             return d
         else:
-            if response.status_code == 200:
+            if response.status_code == 200 or response.logged_status == 200:
                 log.msg("Successful delivery", **self._client_info())
-            elif response.status_code == 202:
+            elif response.status_code == 202 or response.logged_status == 202:
                 log.msg("Router miss, message stored.", **self._client_info())
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)

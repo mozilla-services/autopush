@@ -29,8 +29,16 @@ class WebPushRouter(SimpleRouter):
                                 notification.version)
         return RouterResponse(status_code=201, response_body="",
                               headers={"Location": location,
-                                       "TTL": notification.ttl})
-    stored_response = delivered_response
+                                       "TTL": notification.ttl},
+                              logged_status=200)
+
+    def stored_response(self, notification):
+        location = "%s/m/%s" % (self.ap_settings.endpoint_url,
+                                notification.version)
+        return RouterResponse(status_code=201, response_body="",
+                              headers={"Location": location,
+                                       "TTL": notification.ttl},
+                              logged_status=202)
 
     def _crypto_headers(self, notification):
         """Creates a dict of the crypto headers for this request."""
@@ -100,7 +108,8 @@ class WebPushRouter(SimpleRouter):
         if notification.ttl == 0:
             raise RouterException("Finished Routing", status_code=201,
                                   log_exception=False,
-                                  headers={"TTL": str(notification.ttl)})
+                                  headers={"TTL": str(notification.ttl)},
+                                  logged_status=204)
         headers = None
         if notification.data:
             headers = self._crypto_headers(notification)

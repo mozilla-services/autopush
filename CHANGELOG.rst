@@ -8,6 +8,8 @@ Autopush Changelog
 Features
 --------
 
+* Tag logged notifications based on whether they're for a webpush user or not.
+  Issue #315.
 * Add maintenance.py script for use in AWS Lambda. Issue #254.
 * Add use_webpush base tag for websocket connections using web_push.
   Issue #205.
