@@ -11,6 +11,7 @@ Features
 * Add maintenance.py script for use in AWS Lambda. Issue #254.
 * Add use_webpush base tag for websocket connections using web_push.
   Issue #205.
+* Add log message if routing connection is refused. Issue #283.
 
 1.9.3 (2016-01-23)
 ==================

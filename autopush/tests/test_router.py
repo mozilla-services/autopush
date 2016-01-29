@@ -7,7 +7,8 @@ from mock import Mock, PropertyMock, patch
 from moto import mock_dynamodb2, mock_s3
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
-from twisted.internet.error import ConnectError
+from twisted.internet.error import ConnectError, ConnectionRefusedError
+from twisted.python import log
 
 import apns
 import gcmclient
@@ -421,12 +422,16 @@ class SimplePushRouterTestCase(unittest.TestCase):
         self.agent_mock = Mock(spec=settings.agent)
         settings.agent = self.agent_mock
         self.router.metrics = Mock()
+        self.errors = []
 
     def tearDown(self):
         dead_cache.clear()
 
     def _raise_connect_error(self):
         raise ConnectError()
+
+    def _raise_connection_refused_error(self):
+        raise ConnectionRefusedError()
 
     def _raise_db_error(self):
         raise ProvisionedThroughputExceededException(None, None)
@@ -450,11 +455,21 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d.addBoth(verify_deliver)
         return d
 
-    def test_route_connect_error(self):
+    def _mockObserver(self, event):
+        self.errors.append(event)
+
+    def _contains_err(self, string):
+        for err in self.errors:
+            if string in err['message'][0]:
+                return True
+        return False  # pragma: nocover
+
+    def test_route_connection_refused_error(self):
         self.agent_mock.request.side_effect = MockAssist(
-            [self._raise_connect_error])
+            [self._raise_connection_refused_error])
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
         self.router_mock.clear_node.return_value = None
+        log.addObserver(self._mockObserver)
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_retry(fail):
@@ -466,6 +481,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
             self.flushLoggedErrors()
 
         def verify_deliver(fail):
+            ok_(self._contains_err('ConnectionRefusedError'))
             exc = fail.value
             ok_(exc, RouterException)
             eq_(exc.status_code, 503)
@@ -569,7 +585,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         import autopush.router.simple as simple
         response_mock = Mock()
         self.agent_mock.request.side_effect = MockAssist(
-            [response_mock, self._raise_connect_error])
+            [response_mock, self._raise_connection_refused_error])
         response_mock.code = 202
         self.storage_mock.save_notification.return_value = True
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
