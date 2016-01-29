@@ -13,6 +13,12 @@ Features
   Issue #205.
 * Add log message if routing connection is refused. Issue #283.
 
+Bug Fixes
+---------
+
+* Increase the type of connection loss exceptions caught by autopush that
+  occur during deploys and node losses. Issue #306.
+
 1.9.3 (2016-01-23)
 ==================
 

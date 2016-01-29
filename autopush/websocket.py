@@ -45,8 +45,10 @@ from twisted.internet.defer import (
     DeferredList,
     CancelledError
 )
+from twisted.web._newclient import ResponseNeverReceived
 from twisted.internet.error import (
-    ConnectError, ConnectionRefusedError, UserError
+    ConnectError, ConnectionRefusedError, UserError,
+    ConnectionLost, ConnectionDone
 )
 from twisted.internet.interfaces import IProducer
 from twisted.internet.threads import deferToThread
@@ -703,7 +705,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                 )
                 d.addErrback(lambda f: f.trap(ConnectError,
                                               ConnectionRefusedError,
-                                              UserError))
+                                              UserError,
+                                              ResponseNeverReceived,
+                                              ConnectionLost,
+                                              ConnectionDone))
                 d.addErrback(self.log_err,
                              extra="Failed to delete old node")
 
