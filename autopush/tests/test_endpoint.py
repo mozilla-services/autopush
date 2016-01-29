@@ -626,6 +626,68 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.post(dummy_uaid)
         return self.finish_deferred
 
+    def test_post_webpush_with_logged_delivered(self):
+        import autopush.endpoint
+        log_patcher = patch.object(autopush.endpoint.log, "msg", spec=True)
+        mock_log = log_patcher.start()
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=201,
+            headers={"Location": "Somewhere"},
+            logged_status=200
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(201)
+            self.endpoint.set_header.assert_called_with(
+                "Location", "Somewhere")
+            args, kwargs = mock_log.call_args
+            eq_("Successful delivery", args[0])
+            log_patcher.stop()
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.post(dummy_uaid)
+        return self.finish_deferred
+
+    def test_post_webpush_with_logged_stored(self):
+        import autopush.endpoint
+        log_patcher = patch.object(autopush.endpoint.log, "msg", spec=True)
+        mock_log = log_patcher.start()
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=201,
+            headers={"Location": "Somewhere"},
+            logged_status=202
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(201)
+            self.endpoint.set_header.assert_called_with(
+                "Location", "Somewhere")
+            args, kwargs = mock_log.call_args
+            eq_("Router miss, message stored.", args[0])
+            log_patcher.stop()
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.post(dummy_uaid)
+        return self.finish_deferred
+
     @patch("twisted.python.log")
     def test_post_db_error_in_routing(self, mock_log):
         from autopush.router.interface import RouterException
