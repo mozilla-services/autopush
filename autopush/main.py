@@ -497,5 +497,9 @@ def endpoint_main(sysargs=None, use_files=True):
     else:
         reactor.listenTCP(args.port, site)
 
+    # Start the table rotation checker/updater
+    l = task.LoopingCall(settings.update_rotating_tables)
+    l.start(60)
+
     reactor.suggestThreadPoolSize(50)
     reactor.run()

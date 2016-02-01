@@ -2,6 +2,15 @@
 Autopush Changelog
 ==================
 
+1.10.1 (**dev**)
+================
+
+Bug Fixes
+---------
+
+* Run looping task call to update message table objects on the endpoint as well
+  as the connection node. Issue #319.
+
 1.10.0 (2016-01-29)
 ===================
 
