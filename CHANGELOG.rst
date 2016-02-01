@@ -8,6 +8,8 @@ Autopush Changelog
 Bug Fixes
 ---------
 
+* Use non-conditional update for save_messages as put_item relies on a flakey
+  conditional check that doesn't apply in our case. Issue #320.
 * Run looping task call to update message table objects on the endpoint as well
   as the connection node. Issue #319.
 

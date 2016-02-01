@@ -366,7 +366,7 @@ class Message(object):
             uaid=hasher(uaid),
             chidmessageid=" ",
             chids=channels
-        ))
+        ), overwrite=True)
 
     @track_provisioned
     def store_message(self, uaid, channel_id, message_id, ttl, data=None,
