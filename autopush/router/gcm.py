@@ -60,8 +60,7 @@ class GCMRouter(object):
 
     def _route(self, notification, router_data):
         """Blocking GCM call to route the notification"""
-        data = {"chid": notification.channel_id,
-                "ver": notification.version}
+        data = {"chid": notification.channel_id}
         # Payload data is optional.  If present, all of Content-Encoding,
         # Encryption, and Encryption/Crypto-Key are required.  If one or
         # more are missing, a 400 response is produced.

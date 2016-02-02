@@ -2,7 +2,15 @@
 Autopush Changelog
 ==================
 
-1.10.1 (**dev**)
+1.11.0 (**dev**)
+================
+
+Bug Fixes
+---------
+
+*  Do not send useless ver across GCM bridge. Issue #323.
+
+1.10.1 (2016-02-01)
 ================
 
 Bug Fixes
