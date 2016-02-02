@@ -8,7 +8,7 @@ Autopush Changelog
 Bug Fixes
 ---------
 
-*  Do not send useless ver across GCM bridge. Issue #323.
+*  Do not send useless 'ver' across GCM bridge. Issue #323.
 
 1.10.1 (2016-02-01)
 ===================
