@@ -2,7 +2,15 @@
 Autopush Changelog
 ==================
 
-1.10.1 (**dev**)
+1.11.0 (**dev**)
+================
+
+Bug Fixes
+---------
+
+*  Do not send useless ver across GCM bridge. Issue #323.
+
+1.10.1 (2016-02-01)
 ================
 
 Bug Fixes
@@ -12,7 +20,6 @@ Bug Fixes
   conditional check that doesn't apply in our case. Issue #320.
 * Run looping task call to update message table objects on the endpoint as well
   as the connection node. Issue #319.
-* Do not send useless ver across GCM bridge. Issue #323.
 
 1.10.0 (2016-01-29)
 ===================
