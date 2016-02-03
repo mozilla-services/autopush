@@ -14,6 +14,7 @@ cryptography==0.9.1
 cyclone==1.1
 datadog==0.5.0
 decorator==4.0.0
+ecdsa==0.13
 eliot==0.7.1
 enum34==1.0.4
 funcsigs==0.4
@@ -24,6 +25,7 @@ httpretty==0.8.9
 idna==2.0
 ipaddress==1.0.14
 itsdangerous==0.24
+jws==0.1.3
 mccabe==0.3.1
 pbr==1.3.0
 pluggy==0.3.0

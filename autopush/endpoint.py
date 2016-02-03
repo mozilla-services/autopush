@@ -279,7 +279,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
             try:
                 jws.verify(head, payload, sig, vk)
             except Exception, x:
-                #failure.
+                #failure. Probably should log this...
                 return None
         return payload
 
