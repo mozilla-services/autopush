@@ -461,7 +461,7 @@ def endpoint_main(sysargs=None, use_files=True):
         s3_bucket=args.s3_bucket,
         senderid_expry=args.senderid_expry,
         senderid_list=senderid_list,
-        auth_key=args.auth_key,
+        bear_hash_key=args.auth_key,
     )
 
     # Endpoint HTTP router

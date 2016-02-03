@@ -829,7 +829,7 @@ class RegistrationTestCase(unittest.TestCase):
             AutopushSettings(
                 hostname="localhost",
                 statsd_host=None,
-                auth_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
+                bear_hash_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
             )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
         self.metrics_mock = settings.metrics = Mock(spec=Metrics)
@@ -851,7 +851,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.status_mock = self.reg.set_status = Mock()
         self.write_mock = self.reg.write = Mock()
         self.auth = ("Bearer %s" %
-                     generate_hash(self.reg.ap_settings.auth_key[0],
+                     generate_hash(self.reg.ap_settings.bear_hash_key[0],
                                    dummy_uaid))
 
         d = self.finish_deferred = Deferred()
@@ -1322,7 +1322,7 @@ class RegistrationTestCase(unittest.TestCase):
         eq_(False, self.reg._validate_auth(dummy_uaid))
         self.reg.request.headers['Authorization'] = self.auth
         eq_(True, self.reg._validate_auth(dummy_uaid))
-        self.reg.ap_settings.auth_key = []
+        self.reg.ap_settings.bear_hash_key = []
         eq_(True, self.reg._validate_auth(dummy_uaid))
 
     def test_post_relocate(self):

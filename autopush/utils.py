@@ -54,6 +54,23 @@ def generate_hash(key, payload):
     return h.hexdigest()
 
 
+def parse_header(header):
+    """ Convert a multi-component header line (e.g. "a=b;c=d;...") to
+    a dictionary. """
+
+    if not header:
+        return None
+    vals = dict()
+    for v in map(lambda x: x.strip().split("="), header.split(";")):
+        try:
+            vals[v[0].lower()] = v[1]
+        except IndexError:
+            raise Exception("Malformed header: %s" % header)
+    if not vals:
+        return None
+    return vals
+
+
 class ErrorLogger (object):
 
     def write_error(self, code, **kwargs):

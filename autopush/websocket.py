@@ -60,7 +60,7 @@ from twisted.web.resource import Resource
 from autopush import __version__
 from autopush.db import has_connected_this_month, generate_last_connect
 from autopush.protocol import IgnoreBody
-from autopush.utils import validate_uaid, ErrorLogger
+from autopush.utils import validate_uaid, ErrorLogger, parse_header
 from autopush.noseplugin import track_object
 
 
@@ -117,6 +117,11 @@ class PushState(object):
         'wake_data',
         'connected_at',
         'settings',
+
+        # Voluntary Auth
+        'public_key',  # site public key for vol. auth.
+        'host',  # site associated with this public key.
+        'contact',  # contact info associated with this feed.
 
         # Table rotation
         'message_month',
@@ -579,6 +584,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                                   self.ps.use_webpush)
         self.ps.router_type = "webpush" if self.ps.use_webpush\
                               else "simplepush"
+        # is there a public key for authentication?
+        crypto_headers = parse_header(data.get("crypto_key"))
+        if crypto_headers and crypto_headers.get("p256ecdsa"):
+            self.ps.public_key = crypto_headers.get("p256ecdsa")
+            self.ps.auth_site = data.get("host")
         if self.ps.use_webpush:
             self.ps.updates_sent = defaultdict(lambda: [])
             self.ps.direct_updates = defaultdict(lambda: [])

@@ -27,6 +27,9 @@ import time
 import urlparse
 import uuid
 import re
+import ecdsa
+import jws
+import base64
 
 from collections import namedtuple
 from base64 import urlsafe_b64encode
@@ -46,7 +49,8 @@ from autopush.router.interface import RouterException
 from autopush.utils import (
     generate_hash,
     validate_uaid,
-    ErrorLogger
+    ErrorLogger,
+    parse_header
 )
 
 # Our max TTL is 60 days realistically with table rotation, so we hard-code it
@@ -163,6 +167,9 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
             "uaid_hash": self.uaid_hash,
             "router_key": getattr(self, "router_key", ""),
             "channel_id": getattr(self, "chid", ""),
+            "audience": getattr(self, "aud", ""),
+            "submitter": getattr(self, "sub", ""),
+            "expires": getattr(self, "exp", ""),
         }
 
     #############################################################
@@ -254,6 +261,49 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         d.addErrback(self._response_err)
         return d
 
+    def _extract_jwt(self, token, crypto_key):
+        # first split and convert the jwt.
+
+        def fix_padding(string):
+            return string + '===='[len(sig) % 4:]
+        try:
+            (ehead, epayload, sig) = token.split('.', 2)
+            sig = fix_padding(sig)
+        except ValueError:
+            (ehead, epayload) = token.split('.', 1)
+        head = json.loads(base64.urlsafe_b64decode(ehead))
+        payload = json.loads(base64.urlsafe_b64decode(epayload))
+        if sig and crypto_key:
+            key = base64.urlsafe_b64decode(fix_padding(crypto_key))
+            vk = ecdsa.VerifyingKey.from_string(key, curve=ecdsa.NIST256p)
+            try:
+                jws.verify(head, payload, sig, vk)
+            except Exception, x:
+                #failure.
+                return None
+        return payload
+
+    def _process_auth(self, result):
+        crypto_head = parse_header(self.request.headers.get('crypto-key'))
+        crypto_key = None
+        if crypto_head:
+            crypto_key = crypto_head.get('p256ecdsa')
+        authorization = self.request.headers.get('authorization')
+        if authorization:
+            (auth_type, token) = authorization.split(' ', 1)
+            # if it's a bearer token containing what may be a JWT
+            if auth_type.lower() == 'bearer' and '.' in token:
+                try:
+                    jwt = self._extract_jwt(token, crypto_key)
+                    #TODO: log the important info into self.
+                    self.aud = jwt.get('aud')
+                    self.exp = jwt.get('exp')
+                    self.sub = jwt.get('sub')
+                except Exception:
+                    # It failed, for reasons, but for now let it slide.
+                    pass
+        return result
+
 
 class MessageHandler(AutoendpointHandler):
     cors_methods = "DELETE"
@@ -320,6 +370,7 @@ class EndpointHandler(AutoendpointHandler):
         fernet = self.ap_settings.fernet
 
         d = deferToThread(fernet.decrypt, token.encode('utf8'))
+        d.addCallback(self._process_auth)
         d.addCallback(self._token_valid)
         d.addErrback(self._token_err)
         d.addErrback(self._response_err)
@@ -641,8 +692,8 @@ class RegistrationHandler(AutoendpointHandler):
         """Called after the endpoint was made and should be returned to the
         requestor"""
         if new_uaid:
-            if self.ap_settings.auth_key:
-                hashed = generate_hash(self.ap_settings.auth_key[0],
+            if self.ap_settings.bear_hash_key:
+                hashed = generate_hash(self.ap_settings.bear_hash_key[0],
                                        self.uaid)
             msg = dict(
                 uaid=self.uaid,
@@ -687,8 +738,8 @@ class RegistrationHandler(AutoendpointHandler):
             return False
         if "bearer" != token_type.lower():
             return False
-        if self.ap_settings.auth_key:
-            for key in self.ap_settings.auth_key:
+        if self.ap_settings.bear_hash_key:
+            for key in self.ap_settings.bear_hash_key:
                 token = generate_hash(key, uaid)
                 if rtoken == token:
                     return True
