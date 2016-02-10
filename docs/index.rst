@@ -27,6 +27,7 @@ Reference Docs
    api
    Changelog <changelog>
    http
+   style
 
 Source Code
 ===========

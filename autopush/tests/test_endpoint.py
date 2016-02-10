@@ -63,6 +63,7 @@ def patch_logger(test):
     This uses Trial's ``patch()`` method instead of Mock's ``@patch``
     decorator. The latter still causes the test to print a stack trace
     and fail unless ``flushLoggedErrors()`` is called.
+
     """
     @functools.wraps(test)
     def wrapper(self, *args, **kwargs):

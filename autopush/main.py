@@ -120,6 +120,7 @@ def add_shared_args(parser):
 
 def obsolete_args(parser):
     """ Obsolete and soon to be disabled configuration arguments.
+
     These are included to prevent startup errors with old config files.
 
     """
@@ -440,8 +441,7 @@ def connection_main(sysargs=None, use_files=True):
 
 def endpoint_main(sysargs=None, use_files=True):
     """Main entry point to setup an endpoint node, aka the autoendpoint
-    script
-    """
+    script"""
     args, parser = _parse_endpoint(sysargs, use_files)
     senderid_list = None
     if args.senderid_list:

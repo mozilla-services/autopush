@@ -31,8 +31,7 @@ DB_CALLS = []
 
 def get_month(delta=0):
     """Basic helper function to get a datetime.date object iterations months
-    ahead/behind of now.
-    """
+    ahead/behind of now."""
     new = last = datetime.date.today()
     # Move until we hit a new month, this avoids having to manually
     # check year changes as we push forward or backward since the Python
@@ -55,8 +54,7 @@ def hasher(uaid):
 
 def make_rotating_tablename(prefix, delta=0):
     """Creates a tablename for table rotation based on a prefix with a given
-    month delta.
-    """
+    month delta."""
     date = get_month(delta=delta)
     return "{}_{}_{}".format(prefix, date.year, date.month)
 
@@ -186,8 +184,7 @@ def preflight_check(storage, router):
 
 def track_provisioned(func):
     """Tracks provisioned exceptions and increments a metric for them named
-    after the function decorated
-    """
+    after the function decorated"""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         if TRACK_DB_CALLS:
@@ -375,8 +372,7 @@ class Message(object):
     def store_message(self, uaid, channel_id, message_id, ttl, data=None,
                       headers=None, timestamp=None):
         """Stores a message in the message table for the given uaid/channel
-        with the message id
-        """
+        with the message id"""
         item = dict(
             uaid=hasher(uaid),
             chidmessageid="%s:%s" % (channel_id, message_id),

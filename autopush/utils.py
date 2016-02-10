@@ -39,8 +39,7 @@ def resolve_ip(hostname):
 
 def validate_uaid(uaid):
     """Validates a UAID a tuple indicating if its valid and the original
-    uaid, or a new uaid if its invalid
-    """
+    uaid, or a new uaid if its invalid"""
     if uaid:
         try:
             return bool(uuid.UUID(uaid)), uaid
@@ -79,6 +78,7 @@ def parse_header(header, major=";", minor="="):
     :param header: Header content line to parse.
     :param major: Major item separator.
     :param minor: Minor item separator.
+
     """
     vals = dict()
     items = []

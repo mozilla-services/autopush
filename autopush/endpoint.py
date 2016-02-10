@@ -273,8 +273,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     #############################################################
     def _db_error_handling(self, d):
         """Tack on the common error handling for a dynamodb request and
-        uncaught exceptions
-        """
+        uncaught exceptions"""
         d.addErrback(self._overload_err)
         d.addErrback(self._response_err)
         return d
@@ -303,6 +302,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         `Authorization: bearer ...` and `Crypto-Key: p256ecdsa=..`.
         The problem is that VAPID is optional and Crypto-Key can carry
         content for other functions.
+
         """
         authorization = self.request.headers.get('authorization')
         # No auth present, so it's not a VAPID call.
@@ -338,8 +338,7 @@ class MessageHandler(AutoendpointHandler):
 
     def _token_valid(self, result, func):
         """Handles valid token processing, then dispatches to supplied
-        function
-        """
+        function"""
         info = result.split(":")
         if len(info) != 3:
             raise ValueError("Wrong message token components")
@@ -356,6 +355,7 @@ class MessageHandler(AutoendpointHandler):
         The message will only be removed from DynamoDB. Messages that were
         successfully routed to a client as direct updates, but not delivered
         yet, will not be dropped.
+
         """
         self.version = self._client_info['version'] = token
         d = deferToThread(self.ap_settings.fernet.decrypt,
@@ -722,8 +722,7 @@ class RegistrationHandler(AutoendpointHandler):
 
     def _return_endpoint(self, endpoint_data, new_uaid, router=None):
         """Called after the endpoint was made and should be returned to the
-        requestor
-        """
+        requestor"""
         if new_uaid:
             if self.ap_settings.bear_hash_key:
                 hashed = generate_hash(self.ap_settings.bear_hash_key[0],
@@ -756,6 +755,7 @@ class RegistrationHandler(AutoendpointHandler):
         """Validates the Authorization header in a request
 
         Validate the given request bearer token
+
         """
         test, _ = validate_uaid(uaid)
         if not test:
@@ -781,8 +781,7 @@ class RegistrationHandler(AutoendpointHandler):
 
     def _load_params(self):
         """Load and parse a JSON body out of the request body, or return an
-        empty dict
-        """
+        empty dict"""
         try:
             return json.loads(self.request.body)
         except ValueError:
