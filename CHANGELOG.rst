@@ -2,6 +2,21 @@
 Autopush Changelog
 ==================
 
+1.11.0 (**dev**)
+================
+
+Features
+--------
+
+* Added VAPID auth support to incoming Push POSTs. Issue #325.
+  This does not yet use token caches since that will introduce database
+  changes as well as impact a fair bit more code.
+
+Bug Fixes
+---------
+
+*  Do not send useless 'ver' across GCM bridge. Issue #323.
+
 1.10.1 (2016-02-01)
 ===================
 
@@ -12,7 +27,6 @@ Bug Fixes
   conditional check that doesn't apply in our case. Issue #320.
 * Run looping task call to update message table objects on the endpoint as well
   as the connection node. Issue #319.
-* Do not send useless ver across GCM bridge. Issue #323.
 
 1.10.0 (2016-01-29)
 ===================

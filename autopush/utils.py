@@ -1,8 +1,12 @@
 """A small collection of Autopush utility functions"""
+import base64
 import hashlib
 import hmac
 import socket
 import uuid
+
+import ecdsa
+from jose import jws
 
 from twisted.python import failure, log
 
@@ -54,21 +58,64 @@ def generate_hash(key, payload):
     return h.hexdigest()
 
 
-def parse_header(header):
-    """ Convert a multi-component header line (e.g. "a=b;c=d;...") to
-    a dictionary. """
+def parse_header(header, major=";", minor="="):
+    """Convert a multi-component header line (e.g. "a;b=c;d=e;...") to
+    a list.
 
-    if not header:
-        return None
+    For example, if the header content line is
+
+    `"a;c=1;b;d=2+3=5"`
+
+    and presuming default values for major and minor, then the
+    response would be:
+
+    `['a', 'b', {'c': '1', 'd': '2+3=5'}]`
+
+    items defined with values will always appear as a dictionary at the
+    end of the list. If no items are assigned values, then no dictionary
+    is appended.
+
+    :param header: Header content line to parse.
+    :param major: Major item separator.
+    :param minor: Minor item separator.
+    """
     vals = dict()
-    for v in map(lambda x: x.strip().split("="), header.split(";")):
+    items = []
+    if not header:
+        return items
+    for v in map(lambda x: x.strip().split(minor, 1),
+                 header.split(major)):
         try:
-            vals[v[0].lower()] = v[1]
+            val = v[1]
+            # Trim quotes equally off of start and end
+            # because ""this is "quoted""" is a thing.
+            while val[0] == val[-1] == '"':
+                val = val[1:-1]
+            vals[v[0].lower()] = val
         except IndexError:
-            raise Exception("Malformed header: %s" % header)
-    if not vals:
-        return None
-    return vals
+            if len(v[0]):
+                items.append(v[0].strip('"'))
+    if vals:
+        items.append(vals)
+    return items
+
+
+def fix_padding(string):
+    """ Some JWT fields may strip the end padding from base64 strings """
+    if len(string) % 4:
+        return string + '===='[len(string) % 4:]
+    return string
+
+
+def extract_jwt(token, crypto_key):
+    """ Extract the claims from the validated JWT. """
+    # first split and convert the jwt.
+    if not token or not crypto_key:
+        return {}
+
+    key = base64.urlsafe_b64decode(fix_padding(crypto_key))
+    vk = ecdsa.VerifyingKey.from_string(key, curve=ecdsa.NIST256p)
+    return jws.verify(token, vk, algorithms=["ES256"])
 
 
 class ErrorLogger (object):
@@ -83,7 +130,7 @@ class ErrorLogger (object):
         self.set_status(code)
         if "exc_info" in kwargs:
             log.err(failure.Failure(*kwargs["exc_info"]),
-                    **self._client_info())
+                    **self._client_info)
         else:
-            log.err("Error in handler: %s" % code, **self._client_info())
+            log.err("Error in handler: %s" % code, **self._client_info)
         self.finish()

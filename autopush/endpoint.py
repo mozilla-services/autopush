@@ -27,9 +27,6 @@ import time
 import urlparse
 import uuid
 import re
-import ecdsa
-import jws
-import base64
 
 from collections import namedtuple
 from base64 import urlsafe_b64encode
@@ -50,7 +47,8 @@ from autopush.utils import (
     generate_hash,
     validate_uaid,
     ErrorLogger,
-    parse_header
+    parse_header,
+    extract_jwt,
 )
 
 # Our max TTL is 60 days realistically with table rotation, so we hard-code it
@@ -66,6 +64,11 @@ status_codes = {
     500: "Internal Server Error",
     503: "Service Unavailable",
 }
+
+
+class VapidAuthException(Exception):
+    """Exception if the VAPID Auth token fails"""
+    pass
 
 
 class Notification(namedtuple("Notification",
@@ -118,9 +121,11 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         """Setup basic aliases and attributes"""
         self.uaid_hash = ""
         self._uaid = ""
+        self._chid = ""
         self.ap_settings = ap_settings
         self.metrics = ap_settings.metrics
         self.request_id = str(uuid.uuid4())
+        self._client_info = self._init_info()
 
     def prepare(self):
         """Common request preparation"""
@@ -155,8 +160,20 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         """Set the UAID and update the uaid hash"""
         self._uaid = value
         self.uaid_hash = hashlib.sha224(self.uaid).hexdigest()
+        self._client_info["uaid_hash"] = self.uaid_hash
 
-    def _client_info(self):
+    @property
+    def chid(self):
+        """Return the ChannelID"""
+        return self._chid
+
+    @chid.setter
+    def chid(self, value):
+        """Set the ChannelID and record to _client_info"""
+        self._chid = value
+        self._client_info["channelID"] = value
+
+    def _init_info(self):
         """Returns a dict of additional client data"""
         return {
             "request_id": self.request_id,
@@ -164,12 +181,6 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
             "remote-ip": self.request.headers.get("x-forwarded-for",
                                                   self.request.remote_ip),
             "authorization": self.request.headers.get("authorization", ""),
-            "uaid_hash": self.uaid_hash,
-            "router_key": getattr(self, "router_key", ""),
-            "channel_id": getattr(self, "chid", ""),
-            "audience": getattr(self, "aud", ""),
-            "submitter": getattr(self, "sub", ""),
-            "expires": getattr(self, "exp", ""),
         }
 
     #############################################################
@@ -199,13 +210,13 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         running.
 
         """
-        log.err(fail, **self._client_info())
+        log.err(fail, **self._client_info)
         self._write_response(500, 999)
 
     def _overload_err(self, fail):
         """errBack for throughput provisioned exceptions"""
         fail.trap(ProvisionedThroughputExceededException)
-        log.msg("Throughput Exceeded", **self._client_info())
+        log.msg("Throughput Exceeded", **self._client_info)
         self._write_response(503, 201)
 
     def _router_response(self, response):
@@ -226,29 +237,35 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         fail.trap(RouterException)
         exc = fail.value
         if exc.log_exception:
-            log.err(fail, **self._client_info())
+            log.err(fail, **self._client_info)
         if 200 <= exc.status_code < 300:
             log.msg("Success", status_code=exc.status_code,
                     logged_status=exc.logged_status or "",
-                    **self._client_info())
+                    **self._client_info)
         self._router_response(exc)
 
     def _uaid_not_found_err(self, fail):
         """errBack for uaid lookup not finding the user"""
         fail.trap(ItemNotFound)
-        log.msg("UAID not found in AWS.", **self._client_info())
+        log.msg("UAID not found in AWS.", **self._client_info)
         self._write_response(404, 103)
 
     def _token_err(self, fail):
         """errBack for token decryption fail"""
         fail.trap(InvalidToken, ValueError)
-        log.msg("Invalid token", **self._client_info())
+        log.msg("Invalid token", **self._client_info)
         self._write_response(404, 102)
+
+    def _auth_err(self, fail):
+        """errBack for invalid auth token"""
+        fail.trap(VapidAuthException)
+        log.msg("Invalid Auth token", **self._client_info)
+        self._write_response(401, 109)
 
     def _chid_not_found_err(self, fail):
         """errBack for unknown chid"""
         fail.trap(ItemNotFound, ValueError)
-        log.msg("CHID not found in AWS.", **self._client_info())
+        log.msg("CHID not found in AWS.", **self._client_info)
         self._write_response(404, 106)
 
     #############################################################
@@ -261,48 +278,57 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         d.addErrback(self._response_err)
         return d
 
-    def _extract_jwt(self, token, crypto_key):
-        # first split and convert the jwt.
+    def _store_auth(self, jwt, crypto_key, token, result):
+        if jwt.get('exp', 0) < time.time():
+            raise VapidAuthException("Invalid bearer token: Auth expired")
+        jwt['crypto_key'] = crypto_key
+        jwt['token'] = token
+        self._client_info['jwt'] = jwt
+        return result
 
-        def fix_padding(string):
-            return string + '===='[len(sig) % 4:]
-        try:
-            (ehead, epayload, sig) = token.split('.', 2)
-            sig = fix_padding(sig)
-        except ValueError:
-            (ehead, epayload) = token.split('.', 1)
-        head = json.loads(base64.urlsafe_b64decode(ehead))
-        payload = json.loads(base64.urlsafe_b64decode(epayload))
-        if sig and crypto_key:
-            key = base64.urlsafe_b64decode(fix_padding(crypto_key))
-            vk = ecdsa.VerifyingKey.from_string(key, curve=ecdsa.NIST256p)
-            try:
-                jws.verify(head, payload, sig, vk)
-            except Exception, x:
-                #failure. Probably should log this...
-                return None
-        return payload
+    def _invalid_auth(self, fail):
+        if isinstance(fail.value, VapidAuthException):
+            raise fail.value
+        message = fail.value.message or repr(fail.value)
+        if isinstance(fail.value, AssertionError):
+            message = "A decryption error occurred"
+        log.msg("Invalid bearer token: " + message, **self._client_info)
+        raise VapidAuthException("Invalid bearer token: " + message)
 
     def _process_auth(self, result):
-        crypto_head = parse_header(self.request.headers.get('crypto-key'))
-        crypto_key = None
-        if crypto_head:
-            crypto_key = crypto_head.get('p256ecdsa')
+        """Process the optional VAPID auth token.
+
+        VAPID requires two headers to be present;
+        `Authorization: bearer ...` and `Crypto-Key: p256ecdsa=..`.
+        The problem is that VAPID is optional and Crypto-Key can carry
+        content for other functions."""
+
         authorization = self.request.headers.get('authorization')
-        if authorization:
-            (auth_type, token) = authorization.split(' ', 1)
+        # No auth present, so it's not a VAPID call.
+        if not authorization:
+            return result
+
+        header_info = parse_header(self.request.headers.get('crypto-key'))
+        if not header_info:
+            raise VapidAuthException("Missing Crypto-Key")
+        values = header_info[-1]
+        if isinstance(values, dict):
+            crypto_key = values.get('p256ecdsa')
+            try:
+                (auth_type, token) = authorization.split(' ', 1)
+            except ValueError:
+                raise VapidAuthException("Invalid Authorization header")
             # if it's a bearer token containing what may be a JWT
             if auth_type.lower() == 'bearer' and '.' in token:
-                try:
-                    jwt = self._extract_jwt(token, crypto_key)
-                    #TODO: log the important info into self.
-                    self.aud = jwt.get('aud')
-                    self.exp = jwt.get('exp')
-                    self.sub = jwt.get('sub')
-                except Exception:
-                    # It failed, for reasons, but for now let it slide.
-                    pass
-        return result
+                d = deferToThread(extract_jwt, token, crypto_key)
+                d.addCallback(self._store_auth, crypto_key, token, result)
+                d.addErrback(self._invalid_auth)
+                return d
+            # otherwise, it's not, so ignore the VAPID data.
+            return result
+        else:
+            raise VapidAuthException("Invalid bearer token: "
+                                     "improperly specified crypto-key")
 
 
 class MessageHandler(AutoendpointHandler):
@@ -329,7 +355,7 @@ class MessageHandler(AutoendpointHandler):
         successfully routed to a client as direct updates, but not delivered
         yet, will not be dropped.
         """
-        self.version = token
+        self.version = self._client_info['version'] = token
         d = deferToThread(self.ap_settings.fernet.decrypt,
                           self.version.encode('utf8'))
         d.addCallback(self._token_valid, self._delete_message)
@@ -345,6 +371,7 @@ class MessageHandler(AutoendpointHandler):
         return d
 
     def _delete_completed(self, response):
+        log.msg("Message Deleted", status_code=204, **self._client_info)
         self.set_status(204)
         self.finish()
 
@@ -372,6 +399,7 @@ class EndpointHandler(AutoendpointHandler):
         d = deferToThread(fernet.decrypt, token.encode('utf8'))
         d.addCallback(self._process_auth)
         d.addCallback(self._token_valid)
+        d.addErrback(self._auth_err)
         d.addErrback(self._token_err)
         d.addErrback(self._response_err)
     post = put
@@ -395,6 +423,7 @@ class EndpointHandler(AutoendpointHandler):
         """Process the result of the AWS UAID lookup"""
         # Save the whole record
         router_key = self.router_key = result.get("router_type", "simplepush")
+        self._client_info["router_key"] = router_key
 
         try:
             self.router = self.ap_settings.routers[router_key]
@@ -405,7 +434,8 @@ class EndpointHandler(AutoendpointHandler):
         # Only simplepush uses version/data out of body/query, GCM/APNS will
         # use data out of the request body 'WebPush' style.
         if router_key == "simplepush":
-            version, data = parse_request_params(self.request)
+            self.version, data = parse_request_params(self.request)
+            self._client_info['version'] = self.version
         else:
             data = self.request.body
             if router_key == "webpush":
@@ -413,12 +443,12 @@ class EndpointHandler(AutoendpointHandler):
                 req_fields = ["content-encoding", "encryption"]
                 if data and not all([x in self.request.headers
                                      for x in req_fields]):
-                    log.msg("Missing Crypto headers", **self._client_info())
+                    log.msg("Missing Crypto headers", **self._client_info)
                     return self._write_response(400, 101)
                 if ("encryption-key" in self.request.headers and
                         "crypto-key" in self.request.headers):
                     log.msg("Both encryption and crypto keys in headers",
-                            **self._client_info())
+                            **self._client_info)
                     return self._write_response(
                         400, 110, message="Invalid crypto headers")
 
@@ -433,7 +463,7 @@ class EndpointHandler(AutoendpointHandler):
                 413, 104, message="Data payload too large")
 
         if router_key == "simplepush":
-            self._route_notification(version, result, data)
+            self._route_notification(self.version, result, data)
             return
 
         # Web Push messages are encrypted binary blobs. We store and deliver
@@ -447,6 +477,7 @@ class EndpointHandler(AutoendpointHandler):
         return d
 
     def _route_notification(self, version, result, data, ttl=None):
+        self.version = self._client_info['version'] = version
         notification = Notification(version=version, data=data,
                                     channel_id=self.chid,
                                     headers=self.request.headers,
@@ -481,9 +512,9 @@ class EndpointHandler(AutoendpointHandler):
             return d
         else:
             if response.status_code == 200 or response.logged_status == 200:
-                log.msg("Successful delivery", **self._client_info())
+                log.msg("Successful delivery", **self._client_info)
             elif response.status_code == 202 or response.logged_status == 202:
-                log.msg("Router miss, message stored.", **self._client_info())
+                log.msg("Router miss, message stored.", **self._client_info)
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
             self._router_response(response)
@@ -536,7 +567,7 @@ class RegistrationHandler(AutoendpointHandler):
 
         # normalize the path vars into parameters
         if router_type not in self.ap_settings.routers:
-            log.msg("Invalid parameters", **self._client_info())
+            log.msg("Invalid parameters", **self._client_info)
             return self._write_response(
                 400, 108, message="Invalid arguments")
         router = self.ap_settings.routers[router_type]
@@ -589,7 +620,7 @@ class RegistrationHandler(AutoendpointHandler):
         self.uaid = uaid
         router_data = params
         if router_type not in self.ap_settings.routers or not router_data:
-            log.msg("Invalid parameters", **self._client_info())
+            log.msg("Invalid parameters", **self._client_info)
             return self._write_response(
                 400, 108, message="Invalid arguments")
         router = self.ap_settings.routers[router_type]
@@ -637,7 +668,7 @@ class RegistrationHandler(AutoendpointHandler):
             return self._write_response(
                 401, 109, message="Invalid Authentication")
         if router_type not in self.ap_settings.routers:
-            log.msg("Invalid parameters", **self._client_info())
+            log.msg("Invalid parameters", **self._client_info)
             return self._write_response(
                 400, 108, message="Invalid arguments")
         router = self.ap_settings.routers[router_type]
@@ -708,7 +739,7 @@ class RegistrationHandler(AutoendpointHandler):
         else:
             msg = dict(channelID=self.chid, endpoint=endpoint_data[0])
         self.write(json.dumps(msg))
-        log.msg("Endpoint registered via HTTP", **self._client_info())
+        log.msg("Endpoint registered via HTTP", **self._client_info)
         self.finish()
 
     def _success(self, result):
