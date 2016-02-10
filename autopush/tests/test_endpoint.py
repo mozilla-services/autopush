@@ -165,7 +165,11 @@ dummy_request_id = "11111111-1234-1234-1234-567812345678"
 class EndpointTestCase(unittest.TestCase):
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
     def setUp(self, t):
-        self.timeout = 0.5
+        # this timeout *should* be set to 0.5, however Travis runs
+        # so slow, that many of these tests will time out leading
+        # to false failure rates and integration tests generally
+        # failing.
+        self.timeout = 1
 
         twisted.internet.base.DelayedCall.debug = True
 
@@ -728,8 +732,7 @@ class EndpointTestCase(unittest.TestCase):
 
         (token, crypto_key) = self._gen_jwt(header, payload)
         auth = "Bearer %s" % token
-        """
-            # to verify that the object is encoded correctly
+        """ # to verify that the object is encoded correctly
 
             kd2 = base64.urlsafe_b64decode(utils.fix_padding(crypto_key))
             vk2 = ecdsa.VerifyingKey.from_string(kd2, curve=ecdsa.NIST256p)
@@ -1113,7 +1116,8 @@ class EndpointTestCase(unittest.TestCase):
         """ Write error is triggered by sending the app a request
         with an invalid method (e.g. "put" instead of "PUT").
         This is not code that is triggered within normal flow, but
-        by the cyclone wrapper. """
+        by the cyclone wrapper.
+        """
         class testX(Exception):
             pass
 
@@ -1131,7 +1135,8 @@ class EndpointTestCase(unittest.TestCase):
         """ Write error is triggered by sending the app a request
         with an invalid method (e.g. "put" instead of "PUT").
         This is not code that is triggered within normal flow, but
-        by the cyclone wrapper. """
+        by the cyclone wrapper.
+        """
         self.endpoint.write_error(999)
         self.status_mock.assert_called_with(999)
         self.assertTrue(log_mock.err.called)

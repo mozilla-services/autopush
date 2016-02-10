@@ -69,7 +69,8 @@ class EliotObserver(object):
 
 def stdout(message):
     """Format a message appropriately for structured logging capture of stdout
-    and then write it to stdout"""
+    and then write it to stdout
+    """
     if HUMAN:
         if message['error']:
             sys.stdout.write("ERROR: %s\n" % message['message'])

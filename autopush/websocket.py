@@ -71,7 +71,8 @@ def ms_time():
 
 def periodic_reporter(settings):
     """Twisted Task function that runs every few seconds to emit general
-    metrics regarding twisted and client counts"""
+    metrics regarding twisted and client counts
+    """
     settings.metrics.gauge("update.client.writers",
                            len(reactor.getWriters()))
     settings.metrics.gauge("update.client.readers",
@@ -272,7 +273,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     @property
     def base_tags(self):
         """Property that uses None if there's no tags due to a DataDog library
-        bug"""
+        bug
+        """
         return self.ps._base_tags if self.ps._base_tags else None
 
     def log_err(self, failure, **kwargs):
@@ -302,7 +304,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     @log_exception
     def sendClose(self, code=None, reason=None):
         """Override to add tracker that ensures the connection is truly
-        torn down"""
+        torn down
+        """
         reactor.callLater(10+self.closeHandshakeTimeout, self.nukeConnection)
         return WebSocketServerProtocol.sendClose(self, code, reason)
 
@@ -341,7 +344,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     @log_exception
     def processHandshake(self):
         """Disable host port checking on nonstandard ports since some
-        clients are buggy and don't provide it"""
+        clients are buggy and don't provide it
+        """
         track_object(self, msg="processHandshake")
         port = self.ap_settings.port
         hide = port != 80 and port != 443
@@ -414,7 +418,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     @log_exception
     def onClose(self, wasClean, code, reason):
         """autobahn onClose handler for shutting down the connection and any
-        outstanding deferreds related to this connection"""
+        outstanding deferreds related to this connection
+        """
         try:
             uaid = self.ps.uaid
             self._shutdown_ran = True
@@ -431,7 +436,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def cleanUp(self, wasClean, code, reason):
         """Thorough clean-up method to cancel all remaining deferreds, and send
-        connection metrics in"""
+        connection metrics in
+        """
         self.ps.metrics.increment("client.socket.disconnect",
                                   tags=self.base_tags)
         elapsed = (ms_time() - self.ps.connected_at) / 1000.0
@@ -490,7 +496,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def _lookup_node(self, results):
         """Looks up the node to send a notify for it to check storage if
-        connected"""
+        connected
+        """
         # Locate the node that has this client connected
         d = deferToThread(
             self.ap_settings.router.get_uaid,
@@ -501,7 +508,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def _notify_node(self, result):
         """Checks the result of lookup node to send the notify if the client is
-        connected elsewhere now"""
+        connected elsewhere now
+        """
         if not result:
             self.ps.metrics.increment("error.notify_uaid_failure",
                                       tags=self.base_tags)
@@ -525,7 +533,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def returnError(self, messageType, reason, statusCode, close=True):
         """Return an error to a client, and optionally shut down the connection
-        safely"""
+        safely
+        """
         self.sendJSON({"messageType": messageType,
                        "reason": reason,
                        "status": statusCode})
@@ -550,7 +559,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def err_finish_overload(self, message_type):
         """Close the connection down and resume consuming input after the
-        random interval from a db overload"""
+        random interval from a db overload
+        """
         # Resume producing so we can finish the shutdown
         self.transport.resumeProducing()
         self.returnError(message_type,  "error - overloaded", 503)
@@ -639,7 +649,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def _copy_new_data(self, result):
         """Copies data for a new user to the previous record for later
-        checks"""
+        checks
+        """
         _, previous, data = result
         if "last_connect" in data:
             previous["last_connect"] = data["last_connect"]
@@ -673,7 +684,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def _check_other_nodes(self, result):
         """callback to check other nodes for clients and send them a delete as
-        needed"""
+        needed
+        """
         self.transport.resumeProducing()
         registered, previous, _ = result
         if not registered:
@@ -904,7 +916,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def _rotate_message_table(self):
         """Function to fire off a message table copy of channels + update the
-        router current_month entry"""
+        router current_month entry
+        """
         self.transport.pauseProducing()
         d = self.deferToThread(self.ps.message.all_channels, self.ps.uaid)
         d.addCallback(self._register_rotated_channels)
@@ -1124,7 +1137,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def process_ack(self, data):
         """Process an ack message, delete notifications from storage if
-        needed"""
+        needed
+        """
         updates = data.get("updates")
         if not updates or not isinstance(updates, list):
             return
@@ -1210,7 +1224,6 @@ class RouterHandler(cyclone.web.RequestHandler, ErrorLogger):
     Handles routing a notification to a connected client from an endpoint.
 
     """
-
     def put(self, uaid):
         """HTTP Put
 

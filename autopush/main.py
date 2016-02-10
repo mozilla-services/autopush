@@ -440,7 +440,8 @@ def connection_main(sysargs=None, use_files=True):
 
 def endpoint_main(sysargs=None, use_files=True):
     """Main entry point to setup an endpoint node, aka the autoendpoint
-    script"""
+    script
+    """
     args, parser = _parse_endpoint(sysargs, use_files)
     senderid_list = None
     if args.senderid_list:
