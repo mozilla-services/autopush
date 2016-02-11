@@ -260,7 +260,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         """errBack for invalid auth token"""
         fail.trap(VapidAuthException)
         log.msg("Invalid Auth token", **self._client_info)
-        self._write_response(401, 109)
+        self._write_response(401, 109, message=fail.value.message)
 
     def _chid_not_found_err(self, fail):
         """errBack for unknown chid"""

@@ -740,7 +740,8 @@ class EndpointTestCase(unittest.TestCase):
             res = jws.verify(token, vk2, algorithms=["ES256"])
             eq_(res, payload)
         """
-        self.request_mock.headers["crypto-key"] = "p256ecdsa=%s" % crypto_key
+        self.request_mock.headers["crypto-key"] = \
+            "keyid=\"a1\"; key=\"foo\";p256ecdsa=\"%s\"" % crypto_key
         self.request_mock.headers["authorization"] = auth
         self.router_mock.get_uaid.return_value = dict(
             router_type="webpush",
