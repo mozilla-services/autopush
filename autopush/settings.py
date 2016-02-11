@@ -76,7 +76,7 @@ class AutopushSettings(object):
                  senderid_expry=SENDERID_EXPRY,
                  senderid_list={},
                  hello_timeout=0,
-                 auth_key=None,
+                 bear_hash_key=None,
                  ):
         """Initialize the Settings object
 
@@ -107,11 +107,11 @@ class AutopushSettings(object):
         self.update(crypto_key=crypto_key)
         self.crypto_key = crypto_key
 
-        if auth_key is None:
-            auth_key = []
-        if not isinstance(auth_key, list):
-            auth_key = [auth_key]
-        self.auth_key = auth_key
+        if bear_hash_key is None:
+            bear_hash_key = []
+        if not isinstance(bear_hash_key, list):
+            bear_hash_key = [bear_hash_key]
+        self.bear_hash_key = bear_hash_key
 
         self.max_data = max_data
         self.clients = {}

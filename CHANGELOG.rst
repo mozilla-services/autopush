@@ -5,6 +5,13 @@ Autopush Changelog
 1.11.0 (**dev**)
 ================
 
+Features
+--------
+
+* Added VAPID auth support to incoming Push POSTs. Issue #325.
+  This does not yet use token caches since that will introduce database
+  changes as well as impact a fair bit more code.
+
 Bug Fixes
 ---------
 

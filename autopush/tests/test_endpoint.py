@@ -3,10 +3,14 @@ import json
 import sys
 import time
 import uuid
+import base64
+import hashlib
 
+import ecdsa
 import twisted.internet.base
 from cryptography.fernet import Fernet, InvalidToken
 from cyclone.web import Application
+from jose import jws
 from mock import Mock, patch
 from moto import mock_dynamodb2, mock_s3
 from nose.tools import eq_, ok_
@@ -59,6 +63,7 @@ def patch_logger(test):
     This uses Trial's ``patch()`` method instead of Mock's ``@patch``
     decorator. The latter still causes the test to print a stack trace
     and fail unless ``flushLoggedErrors()`` is called.
+
     """
     @functools.wraps(test)
     def wrapper(self, *args, **kwargs):
@@ -161,7 +166,11 @@ dummy_request_id = "11111111-1234-1234-1234-567812345678"
 class EndpointTestCase(unittest.TestCase):
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
     def setUp(self, t):
-        self.timeout = 0.5
+        # this timeout *should* be set to 0.5, however Travis runs
+        # so slow, that many of these tests will time out leading
+        # to false failure rates and integration tests generally
+        # failing.
+        self.timeout = 1
 
         twisted.internet.base.DelayedCall.debug = True
 
@@ -201,6 +210,11 @@ class EndpointTestCase(unittest.TestCase):
         eq_(d.get("code"), code)
         eq_(d.get("errno"), errno)
         eq_(d.get("error"), error)
+
+    def test_parse_header(self):
+        result = utils.parse_header('fee; fie="foe";  fum=""foobar="five""";')
+        eq_(result[0], 'fee')
+        eq_(result[1], {'fum': 'foobar="five"', 'fie': 'foe'})
 
     def test_uaid_lookup_results(self):
         fresult = dict(router_type="test")
@@ -359,25 +373,27 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
 
-    def test_client_info(self):
-        d = self.endpoint._client_info()
+    def test_init_info(self):
+        d = self.endpoint._init_info()
         eq_(d["request_id"], dummy_request_id)
         h = self.request_mock.headers
         h["user-agent"] = "myself"
-        d = self.endpoint._client_info()
+        d = self.endpoint._init_info()
         eq_(d["user-agent"], "myself")
         self.request_mock.remote_ip = "local1"
-        d = self.endpoint._client_info()
+        d = self.endpoint._init_info()
         eq_(d["remote-ip"], "local1")
         self.request_mock.headers["x-forwarded-for"] = "local2"
-        d = self.endpoint._client_info()
+        d = self.endpoint._init_info()
         eq_(d["remote-ip"], "local2")
-        self.endpoint.uaid_hash = "faa"
-        d = self.endpoint._client_info()
-        eq_(d["uaid_hash"], "faa")
         self.request_mock.headers["authorization"] = "bearer token fred"
-        d = self.endpoint._client_info()
+        d = self.endpoint._init_info()
         eq_(d["authorization"], "bearer token fred")
+        self.endpoint.uaid = "faa"
+        eq_(self.endpoint._client_info["uaid_hash"],
+            hashlib.sha224("faa").hexdigest())
+        self.endpoint.chid = "fie"
+        eq_(self.endpoint._client_info['channelID'], "fie")
 
     def test_load_params_arguments(self):
         args = self.endpoint.request.arguments
@@ -585,7 +601,7 @@ class EndpointTestCase(unittest.TestCase):
         self.request_mock.headers["encryption"] = "ignored"
         self.request_mock.headers["content-encoding"] = 'text'
         self.request_mock.headers["encryption-key"] = "encKey"
-        self.request_mock.headers["crypto-key"] = "crypKey"
+        self.request_mock.headers["crypto-key"] = "fake=crypKey"
         self.request_mock.body = b' '
         self.fernet_mock.decrypt.return_value = "123:456"
         self.router_mock.get_uaid.return_value = dict(
@@ -600,6 +616,77 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.assertTrue(result)
             self.endpoint.set_status.assert_called_with(400)
+
+        self.finish_deferred.addBoth(handle_finish)
+        self.endpoint.put(dummy_uaid)
+        return self.finish_deferred
+
+    def test_put_invalid_vapid_crypto_header(self):
+        self.request_mock.headers["encryption"] = "ignored"
+        self.request_mock.headers["content-encoding"] = 'text'
+        self.request_mock.headers["authorization"] = "some auth"
+        self.request_mock.headers["crypto-key"] = "crypKey"
+        self.request_mock.body = b' '
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=200,
+            router_data={},
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(401)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.put(dummy_uaid)
+        return self.finish_deferred
+
+    def test_put_invalid_vapid_auth_header(self):
+        self.request_mock.headers["encryption"] = "ignored"
+        self.request_mock.headers["content-encoding"] = 'text'
+        self.request_mock.headers["authorization"] = "invalid"
+        self.request_mock.headers["crypto-key"] = "crypt=crap"
+        self.request_mock.body = b' '
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=200,
+            router_data={},
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(401)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.put(dummy_uaid)
+        return self.finish_deferred
+
+    def test_put_missing_vapid_crypto_header(self):
+        self.request_mock.headers["encryption"] = "ignored"
+        self.request_mock.headers["content-encoding"] = 'text'
+        self.request_mock.headers["authorization"] = "some auth"
+        self.request_mock.body = b' '
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=200,
+            router_data={},
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(401)
 
         self.finish_deferred.addCallback(handle_finish)
         self.endpoint.put(dummy_uaid)
@@ -626,6 +713,248 @@ class EndpointTestCase(unittest.TestCase):
                 "Location", "Somewhere")
             self.endpoint.set_header.assert_any_call(
                 "Router", "webpush")
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.post(dummy_uaid)
+        return self.finish_deferred
+
+    def _gen_jwt(self, header, payload):
+        sk256p = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
+        vk = sk256p.get_verifying_key()
+        sig = jws.sign(payload, sk256p, algorithm="ES256").strip('=')
+        crypto_key = base64.urlsafe_b64encode(vk.to_string()).strip('=')
+        return (sig, crypto_key)
+
+    def test_post_webpush_with_vapid_auth(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+
+        (token, crypto_key) = self._gen_jwt(header, payload)
+        auth = "Bearer %s" % token
+        """ # to verify that the object is encoded correctly
+
+            kd2 = base64.urlsafe_b64decode(utils.fix_padding(crypto_key))
+            vk2 = ecdsa.VerifyingKey.from_string(kd2, curve=ecdsa.NIST256p)
+            res = jws.verify(token, vk2, algorithms=["ES256"])
+            eq_(res, payload)
+        """
+        self.request_mock.headers["crypto-key"] = \
+            "keyid=\"a1\"; key=\"foo\";p256ecdsa=\"%s\"" % crypto_key
+        self.request_mock.headers["authorization"] = auth
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=201,
+        )
+
+        def handle_finish(result, crypto_key, token):
+            self.endpoint.set_status.assert_called_with(201)
+            payload.update({'crypto_key': crypto_key, 'token': token})
+            eq_(self.endpoint._client_info.get('jwt'), payload)
+            self.assertTrue(result)
+
+        self.finish_deferred.addCallback(handle_finish, crypto_key, token)
+        self.endpoint.post(dummy_uaid)
+        return self.finish_deferred
+
+    def test_post_webpush_with_other_than_vapid_auth(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+
+        (token, crypto_key) = self._gen_jwt(header, payload)
+        auth = "Bearer other_token"
+        self.request_mock.headers["crypto-key"] = "p256ecdsa=%s" % crypto_key
+        self.request_mock.headers["authorization"] = auth
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=201,
+        )
+
+        def handle_finish(result):
+            self.endpoint.set_status.assert_called_with(201)
+            eq_(self.endpoint._client_info.get('jwt'), None)
+            self.assertTrue(result)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.post(dummy_uaid)
+        return self.finish_deferred
+
+    def test_post_webpush_with_bad_vapid_auth(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+
+        (token, crypto_key) = self._gen_jwt(header, payload)
+        crypto_key = crypto_key.strip('=')[:-2]
+        self.request_mock.headers["crypto-key"] = "p256ecdsa=%s" % crypto_key
+        self.request_mock.headers["authorization"] = "Bearer " + token
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=201,
+        )
+
+        def handle_finish(result):
+            self.endpoint.set_status.assert_called_with(401)
+            eq_(self.endpoint._client_info.get('jwt'), None)
+            self.assertTrue(result)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.post(dummy_uaid)
+        return self.finish_deferred
+
+    def test_post_webpush_no_sig(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+
+        (sig, crypto_key) = self._gen_jwt(header, payload)
+        sigs = sig.split('.')
+        auth = "Bearer %s.%s" % (sigs[0], sigs[1])
+        self.request_mock.headers["crypto-key"] = "p256ecdsa=%s" % crypto_key
+        self.request_mock.headers["authorization"] = auth
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=201,
+            headers={"Location": "Somewhere"}
+        )
+
+        def handle_finish(result):
+            eq_(self.endpoint._client_info.get('jwt'), None)
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(401)
+
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.post(dummy_uaid)
+        return self.finish_deferred
+
+    def test_util_extract_jwt(self):
+        eq_(utils.extract_jwt('a.b.c', None), {})
+        eq_(utils.extract_jwt(None, 'present_but_invalid_key'), {})
+
+    def test_post_webpush_bad_sig(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+
+        (sig, crypto_key) = self._gen_jwt(header, payload)
+        sigs = sig.split('.')
+        auth = "Bearer %s.%s.%s" % (sigs[0], sigs[1], "invalid")
+        self.request_mock.headers["crypto-key"] = "p256ecdsa=%s" % crypto_key
+        self.request_mock.headers["authorization"] = auth
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=201,
+            headers={"Location": "Somewhere"}
+        )
+
+        def handle_finish(result):
+            eq_(self.endpoint._client_info.get('jwt'), None)
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(401)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.post(dummy_uaid)
+        return self.finish_deferred
+
+    def test_post_webpush_bad_exp(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) - 100,
+                   "sub": "mailto:admin@example.com"}
+
+        (token, crypto_key) = self._gen_jwt(header, payload)
+        self.request_mock.headers["crypto-key"] = "p256ecdsa=%s" % crypto_key
+        self.request_mock.headers["authorization"] = "Bearer %s" % token
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=201,
+            headers={"Location": "Somewhere"}
+        )
+
+        def handle_finish(result):
+            eq_(self.endpoint._client_info.get('jwt'), None)
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(401)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.post(dummy_uaid)
+        return self.finish_deferred
+
+    def test_post_webpush_with_auth(self):
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.request_mock.headers["crypto-key"] = ""
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=201,
+            headers={"Location": "Somewhere"}
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(201)
+            self.endpoint.set_header.assert_called_with(
+                "Location", "Somewhere")
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.post(dummy_uaid)
@@ -798,7 +1127,8 @@ class EndpointTestCase(unittest.TestCase):
         """ Write error is triggered by sending the app a request
         with an invalid method (e.g. "put" instead of "PUT").
         This is not code that is triggered within normal flow, but
-        by the cyclone wrapper. """
+        by the cyclone wrapper.
+        """
         class testX(Exception):
             pass
 
@@ -816,13 +1146,18 @@ class EndpointTestCase(unittest.TestCase):
         """ Write error is triggered by sending the app a request
         with an invalid method (e.g. "put" instead of "PUT").
         This is not code that is triggered within normal flow, but
-        by the cyclone wrapper. """
+        by the cyclone wrapper.
+        """
         self.endpoint.write_error(999)
         self.status_mock.assert_called_with(999)
         self.assertTrue(log_mock.err.called)
 
     def _assert_error_response(self, result):
         self.status_mock.assert_called_with(500)
+
+    def test_padding(self):
+        eq_(utils.fix_padding("ab"), "ab==")
+        eq_(utils.fix_padding("abcd"), "abcd")
 
 
 dummy_uaid = "00000000123412341234567812345678"
@@ -838,7 +1173,7 @@ class RegistrationTestCase(unittest.TestCase):
             AutopushSettings(
                 hostname="localhost",
                 statsd_host=None,
-                auth_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
+                bear_hash_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
             )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
         self.metrics_mock = settings.metrics = Mock(spec=Metrics)
@@ -860,7 +1195,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.status_mock = self.reg.set_status = Mock()
         self.write_mock = self.reg.write = Mock()
         self.auth = ("Bearer %s" %
-                     generate_hash(self.reg.ap_settings.auth_key[0],
+                     generate_hash(self.reg.ap_settings.bear_hash_key[0],
                                    dummy_uaid))
 
         d = self.finish_deferred = Deferred()
@@ -881,16 +1216,16 @@ class RegistrationTestCase(unittest.TestCase):
         if message:
             eq_(d.get("message"), message)
 
-    def test_client_info(self):
+    def test_init_info(self):
         h = self.request_mock.headers
         h["user-agent"] = "myself"
-        d = self.reg._client_info()
+        d = self.reg._init_info()
         eq_(d["user-agent"], "myself")
         self.request_mock.remote_ip = "local1"
-        d = self.reg._client_info()
+        d = self.reg._init_info()
         eq_(d["remote-ip"], "local1")
         self.request_mock.headers["x-forwarded-for"] = "local2"
-        d = self.reg._client_info()
+        d = self.reg._init_info()
         eq_(d["remote-ip"], "local2")
 
     def test_ap_settings_update(self):
@@ -1331,7 +1666,7 @@ class RegistrationTestCase(unittest.TestCase):
         eq_(False, self.reg._validate_auth(dummy_uaid))
         self.reg.request.headers['Authorization'] = self.auth
         eq_(True, self.reg._validate_auth(dummy_uaid))
-        self.reg.ap_settings.auth_key = []
+        self.reg.ap_settings.bear_hash_key = []
         eq_(True, self.reg._validate_auth(dummy_uaid))
 
     def test_post_relocate(self):
