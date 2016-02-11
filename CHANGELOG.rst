@@ -11,6 +11,8 @@ Features
 * Added VAPID auth support to incoming Push POSTs. Issue #325.
   This does not yet use token caches since that will introduce database
   changes as well as impact a fair bit more code.
+* Added "Router" header to outbound successful subscription updates.
+  Issue #334.
 
 Bug Fixes
 ---------

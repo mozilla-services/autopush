@@ -224,6 +224,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
             self.set_header(name, val)
         if 200 <= response.status_code < 300:
             self.set_status(response.status_code)
+            self.set_header("Router", self.router_key)
             self.write(response.response_body)
             self.finish()
         else:

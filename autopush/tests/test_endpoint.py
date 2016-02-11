@@ -510,6 +510,7 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.router_mock.get_uaid.assert_called_with('123')
             self.status_mock.assert_called_with(404)
+            ok_('Router' not in self.endpoint._headers)
             self._check_error(404, 103, "Not Found")
         self.finish_deferred.addCallback(handle_finish)
 
@@ -526,6 +527,7 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.assertTrue(result)
             self.endpoint.set_status.assert_called_with(200)
+            eq_(self.endpoint._headers.get('Router'), 'simplepush')
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put(dummy_uaid)
@@ -548,6 +550,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.assertTrue(result)
+            eq_(self.endpoint._headers.get('Router'), 'webpush')
             self.endpoint.set_status.assert_called_with(200)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -706,8 +709,10 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.assertTrue(result)
             self.endpoint.set_status.assert_called_with(201)
-            self.endpoint.set_header.assert_called_with(
+            self.endpoint.set_header.assert_any_call(
                 "Location", "Somewhere")
+            self.endpoint.set_header.assert_any_call(
+                "Router", "webpush")
 
         self.finish_deferred.addCallback(handle_finish)
         self.endpoint.post(dummy_uaid)
@@ -948,8 +953,10 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.assertTrue(result)
             self.endpoint.set_status.assert_called_with(201)
-            self.endpoint.set_header.assert_called_with(
+            self.endpoint.set_header.assert_any_call(
                 "Location", "Somewhere")
+            self.endpoint.set_header.assert_any_call(
+                "Router", "webpush")
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.post(dummy_uaid)
@@ -976,8 +983,10 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.assertTrue(result)
             self.endpoint.set_status.assert_called_with(201)
-            self.endpoint.set_header.assert_called_with(
+            self.endpoint.set_header.assert_any_call(
                 "Location", "Somewhere")
+            self.endpoint.set_header.assert_any_call(
+                "Router", "webpush")
             args, kwargs = mock_log.call_args
             eq_("Successful delivery", args[0])
             log_patcher.stop()
@@ -1007,8 +1016,10 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.assertTrue(result)
             self.endpoint.set_status.assert_called_with(201)
-            self.endpoint.set_header.assert_called_with(
+            self.endpoint.set_header.assert_any_call(
                 "Location", "Somewhere")
+            self.endpoint.set_header.assert_any_call(
+                "Router", "webpush")
             args, kwargs = mock_log.call_args
             eq_("Router miss, message stored.", args[0])
             log_patcher.stop()
