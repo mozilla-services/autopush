@@ -231,8 +231,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
             return self._write_response(
                 response.status_code,
                 errno=response.errno or 999,
-                message=response.response_body,
-                )
+                message=response.response_body)
 
     def _router_fail_err(self, fail):
         """errBack for router failures"""

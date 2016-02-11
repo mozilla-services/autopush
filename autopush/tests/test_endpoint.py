@@ -953,8 +953,10 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.assertTrue(result)
             self.endpoint.set_status.assert_called_with(201)
-            self.endpoint.set_header.assert_called_with(
+            self.endpoint.set_header.assert_any_call(
                 "Location", "Somewhere")
+            self.endpoint.set_header.assert_any_call(
+                "Router", "webpush")
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.post(dummy_uaid)
