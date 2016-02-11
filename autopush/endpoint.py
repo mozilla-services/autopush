@@ -206,13 +206,15 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
             self.set_header(name, val)
         if 200 <= response.status_code < 300:
             self.set_status(response.status_code)
+            self.set_header("Router", self.router_key)
             self.write(response.response_body)
             self.finish()
         else:
             return self._write_response(
                 response.status_code,
                 errno=response.errno or 999,
-                message=response.response_body)
+                message=response.response_body,
+                )
 
     def _router_fail_err(self, fail):
         """errBack for router failures"""
