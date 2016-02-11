@@ -41,6 +41,7 @@ DEFAULT_BUCKET = "oms_autopush"
 
 class SenderIDs(object):
     """Handle Read, Write and cache of SenderID values from S3"""
+
     _expry = SENDERID_EXPRY
     _senderIDs = {}
     _use_s3 = True

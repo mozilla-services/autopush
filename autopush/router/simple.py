@@ -46,7 +46,8 @@ def node_key(node_id):
 
 class SimpleRouter(object):
     """Implements :class:`autopush.router.interface.IRouter` for internal
-    routing to an Autopush node"""
+    routing to an Autopush node
+    """
     def __init__(self, ap_settings, router_conf):
         """Create a new SimpleRouter"""
         self.ap_settings = ap_settings
@@ -77,7 +78,8 @@ class SimpleRouter(object):
     @inlineCallbacks
     def route_notification(self, notification, uaid_data):
         """Route a notification to an internal node, and store it if the node
-        can't deliver immediately or is no longer a valid node"""
+        can't deliver immediately or is no longer a valid node
+        """
         # Determine if they're connected at the moment
         node_id = uaid_data.get("node_id")
         uaid = uaid_data["uaid"]

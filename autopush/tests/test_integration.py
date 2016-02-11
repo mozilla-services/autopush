@@ -1,3 +1,4 @@
+import base64
 import httplib
 import json
 import logging
@@ -12,10 +13,12 @@ from base64 import urlsafe_b64encode
 from unittest.case import SkipTest
 
 import boto
+import ecdsa
 import psutil
 import websocket
 import twisted.internet.base
 from autobahn.twisted.websocket import WebSocketServerFactory
+from jose import jws
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
 from twisted.internet import reactor
@@ -76,6 +79,21 @@ def tearDown():
     # fine
     for section in boto.config.sections():
         boto.config.remove_section(section)
+
+
+def _get_vapid(key=None, payload=None):
+    if not payload:
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+    if not key:
+        key = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
+    vk = key.get_verifying_key()
+    auth = jws.sign(payload, key, algorithm="ES256").strip('=')
+    crypto_key = base64.urlsafe_b64encode(vk.to_string()).strip('=')
+    return {"auth": auth,
+            "crypto-key": crypto_key,
+            "key": key}
 
 
 class Client(object):
@@ -168,17 +186,20 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 
     def send_notification(self, channel=None, version=None, data=None,
                           use_header=True, status=None, ttl=200,
-                          timeout=0.2):
+                          timeout=0.2, vapid=False):
         if not channel:
             channel = random.choice(self.channels.keys())
 
         endpoint = self.channels[channel]
         url = urlparse.urlparse(endpoint)
         http = None
+        vapid_info = None
         if url.scheme == "https":  # pragma: nocover
             http = httplib.HTTPSConnection(url.netloc)
         else:
             http = httplib.HTTPConnection(url.netloc)
+        if vapid:
+            vapid_info = _get_vapid()
 
         if self.use_webpush:
             headers = {"TTL": str(ttl)}
@@ -189,6 +210,19 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                     "Encryption": self._crypto_key,
                     "Crypto-Key": 'keyid="a1"; key="JcqK-OLkJZlJ3sJJWstJCA"',
                 })
+            if vapid:
+                headers.update({
+                    "Authorization": "Bearer " + vapid_info.get('auth')
+                })
+                ckey = 'p256ecdsa="' + vapid_info.get('crypto-key') + '"'
+                if headers.get('Crypto-Key'):
+                    headers.update({
+                        'Crypto-Key': headers.get('Crypto-Key') + ';' + ckey
+                    })
+                else:
+                    headers.update({
+                        'Crypto-Key': ckey
+                    })
             body = data or ""
             method = "POST"
             status = status or 201
@@ -646,6 +680,16 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         result = yield client.send_notification(data=data)
+        eq_(result["headers"]["encryption"], client._crypto_key)
+        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["messageType"], "notification")
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_basic_delivery_with_vapid(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        result = yield client.send_notification(data=data, vapid=True)
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], urlsafe_b64encode(data))
         eq_(result["messageType"], "notification")
