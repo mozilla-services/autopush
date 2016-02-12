@@ -244,6 +244,8 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         location = resp.getheader("Location", None)
         log.debug("Response Headers: %s", resp.getheaders())
         if self.use_webpush:
+            if status >= 200 and status < 300:
+                ok_(location is not None)
             if status == 201:
                 ttl_header = resp.getheader("TTL")
                 eq_(ttl_header, str(ttl))

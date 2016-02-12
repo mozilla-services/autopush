@@ -183,6 +183,15 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
             "authorization": self.request.headers.get("authorization", ""),
         }
 
+    def _location(self):
+        """Returns a location header value created from the version"""
+        return "%s/m/%s" % (self.ap_settings.endpoint_url,
+                            self.version)
+
+    def _is_webpush(self):
+        """Returns if a given message is WebPush compatible"""
+        return self.router_key not in ["simplepush"]
+
     #############################################################
     #                    Error Callbacks
     #############################################################
@@ -222,6 +231,11 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     def _router_response(self, response):
         for name, val in response.headers.items():
             self.set_header(name, val)
+
+        if self._is_webpush() and "location" not in map(
+                lambda x: x.lower(), response.headers.keys()):
+            self.set_header("Location", self._location())
+
         if 200 <= response.status_code < 300:
             self.set_status(response.status_code)
             self.write(response.response_body)
@@ -435,7 +449,7 @@ class EndpointHandler(AutoendpointHandler):
 
         # Only simplepush uses version/data out of body/query, GCM/APNS will
         # use data out of the request body 'WebPush' style.
-        if router_key == "simplepush":
+        if not self._is_webpush():
             self.version, data = parse_request_params(self.request)
             self._client_info['version'] = self.version
         else:
@@ -464,7 +478,7 @@ class EndpointHandler(AutoendpointHandler):
             return self._write_response(
                 413, 104, message="Data payload too large")
 
-        if router_key == "simplepush":
+        if not self._is_webpush():
             self._route_notification(self.version, result, data)
             return
 
