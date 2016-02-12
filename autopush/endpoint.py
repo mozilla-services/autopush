@@ -183,11 +183,6 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
             "authorization": self.request.headers.get("authorization", ""),
         }
 
-    def _location(self):
-        """Returns a location header value created from the version"""
-        return "%s/m/%s" % (self.ap_settings.endpoint_url,
-                            self.version)
-
     def _is_webpush(self):
         """Returns if a given message is WebPush compatible"""
         return self.router_key not in ["simplepush"]
@@ -231,10 +226,6 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     def _router_response(self, response):
         for name, val in response.headers.items():
             self.set_header(name, val)
-
-        if self._is_webpush() and "location" not in map(
-                lambda x: x.lower(), response.headers.keys()):
-            self.set_header("Location", self._location())
 
         if 200 <= response.status_code < 300:
             self.set_status(response.status_code)
