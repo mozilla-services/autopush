@@ -11,6 +11,7 @@ Features
 * Added VAPID auth support to incoming Push POSTs. Issue #325.
   This does not yet use token caches since that will introduce database
   changes as well as impact a fair bit more code.
+* Require TTL header for all incoming subscription updates. Issue #329.
 
 Bug Fixes
 ---------
@@ -18,6 +19,12 @@ Bug Fixes
 * Use appropriate 400, 404, 410 status codes for differing message endpoint
   results, rather than always a 404. Issue #312.
 * Do not send useless 'ver' across GCM bridge. Issue #323.
+
+Backwards Incompatibilities
+---------------------------
+
+* The TTL header is now required for all subscription updates. Messages without
+  this header will return a 400 error (errno 111).
 
 1.10.1 (2016-02-01)
 ===================
