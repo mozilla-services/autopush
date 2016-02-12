@@ -547,7 +547,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         def verify_deliver(fail):
             exc = fail.value
             ok_(exc, RouterException)
-            eq_(exc.status_code, 404)
+            eq_(exc.status_code, 410)
         d.addBoth(verify_deliver)
         return d
 

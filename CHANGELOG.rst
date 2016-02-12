@@ -16,7 +16,9 @@ Features
 Bug Fixes
 ---------
 
-*  Do not send useless 'ver' across GCM bridge. Issue #323.
+* Use appropriate 400, 404, 410 status codes for differing message endpoint
+  results, rather than always a 404. Issue #312.
+* Do not send useless 'ver' across GCM bridge. Issue #323.
 
 Backwards Incompatibilities
 ---------------------------

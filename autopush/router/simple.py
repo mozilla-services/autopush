@@ -146,7 +146,7 @@ class SimpleRouter(object):
         except ItemNotFound:
             self.metrics.increment("updates.client.deleted")
             raise RouterException("User was deleted",
-                                  status_code=404,
+                                  status_code=410,
                                   response_body="Invalid UAID",
                                   errno=105)
 

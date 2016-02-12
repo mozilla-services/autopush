@@ -106,7 +106,7 @@ class MessageTestCase(unittest.TestCase):
             "decrypt.side_effect": InvalidToken})
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(404)
+            self.status_mock.assert_called_with(400)
         self.finish_deferred.addCallback(handle_finish)
 
         self.message.delete('')
@@ -116,7 +116,7 @@ class MessageTestCase(unittest.TestCase):
         self.fernet_mock.decrypt.return_value = "123:456"
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(404)
+            self.status_mock.assert_called_with(400)
         self.finish_deferred.addCallback(handle_finish)
 
         self.message.delete('')
@@ -126,7 +126,7 @@ class MessageTestCase(unittest.TestCase):
         self.fernet_mock.decrypt.return_value = "r:123:456"
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(404)
+            self.status_mock.assert_called_with(400)
         self.finish_deferred.addCallback(handle_finish)
 
         self.message.delete('')
@@ -502,7 +502,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.request.body = b'version=123&data=bad-token'
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(404)
+            self.status_mock.assert_called_with(400)
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put('')
@@ -513,7 +513,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.request.body = b'version=123'
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(404)
+            self.status_mock.assert_called_with(400)
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put('')
@@ -531,8 +531,8 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.router_mock.get_uaid.assert_called_with('123')
-            self.status_mock.assert_called_with(404)
-            self._check_error(404, 103, "Not Found")
+            self.status_mock.assert_called_with(410)
+            self._check_error(410, 103, "")
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.version, self.endpoint.data = 789, None
@@ -1589,7 +1589,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.request.headers["Authorization"] = self.auth
 
         def handle_finish(value):
-            self._check_error(404, 106, "Not Found")
+            self._check_error(410, 106, "")
             messages.delete_user(dummy_uaid)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -1642,7 +1642,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.request.headers["Authorization"] = self.auth
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(404)
+            self.reg.set_status.assert_called_with(410)
 
         self.router_mock.drop_user = Mock()
         self.router_mock.drop_user.return_value = False
