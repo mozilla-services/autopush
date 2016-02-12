@@ -11,6 +11,8 @@ Features
 * Added VAPID auth support to incoming Push POSTs. Issue #325.
   This does not yet use token caches since that will introduce database
   changes as well as impact a fair bit more code.
+* Added "Location" header to all successful outbound webpush subscription
+  update responses. Issue #338.
 
 Bug Fixes
 ---------
