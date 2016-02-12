@@ -87,6 +87,7 @@ Unless otherwise specified, all calls return the following error codes:
 -  400 - Bad Parameters
 
    - errno 101 - Missing neccessary crypto keys
+   - errno 102 - Invalid URL endpoint
    - errno 108 - Router type is invalid
    - errno 110 - Invalid crypto keys specified
 
@@ -94,14 +95,13 @@ Unless otherwise specified, all calls return the following error codes:
 
    - errno 109 - Invalid authentication
 
--  404 - `{UAID}` not found or invalid
+-  410 - `{UAID}` or `{CHID}` not found
 
-   - errno 102 - Invalid URL endpoint
    - errno 103 - Expired URL endpoint
    - errno 105 - Endpoint became unavailable during request
    - errno 106 - Invalid subscription
 
-- 413 - Payload too large
+-  413 - Payload too large
 
    - errno 104 - Data payload too large
 
