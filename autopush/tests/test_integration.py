@@ -215,14 +215,9 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                     "Authorization": "Bearer " + vapid_info.get('auth')
                 })
                 ckey = 'p256ecdsa="' + vapid_info.get('crypto-key') + '"'
-                if headers.get('Crypto-Key'):
-                    headers.update({
-                        'Crypto-Key': headers.get('Crypto-Key') + ';' + ckey
-                    })
-                else:
-                    headers.update({
-                        'Crypto-Key': ckey
-                    })
+                headers.update({
+                    'Crypto-Key': headers.get('Crypto-Key') + ';' + ckey
+                })
             body = data or ""
             method = "POST"
             status = status or 201
@@ -536,6 +531,7 @@ class TestSimple(IntegrationBase):
         yield client.hello()
         yield client.disconnect()
         c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
+        log.debug("Last connected time: %s", c.get("last_connect", "None"))
         eq_(True, has_connected_this_month(c))
 
 

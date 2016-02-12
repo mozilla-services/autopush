@@ -164,6 +164,13 @@ dummy_request_id = "11111111-1234-1234-1234-567812345678"
 
 
 class EndpointTestCase(unittest.TestCase):
+    CORS_METHODS = "POST,PUT"
+    CORS_HEADERS = ','.join(
+        ["content-encoding", "encryption",
+         "crypto-key", "ttl",
+         "encryption-key", "content-type"]
+    )
+
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
     def setUp(self, t):
         # this timeout *should* be set to 0.5, however Travis runs
@@ -187,7 +194,8 @@ class EndpointTestCase(unittest.TestCase):
         self.senderIDs_mock = settings.senderIDs = Mock(spec=SenderIDs)
         self.senderIDs_mock.get_ID.return_value = "test_senderid"
 
-        self.request_mock = Mock(body=b'', arguments={}, headers={},
+        self.request_mock = Mock(body=b'', arguments={},
+                                 headers={"ttl": 0},
                                  host='example.com:8080')
         self.endpoint = endpoint.EndpointHandler(Application(),
                                                  self.request_mock,
@@ -272,6 +280,20 @@ class EndpointTestCase(unittest.TestCase):
             args, kwargs = frouter.route_notification.call_args
             notif = args[0]
             eq_(notif.ttl, MAX_TTL)
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    def test_webpush_missing_ttl(self):
+        del(self.request_mock.headers['ttl'])
+        frouter = Mock(spec=Router)
+        frouter.route_notification = Mock()
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.ap_settings.routers["webpush"] = frouter
+        self.endpoint._uaid_lookup_results(dict(router_type="webpush"))
+
+        def handle_finish(value):
+            self.endpoint.set_status.assert_called_with(400)
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -1067,10 +1089,8 @@ class EndpointTestCase(unittest.TestCase):
         endpoint = self.endpoint
         endpoint.ap_settings.cors = False
         assert endpoint._headers.get(ch1) != "*"
-        assert endpoint._headers.get(ch2) != "POST,PUT"
-        assert endpoint._headers.get(ch3) != ("content-encoding,encryption,"
-                                              "crypto-key,"
-                                              "encryption-key,content-type")
+        assert endpoint._headers.get(ch2) != self.CORS_METHODS
+        assert endpoint._headers.get(ch3) != self.CORS_HEADERS
         assert endpoint._headers.get(ch4) != "location"
 
         endpoint.clear_header(ch1)
@@ -1078,9 +1098,8 @@ class EndpointTestCase(unittest.TestCase):
         endpoint.ap_settings.cors = True
         self.endpoint.prepare()
         eq_(endpoint._headers[ch1], "*")
-        eq_(endpoint._headers[ch2], "POST,PUT")
-        eq_(endpoint._headers[ch3], "content-encoding,encryption,"
-            "crypto-key,encryption-key,content-type")
+        eq_(endpoint._headers[ch2], self.CORS_METHODS)
+        eq_(endpoint._headers[ch3], self.CORS_HEADERS)
         eq_(endpoint._headers[ch4], "location")
 
     def test_cors_head(self):
@@ -1093,9 +1112,8 @@ class EndpointTestCase(unittest.TestCase):
         endpoint.prepare()
         endpoint.head(None)
         eq_(endpoint._headers[ch1], "*")
-        eq_(endpoint._headers[ch2], "POST,PUT")
-        eq_(endpoint._headers[ch3], "content-encoding,encryption,"
-            "crypto-key,encryption-key,content-type")
+        eq_(endpoint._headers[ch2], self.CORS_METHODS)
+        eq_(endpoint._headers[ch3], self.CORS_HEADERS)
         eq_(endpoint._headers[ch4], "location")
 
     def test_cors_options(self):
@@ -1108,9 +1126,8 @@ class EndpointTestCase(unittest.TestCase):
         endpoint.prepare()
         endpoint.options(None)
         eq_(endpoint._headers[ch1], "*")
-        eq_(endpoint._headers[ch2], "POST,PUT")
-        eq_(endpoint._headers[ch3], "content-encoding,encryption,"
-            "crypto-key,encryption-key,content-type")
+        eq_(endpoint._headers[ch2], self.CORS_METHODS)
+        eq_(endpoint._headers[ch3], self.CORS_HEADERS)
         eq_(endpoint._headers[ch4], "location")
 
     @patch_logger
