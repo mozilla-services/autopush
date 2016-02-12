@@ -395,7 +395,7 @@ class MessageHandler(AutoendpointHandler):
 class EndpointHandler(AutoendpointHandler):
     cors_methods = "POST,PUT"
     cors_request_headers = ["content-encoding", "encryption",
-                            "crypto-key",
+                            "crypto-key", "ttl",
                             "encryption-key", "content-type"]
     cors_response_headers = ["location"]
 
@@ -453,8 +453,17 @@ class EndpointHandler(AutoendpointHandler):
             self.version, data = parse_request_params(self.request)
             self._client_info['version'] = self.version
         else:
+
             data = self.request.body
             if router_key == "webpush":
+                if "ttl" not in self.request.headers:
+                    log.msg("Missing TTL Header",
+                            status_code=400,
+                            **self._client_info)
+                    self._write_response(status_code=400,
+                                         errno=111,
+                                         message="Missing TTL header")
+                    return
                 # We need crypto headers for messages with payloads.
                 req_fields = ["content-encoding", "encryption"]
                 if data and not all([x in self.request.headers
