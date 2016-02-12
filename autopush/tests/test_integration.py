@@ -219,10 +219,6 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                     headers.update({
                         'Crypto-Key': headers.get('Crypto-Key') + ';' + ckey
                     })
-                else:
-                    headers.update({
-                        'Crypto-Key': ckey
-                    })
             body = data or ""
             method = "POST"
             status = status or 201

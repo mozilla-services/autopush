@@ -248,13 +248,13 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         """errBack for uaid lookup not finding the user"""
         fail.trap(ItemNotFound)
         log.msg("UAID not found in AWS.", **self._client_info)
-        self._write_response(404, 103)
+        self._write_response(410, 103)
 
     def _token_err(self, fail):
         """errBack for token decryption fail"""
         fail.trap(InvalidToken, ValueError)
         log.msg("Invalid token", **self._client_info)
-        self._write_response(404, 102)
+        self._write_response(400, 102)
 
     def _auth_err(self, fail):
         """errBack for invalid auth token"""
@@ -266,7 +266,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         """errBack for unknown chid"""
         fail.trap(ItemNotFound, ValueError)
         log.msg("CHID not found in AWS.", **self._client_info)
-        self._write_response(404, 106)
+        self._write_response(410, 106)
 
     #############################################################
     #                    Utility Methods
