@@ -106,9 +106,12 @@ class WebPushRouter(SimpleRouter):
 
         """
         if notification.ttl == 0:
+            location = "%s/m/%s" % (self.ap_settings.endpoint_url,
+                                    notification.version)
             raise RouterException("Finished Routing", status_code=201,
                                   log_exception=False,
-                                  headers={"TTL": str(notification.ttl)},
+                                  headers={"TTL": str(notification.ttl),
+                                           "Location": location},
                                   logged_status=204)
         headers = None
         if notification.data:

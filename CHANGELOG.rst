@@ -12,6 +12,8 @@ Features
   This does not yet use token caches since that will introduce database
   changes as well as impact a fair bit more code.
 * Require TTL header for all incoming subscription updates. Issue #329.
+* Added "Location" header to all successful outbound webpush subscription
+  update responses. Issue #338.
 
 Bug Fixes
 ---------

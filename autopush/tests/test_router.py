@@ -684,7 +684,8 @@ class WebPushRouterTestCase(unittest.TestCase):
             "encryption-key": "niftykey"
         }
         self.router = WebPushRouter(settings, {})
-        self.notif = Notification(10, "data", dummy_chid, headers, 20)
+        self.notif = Notification("EncMessageId", "data",
+                                  dummy_chid, headers, 20)
         mock_result = Mock(spec=gcmclient.gcm.Result)
         mock_result.canonical = dict()
         mock_result.failed = dict()
@@ -722,7 +723,8 @@ class WebPushRouterTestCase(unittest.TestCase):
         return d
 
     def test_route_to_busy_node_with_ttl_zero(self):
-        notif = Notification(10, "data", dummy_chid, self.headers, 0)
+        notif = Notification("EncMessageId", "data", dummy_chid,
+                             self.headers, 0)
         self.agent_mock.request.return_value = response_mock = Mock()
         response_mock.addCallback.return_value = response_mock
         type(response_mock).code = PropertyMock(
@@ -741,7 +743,7 @@ class WebPushRouterTestCase(unittest.TestCase):
             ok_(exc, RouterResponse)
             eq_(exc.status_code, 201)
             eq_(len(self.router.metrics.increment.mock_calls), 0)
-            ok_("Location" not in exc.headers)
+            ok_("Location" in exc.headers)
         d.addBoth(verify_deliver)
         return d
 

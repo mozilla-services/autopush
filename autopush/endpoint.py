@@ -222,6 +222,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     def _router_response(self, response):
         for name, val in response.headers.items():
             self.set_header(name, val)
+
         if 200 <= response.status_code < 300:
             self.set_status(response.status_code)
             self.write(response.response_body)
