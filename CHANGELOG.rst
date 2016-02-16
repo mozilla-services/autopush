@@ -16,6 +16,8 @@ Features
 * Require TTL header for all incoming subscription updates. Issue #329.
 * Added "Location" header to all successful outbound webpush subscription
   update responses. Issue #338.
+* Whitelist the "Authorization" header for CORS requests. PR #341.
+* Add a "WWW-Authenticate" header for 401 responses. PR #341.
 
 Bug Fixes
 ---------
