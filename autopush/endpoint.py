@@ -53,6 +53,7 @@ from autopush.utils import (
 
 # Our max TTL is 60 days realistically with table rotation, so we hard-code it
 MAX_TTL = 60 * 60 * 24 * 60
+AUTH_SCHEME = "bearer"
 status_codes = {
     200: "OK",
     201: "Created",
@@ -203,6 +204,10 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
                 self.set_header(header, headers.get(header))
         self.finish()
 
+    def _write_unauthorized_response(self, message=None):
+        headers = {"www-authenticate": AUTH_SCHEME}
+        self._write_response(401, 109, message, headers)
+
     def _response_err(self, fail):
         """errBack for all exceptions that should be logged
 
@@ -261,7 +266,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         """errBack for invalid auth token"""
         fail.trap(VapidAuthException)
         log.msg("Invalid Auth token", **self._client_info)
-        self._write_response(401, 109, message=fail.value.message)
+        self._write_unauthorized_response(message=fail.value.message)
 
     def _chid_not_found_err(self, fail):
         """errBack for unknown chid"""
@@ -300,7 +305,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         """Process the optional VAPID auth token.
 
         VAPID requires two headers to be present;
-        `Authorization: bearer ...` and `Crypto-Key: p256ecdsa=..`.
+        `Authorization: Bearer ...` and `Crypto-Key: p256ecdsa=..`.
         The problem is that VAPID is optional and Crypto-Key can carry
         content for other functions.
 
@@ -321,7 +326,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
             except ValueError:
                 raise VapidAuthException("Invalid Authorization header")
             # if it's a bearer token containing what may be a JWT
-            if auth_type.lower() == 'bearer' and '.' in token:
+            if auth_type.lower() == AUTH_SCHEME and '.' in token:
                 d = deferToThread(extract_jwt, token, crypto_key)
                 d.addCallback(self._store_auth, crypto_key, token, result)
                 d.addErrback(self._invalid_auth)
@@ -383,8 +388,9 @@ class EndpointHandler(AutoendpointHandler):
     cors_methods = "POST,PUT"
     cors_request_headers = ["content-encoding", "encryption",
                             "crypto-key", "ttl",
-                            "encryption-key", "content-type"]
-    cors_response_headers = ["location"]
+                            "encryption-key", "content-type",
+                            "authorization"]
+    cors_response_headers = ["location", "www-authenticate"]
 
     #############################################################
     #                    Cyclone HTTP Methods
@@ -591,8 +597,8 @@ class RegistrationHandler(AutoendpointHandler):
 
         if uaid:
             if not self._validate_auth(uaid):
-                return self._write_response(
-                    401, 109, message="Unauthorized")
+                return self._write_unauthorized_response(
+                    message="Unauthorized")
         else:
             # No UAID supplied, make our own
             uaid = uuid.uuid4().hex
@@ -624,8 +630,8 @@ class RegistrationHandler(AutoendpointHandler):
         self.start_time = time.time()
 
         if not self._validate_auth(uaid):
-            return self._write_response(
-                401, 109, message="Invalid Authentication")
+            return self._write_unauthorized_response(
+                message="Invalid Authentication")
 
         params = self._load_params()
         self.uaid = uaid
@@ -676,8 +682,8 @@ class RegistrationHandler(AutoendpointHandler):
 
         """
         if not self._validate_auth(uaid):
-            return self._write_response(
-                401, 109, message="Invalid Authentication")
+            return self._write_unauthorized_response(
+                message="Invalid Authentication")
         if router_type not in self.ap_settings.routers:
             log.msg("Invalid parameters", **self._client_info)
             return self._write_response(
@@ -778,7 +784,7 @@ class RegistrationHandler(AutoendpointHandler):
                                         header.strip()).split(" ", 2)
         except ValueError:
             return False
-        if "bearer" != token_type.lower():
+        if AUTH_SCHEME != token_type.lower():
             return False
         if self.ap_settings.bear_hash_key:
             for key in self.ap_settings.bear_hash_key:

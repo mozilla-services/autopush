@@ -168,7 +168,11 @@ class EndpointTestCase(unittest.TestCase):
     CORS_HEADERS = ','.join(
         ["content-encoding", "encryption",
          "crypto-key", "ttl",
-         "encryption-key", "content-type"]
+         "encryption-key", "content-type",
+         "authorization"]
+    )
+    CORS_RESPONSE_HEADERS = ','.join(
+        ["location", "www-authenticate"]
     )
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
@@ -1091,7 +1095,7 @@ class EndpointTestCase(unittest.TestCase):
         assert endpoint._headers.get(ch1) != "*"
         assert endpoint._headers.get(ch2) != self.CORS_METHODS
         assert endpoint._headers.get(ch3) != self.CORS_HEADERS
-        assert endpoint._headers.get(ch4) != "location"
+        assert endpoint._headers.get(ch4) != self.CORS_RESPONSE_HEADERS
 
         endpoint.clear_header(ch1)
         endpoint.clear_header(ch2)
@@ -1100,7 +1104,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(endpoint._headers[ch1], "*")
         eq_(endpoint._headers[ch2], self.CORS_METHODS)
         eq_(endpoint._headers[ch3], self.CORS_HEADERS)
-        eq_(endpoint._headers[ch4], "location")
+        eq_(endpoint._headers[ch4], self.CORS_RESPONSE_HEADERS)
 
     def test_cors_head(self):
         ch1 = "Access-Control-Allow-Origin"
@@ -1114,7 +1118,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(endpoint._headers[ch1], "*")
         eq_(endpoint._headers[ch2], self.CORS_METHODS)
         eq_(endpoint._headers[ch3], self.CORS_HEADERS)
-        eq_(endpoint._headers[ch4], "location")
+        eq_(endpoint._headers[ch4], self.CORS_RESPONSE_HEADERS)
 
     def test_cors_options(self):
         ch1 = "Access-Control-Allow-Origin"
@@ -1128,7 +1132,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(endpoint._headers[ch1], "*")
         eq_(endpoint._headers[ch2], self.CORS_METHODS)
         eq_(endpoint._headers[ch3], self.CORS_HEADERS)
-        eq_(endpoint._headers[ch4], "location")
+        eq_(endpoint._headers[ch4], self.CORS_RESPONSE_HEADERS)
 
     @patch_logger
     def test_write_error(self, log_mock):
