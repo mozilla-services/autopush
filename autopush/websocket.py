@@ -58,7 +58,11 @@ from zope.interface import implements
 from twisted.web.resource import Resource
 
 from autopush import __version__
-from autopush.db import has_connected_this_month, generate_last_connect
+from autopush.db import (
+    has_connected_this_month,
+    hasher,
+    generate_last_connect
+)
 from autopush.protocol import IgnoreBody
 from autopush.utils import validate_uaid, ErrorLogger
 from autopush.noseplugin import track_object
@@ -110,6 +114,7 @@ class PushState(object):
         '_paused',
         'metrics',
         'uaid',
+        'uaid_hash',
         'last_ping',
         'check_storage',
         'use_webpush',
@@ -160,6 +165,7 @@ class PushState(object):
         self.metrics.increment("client.socket.connect",
                                tags=self._base_tags or None)
         self.uaid = None
+        self.uaid_hash = ""
         self.last_ping = 0
         self.check_storage = False
         self.use_webpush = False
@@ -585,6 +591,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         existing_user, uaid = validate_uaid(uaid)
         self.ps.uaid = uaid
+        self.ps.uaid_hash = hasher(uaid)
         # Check for the special wakeup commands
         if "wakeup_host" in data and "mobilenetwork" in data:
             wakeup_host = data.get("wakeup_host")
@@ -1079,11 +1086,21 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         found = filter(ver_filter, self.ps.direct_updates[chid])
         if found:
-            self.ps.direct_updates[chid].remove(found[0])
+            msg = found[0]
+            size = len(msg.data) if msg.data else 0
+            log.msg("Ack", router_key="webpush", channelID=chid,
+                    message_id=version, message_type="direct",
+                    message_size=size, uaid_hash=self.ps.uaid_hash)
+            self.ps.direct_updates[chid].remove(msg)
             return
 
         found = filter(ver_filter, self.ps.updates_sent[chid])
         if found:
+            msg = found[0]
+            size = len(msg.data) if msg.data else 0
+            log.msg("Ack", router_key="webpush", channelID=chid,
+                    message_id=version, message_type="stored",
+                    message_size=size, uaid_hash=self.ps.uaid_hash)
             d = self.force_retry(self.ps.message.delete_message,
                                  uaid=self.ps.uaid,
                                  channel_id=chid,
@@ -1093,7 +1110,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # This is because we don't use range queries on dynamodb and we
             # need to make sure this notification is deleted from the db before
             # we query it again (to avoid dupes).
-            d.addBoth(self._handle_webpush_update_remove, chid, found[0])
+            d.addBoth(self._handle_webpush_update_remove, chid, msg)
             return d
 
     def _handle_webpush_update_remove(self, result, chid, notif):
@@ -1113,7 +1130,13 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if chid in self.ps.direct_updates and \
            self.ps.direct_updates[chid] <= version:
             del self.ps.direct_updates[chid]
+            log.msg("Ack", router_key="simplepush", channelID=chid,
+                    message_id=version, message_type="direct",
+                    uaid_hash=self.ps.uaid_hash)
             return
+        log.msg("Ack", router_key="simplepush", channelID=chid,
+                message_id=version, message_type="stored",
+                uaid_hash=self.ps.uaid_hash)
         if chid in self.ps.updates_sent and \
            self.ps.updates_sent[chid] <= version:
             del self.ps.updates_sent[chid]

@@ -21,7 +21,6 @@ For a discussion on how to use the endpoints listed here, please refer
 to :ref:`http`.
 
 """
-import hashlib
 import json
 import time
 import urlparse
@@ -41,7 +40,10 @@ from twisted.internet.defer import Deferred
 from twisted.internet.threads import deferToThread
 from twisted.python import log
 
-from autopush.db import generate_last_connect
+from autopush.db import (
+    generate_last_connect,
+    hasher
+)
 from autopush.router.interface import RouterException
 from autopush.utils import (
     generate_hash,
@@ -159,7 +161,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     def uaid(self, value):
         """Set the UAID and update the uaid hash"""
         self._uaid = value
-        self.uaid_hash = hashlib.sha224(self.uaid).hexdigest()
+        self.uaid_hash = hasher(value)
         self._client_info["uaid_hash"] = self.uaid_hash
 
     @property
@@ -437,7 +439,7 @@ class EndpointHandler(AutoendpointHandler):
         # use data out of the request body 'WebPush' style.
         if router_key == "simplepush":
             self.version, data = parse_request_params(self.request)
-            self._client_info['version'] = self.version
+            self._client_info['message_id'] = self.version
         else:
             data = self.request.body
             if router_key == "webpush":
@@ -453,6 +455,7 @@ class EndpointHandler(AutoendpointHandler):
                             **self._client_info)
                     return self._write_response(
                         400, 110, message="Invalid crypto headers")
+                self._client_info["message_size"] = len(data) if data else 0
 
         try:
             ttl = int(self.request.headers.get("ttl", "0"))
@@ -479,7 +482,7 @@ class EndpointHandler(AutoendpointHandler):
         return d
 
     def _route_notification(self, version, result, data, ttl=None):
-        self.version = self._client_info['version'] = version
+        self.version = self._client_info['message_id'] = version
         notification = Notification(version=version, data=data,
                                     channel_id=self.chid,
                                     headers=self.request.headers,

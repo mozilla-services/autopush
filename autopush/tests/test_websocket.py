@@ -1125,11 +1125,14 @@ class WebsocketTestCase(unittest.TestCase):
         return d
 
     def test_ack(self):
+        patcher = patch('autopush.websocket.log', spec=True)
+        mock_log = patcher.start()
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
         d = Deferred()
         chid = str(uuid.uuid4())
+        d.addBoth(lambda x: patcher.stop())
 
         # stick a notification to ack in
         self.proto.ps.direct_updates[chid] = 12
@@ -1144,6 +1147,12 @@ class WebsocketTestCase(unittest.TestCase):
 
             # Verify it was cleared out
             eq_(len(self.proto.ps.direct_updates), 0)
+            eq_(len(mock_log.mock_calls), 1)
+            args, kwargs = mock_log.msg.call_args
+            eq_(args[0], "Ack")
+            eq_(kwargs["router_key"], "simplepush")
+            eq_(kwargs["message_type"], "direct")
+
             d.callback(True)
 
         f = self._check_response(check_hello_result)
@@ -1154,9 +1163,12 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         eq_(self.proto.ack_update(None), None)
 
-    def test_ack_with_webpush_direct(self):
+    @patch('autopush.websocket.log', spec=True)
+    def test_ack_with_webpush_direct(self, mock_log):
         self._connect()
+        self.proto.ps.uaid = str(uuid.uuid4())
         chid = str(uuid.uuid4())
+
         self.proto.ps.use_webpush = True
         self.proto.ps.direct_updates[chid] = [
             Notification(version="bleh", headers={}, data="meh",
@@ -1168,8 +1180,14 @@ class WebsocketTestCase(unittest.TestCase):
             version="bleh:asdjfilajsdilfj"
         ))
         eq_(self.proto.ps.direct_updates[chid], [])
+        eq_(len(mock_log.mock_calls), 1)
+        args, kwargs = mock_log.msg.call_args
+        eq_(args[0], "Ack")
+        eq_(kwargs["router_key"], "webpush")
+        eq_(kwargs["message_type"], "direct")
 
-    def test_ack_with_webpush_from_storage(self):
+    @patch('autopush.websocket.log', spec=True)
+    def test_ack_with_webpush_from_storage(self, mock_log):
         self._connect()
         chid = str(uuid.uuid4())
         self.proto.ps.use_webpush = True
@@ -1187,6 +1205,11 @@ class WebsocketTestCase(unittest.TestCase):
         ))
         assert self.proto.force_retry.called
         assert mock_defer.addBoth.called
+        eq_(len(mock_log.mock_calls), 1)
+        args, kwargs = mock_log.msg.call_args
+        eq_(args[0], "Ack")
+        eq_(kwargs["router_key"], "webpush")
+        eq_(kwargs["message_type"], "stored")
 
     def test_ack_remove(self):
         self._connect()
