@@ -4,7 +4,6 @@ import sys
 import time
 import uuid
 import base64
-import hashlib
 
 import ecdsa
 import twisted.internet.base
@@ -29,6 +28,7 @@ from autopush.db import (
     ItemNotFound,
     create_rotating_message_table,
     has_connected_this_month,
+    hasher
 )
 from autopush.settings import AutopushSettings
 from autopush.router.interface import IRouter, RouterResponse
@@ -412,8 +412,7 @@ class EndpointTestCase(unittest.TestCase):
         d = self.endpoint._init_info()
         eq_(d["authorization"], "bearer token fred")
         self.endpoint.uaid = "faa"
-        eq_(self.endpoint._client_info["uaid_hash"],
-            hashlib.sha224("faa").hexdigest())
+        eq_(self.endpoint._client_info["uaid_hash"], hasher("faa"))
         self.endpoint.chid = "fie"
         eq_(self.endpoint._client_info['channelID'], "fie")
 
