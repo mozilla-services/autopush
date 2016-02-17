@@ -1,0 +1,11 @@
+[clog]
+repository = "https://github.com/mozilla-services/autopush"
+changelog = "CHANGELOG.md"
+from-latest-tag = true
+link-style = "github"
+
+[sections]
+Refactor = ["refactor"]
+Test = ["test"]
+Doc = ["docs"]
+Chore = ["chore"]

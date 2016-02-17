@@ -5,9 +5,9 @@ from autopush import __version__
 from setuptools import setup, find_packages
 
 here = os.path.abspath(os.path.dirname(__file__))
-with io.open(os.path.join(here, 'README.rst'), encoding='utf8') as f:
+with io.open(os.path.join(here, 'README.md'), encoding='utf8') as f:
     README = f.read()
-with io.open(os.path.join(here, 'CHANGELOG.rst'), encoding='utf8') as f:
+with io.open(os.path.join(here, 'CHANGELOG.md'), encoding='utf8') as f:
     CHANGES = f.read()
 
 extra_options = {
