@@ -4,6 +4,7 @@ import sys
 import time
 import uuid
 import base64
+import random
 
 import ecdsa
 import twisted.internet.base
@@ -33,7 +34,7 @@ from autopush.db import (
 from autopush.settings import AutopushSettings
 from autopush.router.interface import IRouter, RouterResponse
 from autopush.senderids import SenderIDs
-from autopush.utils import generate_hash
+from autopush.utils import (generate_hash, decipher_public_key)
 
 mock_dynamodb2 = mock_dynamodb2()
 
@@ -785,6 +786,27 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish, crypto_key, token)
         self.endpoint.post(dummy_uaid)
         return self.finish_deferred
+
+    def test_decipher_public_key(self):
+        # Exercise WebCrypto and other well known public key formats we may get
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+        (_, crypto) = self._gen_jwt(header, payload)
+        crypto_key = base64.urlsafe_b64decode(utils.fix_padding(crypto))
+
+        spki_header = ('0V0\x10\x06\x04+\x81\x04p\x06\x08*'
+                       '\x86H\xce=\x03\x01\x07\x03B\x00\x04')
+        eq_(decipher_public_key(crypto_key), crypto_key)
+        eq_(decipher_public_key('\x04' + crypto_key), crypto_key)
+        eq_(decipher_public_key(spki_header + crypto_key), crypto_key)
+        self.assertRaises(ValueError, decipher_public_key, "banana")
+        crap = ''.join([random.choice('012345abcdef') for i in range(0, 64)])
+        self.assertRaises(ValueError, decipher_public_key, '\x05' + crap)
+        self.assertRaises(ValueError, decipher_public_key,
+                          crap[:len(spki_header)] + crap)
+        self.assertRaises(ValueError, decipher_public_key, crap[:60])
 
     def test_post_webpush_with_other_than_vapid_auth(self):
         self.fernet_mock.decrypt.return_value = "123:456"
