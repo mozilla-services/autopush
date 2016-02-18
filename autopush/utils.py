@@ -108,13 +108,39 @@ def fix_padding(string):
     return string
 
 
+def decipher_public_key(key_data):
+    """A public key may come in several flavors. Attempt to extract the
+    valid key bits from keys doing minimal validation checks.
+
+    This is mostly a result of libs like WebCrypto prefixing data to "raw"
+    keys, and the ecdsa library not really providing helpful errors.
+
+    :param key_data: the raw-ish key we're going to try and process
+    :returns: the raw key data.
+    :raises: ValueError for unknown or poorly formatted keys.
+
+    """
+    # key data is actually a raw coordinate pair
+    key_len = len(key_data)
+    if key_len == 64:
+        return key_data
+    # Key format is "raw"
+    if key_len == 65 and key_data[0] == '\x04':
+        return key_data[-64:]
+    # key format is "spki"
+    if key_len == 88 and key_data[:3] == '0V0':
+        return key_data[-64:]
+    raise ValueError("Unknown public key format specified")
+
+
 def extract_jwt(token, crypto_key):
-    """ Extract the claims from the validated JWT. """
+    """Extract the claims from the validated JWT. """
     # first split and convert the jwt.
     if not token or not crypto_key:
         return {}
 
     key = base64.urlsafe_b64decode(fix_padding(crypto_key))
+    key = decipher_public_key(key)
     vk = ecdsa.VerifyingKey.from_string(key, curve=ecdsa.NIST256p)
     return jws.verify(token, vk, algorithms=["ES256"])
 
