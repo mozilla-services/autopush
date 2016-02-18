@@ -33,8 +33,9 @@ When submitting a PR:
 - Please do not include merge commits in pull requests; include only commits
   with the new relevant code.
 
-See the main [README.md](/README.md) for information on prerequisites,
-installing, running and testing.
+See the main
+[documentation](http://autopush.readthedocs.org/en/latest/install.html)
+for information on prerequisites, installing, running and testing.
 
 ## Code Review
 
@@ -42,7 +43,8 @@ This project is production Mozilla code and subject to our [engineering practice
 
 ## Git Commit Guidelines
 
-We loosely follow the [Angular commit guidelines](https://github.com/angular/angular.js/blob/master/CONTRIBUTING.md#type) of `<type>(<scope>): <subject>` where `type` must be one of:
+We loosely follow the [Angular commit guidelines](https://github.com/angular/angular.js/blob/master/CONTRIBUTING.md#type)
+of `<type>: <subject>` where `type` must be one of:
 
 * **feat**: A new feature
 * **fix**: A bug fix
@@ -55,10 +57,6 @@ We loosely follow the [Angular commit guidelines](https://github.com/angular/ang
 * **chore**: Changes to the build process or auxiliary tools and libraries such as documentation
   generation
 
-### Scope
-
-The scope could be anything specifying place of the commit change.
-
 ### Subject
 
 The subject contains succinct description of the change:
@@ -70,7 +68,7 @@ The subject contains succinct description of the change:
 ### Body
 
 In order to maintain a reference to the context of the commit, add
-`fixes #<issue_number>` if it closes a related issue or `issue #<issue_number>`
+`closes #<issue_number>` if it closes a related issue or `issue #<issue_number>`
 if it's a partial fix.
 
 You can also write a detailed description of the commit: Just as in the
@@ -82,3 +80,20 @@ previous behavior.
 
 The footer should contain any information about **Breaking Changes** and is also
 the place to reference GitHub issues that this commit **Closes**.
+
+### Example
+
+A properly formatted commit message should look like:
+
+```
+feat: give the developers a delicious cookie
+
+Properly formatted commit messages provide understandable history and
+documentation. This patch will provide a delicious cookie when all tests have
+passed and the commit message is properly formatted.
+
+BREAKING CHANGE: This patch requires developer to lower expectations about
+    what "delicious" and "cookie" may mean. Some sadness may result.
+
+Closes #3.14, #9.75
+```
