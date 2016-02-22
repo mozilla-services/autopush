@@ -681,7 +681,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         self.headers = headers = {
             "content-encoding": "aes128",
             "encryption": "awesomecrypto",
-            "encryption-key": "niftykey"
+            "crypto-key": "niftykey"
         }
         self.router = WebPushRouter(settings, {})
         self.notif = Notification("EncMessageId", "data",
@@ -715,10 +715,15 @@ class WebPushRouterTestCase(unittest.TestCase):
         def verify_deliver(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 201)
+            t_h = self.message_mock.store_message.call_args[1].get('headers')
+            eq_(t_h.get('encryption'), self.headers.get('encryption'))
+            eq_(t_h.get('crypto-key'), self.headers.get('crypto-key'))
+            eq_(t_h.get('encoding'), self.headers.get('content-encoding'))
             self.router.metrics.increment.assert_called_with(
                 "router.broadcast.save_hit"
             )
             ok_("Location" in result.headers)
+
         d.addCallback(verify_deliver)
         return d
 
