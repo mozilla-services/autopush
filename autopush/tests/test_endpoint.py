@@ -879,7 +879,7 @@ class EndpointTestCase(unittest.TestCase):
                    "sub": "mailto:admin@example.com"}
 
         (token, crypto_key) = self._gen_jwt(header, payload)
-        crypto_key = crypto_key.strip('=')[:-2]
+        crypto_key = crypto_key.strip('=')[:-2]+'ff'
         self.request_mock.headers["crypto-key"] = "p256ecdsa=%s" % crypto_key
         self.request_mock.headers["authorization"] = "Bearer " + token
         self.router_mock.get_uaid.return_value = dict(
