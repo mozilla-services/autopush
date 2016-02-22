@@ -200,7 +200,7 @@ class EndpointTestCase(unittest.TestCase):
         self.senderIDs_mock.get_ID.return_value = "test_senderid"
 
         self.request_mock = Mock(body=b'', arguments={},
-                                 headers={"ttl": 0},
+                                 headers={"ttl": "0"},
                                  host='example.com:8080')
         self.endpoint = endpoint.EndpointHandler(Application(),
                                                  self.request_mock,
@@ -259,10 +259,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
-            assert(frouter.route_notification.called)
-            args, kwargs = frouter.route_notification.call_args
-            notif = args[0]
-            assert(notif.ttl == 0)
+            self.endpoint.set_status.assert_called_with(400)
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -274,7 +271,7 @@ class EndpointTestCase(unittest.TestCase):
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
         self.endpoint.chid = "fred"
-        self.request_mock.headers["ttl"] = MAX_TTL + 100
+        self.request_mock.headers["ttl"] = str(MAX_TTL + 100)
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
         self.endpoint.ap_settings.routers["test"] = frouter
@@ -298,9 +295,39 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._uaid_lookup_results(dict(router_type="webpush"))
 
         def handle_finish(value):
-            self.endpoint.set_status.assert_called_with(400)
+            self.endpoint.set_status.assert_called_with(200)
 
         self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    def test_webpush_missing_ttl_user_offline(self):
+        from autopush.router.interface import RouterException
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.endpoint.set_header = Mock()
+        del(self.request_mock.headers["ttl"])
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+
+        def raise_error(*args):
+            raise RouterException(
+                "Missing TTL Header",
+                status_code=400,
+                response_body="Missing TTL Header",
+                errno=111
+            )
+
+        self.wp_router_mock.route_notification.side_effect = raise_error
+
+        def handle_finish(result):
+            self.flushLoggedErrors()
+            self.endpoint.set_status.assert_called_with(400)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.post(dummy_uaid)
         return self.finish_deferred
 
     def test_webpush_bad_routertype(self):

@@ -91,6 +91,7 @@ Unless otherwise specified, all calls return the following error codes:
    - errno 108 - Router type is invalid
    - errno 110 - Invalid crypto keys specified
    - errno 111 - Missing Required Header
+   - errno 112 - Invalid TTL header value
 
 -  401 - Bad Authorization
 
