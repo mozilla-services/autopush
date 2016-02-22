@@ -179,7 +179,7 @@ class WebsocketTestCase(unittest.TestCase):
         req.headers = {'user-agent': "tester"}
         req.host = "example.com:8080"
         ps = PushState(settings=self.proto.ap_settings, request=req)
-        eq_(ps._base_tags, ['user-agent:tester',
+        eq_(ps._base_tags, ['user_agent:tester',
                             'host:example.com:8080'])
 
     def test_reporter(self):
