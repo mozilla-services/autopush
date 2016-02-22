@@ -55,6 +55,7 @@ from autopush.utils import (
 
 # Our max TTL is 60 days realistically with table rotation, so we hard-code it
 MAX_TTL = 60 * 60 * 24 * 60
+VALID_TTL = re.compile(r'^\d+$')
 AUTH_SCHEME = "bearer"
 status_codes = {
     200: "OK",
@@ -250,6 +251,11 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
             log.msg("Success", status_code=exc.status_code,
                     logged_status=exc.logged_status or "",
                     **self._client_info)
+        elif 400 <= exc.status_code < 500:
+            log.msg("Client error", status_code=exc.status_code,
+                    logged_status=exc.logged_status or "",
+                    errno=exc.errno or "",
+                    **self._client_info)
         self._router_response(exc)
 
     def _uaid_not_found_err(self, fail):
@@ -439,6 +445,8 @@ class EndpointHandler(AutoendpointHandler):
         try:
             self.router = self.ap_settings.routers[router_key]
         except KeyError:
+            log.msg("Client error", status_code=400, errno=108,
+                    **self._client_info)
             return self._write_response(400, 108,
                                         message="Invalid router type")
 
@@ -447,39 +455,42 @@ class EndpointHandler(AutoendpointHandler):
         if router_key == "simplepush":
             self.version, data = parse_request_params(self.request)
             self._client_info['message_id'] = self.version
-        else:
-
+        elif router_key == "webpush":
             data = self.request.body
-            if router_key == "webpush":
-                if "ttl" not in self.request.headers:
-                    log.msg("Missing TTL Header",
-                            status_code=400,
-                            **self._client_info)
-                    self._write_response(status_code=400,
-                                         errno=111,
-                                         message="Missing TTL header")
-                    return
-                # We need crypto headers for messages with payloads.
-                req_fields = ["content-encoding", "encryption"]
-                if data and not all([x in self.request.headers
-                                     for x in req_fields]):
-                    log.msg("Missing Crypto headers", **self._client_info)
-                    return self._write_response(400, 101)
-                if ("encryption-key" in self.request.headers and
-                        "crypto-key" in self.request.headers):
-                    log.msg("Both encryption and crypto keys in headers",
-                            **self._client_info)
-                    return self._write_response(
-                        400, 110, message="Invalid crypto headers")
-                self._client_info["message_size"] = len(data) if data else 0
+            if "ttl" not in self.request.headers:
+                ttl = None
+            # We need crypto headers for messages with payloads.
+            req_fields = ["content-encoding", "encryption"]
+            if data and not all([x in self.request.headers
+                                 for x in req_fields]):
+                log.msg("Client error", status_code=400, errno=101,
+                        **self._client_info)
+                return self._write_response(400, 101)
+            if ("encryption-key" in self.request.headers and
+                    "crypto-key" in self.request.headers):
+                log.msg("Client error", status_code=400, errno=110,
+                        **self._client_info)
+                return self._write_response(
+                    400, 110, message="Invalid crypto headers")
+            self._client_info["message_size"] = len(data) if data else 0
+        else:
+            # GCM/APNS pull data out of body
+            data = self.request.body
 
-        try:
-            ttl = int(self.request.headers.get("ttl", "0"))
+        if "ttl" not in self.request.headers:
+            ttl = None
+        elif VALID_TTL.match(self.request.headers["ttl"]):
+            ttl = int(self.request.headers["ttl"])
             # Cap the TTL to our MAX_TTL
             ttl = min(ttl, MAX_TTL)
-        except ValueError:
-            ttl = 0
+        else:
+            log.msg("Client error", status_code=400,
+                    errno=112, **self._client_info)
+            return self._write_response(400, 112, message="Invalid TTL header")
+
         if data and len(data) > self.ap_settings.max_data:
+            log.msg("Client error", status_code=400, errno=104,
+                    **self._client_info)
             return self._write_response(
                 413, 104, message="Data payload too large")
 

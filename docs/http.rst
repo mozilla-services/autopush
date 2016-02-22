@@ -91,6 +91,7 @@ Unless otherwise specified, all calls return the following error codes:
    - errno 108 - Router type is invalid
    - errno 110 - Invalid crypto keys specified
    - errno 111 - Missing Required Header
+   - errno 112 - Invalid TTL header value
 
        - Missing TTL Header - Include the Time To Live header (`IETF WebPush protocol §6.2 <https://tools.ietf.org/html/draft-ietf-webpush-protocol#section-6.2>`_)
        - Missing Crypto Headers - Include the appropriate encryption headers (`WebPush Encryption §3.2 <https://webpush-wg.github.io/webpush-encryption/#rfc.section.3.2>`_ and `WebPush VAPID §4 <https://martinthomson.github.io/webpush-vapid/#rfc.section.4>`_)

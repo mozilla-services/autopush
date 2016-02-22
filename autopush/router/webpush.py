@@ -20,6 +20,8 @@ from autopush.protocol import IgnoreBody
 from autopush.router.interface import RouterException, RouterResponse
 from autopush.router.simple import SimpleRouter
 
+TTL_URL = "https://webpush-wg.github.io/webpush-protocol/#rfc.section.6.2"
+
 
 class WebPushRouter(SimpleRouter):
     """SimpleRouter subclass to store individual messages appropriately"""
@@ -29,7 +31,7 @@ class WebPushRouter(SimpleRouter):
                                 notification.version)
         return RouterResponse(status_code=201, response_body="",
                               headers={"Location": location,
-                                       "TTL": notification.ttl},
+                                       "TTL": notification.ttl or 0},
                               logged_status=200)
 
     def stored_response(self, notification):
@@ -106,6 +108,15 @@ class WebPushRouter(SimpleRouter):
         available.
 
         """
+        if notification.ttl is None:
+            # Note that this URL is temporary, as well as this warning as
+            # we will 400 all missing TTL's eventually
+            raise RouterException(
+                "Missing TTL Header",
+                response_body="Missing TTL Header, see: %s" % TTL_URL,
+                status_code=400,
+                errno=111
+            )
         if notification.ttl == 0:
             location = "%s/m/%s" % (self.ap_settings.endpoint_url,
                                     notification.version)
