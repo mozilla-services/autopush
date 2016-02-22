@@ -202,7 +202,9 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
             vapid_info = _get_vapid()
 
         if self.use_webpush:
-            headers = {"TTL": str(ttl)}
+            headers = {}
+            if ttl is not None:
+                headers = {"TTL": str(ttl)}
             if use_header:
                 headers.update({
                     "Content-Type": "application/octet-stream",
@@ -245,7 +247,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         if self.use_webpush:
             if status >= 200 and status < 300:
                 ok_(location is not None)
-            if status == 201:
+            if status == 201 and ttl is not None:
                 ttl_header = resp.getheader("TTL")
                 eq_(ttl_header, str(ttl))
             if ttl != 0 and status == 201:
@@ -838,6 +840,30 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         eq_(result, None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_ttl_not_present_not_connected(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        yield client.send_notification(data=data, ttl=None, status=400)
+        self.flushLoggedErrors()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        eq_(result, None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_ttl_not_present_connected(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        result = yield client.send_notification(data=data, ttl=None)
+        assert(result is not None)
+        eq_(result["headers"]["encryption"], client._crypto_key)
+        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["messageType"], "notification")
         yield self.shut_down(client)
 
     @inlineCallbacks
