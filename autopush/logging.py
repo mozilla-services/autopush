@@ -85,9 +85,6 @@ def stdout(message):
     else:
         msg["Severity"] = 5
 
-    if "message_type" in message:
-        msg["Type"] = message.pop("message_type")
-
     for key in ["Type", "Severity", "type", "severity"]:
         if key in message:
             msg[key.title()] = message.pop(key)
