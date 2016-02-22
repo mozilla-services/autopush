@@ -47,10 +47,11 @@ class WebPushRouter(SimpleRouter):
             encoding=headers["content-encoding"],
             encryption=headers["encryption"],
         )
-        # AWS cannot store empty strings, so we only add the encryption-key if
-        # its present to avoid empty strings.
-        if "encryption-key" in headers:
-            data["encryption_key"] = headers["encryption-key"]
+        # AWS cannot store empty strings, so we only add these keys if
+        # they're present to avoid empty strings.
+        for name in ["encryption-key", "crypto-key"]:
+            if name in headers:
+                data[name] = headers[name]
         return data
 
     @inlineCallbacks
