@@ -78,6 +78,7 @@ def stdout(message):
         return
     msg = {}
     ts = message.pop("timestamp")
+    message.pop("time")
     del message["task_level"]
     msg["Hostname"] = HOSTNAME
     if message["error"]:
@@ -93,10 +94,11 @@ def stdout(message):
             msg[key.title()] = message.pop(key)
 
     msg["Timestamp"] = ts * 1000 * 1000 * 1000
-    msg["Fields"] = message
+    msg["Fields"] = {k: v for k, v in message.items()
+                     if not k.startswith("log_")}
     msg["EnvVersion"] = "2.0"
     msg["Logger"] = LOGGER
-    sys.stdout.write(json.dumps(msg) + "\n")
+    sys.stdout.write(json.dumps(msg, skipkeys=True) + "\n")
 
 
 def setup_logging(logger_name, human=False):
