@@ -1,5 +1,24 @@
-Autopush Changelog
-==================
+<a name="1.12.0"></a>
+## 1.12.0 (2016-02-23)
+
+
+#### Doc
+
+*   add text and links for 400:111 errors ([515be293](https://github.com/mozilla-services/autopush/commit/515be2939c12dc5b5720e3fcdb2fd7a0e0d60e6b))
+*   update CONTRIBUTING.md doc to match our style ([214e8a77](https://github.com/mozilla-services/autopush/commit/214e8a77c890803846bfc6133dafd2b9e1ae2662))
+
+#### Features
+
+*   upgrade autobahn/twisted to 0.12/15.5 ([47597a0d](https://github.com/mozilla-services/autopush/commit/47597a0da8a401aac38167632d316c48c34c3299), closes [#180](https://github.com/mozilla-services/autopush/issues/180))
+*   add user-agent logging to acks ([1dbe3460](https://github.com/mozilla-services/autopush/commit/1dbe3460028ae7980fe5a1722f2499e3428838f3))
+
+#### Bug Fixes
+
+*   allow webpush w/no ttl & cleanup 400 logging ([1f01cd70](https://github.com/mozilla-services/autopush/commit/1f01cd70f52de3c22f74a7389019dfafd1d90ea7), closes [#358](https://github.com/mozilla-services/autopush/issues/358))
+
+#### Chore
+
+*   bring project up to standard guidelines ([c2baf49f](https://github.com/mozilla-services/autopush/commit/c2baf49fd6310dde221151a2d088c6c9f6ca7c9f), closes [#344](https://github.com/mozilla-services/autopush/issues/344))
 
 1.11.0 (2016-02-16)
 -------------------
@@ -570,4 +589,3 @@ Autopush Changelog
 -   Capture and log exceptions in websocket protocol functions.
 -   Fix bug with 'settings' in cyclone overriding cyclone's settings.
     Resolves Issue \#13.
-
