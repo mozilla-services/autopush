@@ -1,5 +1,4 @@
 import os
-import sys
 
 import twisted.internet
 import twisted.trial.unittest
@@ -21,7 +20,6 @@ class SentryLogTestCase(twisted.trial.unittest.TestCase):
 
     def tearDown(self):
         self.mock_raven.stop()
-        log.startLogging(sys.stdout)
 
     def test_sentry_logging(self):
         os.environ["SENTRY_DSN"] = "some_locale"
