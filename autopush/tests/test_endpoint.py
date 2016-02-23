@@ -433,13 +433,13 @@ class EndpointTestCase(unittest.TestCase):
         h = self.request_mock.headers
         h["user-agent"] = "myself"
         d = self.endpoint._init_info()
-        eq_(d["user-agent"], "myself")
+        eq_(d["user_agent"], "myself")
         self.request_mock.remote_ip = "local1"
         d = self.endpoint._init_info()
-        eq_(d["remote-ip"], "local1")
+        eq_(d["remote_ip"], "local1")
         self.request_mock.headers["x-forwarded-for"] = "local2"
         d = self.endpoint._init_info()
-        eq_(d["remote-ip"], "local2")
+        eq_(d["remote_ip"], "local2")
         self.request_mock.headers["authorization"] = "bearer token fred"
         d = self.endpoint._init_info()
         eq_(d["authorization"], "bearer token fred")
@@ -1266,7 +1266,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.request = Mock(headers={'user-agent': 'test'},
                                 host='example.com:8080')
         tags = self.reg.base_tags()
-        eq_(tags, ['user-agent:test', 'host:example.com:8080'])
+        eq_(tags, ['user_agent:test', 'host:example.com:8080'])
 
     def _check_error(self, code, errno, error, message=None):
         d = json.loads(self.write_mock.call_args[0][0])
@@ -1280,13 +1280,13 @@ class RegistrationTestCase(unittest.TestCase):
         h = self.request_mock.headers
         h["user-agent"] = "myself"
         d = self.reg._init_info()
-        eq_(d["user-agent"], "myself")
+        eq_(d["user_agent"], "myself")
         self.request_mock.remote_ip = "local1"
         d = self.reg._init_info()
-        eq_(d["remote-ip"], "local1")
+        eq_(d["remote_ip"], "local1")
         self.request_mock.headers["x-forwarded-for"] = "local2"
         d = self.reg._init_info()
-        eq_(d["remote-ip"], "local2")
+        eq_(d["remote_ip"], "local2")
 
     def test_ap_settings_update(self):
         fake = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
