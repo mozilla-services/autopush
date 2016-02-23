@@ -155,7 +155,7 @@ class PushState(object):
             self._user_agent = None
         self._base_tags = []
         if self._user_agent:
-            self._base_tags.append("user-agent:%s" % self._user_agent)
+            self._base_tags.append("user_agent:%s" % self._user_agent)
         if host:
             self._base_tags.append("host:%s" % host)
 
@@ -195,6 +195,10 @@ class PushState(object):
     def message(self):
         """Property to access the currently used message table"""
         return self.settings.message_tables[self.message_month]
+
+    @property
+    def user_agent(self):
+        return self._user_agent or "None"
 
     def pauseProducing(self):
         """IProducer implementation tracking if we should pause output"""
@@ -1090,7 +1094,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             size = len(msg.data) if msg.data else 0
             log.msg("Ack", router_key="webpush", channelID=chid,
                     message_id=version, message_type="direct",
-                    message_size=size, uaid_hash=self.ps.uaid_hash)
+                    message_size=size, uaid_hash=self.ps.uaid_hash,
+                    user_agent=self.ps.user_agent)
             self.ps.direct_updates[chid].remove(msg)
             return
 
@@ -1100,7 +1105,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             size = len(msg.data) if msg.data else 0
             log.msg("Ack", router_key="webpush", channelID=chid,
                     message_id=version, message_type="stored",
-                    message_size=size, uaid_hash=self.ps.uaid_hash)
+                    message_size=size, uaid_hash=self.ps.uaid_hash,
+                    user_agent=self.ps.user_agent)
             d = self.force_retry(self.ps.message.delete_message,
                                  uaid=self.ps.uaid,
                                  channel_id=chid,
@@ -1132,11 +1138,13 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             del self.ps.direct_updates[chid]
             log.msg("Ack", router_key="simplepush", channelID=chid,
                     message_id=version, message_type="direct",
-                    uaid_hash=self.ps.uaid_hash)
+                    uaid_hash=self.ps.uaid_hash,
+                    user_agent=self.ps.user_agent)
             return
         log.msg("Ack", router_key="simplepush", channelID=chid,
                 message_id=version, message_type="stored",
-                uaid_hash=self.ps.uaid_hash)
+                uaid_hash=self.ps.uaid_hash,
+                user_agent=self.ps.user_agent)
         if chid in self.ps.updates_sent and \
            self.ps.updates_sent[chid] <= version:
             del self.ps.updates_sent[chid]

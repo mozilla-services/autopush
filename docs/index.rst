@@ -25,7 +25,7 @@ Reference Docs
    running
    architecture
    api
-   Changelog <changelog>
+   Changelog <https://github.com/mozilla-services/autopush/blob/master/CHANGELOG.md>
    http
    style
 

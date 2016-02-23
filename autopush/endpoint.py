@@ -181,8 +181,8 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         """Returns a dict of additional client data"""
         return {
             "request_id": self.request_id,
-            "user-agent": self.request.headers.get("user-agent", ""),
-            "remote-ip": self.request.headers.get("x-forwarded-for",
+            "user_agent": self.request.headers.get("user-agent", ""),
+            "remote_ip": self.request.headers.get("x-forwarded-for",
                                                   self.request.remote_ip),
             "authorization": self.request.headers.get("authorization", ""),
         }
@@ -558,7 +558,7 @@ class RegistrationHandler(AutoendpointHandler):
 
     def base_tags(self):
         tags = self._base_tags
-        tags.append("user-agent:%s" %
+        tags.append("user_agent:%s" %
                     self.request.headers.get("user-agent"))
         tags.append("host:%s" % self.request.host)
         return tags
