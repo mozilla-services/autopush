@@ -85,7 +85,7 @@ class WebPushRouter(SimpleRouter):
         """
         payload = {"channelID": notification.channel_id,
                    "version": notification.version,
-                   "ttl": notification.ttl,
+                   "ttl": notification.ttl or 0,
                    "timestamp": int(time.time()),
                    }
         if notification.data:

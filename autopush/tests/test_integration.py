@@ -867,6 +867,22 @@ class TestWebPush(IntegrationBase):
         yield self.shut_down(client)
 
     @inlineCallbacks
+    def test_ttl_not_present_connected_no_ack(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        result = yield client.send_notification(data=data, ttl=None)
+        assert(result is not None)
+        eq_(result["headers"]["encryption"], client._crypto_key)
+        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["messageType"], "notification")
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        eq_(result, None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
     def test_ttl_0_connected(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
