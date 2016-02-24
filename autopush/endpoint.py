@@ -246,7 +246,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         fail.trap(RouterException)
         exc = fail.value
         if exc.log_exception:
-            log.err(fail, **self._client_info)
+            log.err(fail, **self._client_info)  # pragma nocover
         if 200 <= exc.status_code < 300:
             log.msg("Success", status_code=exc.status_code,
                     logged_status=exc.logged_status or "",

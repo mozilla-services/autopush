@@ -317,7 +317,8 @@ class EndpointTestCase(unittest.TestCase):
                 "Missing TTL Header",
                 status_code=400,
                 response_body="Missing TTL Header",
-                errno=111
+                errno=111,
+                log_exception=False,
             )
 
         self.wp_router_mock.route_notification.side_effect = raise_error
@@ -1108,7 +1109,8 @@ class EndpointTestCase(unittest.TestCase):
                 "Provisioned throughput error",
                 status_code=503,
                 response_body="Retry Request",
-                errno=201
+                errno=201,
+                log_exception=False
             )
 
         self.wp_router_mock.route_notification.side_effect = raise_error
