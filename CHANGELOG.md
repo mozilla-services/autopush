@@ -1,3 +1,13 @@
+<a name="1.12.1"></a>
+### 1.12.1 (2016-02-25)
+
+
+#### Bug Fixes
+
+*   Normalize encryption headers. ([b9c3cc57](https://github.com/mozilla-services/autopush/commit/b9c3cc571fbdce3c2d748a8ad4efd2431c005bdc))
+*   allow stored ttl of None to be treated as 0 ([2b75be5f](https://github.com/mozilla-services/autopush/commit/2b75be5fb79d8bd6dc410cea44b6153ec9446b3a), closes [#366](https://github.com/mozilla-services/autopush/issues/366))
+*   silence missing TTL errors from sentry log ([c167ee2f](https://github.com/mozilla-services/autopush/commit/c167ee2fdcceb79a21c47eff0ddc46fe4e0b9e9e))
+
 <a name="1.12.0"></a>
 ## 1.12.0 (2016-02-23)
 
