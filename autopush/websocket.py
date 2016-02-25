@@ -891,7 +891,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             chid, version = notif["chidmessageid"].split(":")
 
             # If the TTL is too old, don't deliver and fire a delete off
-            if now >= (notif["ttl"]+notif["timestamp"]):
+            if not notif["ttl"] or now >= (notif["ttl"]+notif["timestamp"]):
                 self.force_retry(
                     self.ps.message.delete_message, self.ps.uaid,
                     chid, version, updateid=notif["updateid"])
