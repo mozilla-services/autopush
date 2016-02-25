@@ -165,6 +165,7 @@ class GCMRouterTestCase(unittest.TestCase):
         )
         self.gcm_config = {'s3_bucket': 'None',
                            'max_data': 32,
+                           'ttl': 60,
                            'senderid_list': {'test123':
                                              {"auth": "12345678abcdefg"}}}
         self.gcm = fgcm
@@ -239,6 +240,30 @@ class GCMRouterTestCase(unittest.TestCase):
             eq_(data['enc'], 'test')
             eq_(data['enckey'], 'test')
             eq_(data['con'], 'aesgcm')
+        d.addCallback(check_results)
+        return d
+
+    def test_ttl_none(self):
+        self.router.gcm = self.gcm
+        self.notif = Notification(version=10,
+                                  data="\xab\xad\x1d\xea",
+                                  channel_id=dummy_chid,
+                                  headers=self.headers,
+                                  ttl=None)
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(result):
+            ok_(isinstance(result, RouterResponse))
+            assert(self.router.gcm.send.called)
+            # Make sure the data was encoded as base64
+            data = self.router.gcm.send.call_args[0][0].data
+            options = self.router.gcm.send.call_args[0][0].options
+            eq_(data['body'], 'q60d6g==')
+            eq_(data['enc'], 'test')
+            eq_(data['enckey'], 'test')
+            eq_(data['con'], 'aesgcm')
+            # use the defined min TTL
+            eq_(options['time_to_live'], 60)
         d.addCallback(check_results)
         return d
 

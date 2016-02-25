@@ -13,14 +13,13 @@ from autopush.senderids import SenderIDs
 class GCMRouter(object):
     """GCM Router Implementation"""
     gcm = None
-    ttl = 60
     dryRun = 0
     collapseKey = "simplepush"
 
     def __init__(self, ap_settings, router_conf):
         """Create a new GCM router and connect to GCM"""
         self.config = router_conf
-        self.ttl = router_conf.get("ttl", 60)
+        self.min_ttl = router_conf.get("ttl", 60)
         self.dryRun = router_conf.get("dryrun", False)
         self.collapseKey = router_conf.get("collapseKey", "simplepush")
         self.senderIDs = router_conf.get("senderIDs")
@@ -100,10 +99,11 @@ class GCMRouter(object):
 
         # registration_ids are the GCM instance tokens (specified during
         # registration.
+        router_ttl = notification.ttl or 0
         payload = gcmclient.JSONMessage(
             registration_ids=[router_data.get("token")],
             collapse_key=self.collapseKey,
-            time_to_live=self.ttl,
+            time_to_live=max(self.min_ttl, router_ttl),
             dry_run=self.dryRun or ("dryrun" in router_data),
             data=data,
         )
