@@ -86,7 +86,12 @@ def stdout(message):
     else:
         msg["Severity"] = 5
 
-    for key in ["Type", "Severity", "type", "severity"]:
+    # 'message_type' is used by twisted logging. Preserve this to the
+    # 'Type' tag.
+    if "message_type" in message:
+        msg["Type"] = message.pop("message_type")
+
+    for key in ["Severity", "type", "severity"]:
         if key in message:
             msg[key.title()] = message.pop(key)
 
