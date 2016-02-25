@@ -115,7 +115,8 @@ class WebPushRouter(SimpleRouter):
                 "Missing TTL Header",
                 response_body="Missing TTL Header, see: %s" % TTL_URL,
                 status_code=400,
-                errno=111
+                errno=111,
+                log_exception=False,
             )
         if notification.ttl == 0:
             location = "%s/m/%s" % (self.ap_settings.endpoint_url,
