@@ -598,6 +598,10 @@ class TestData(IntegrationBase):
             chan = result["channelID"]
             test = tests[chan]
             eq_(result["data"], test["result"])
+            headers = result["headers"]
+            ok_("crypto_key" in headers)
+            ok_("encryption" in headers)
+            ok_("encoding" in headers)
             yield client.ack(chan, result["version"])
 
         yield self.shut_down(client)

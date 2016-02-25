@@ -717,7 +717,7 @@ class WebPushRouterTestCase(unittest.TestCase):
             eq_(result.status_code, 201)
             t_h = self.message_mock.store_message.call_args[1].get('headers')
             eq_(t_h.get('encryption'), self.headers.get('encryption'))
-            eq_(t_h.get('crypto-key'), self.headers.get('crypto-key'))
+            eq_(t_h.get('crypto_key'), self.headers.get('crypto-key'))
             eq_(t_h.get('encoding'), self.headers.get('content-encoding'))
             self.router.metrics.increment.assert_called_with(
                 "router.broadcast.save_hit"
