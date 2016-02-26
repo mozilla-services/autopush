@@ -445,10 +445,10 @@ class EndpointHandler(AutoendpointHandler):
         try:
             self.router = self.ap_settings.routers[router_key]
         except KeyError:
-            log.msg("Client error", status_code=400, errno=108,
+            log.msg("Invalid router requested", status_code=400, errno=108,
                     **self._client_info)
             return self._write_response(400, 108,
-                                        message="Invalid router type")
+                                        message="Invalid router")
 
         # Only simplepush uses version/data out of body/query, GCM/APNS will
         # use data out of the request body 'WebPush' style.
@@ -598,9 +598,9 @@ class RegistrationHandler(AutoendpointHandler):
 
         # normalize the path vars into parameters
         if router_type not in self.ap_settings.routers:
-            log.msg("Invalid parameters", **self._client_info)
+            log.msg("Invalid router requested", **self._client_info)
             return self._write_response(
-                400, 108, message="Invalid arguments")
+                400, 108, message="Invalid router")
         router = self.ap_settings.routers[router_type]
         valid, router_token = router.check_token(router_token)
         if not valid:
@@ -651,9 +651,9 @@ class RegistrationHandler(AutoendpointHandler):
         self.uaid = uaid
         router_data = params
         if router_type not in self.ap_settings.routers or not router_data:
-            log.msg("Invalid parameters", **self._client_info)
+            log.msg("Invalid router requested", **self._client_info)
             return self._write_response(
-                400, 108, message="Invalid arguments")
+                400, 108, message="Invalid router")
         router = self.ap_settings.routers[router_type]
         valid, router_token = router.check_token(router_token)
         if not valid:
@@ -699,9 +699,9 @@ class RegistrationHandler(AutoendpointHandler):
             return self._write_unauthorized_response(
                 message="Invalid Authentication")
         if router_type not in self.ap_settings.routers:
-            log.msg("Invalid parameters", **self._client_info)
+            log.msg("Invalid router requested", **self._client_info)
             return self._write_response(
-                400, 108, message="Invalid arguments")
+                400, 108, message="Invalid router")
         router = self.ap_settings.routers[router_type]
         valid, router_token = router.check_token(router_token)
         if not valid:
