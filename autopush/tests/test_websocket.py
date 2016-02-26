@@ -1151,7 +1151,7 @@ class WebsocketTestCase(unittest.TestCase):
             args, kwargs = mock_log.msg.call_args
             eq_(args[0], "Ack")
             eq_(kwargs["router_key"], "simplepush")
-            eq_(kwargs["message_type"], "direct")
+            eq_(kwargs["message_source"], "direct")
 
             d.callback(True)
 
@@ -1184,7 +1184,7 @@ class WebsocketTestCase(unittest.TestCase):
         args, kwargs = mock_log.msg.call_args
         eq_(args[0], "Ack")
         eq_(kwargs["router_key"], "webpush")
-        eq_(kwargs["message_type"], "direct")
+        eq_(kwargs["message_source"], "direct")
 
     @patch('autopush.websocket.log', spec=True)
     def test_ack_with_webpush_from_storage(self, mock_log):
@@ -1209,7 +1209,7 @@ class WebsocketTestCase(unittest.TestCase):
         args, kwargs = mock_log.msg.call_args
         eq_(args[0], "Ack")
         eq_(kwargs["router_key"], "webpush")
-        eq_(kwargs["message_type"], "stored")
+        eq_(kwargs["message_source"], "stored")
 
     def test_ack_remove(self):
         self._connect()

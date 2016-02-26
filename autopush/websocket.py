@@ -1093,7 +1093,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             msg = found[0]
             size = len(msg.data) if msg.data else 0
             log.msg("Ack", router_key="webpush", channelID=chid,
-                    message_id=version, message_type="direct",
+                    message_id=version, message_source="direct",
                     message_size=size, uaid_hash=self.ps.uaid_hash,
                     user_agent=self.ps.user_agent)
             self.ps.direct_updates[chid].remove(msg)
@@ -1104,7 +1104,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             msg = found[0]
             size = len(msg.data) if msg.data else 0
             log.msg("Ack", router_key="webpush", channelID=chid,
-                    message_id=version, message_type="stored",
+                    message_id=version, message_source="stored",
                     message_size=size, uaid_hash=self.ps.uaid_hash,
                     user_agent=self.ps.user_agent)
             d = self.force_retry(self.ps.message.delete_message,
@@ -1137,12 +1137,12 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
            self.ps.direct_updates[chid] <= version:
             del self.ps.direct_updates[chid]
             log.msg("Ack", router_key="simplepush", channelID=chid,
-                    message_id=version, message_type="direct",
+                    message_id=version, message_source="direct",
                     uaid_hash=self.ps.uaid_hash,
                     user_agent=self.ps.user_agent)
             return
         log.msg("Ack", router_key="simplepush", channelID=chid,
-                message_id=version, message_type="stored",
+                message_id=version, message_source="stored",
                 uaid_hash=self.ps.uaid_hash,
                 user_agent=self.ps.user_agent)
         if chid in self.ps.updates_sent and \
