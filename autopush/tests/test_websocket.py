@@ -1,6 +1,7 @@
 import json
 import time
 import uuid
+from hashlib import sha256
 
 import twisted.internet.base
 from boto.dynamodb2.exceptions import (
@@ -475,7 +476,7 @@ class WebsocketTestCase(unittest.TestCase):
         router = self.proto.ap_settings.router
         router.table.connection.update_item = Mock(side_effect=KeyError)
 
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", channelIDs=[], stop=1))
 
         def check_result(msg):
             eq_(msg["status"], 503)
@@ -761,7 +762,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_register(self):
         self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", channelIDs=[], stop=1))
 
         d = Deferred()
         d.addCallback(lambda x: True)
@@ -797,6 +798,39 @@ class WebsocketTestCase(unittest.TestCase):
 
         res = self.proto.process_register(dict(channelID=chid))
         res.addCallback(check_register_result)
+        return d
+
+    def test_register_webpush_with_key(self):
+        self._connect()
+        self.proto.ps.use_webpush = True
+        chid = str(uuid.uuid4())
+        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ap_settings.message.register_channel = Mock()
+        test_key = "SomeRandomCryptoKeyString"
+        test_sha = sha256(test_key).hexdigest()
+        test_endpoint = ('http://localhost/push/v2/' +
+                         self.proto.ps.uaid.replace('-', '') +
+                         chid.replace('-', '') +
+                         test_sha)
+        self.proto.sendJSON = Mock()
+
+        def echo(str):
+            return str.encode('hex')
+
+        self.proto.ap_settings.fernet.encrypt = echo
+
+        d = Deferred()
+
+        def check_register_result(msg, test_endpoint):
+            eq_(test_endpoint,
+                self.proto.sendJSON.call_args[0][0]['pushEndpoint'])
+            assert self.proto.ap_settings.message.register_channel.called
+            d.callback(True)
+
+        res = self.proto.process_register(
+            dict(channelID=chid,
+                 key=test_key))
+        res.addCallback(check_register_result, test_endpoint)
         return d
 
     def test_register_no_chid(self):
@@ -1097,37 +1131,6 @@ class WebsocketTestCase(unittest.TestCase):
         # Check the call result
         args = self.send_mock.call_args
         eq_(args, None)
-
-    def test_notification_retains_no_dash(self):
-        self._connect()
-
-        uaid = str(uuid.uuid4()).replace('-', '')
-        chid = str(uuid.uuid4()).replace('-', '')
-
-        storage = self.proto.ap_settings.storage
-        storage.save_notification(uaid, chid, 10)
-        self._send_message(dict(messageType="hello", channelIDs=[], uaid=uaid))
-
-        d = Deferred()
-
-        def check_notif_result(msg):
-            eq_(msg["messageType"], "notification")
-            updates = msg["updates"]
-            eq_(len(updates), 1)
-            eq_(updates[0]["channelID"], chid)
-            eq_(updates[0]["version"], 10)
-            d.callback(True)
-
-        def check_hello_result(msg):
-            eq_(msg["status"], 200)
-
-            # Now wait for the notification
-            nd = self._check_response(check_notif_result)
-            nd.addErrback(lambda x: d.errback(x))
-
-        f = self._check_response(check_hello_result)
-        f.addErrback(lambda x: d.errback(x))
-        return d
 
     def test_ack(self):
         patcher = patch('autopush.websocket.log', spec=True)

@@ -467,7 +467,8 @@ def endpoint_main(sysargs=None, use_files=True):
 
     # Endpoint HTTP router
     site = cyclone.web.Application([
-        (r"/push/([^\/]+)", EndpointHandler, dict(ap_settings=settings)),
+        (r"/push/(?:(v\d+)\/)?([^\/]+)", EndpointHandler,
+         dict(ap_settings=settings)),
         (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
         # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint

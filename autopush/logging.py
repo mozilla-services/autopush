@@ -15,7 +15,8 @@ import socket
 import sys
 
 import raven
-from eliot import add_destination, fields, Logger, MessageType
+from eliot import (add_destination, fields,
+                   Logger, MessageType)
 from twisted.python.log import textFromEventDict, startLoggingWithObserver
 
 HOSTNAME = socket.getfqdn()

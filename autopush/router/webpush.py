@@ -19,6 +19,7 @@ from twisted.web.client import FileBodyProducer
 from autopush.protocol import IgnoreBody
 from autopush.router.interface import RouterException, RouterResponse
 from autopush.router.simple import SimpleRouter
+from autopush.db import normalize_id
 
 TTL_URL = "https://webpush-wg.github.io/webpush-protocol/#rfc.section.6.2"
 
@@ -72,7 +73,8 @@ class WebPushRouter(SimpleRouter):
             self.ap_settings.message_tables[month_table].all_channels,
             uaid=uaid)
 
-        if not exists or channel_id not in chans:
+        if (not exists or channel_id.lower() not
+                in map(lambda x: normalize_id(x), chans)):
             raise RouterException("No such subscription", status_code=404,
                                   log_exception=False, errno=106)
         returnValue(month_table)
@@ -84,7 +86,8 @@ class WebPushRouter(SimpleRouter):
         headers for the notification.
 
         """
-        payload = {"channelID": notification.channel_id,
+        # Firefox currently requires channelIDs to be '-' formatted.
+        payload = {"channelID": normalize_id(notification.channel_id),
                    "version": notification.version,
                    "ttl": notification.ttl or 0,
                    "timestamp": int(time.time()),

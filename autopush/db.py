@@ -52,6 +52,18 @@ def hasher(uaid):
     return uaid
 
 
+def normalize_id(id):
+    if not id:
+        return id
+    if (len(id) == 36 and
+            id[8] == id[13] == id[18] == id[23] == '-'):
+        return id.lower()
+    raw = filter(lambda x: x in '0123456789abcdef', id.lower())
+    if len(raw) != 32:
+        raise ValueError("Invalid UUID")
+    return '-'.join((raw[:8], raw[8:12], raw[12:16], raw[16:20], raw[20:]))
+
+
 def make_rotating_tablename(prefix, delta=0):
     """Creates a tablename for table rotation based on a prefix with a given
     month delta."""
@@ -261,7 +273,8 @@ class Storage(object):
             cond = "attribute_not_exists(version) or version < :ver"
             conn.put_item(
                 self.table.table_name,
-                item=self.encode(dict(uaid=hasher(uaid), chid=chid,
+                item=self.encode(dict(uaid=hasher(uaid),
+                                      chid=normalize_id(chid),
                                       version=version)),
                 condition_expression=cond,
                 expression_attribute_values={
@@ -281,10 +294,12 @@ class Storage(object):
         """
         try:
             if version:
-                self.table.delete_item(uaid=hasher(uaid), chid=chid,
+                self.table.delete_item(uaid=hasher(uaid),
+                                       chid=normalize_id(chid),
                                        expected={"version__eq": version})
             else:
-                self.table.delete_item(uaid=hasher(uaid), chid=chid)
+                self.table.delete_item(uaid=hasher(uaid),
+                                       chid=normalize_id(chid))
             return True
         except ProvisionedThroughputExceededException:
             self.metrics.increment("error.provisioned.delete_notification")
@@ -312,7 +327,8 @@ class Message(object):
         db_key = self.encode({"uaid": hasher(uaid), "chidmessageid": " "})
         # Generate our update expression
         expr = "ADD chids :channel_id"
-        expr_values = self.encode({":channel_id": set([channel_id])})
+        expr_values = self.encode({":channel_id":
+                                  set([normalize_id(channel_id)])})
         conn.update_item(
             self.table.table_name,
             db_key,
@@ -327,7 +343,8 @@ class Message(object):
         conn = self.table.connection
         db_key = self.encode({"uaid": hasher(uaid), "chidmessageid": " "})
         expr = "DELETE chids :channel_id"
-        expr_values = self.encode({":channel_id": set([channel_id])})
+        expr_values = self.encode({":channel_id":
+                                   set([normalize_id(channel_id)])})
 
         result = conn.update_item(
             self.table.table_name,
@@ -375,7 +392,7 @@ class Message(object):
         with the message id"""
         item = dict(
             uaid=hasher(uaid),
-            chidmessageid="%s:%s" % (channel_id, message_id),
+            chidmessageid="%s:%s" % (normalize_id(channel_id), message_id),
             data=data,
             headers=headers,
             ttl=ttl,
@@ -407,7 +424,7 @@ class Message(object):
             item["headers"] = headers
             item["data"] = data
         try:
-            chidmessageid = "%s:%s" % (channel_id, message_id)
+            chidmessageid = "%s:%s" % (normalize_id(channel_id), message_id)
             db_key = self.encode({"uaid": hasher(uaid),
                                   "chidmessageid": chidmessageid})
             expr = ("SET #tl=:ttl, #ts=:timestamp,"
@@ -439,14 +456,16 @@ class Message(object):
             try:
                 self.table.delete_item(
                     uaid=hasher(uaid),
-                    chidmessageid="%s:%s" % (channel_id, message_id),
+                    chidmessageid="%s:%s" % (normalize_id(channel_id),
+                                             message_id),
                     expected={'updateid__eq': updateid})
             except ConditionalCheckFailedException:
                 return False
         else:
             self.table.delete_item(
                 uaid=hasher(uaid),
-                chidmessageid="%s:%s" % (channel_id, message_id))
+                chidmessageid="%s:%s" % (normalize_id(channel_id),
+                                         message_id))
         return True
 
     def delete_messages(self, uaid, chidmessageids):
@@ -463,7 +482,7 @@ class Message(object):
         """Deletes all messages for a uaid/channel_id"""
         results = self.table.query_2(
             uaid__eq=hasher(uaid),
-            chidmessageid__beginswith="%s:" % channel_id,
+            chidmessageid__beginswith="%s:" % normalize_id(channel_id),
             consistent=True,
             attributes=("chidmessageid",),
         )

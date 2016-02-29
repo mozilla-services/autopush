@@ -2,7 +2,10 @@
 import datetime
 import socket
 
+from hashlib import sha256
+
 from cryptography.fernet import Fernet, MultiFernet
+from cryptography.hazmat.primitives import constant_time
 from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks,
@@ -232,6 +235,7 @@ class AutopushSettings(object):
         self.current_msg_month = message_table.table_name
         self.message_tables[self.current_msg_month] = \
             Message(message_table, self.metrics)
+
         returnValue(True)
 
     def update(self, **kwargs):
@@ -248,7 +252,57 @@ class AutopushSettings(object):
             else:
                 setattr(self, key, val)
 
-    def make_endpoint(self, uaid, chid):
-        """ Create an endpoint from the identifiers"""
-        return self.endpoint_url + '/push/' + \
-            self.fernet.encrypt((uaid + ':' + chid).encode('utf8'))
+    def make_endpoint(self, uaid, chid, key=None):
+        """Create an v1 or v2 endpoint from the indentifiers.
+
+        Both endpoints use bytes instead of hex to reduce ID length.
+        v0 is uaid.hex + ':' + chid.hex and is deprecated.
+        v1 is the uaid + chid
+        v2 is the uaid + chid + sha256(key).bytes
+
+        :param uaid: User Agent Identifier
+        :param chid: Channel or Subscription ID
+        :param key: Optional provided Public Key
+        :returns: Push endpoint
+
+        """
+        root = self.endpoint_url + '/push/'
+        base = (uaid.replace('-', '').decode("hex") +
+                chid.replace('-', '').decode("hex"))
+
+        if key is None:
+            return root + 'v1/' + self.fernet.encrypt(base).strip('=')
+
+        return root + 'v2/' + self.fernet.encrypt(base + sha256(key).digest())
+
+    def parse_endpoint(self, token, version="v0", public_key=None):
+        """Parse an endpoint into component elements of UAID, CHID and optional
+        key hash if v2
+
+        :param token: The obscured subscription data.
+        :param version: This is the API version of the token.
+        :param public_key: the public key (from Encryption-Key: p256ecdsa=)
+
+        :raises ValueError: In the case of a malformed endpoint.
+
+        :returns: a tuple containing the (UAID, CHID)
+
+        """
+
+        token = self.fernet.decrypt(token.encode('utf8'))
+
+        if version == 'v0':
+            if ':' not in token:
+                raise ValueError("Corrupted push token")
+            return tuple(token.split(':'))
+        if version == 'v1' and len(token) != 32:
+            raise ValueError("Corrupted push token")
+        if version == 'v2':
+            if len(token) != 64:
+                raise ValueError("Corrupted push token")
+            if not public_key:
+                raise ValueError("Invalid key data")
+            if not constant_time.bytes_eq(sha256(public_key).digest(),
+                                          token[32:]):
+                raise ValueError("Key mismatch")
+        return (token[:16].encode('hex'), token[16:32].encode('hex'))

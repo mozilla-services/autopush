@@ -1000,7 +1000,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.transport.pauseProducing()
 
         d = self.deferToThread(self.ap_settings.make_endpoint, self.ps.uaid,
-                               chid)
+                               chid, data.get("key"))
         d.addCallback(self.finish_register, chid)
         d.addErrback(self.trap_cancel)
         d.addErrback(self.error_register)

@@ -28,6 +28,8 @@ from autopush.metrics import SinkMetrics
 
 
 mock_db2 = mock_dynamodb2()
+dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
+dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
 
 
 def setUp():
@@ -106,7 +108,7 @@ class StorageTestCase(unittest.TestCase):
             raise ConditionalCheckFailedException(None, None)
 
         storage.table.connection.put_item.side_effect = raise_error
-        result = storage.save_notification("fdas",  "asdf", 8)
+        result = storage.save_notification(dummy_uaid, dummy_chid, 8)
         eq_(result, False)
 
     def test_fetch_over_provisioned(self):
@@ -119,7 +121,7 @@ class StorageTestCase(unittest.TestCase):
 
         storage.table.connection.put_item.side_effect = raise_error
         with self.assertRaises(ProvisionedThroughputExceededException):
-            storage.save_notification("asdf", "asdf", 12)
+            storage.save_notification(dummy_uaid, dummy_chid, 12)
 
     def test_save_over_provisioned(self):
         s = get_storage_table()
@@ -131,7 +133,7 @@ class StorageTestCase(unittest.TestCase):
 
         storage.table.query_2.side_effect = raise_error
         with self.assertRaises(ProvisionedThroughputExceededException):
-            storage.fetch_notifications("asdf")
+            storage.fetch_notifications(dummy_uaid)
 
     def test_delete_over_provisioned(self):
         s = get_storage_table()
@@ -142,7 +144,7 @@ class StorageTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         storage.table.connection.delete_item.side_effect = raise_error
-        results = storage.delete_notification("asdf", "asdf")
+        results = storage.delete_notification(dummy_uaid, dummy_chid)
         eq_(results, False)
 
 
@@ -195,7 +197,7 @@ class MessageTestCase(unittest.TestCase):
         m.connection.update_item.return_value = {
             'Attributes': {'uaid': {'S': self.uaid}},
             'ConsumedCapacityUnits': 0.5}
-        r = message.unregister_channel(self.uaid, "test")
+        r = message.unregister_channel(self.uaid, dummy_chid)
         eq_(r, False)
 
     def test_all_channels(self):
@@ -232,7 +234,7 @@ class MessageTestCase(unittest.TestCase):
     def test_all_channels_no_uaid(self):
         m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
-        exists, chans = message.all_channels("asdf")
+        exists, chans = message.all_channels(dummy_uaid)
         assert(chans == set([]))
 
     def test_message_storage(self):
@@ -322,7 +324,7 @@ class MessageTestCase(unittest.TestCase):
 
         message.table = Mock()
         message.table.delete_item.side_effect = raise_condition
-        result = message.delete_message(uaid="asdf", channel_id="asdf",
+        result = message.delete_message(uaid=dummy_uaid, channel_id=dummy_chid,
                                         message_id="asdf", updateid="asdf")
         eq_(result, False)
 
@@ -415,7 +417,7 @@ class RouterTestCase(unittest.TestCase):
 
         router.table.connection.update_item.side_effect = raise_error
         with self.assertRaises(ProvisionedThroughputExceededException):
-            router.register_user(dict(uaid="asdf", node_id="me",
+            router.register_user(dict(uaid=dummy_uaid, node_id="me",
                                  connected_at=1234))
 
     def test_clear_node_provision_failed(self):
@@ -428,7 +430,8 @@ class RouterTestCase(unittest.TestCase):
 
         router.table.connection.put_item.side_effect = raise_error
         with self.assertRaises(ProvisionedThroughputExceededException):
-            router.clear_node(Item(r, dict(uaid="asdf", connected_at="1234",
+            router.clear_node(Item(r, dict(uaid=dummy_uaid,
+                                           connected_at="1234",
                                            node_id="asdf")))
 
     def test_save_uaid(self):
@@ -465,7 +468,7 @@ class RouterTestCase(unittest.TestCase):
 
         router.table.connection = Mock()
         router.table.connection.update_item.side_effect = raise_condition
-        router_data = dict(uaid="asdf", node_id="asdf", connected_at=1234)
+        router_data = dict(uaid=dummy_uaid, node_id="asdf", connected_at=1234)
         result = router.register_user(router_data)
         eq_(result, (False, {}, router_data))
 
@@ -474,18 +477,18 @@ class RouterTestCase(unittest.TestCase):
         router = Router(r, SinkMetrics())
 
         # Register a node user
-        router.register_user(dict(uaid="asdf", node_id="asdf",
+        router.register_user(dict(uaid=dummy_uaid, node_id="asdf",
                                   connected_at=1234))
 
         # Verify
-        user = router.get_uaid("asdf")
+        user = router.get_uaid(dummy_uaid)
         eq_(user["node_id"], "asdf")
 
         # Clear
         router.clear_node(user)
 
         # Verify
-        user = router.get_uaid("asdf")
+        user = router.get_uaid(dummy_uaid)
         eq_(user.get("node_id"), None)
 
     def test_node_clear_fail(self):
@@ -497,7 +500,7 @@ class RouterTestCase(unittest.TestCase):
 
         router.table.connection.put_item = Mock()
         router.table.connection.put_item.side_effect = raise_condition
-        data = dict(uaid="asdf", node_id="asdf", connected_at=1234)
+        data = dict(uaid=dummy_uaid, node_id="asdf", connected_at=1234)
         result = router.clear_node(Item(r, data))
         eq_(result, False)
 

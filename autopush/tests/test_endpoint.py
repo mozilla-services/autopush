@@ -6,6 +6,8 @@ import uuid
 import base64
 import random
 
+from hashlib import sha256
+
 import ecdsa
 import twisted.internet.base
 from cryptography.fernet import Fernet, InvalidToken
@@ -37,6 +39,8 @@ from autopush.senderids import SenderIDs
 from autopush.utils import (generate_hash, decipher_public_key)
 
 mock_dynamodb2 = mock_dynamodb2()
+dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
+dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
 
 
 def setUp():
@@ -228,13 +232,14 @@ class EndpointTestCase(unittest.TestCase):
         result = utils.parse_header('fee; fie="foe";  fum=""foobar="five""";')
         eq_(result[0], 'fee')
         eq_(result[1], {'fum': 'foobar="five"', 'fie': 'foe'})
+        eq_([], utils.parse_header(""))
 
     def test_uaid_lookup_results(self):
         fresult = dict(router_type="test")
         frouter = Mock(spec=Router)
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
-        self.endpoint.chid = "fred"
+        self.endpoint.chid = dummy_chid
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
         self.endpoint.ap_settings.routers["test"] = frouter
@@ -251,7 +256,7 @@ class EndpointTestCase(unittest.TestCase):
         frouter = Mock(spec=Router)
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
-        self.endpoint.chid = "fred"
+        self.endpoint.chid = dummy_chid
         self.request_mock.headers["ttl"] = "woops"
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
@@ -270,7 +275,7 @@ class EndpointTestCase(unittest.TestCase):
         frouter = Mock(spec=Router)
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
-        self.endpoint.chid = "fred"
+        self.endpoint.chid = dummy_chid
         self.request_mock.headers["ttl"] = str(MAX_TTL + 100)
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
@@ -328,12 +333,12 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(400)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.post(dummy_uaid)
+        self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
     def test_webpush_bad_routertype(self):
         fresult = dict(router_type="fred")
-        self.endpoint.chid = "fred"
+        self.endpoint.chid = dummy_chid
         self.request_mock.body = b"stuff"
         self.endpoint._uaid_lookup_results(fresult)
 
@@ -347,7 +352,7 @@ class EndpointTestCase(unittest.TestCase):
         fresult = dict(router_type="webpush")
         frouter = self.settings.routers["webpush"]
         frouter.route_notification.return_value = RouterResponse()
-        self.endpoint.chid = "fred"
+        self.endpoint.chid = dummy_chid
         self.request_mock.body = b"stuff"
         self.endpoint._uaid_lookup_results(fresult)
 
@@ -362,7 +367,7 @@ class EndpointTestCase(unittest.TestCase):
         fresult = dict(router_type="webpush")
         frouter = self.settings.routers["webpush"]
         frouter.route_notification.return_value = RouterResponse()
-        self.endpoint.chid = "fred"
+        self.endpoint.chid = dummy_chid
         self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
@@ -377,7 +382,7 @@ class EndpointTestCase(unittest.TestCase):
         frouter = Mock(spec=Router)
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
-        self.endpoint.chid = "fred"
+        self.endpoint.chid = dummy_chid
         self.endpoint.ap_settings.routers["test"] = frouter
         self.endpoint._uaid_lookup_results(fresult)
 
@@ -391,7 +396,7 @@ class EndpointTestCase(unittest.TestCase):
         fresult = dict(router_type="webpush")
         frouter = self.settings.routers["webpush"]
         frouter.route_notification.return_value = RouterResponse()
-        self.endpoint.chid = "fred"
+        self.endpoint.chid = dummy_chid
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
         self.request_mock.body = b"\xc3\x28\xa0\xa1"
@@ -401,7 +406,7 @@ class EndpointTestCase(unittest.TestCase):
             calls = frouter.route_notification.mock_calls
             eq_(len(calls), 1)
             (_, (notification, _), _) = calls[0]
-            eq_(notification.channel_id, "fred")
+            eq_(notification.channel_id, dummy_chid)
             eq_(notification.data, b"wyigoQ==")
 
         self.finish_deferred.addCallback(handle_finish)
@@ -412,7 +417,7 @@ class EndpointTestCase(unittest.TestCase):
         frouter = Mock(spec=Router)
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
-        self.endpoint.chid = "fred"
+        self.endpoint.chid = dummy_chid
         self.endpoint.ap_settings.routers["test"] = frouter
 
         self.request_mock.body = b"stuff"
@@ -422,7 +427,7 @@ class EndpointTestCase(unittest.TestCase):
             calls = frouter.route_notification.mock_calls
             eq_(len(calls), 1)
             (_, (notification, _), _) = calls[0]
-            eq_(notification.channel_id, "fred")
+            eq_(notification.channel_id, dummy_chid)
             eq_(notification.data, b"stuff")
 
         self.finish_deferred.addCallback(handle_finish)
@@ -444,10 +449,10 @@ class EndpointTestCase(unittest.TestCase):
         self.request_mock.headers["authorization"] = "bearer token fred"
         d = self.endpoint._init_info()
         eq_(d["authorization"], "bearer token fred")
-        self.endpoint.uaid = "faa"
-        eq_(self.endpoint._client_info["uaid_hash"], hasher("faa"))
-        self.endpoint.chid = "fie"
-        eq_(self.endpoint._client_info['channelID'], "fie")
+        self.endpoint.uaid = dummy_uaid
+        eq_(self.endpoint._client_info["uaid_hash"], hasher(dummy_uaid))
+        self.endpoint.chid = dummy_chid
+        eq_(self.endpoint._client_info['channelID'], dummy_chid)
 
     def test_load_params_arguments(self):
         args = self.endpoint.request.arguments
@@ -510,7 +515,7 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(413)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.put('')
+        self.endpoint.put(None, '')
         return self.finish_deferred
 
     @patch_logger
@@ -525,7 +530,7 @@ class EndpointTestCase(unittest.TestCase):
             self._assert_error_response(value)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.put('')
+        self.endpoint.put(None, '')
         return self.finish_deferred
 
     def test_put_token_invalid(self):
@@ -537,7 +542,7 @@ class EndpointTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(400)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.put('')
+        self.endpoint.put(None, '')
         return self.finish_deferred
 
     def test_put_token_wrong(self):
@@ -548,7 +553,7 @@ class EndpointTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(400)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.put('')
+        self.endpoint.put(None, '')
         return self.finish_deferred
 
     def _throw_item_not_found(self, item):
@@ -569,7 +574,12 @@ class EndpointTestCase(unittest.TestCase):
 
         self.endpoint.version, self.endpoint.data = 789, None
 
-        self.endpoint._token_valid('123:456')
+        exc = self.assertRaises(ValueError,
+                                self.endpoint._token_valid,
+                                ['invalid'])
+        eq_(exc.message, "Wrong subscription token components")
+
+        self.endpoint._token_valid(['123', dummy_chid])
         return self.finish_deferred
 
     def test_put_default_router(self):
@@ -582,7 +592,7 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(200)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.put(dummy_uaid)
+        self.endpoint.put(None, dummy_uaid)
         return self.finish_deferred
 
     def test_put_router_with_headers(self):
@@ -605,7 +615,7 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(200)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.endpoint.put(dummy_uaid)
+        self.endpoint.put(None, dummy_uaid)
         return self.finish_deferred
 
     def test_put_router_needs_change(self):
@@ -625,7 +635,7 @@ class EndpointTestCase(unittest.TestCase):
             assert(self.router_mock.register_user.called)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.put(dummy_uaid)
+        self.endpoint.put(None, dummy_uaid)
         return self.finish_deferred
 
     def test_put_router_needs_update(self):
@@ -645,7 +655,7 @@ class EndpointTestCase(unittest.TestCase):
             assert(self.router_mock.register_user.called)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.put(dummy_uaid)
+        self.endpoint.put(None, dummy_uaid)
         return self.finish_deferred
 
     def test_put_bogus_headers(self):
@@ -669,7 +679,7 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(400)
 
         self.finish_deferred.addBoth(handle_finish)
-        self.endpoint.put(dummy_uaid)
+        self.endpoint.put(None, dummy_uaid)
         return self.finish_deferred
 
     def test_put_invalid_vapid_crypto_header(self):
@@ -693,10 +703,10 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(401)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.endpoint.put(dummy_uaid)
+        self.endpoint.put(None, dummy_uaid)
         return self.finish_deferred
 
-    def test_put_invalid_vapid_auth_header(self):
+    def test_put_invalid_vapid_crypto_key(self):
         self.request_mock.headers["encryption"] = "ignored"
         self.request_mock.headers["content-encoding"] = 'text'
         self.request_mock.headers["authorization"] = "invalid"
@@ -717,7 +727,31 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(401)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.endpoint.put(dummy_uaid)
+        self.endpoint.put(None, dummy_uaid)
+        return self.finish_deferred
+
+    def test_put_invalid_vapid_auth_header(self):
+        self.request_mock.headers["encryption"] = "ignored"
+        self.request_mock.headers["content-encoding"] = 'text'
+        self.request_mock.headers["authorization"] = "invalid"
+        self.request_mock.headers["crypto-key"] = "p256ecdsa=crap"
+        self.request_mock.body = b' '
+        self.fernet_mock.decrypt.return_value = "123:456"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+        self.wp_router_mock.route_notification.return_value = RouterResponse(
+            status_code=200,
+            router_data={},
+        )
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(401)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.put(None, dummy_uaid)
         return self.finish_deferred
 
     def test_put_missing_vapid_crypto_header(self):
@@ -740,7 +774,7 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(401)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.endpoint.put(dummy_uaid)
+        self.endpoint.put(None, dummy_uaid)
         return self.finish_deferred
 
     def test_post_webpush_with_headers_in_response(self):
@@ -764,7 +798,7 @@ class EndpointTestCase(unittest.TestCase):
                 "Location", "Somewhere")
 
         self.finish_deferred.addCallback(handle_finish)
-        self.endpoint.post(dummy_uaid)
+        self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
     def _gen_jwt(self, header, payload):
@@ -812,7 +846,7 @@ class EndpointTestCase(unittest.TestCase):
             self.assertTrue(result)
 
         self.finish_deferred.addCallback(handle_finish, crypto_key, token)
-        self.endpoint.post(dummy_uaid)
+        self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
     def test_decipher_public_key(self):
@@ -865,7 +899,7 @@ class EndpointTestCase(unittest.TestCase):
             self.assertTrue(result)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.endpoint.post(dummy_uaid)
+        self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
     def test_post_webpush_with_bad_vapid_auth(self):
@@ -897,7 +931,7 @@ class EndpointTestCase(unittest.TestCase):
             self.assertTrue(result)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.endpoint.post(dummy_uaid)
+        self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
     def test_post_webpush_no_sig(self):
@@ -932,7 +966,7 @@ class EndpointTestCase(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.post(dummy_uaid)
+        self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
     def test_util_extract_jwt(self):
@@ -970,7 +1004,7 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(401)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.endpoint.post(dummy_uaid)
+        self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
     def test_post_webpush_bad_exp(self):
@@ -1002,7 +1036,7 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(401)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.endpoint.post(dummy_uaid)
+        self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
     def test_post_webpush_with_auth(self):
@@ -1027,7 +1061,7 @@ class EndpointTestCase(unittest.TestCase):
                 "Location", "Somewhere")
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.post(dummy_uaid)
+        self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
     def test_post_webpush_with_logged_delivered(self):
@@ -1058,7 +1092,7 @@ class EndpointTestCase(unittest.TestCase):
             log_patcher.stop()
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.post(dummy_uaid)
+        self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
     def test_post_webpush_with_logged_stored(self):
@@ -1089,7 +1123,7 @@ class EndpointTestCase(unittest.TestCase):
             log_patcher.stop()
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.post(dummy_uaid)
+        self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
     @patch("twisted.python.log")
@@ -1120,7 +1154,7 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(503)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.post(dummy_uaid)
+        self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
     def test_put_db_error(self):
@@ -1132,7 +1166,7 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(503)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.endpoint.put(dummy_uaid)
+        self.endpoint.put(None, dummy_uaid)
         return self.finish_deferred
 
     def test_cors(self):
@@ -1221,9 +1255,84 @@ class EndpointTestCase(unittest.TestCase):
         eq_(utils.fix_padding("ab"), "ab==")
         eq_(utils.fix_padding("abcd"), "abcd")
 
+    def test_parse_endpoint(self):
+        v0_valid = dummy_uaid + ":" + dummy_chid
+        uaid_strip = dummy_uaid.replace('-', '')
+        chid_strip = dummy_chid.replace('-', '')
+        uaid_dec = uaid_strip.decode('hex')
+        chid_dec = chid_strip.decode('hex')
+        v1_valid = uaid_dec + chid_dec
+        pub_key = uuid.uuid4().hex
+        v2_valid = sha256(pub_key).digest()
+        v2_invalid = sha256(uuid.uuid4().hex).digest()
+        # v0 good
+        self.fernet_mock.decrypt.return_value = v0_valid
+        tokens = self.settings.parse_endpoint('/valid')
+        eq_(tokens, (dummy_uaid, dummy_chid))
 
-dummy_uaid = "00000000123412341234567812345678"
-dummy_chid = "11111111123412341234567812345678"
+        # v0 bad
+        self.fernet_mock.decrypt.return_value = v1_valid
+        exc = self.assertRaises(ValueError,
+                                self.settings.parse_endpoint,
+                                '/invalid')
+        eq_(exc.message, 'Corrupted push token')
+
+        self.fernet_mock.decrypt.return_value = v1_valid[:30]
+        exc = self.assertRaises(ValueError,
+                                self.settings.parse_endpoint,
+                                'invalid', 'v1')
+        eq_(exc.message, 'Corrupted push token')
+
+        self.fernet_mock.decrypt.return_value = v1_valid
+        tokens = self.settings.parse_endpoint('valid', 'v1')
+        eq_(tokens, (uaid_strip, chid_strip))
+
+        self.fernet_mock.decrypt.return_value = v1_valid + v2_valid
+        tokens = self.settings.parse_endpoint('valid', 'v2', pub_key)
+        eq_(tokens, (uaid_strip, chid_strip))
+
+        self.fernet_mock.decrypt.return_value = v1_valid + "invalid"
+        exc = self.assertRaises(ValueError,
+                                self.settings.parse_endpoint,
+                                'invalid', 'v2', pub_key)
+        eq_(exc.message, "Corrupted push token")
+
+        self.fernet_mock.decrypt.return_value = v1_valid + v2_valid
+        exc = self.assertRaises(ValueError,
+                                self.settings.parse_endpoint,
+                                'invalid', 'v2', pub_key[:30])
+        eq_(exc.message, "Key mismatch")
+
+        self.fernet_mock.decrypt.return_value = v1_valid + v2_invalid
+        exc = self.assertRaises(ValueError,
+                                self.settings.parse_endpoint,
+                                'invalid', 'v2')
+        eq_(exc.message, "Invalid key data")
+
+        self.fernet_mock.decrypt.return_value = v1_valid + v2_invalid
+        exc = self.assertRaises(ValueError,
+                                self.settings.parse_endpoint,
+                                'invalid', 'v2', pub_key)
+        eq_(exc.message, "Key mismatch")
+
+    def test_make_endpoint(self):
+
+        def echo(val):
+            return val.encode('hex')
+
+        # make a v1 endpoint:
+        self.fernet_mock.encrypt = echo
+        strip_uaid = dummy_uaid.replace('-', '')
+        strip_chid = dummy_chid.replace('-', '')
+        dummy_key = "RandomKeyString"
+        sha = sha256(dummy_key).hexdigest()
+        ep = self.settings.make_endpoint(dummy_uaid, dummy_chid)
+        eq_(ep, 'http://localhost/push/v1/' + strip_uaid + strip_chid)
+        ep = self.settings.make_endpoint(dummy_uaid, dummy_chid,
+                                         "RandomKeyString")
+        eq_(ep, 'http://localhost/push/v2/' + strip_uaid + strip_chid + sha)
+
+
 CORS_HEAD = "POST,PUT,DELETE"
 
 
@@ -1378,9 +1487,9 @@ class RegistrationTestCase(unittest.TestCase):
             ok_(call_args is not None)
             args = call_args[0]
             call_arg = json.loads(args[0])
-            eq_(call_arg["uaid"], dummy_uaid)
+            eq_(call_arg["uaid"], dummy_uaid.replace('-', ''))
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
             ok_("secret" in call_arg)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -1417,9 +1526,9 @@ class RegistrationTestCase(unittest.TestCase):
             ok_(call_args is not None)
             args = call_args[0]
             call_arg = json.loads(args[0])
-            eq_(call_arg["uaid"], dummy_uaid)
+            eq_(call_arg["uaid"], dummy_uaid.replace('-', ''))
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
             calls = self.reg.ap_settings.router.register_user.call_args
             call_args = calls[0][0]
             eq_(True, has_connected_this_month(call_args))
@@ -1475,7 +1584,7 @@ class RegistrationTestCase(unittest.TestCase):
             args = call_args[0]
             call_arg = json.loads(args[0])
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
@@ -1530,7 +1639,7 @@ class RegistrationTestCase(unittest.TestCase):
             args = call_args[0]
             call_arg = json.loads(args[0])
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
@@ -1555,7 +1664,7 @@ class RegistrationTestCase(unittest.TestCase):
             args = call_args[0]
             call_arg = json.loads(args[0])
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
@@ -1613,23 +1722,24 @@ class RegistrationTestCase(unittest.TestCase):
             dummy_chid,
             "1",
             10000)
-        messages.register_channel(dummy_uaid, "test")
+        chid2 = str(uuid.uuid4())
+        messages.register_channel(dummy_uaid, chid2)
         messages.store_message(
             dummy_uaid,
-            "test",
+            chid2,
             "2",
             10000)
         self.reg.request.headers["Authorization"] = self.auth
 
-        def handle_finish(value):
+        def handle_finish(value, chid2):
             ml = messages.fetch_messages(dummy_uaid)
             cl = messages.all_channels(dummy_uaid)
             eq_(len(ml), 1)
-            eq_((True, set(['test'])), cl)
+            eq_((True, set([chid2])), cl)
             messages.delete_user(dummy_uaid)
 
-        self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete("simplepush", "test", uaid=dummy_uaid, chid=dummy_chid)
+        self.finish_deferred.addCallback(handle_finish, chid2)
+        self.reg.delete("simplepush", "test", dummy_uaid, dummy_chid)
         return self.finish_deferred
 
     def test_delete_bad_chid(self):
@@ -1647,11 +1757,12 @@ class RegistrationTestCase(unittest.TestCase):
             messages.delete_user(dummy_uaid)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete("test", "test", uaid=dummy_uaid, chid="invalid")
+        self.reg.delete("test", "test", dummy_uaid, "invalid")
         return self.finish_deferred
 
     def test_delete_uaid(self):
         messages = self.reg.ap_settings.message
+        chid2 = str(uuid.uuid4())
         messages.store_message(
             dummy_uaid,
             dummy_chid,
@@ -1659,15 +1770,14 @@ class RegistrationTestCase(unittest.TestCase):
             10000)
         messages.store_message(
             dummy_uaid,
-            "test",
+            chid2,
             "2",
             10000)
         self.reg.ap_settings.router.drop_user = Mock()
         self.reg.ap_settings.router.drop_user.return_value = True
 
-        def handle_finish(value):
+        def handle_finish(value, chid2):
             ml = messages.fetch_messages(dummy_uaid)
-            cl = messages.all_channels(dummy_uaid)
             eq_(len(ml), 0)
             # Note: Router is mocked, so the UAID is never actually
             # dropped. Normally, this should messages.all_channels
@@ -1675,11 +1785,10 @@ class RegistrationTestCase(unittest.TestCase):
             ok_(self.reg.ap_settings.router.drop_user.called)
             eq_(self.reg.ap_settings.router.drop_user.call_args_list[0][0],
                 (dummy_uaid,))
-            eq_((True, set(["test"])), cl)
 
-        self.finish_deferred.addCallback(handle_finish)
+        self.finish_deferred.addCallback(handle_finish, chid2)
         self.reg.request.headers["Authorization"] = self.auth
-        self.reg.delete("simplepush", "test", uaid=dummy_uaid)
+        self.reg.delete("simplepush", "test", dummy_uaid)
         return self.finish_deferred
 
     def test_delete_bad_uaid(self):
@@ -1689,7 +1798,7 @@ class RegistrationTestCase(unittest.TestCase):
             self.reg.set_status.assert_called_with(401)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete("test", "test", uaid="invalid")
+        self.reg.delete("test", "test", "invalid")
         return self.finish_deferred
 
     def test_delete_orphans(self):
@@ -1701,7 +1810,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.router_mock.drop_user = Mock()
         self.router_mock.drop_user.return_value = False
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete("test", "test", uaid=dummy_uaid)
+        self.reg.delete("test", "test", dummy_uaid)
         return self.finish_deferred
 
     def test_delete_bad_auth(self, *args):
@@ -1711,7 +1820,7 @@ class RegistrationTestCase(unittest.TestCase):
             self.reg.set_status.assert_called_with(401)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete("test", "test", uaid=dummy_uaid)
+        self.reg.delete("test", "test", dummy_uaid)
         return self.finish_deferred
 
     def test_delete_bad_router(self):
@@ -1721,7 +1830,7 @@ class RegistrationTestCase(unittest.TestCase):
             self.reg.set_status.assert_called_with(400)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete("invalid", "test", uaid=dummy_uaid)
+        self.reg.delete("invalid", "test", dummy_uaid)
         return self.finish_deferred
 
     def test_validate_auth(self):
