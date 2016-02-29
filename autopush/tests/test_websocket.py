@@ -943,6 +943,8 @@ class WebsocketTestCase(unittest.TestCase):
         assert self.proto.force_retry.called
 
     def test_ws_unregister(self):
+        patcher = patch("autopush.websocket.log", spec=True)
+        mock_log = patcher.start()
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
@@ -953,12 +955,15 @@ class WebsocketTestCase(unittest.TestCase):
         def check_unregister_result(msg):
             eq_(msg["status"], 200)
             eq_(msg["channelID"], chid)
+            eq_(len(mock_log.mock_calls), 1)
+            patcher.stop()
             d.callback(True)
 
         def check_hello_result(msg):
             eq_(msg["messageType"], "hello")
             eq_(msg["status"], 200)
             self._send_message(dict(messageType="unregister",
+                                    code=104,
                                     channelID=chid))
             self._check_response(check_unregister_result)
 
@@ -1201,7 +1206,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.force_retry = Mock(return_value=mock_defer)
         self.proto.ack_update(dict(
             channelID=chid,
-            version="bleh:jialsdjfilasjdf"
+            version="bleh:jialsdjfilasjdf",
+            code=200
         ))
         assert self.proto.force_retry.called
         assert mock_defer.addBoth.called
@@ -1210,6 +1216,27 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(args[0], "Ack")
         eq_(kwargs["router_key"], "webpush")
         eq_(kwargs["message_source"], "stored")
+
+    @patch('autopush.websocket.log', spec=True)
+    def test_nack(self, mock_log):
+        self._connect()
+        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.onMessage(json.dumps(dict(
+            messageType="nack",
+            version="bleh:asdfhjklhjkl",
+            code=200
+        )), False)
+        eq_(len(mock_log.mock_calls), 1)
+
+    @patch('autopush.websocket.log', spec=True)
+    def test_nack_no_version(self, mock_log):
+        self._connect()
+        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.onMessage(json.dumps(dict(
+            messageType="nack",
+            code=200
+        )), False)
+        eq_(len(mock_log.mock_calls), 0)
 
     def test_ack_remove(self):
         self._connect()
