@@ -53,8 +53,9 @@ class WebPushRouter(SimpleRouter):
         # they're present to avoid empty strings.
         for name in ["encryption-key", "crypto-key"]:
             if name in headers:
-                # Normalize hyphens in header names.
-                data[name.replace("-", "_")] = headers[name]
+                # NOTE: The client code expects all header keys to be lower
+                # case and s/-/_/.
+                data[name.lower().replace("-", "_")] = headers[name]
         return data
 
     @inlineCallbacks
