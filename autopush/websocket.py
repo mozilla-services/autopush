@@ -68,6 +68,16 @@ from autopush.utils import validate_uaid, ErrorLogger
 from autopush.noseplugin import track_object
 
 
+def extract_code(data):
+    """Extracts and converts a code key if found in data dict"""
+    code = data.get("code", None)
+    if code and isinstance(code, int):
+        code = code
+    else:
+        code = 0
+    return code
+
+
 def ms_time():
     """Return current time.time call as ms and a Python int"""
     return int(time.time() * 1000)
@@ -403,6 +413,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                 return self.process_unregister(data)
             elif cmd == "ack":
                 return self.process_ack(data)
+            elif cmd == "nack":
+                return self.process_nack(data)
             else:
                 self.sendClose()
         finally:
@@ -1037,6 +1049,12 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.ps.metrics.increment("updates.client.unregister",
                                   tags=self.base_tags)
 
+        # Log out the unregister if it has a code in it
+        if "code" in data:
+            code = extract_code(data)
+            log.msg("Unregister", channelID=chid, uaid_hash=self.ps.uaid_hash,
+                    user_agent=self.ps.user_agent, code=code)
+
         # Clear out any existing tracked messages for this channel
         if self.ps.use_webpush:
             self.ps.direct_updates[chid] = []
@@ -1075,12 +1093,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if not chid or not version:
             return
 
-        if self.ps.use_webpush:
-            return self._handle_webpush_ack(chid, version)
-        else:
-            return self._handle_simple_ack(chid, version)
+        code = extract_code(update)
 
-    def _handle_webpush_ack(self, chid, version):
+        if self.ps.use_webpush:
+            return self._handle_webpush_ack(chid, version, code)
+        else:
+            return self._handle_simple_ack(chid, version, code)
+
+    def _handle_webpush_ack(self, chid, version, code):
         """Handle clearing out a webpush ack"""
         # Split off the updateid if its not a direct update
         version, updateid = version.split(":")
@@ -1095,7 +1115,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             log.msg("Ack", router_key="webpush", channelID=chid,
                     message_id=version, message_source="direct",
                     message_size=size, uaid_hash=self.ps.uaid_hash,
-                    user_agent=self.ps.user_agent)
+                    user_agent=self.ps.user_agent, code=code)
             self.ps.direct_updates[chid].remove(msg)
             return
 
@@ -1106,7 +1126,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             log.msg("Ack", router_key="webpush", channelID=chid,
                     message_id=version, message_source="stored",
                     message_size=size, uaid_hash=self.ps.uaid_hash,
-                    user_agent=self.ps.user_agent)
+                    user_agent=self.ps.user_agent, code=code)
             d = self.force_retry(self.ps.message.delete_message,
                                  uaid=self.ps.uaid,
                                  channel_id=chid,
@@ -1131,7 +1151,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         except AttributeError:
             pass
 
-    def _handle_simple_ack(self, chid, version):
+    def _handle_simple_ack(self, chid, version, code):
         """Handle clearing out a simple ack"""
         if chid in self.ps.direct_updates and \
            self.ps.direct_updates[chid] <= version:
@@ -1139,12 +1159,12 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             log.msg("Ack", router_key="simplepush", channelID=chid,
                     message_id=version, message_source="direct",
                     uaid_hash=self.ps.uaid_hash,
-                    user_agent=self.ps.user_agent)
+                    user_agent=self.ps.user_agent, code=code)
             return
         log.msg("Ack", router_key="simplepush", channelID=chid,
                 message_id=version, message_source="stored",
                 uaid_hash=self.ps.uaid_hash,
-                user_agent=self.ps.user_agent)
+                user_agent=self.ps.user_agent, code=code)
         if chid in self.ps.updates_sent and \
            self.ps.updates_sent[chid] <= version:
             del self.ps.updates_sent[chid]
@@ -1169,6 +1189,19 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             dl.addBoth(self.check_missed_notifications, True)
         else:
             self.check_missed_notifications(None)
+
+    def process_nack(self, data):
+        """Process a nack message and log its contents"""
+        code = extract_code(data)
+        version = data.get("version")
+        if not version:
+            return
+
+        version, updateid = version.split(":")
+
+        log.msg("Nack", uaid_hash=self.ps.uaid_hash,
+                user_agent=self.ps.user_agent, message_id=version,
+                code=code)
 
     def check_missed_notifications(self, results, resume=False):
         """Check to see if notifications were missed"""
