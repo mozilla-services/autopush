@@ -17,6 +17,7 @@ import sys
 import raven
 from eliot import (add_destination, fields,
                    Logger, MessageType)
+from twisted.internet import reactor
 from twisted.python.log import textFromEventDict, startLoggingWithObserver
 
 HOSTNAME = socket.getfqdn()
@@ -41,8 +42,11 @@ class EliotObserver(object):
     def raven_log(self, event):
         """Log out twisted exception failures to Raven"""
         f = event['failure']
-        self.raven_client.captureException(
-            (f.type, f.value, f.getTracebackObject()))
+        # Throw back to event loop
+        reactor.callFromThread(
+            self.raven_client.captureException,
+            (f.type, f.value, f.getTracebackObject())
+        )
 
     def __call__(self, msg):
         """Called to log out messages"""

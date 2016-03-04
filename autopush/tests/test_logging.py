@@ -5,6 +5,8 @@ import twisted.trial.unittest
 
 from mock import Mock, patch
 from nose.tools import eq_, ok_
+from twisted.internet import reactor
+from twisted.internet.defer import Deferred
 from twisted.python import log, failure
 
 from autopush.logging import setup_logging
@@ -28,8 +30,17 @@ class SentryLogTestCase(twisted.trial.unittest.TestCase):
 
         log.err(failure.Failure(Exception("eek")))
         self.flushLoggedErrors()
-        eq_(len(self.mock_client.mock_calls), 1)
+        d = Deferred()
+
+        def check():
+            if len(self.mock_client.mock_calls):
+                eq_(len(self.mock_client.mock_calls), 1)
+                d.callback(True)
+            else:  # pragma: nocover
+                reactor.callLater(0, check)
         del os.environ["SENTRY_DSN"]
+        reactor.callLater(0, check)
+        return d
 
 
 class EliotLogTestCase(twisted.trial.unittest.TestCase):
