@@ -1148,7 +1148,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         """
         try:
             self.ps.updates_sent[chid].remove(notif)
-        except AttributeError:
+        except (AttributeError, ValueError):
             pass
 
     def _handle_simple_ack(self, chid, version, code):
