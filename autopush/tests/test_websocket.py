@@ -1258,6 +1258,14 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.updates_sent[chid] = None
         self.proto._handle_webpush_update_remove(None, chid, notif)
 
+    def test_ack_remove_missing(self):
+        self._connect()
+        chid = str(uuid.uuid4())
+        notif = Notification(version="bleh", headers={}, data="meh",
+                             channel_id=chid, ttl=200, timestamp=0)
+        self.proto.ps.updates_sent[chid] = []
+        self.proto._handle_webpush_update_remove(None, chid, notif)
+
     def test_ack_fails_first_time(self):
         self._connect()
         self.proto.ps.uaid = str(uuid.uuid4())
