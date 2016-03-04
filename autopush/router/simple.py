@@ -97,6 +97,7 @@ class SimpleRouter(object):
         #   - Error (Client gone, node gone/dead): Clear node entry for user
         #       - Both: Done, return 503
         if node_id:
+            result = None
             try:
                 result = yield self._send_notification(uaid, node_id,
                                                        notification)
@@ -107,10 +108,7 @@ class SimpleRouter(object):
                                     uaid_data).addErrback(self._eat_db_err)
                 if isinstance(exc, ConnectionRefusedError):
                     log.err("Could not route message: %s" % repr(exc))
-                raise RouterException("Node was invalid", status_code=503,
-                                      response_body="Retry Request",
-                                      log_exception=False, errno=202)
-            if result.code == 200:
+            if result and result.code == 200:
                 self.metrics.increment("router.broadcast.hit")
                 returnValue(self.delivered_response(notification))
 
