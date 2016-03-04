@@ -489,32 +489,21 @@ class SimplePushRouterTestCase(unittest.TestCase):
                 return True
         return False  # pragma: nocover
 
-    def test_route_connection_refused_error(self):
+    def test_route_connection_fail_saved(self):
         self.agent_mock.request.side_effect = MockAssist(
             [self._raise_connection_refused_error])
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
         self.router_mock.clear_node.return_value = None
+        self.router_mock.get_uaid.return_value = {}
         log.addObserver(self._mockObserver)
+        self.storage_mock.save_notification.return_value = True
         d = self.router.route_notification(self.notif, router_data)
 
-        def verify_retry(fail):
-            exc = fail.value
-            ok_(exc, RouterException)
-            eq_(exc.status_code, 503)
-            eq_(len(self.router_mock.clear_node.mock_calls), 1)
-            self.router_mock.clear_node.reset_mock()
-            self.flushLoggedErrors()
-
-        def verify_deliver(fail):
+        def verify_deliver(reply):
             ok_(self._contains_err('ConnectionRefusedError'))
-            exc = fail.value
-            ok_(exc, RouterException)
-            eq_(exc.status_code, 503)
+            ok_(reply.status_code, 202)
             eq_(len(self.router_mock.clear_node.mock_calls), 1)
-            self.router_mock.clear_node.reset_mock()
-            d = self.router.route_notification(self.notif, router_data)
-            d.addBoth(verify_retry)
-            return d
+
         d.addBoth(verify_deliver)
         return d
 
