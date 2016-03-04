@@ -90,7 +90,7 @@ def _get_vapid(key=None, payload=None):
         key = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
     vk = key.get_verifying_key()
     auth = jws.sign(payload, key, algorithm="ES256").strip('=')
-    crypto_key = base64.urlsafe_b64encode(vk.to_string()).strip('=')
+    crypto_key = base64.urlsafe_b64encode('\4' + vk.to_string()).strip('=')
     return {"auth": auth,
             "crypto-key": crypto_key,
             "key": key}
@@ -146,9 +146,11 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         eq_(result["status"], 200)
         return result
 
-    def register(self, chid=None):
+    def register(self, chid=None, key=None):
         chid = chid or str(uuid.uuid4())
-        msg = json.dumps(dict(messageType="register", channelID=chid))
+        msg = json.dumps(dict(messageType="register",
+                              channelID=chid,
+                              key=key))
         log.debug("Send: %s", msg)
         self.ws.send(msg)
         result = json.loads(self.ws.recv())
@@ -186,20 +188,17 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 
     def send_notification(self, channel=None, version=None, data=None,
                           use_header=True, status=None, ttl=200,
-                          timeout=0.2, vapid=False):
+                          timeout=0.2, vapid=None):
         if not channel:
             channel = random.choice(self.channels.keys())
 
         endpoint = self.channels[channel]
         url = urlparse.urlparse(endpoint)
         http = None
-        vapid_info = None
         if url.scheme == "https":  # pragma: nocover
             http = httplib.HTTPSConnection(url.netloc)
         else:
             http = httplib.HTTPConnection(url.netloc)
-        if vapid:
-            vapid_info = _get_vapid()
 
         if self.use_webpush:
             headers = {}
@@ -214,9 +213,9 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                 })
             if vapid:
                 headers.update({
-                    "Authorization": "Bearer " + vapid_info.get('auth')
+                    "Authorization": "Bearer " + vapid.get('auth')
                 })
-                ckey = 'p256ecdsa="' + vapid_info.get('crypto-key') + '"'
+                ckey = 'p256ecdsa="' + vapid.get('crypto-key') + '"'
                 headers.update({
                     'Crypto-Key': headers.get('Crypto-Key') + ';' + ckey
                 })
@@ -362,7 +361,8 @@ class IntegrationBase(unittest.TestCase):
 
         # Endpoint HTTP router
         site = cyclone.web.Application([
-            (r"/push/([^\/]+)", EndpointHandler, dict(ap_settings=settings)),
+            (r"/push/(v\d+)?/?([^\/]+)", EndpointHandler,
+             dict(ap_settings=settings)),
             (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
             # PUT /register/ => connect info
             # GET /register/uaid => chid + endpoint
@@ -693,7 +693,8 @@ class TestWebPush(IntegrationBase):
     def test_basic_delivery_with_vapid(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
-        result = yield client.send_notification(data=data, vapid=True)
+        vapid_info = _get_vapid()
+        result = yield client.send_notification(data=data, vapid=vapid_info)
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], urlsafe_b64encode(data))
         eq_(result["messageType"], "notification")
@@ -1247,6 +1248,34 @@ class TestWebPush(IntegrationBase):
         c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
         eq_(c["current_month"], self._settings.current_msg_month)
         eq_(server_client.ps.rotate_message_table, False)
+
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_with_key(self):
+        private_key = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
+        claims = {"aud": "http://example.com",
+                  "exp": int(time.time()) + 86400,
+                  "sub": "a@example.com"}
+        vapid = _get_vapid(private_key, claims)
+        pk_hex = vapid['crypto-key']
+        chid = str(uuid.uuid4())
+        client = Client("ws://localhost:9010/", use_webpush=True)
+        yield client.connect()
+        yield client.hello()
+        yield client.register(chid=chid, key=pk_hex)
+        # check that the client actually registered the key.
+
+        # Send an update with a properly formatted key.
+        yield client.send_notification(vapid=vapid)
+
+        # now try an invalid key.
+        new_key = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
+        vapid = _get_vapid(new_key, claims)
+
+        yield client.send_notification(
+            vapid=vapid,
+            status=400)
 
         yield self.shut_down(client)
 
