@@ -1,3 +1,20 @@
+<a name="1.13"></a>
+## 1.13 (2016-03-07)
+
+
+#### Features
+
+*   accept nack messages, log code for ack/unreg/nack ([2030a4df](https://github.com/mozilla-services/autopush/commit/2030a4df980a9fc04c7edaae85fb57175510481e), closes [#380](https://github.com/mozilla-services/autopush/issues/380))
+
+#### Bug Fixes
+
+*   send raven calls to event loop ([d35a78d4](https://github.com/mozilla-services/autopush/commit/d35a78d44c0838d2b72492b23031614611e960dd), closes [#387](https://github.com/mozilla-services/autopush/issues/387))
+*   capture ValueError for empty notifications arrays ([ce27f1e3](https://github.com/mozilla-services/autopush/commit/ce27f1e383886219710786f9d5233e6e7bc95226), closes [#385](https://github.com/mozilla-services/autopush/issues/385))
+*   don't return 503 for disconnected user ([43a2e906](https://github.com/mozilla-services/autopush/commit/43a2e90692e81742afe9a44bf836079bcaf2604d), closes [#378](https://github.com/mozilla-services/autopush/issues/378))
+*   force header values to lowercase underscored values ([b4517aeb](https://github.com/mozilla-services/autopush/commit/b4517aeb4c804d0d03063d31dd00ea9db4b39bc1), closes [#373](https://github.com/mozilla-services/autopush/issues/373))
+*   change message_type to message_source ([d603902c](https://github.com/mozilla-services/autopush/commit/d603902ce7a01ad140eb69c61dd7935a8370315b))
+*   pass TTL Header value to GCM ([c5ae841c](https://github.com/mozilla-services/autopush/commit/c5ae841cbd7f8e31dc72f6f42ae1ffe53d5d4078))
+
 <a name="1.12.1"></a>
 ### 1.12.1 (2016-02-25)
 
