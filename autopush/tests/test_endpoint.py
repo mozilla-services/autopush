@@ -444,8 +444,10 @@ class EndpointTestCase(unittest.TestCase):
         d = self.endpoint._init_info()
         eq_(d["remote_ip"], "local1")
         self.request_mock.headers["x-forwarded-for"] = "local2"
+        self.request_mock.headers["ttl"] = "0"
         d = self.endpoint._init_info()
         eq_(d["remote_ip"], "local2")
+        eq_(d["message_ttl"], "0")
         self.request_mock.headers["authorization"] = "bearer token fred"
         d = self.endpoint._init_info()
         eq_(d["authorization"], "bearer token fred")
@@ -841,7 +843,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result, crypto_key, token):
             self.endpoint.set_status.assert_called_with(201)
-            payload.update({'crypto_key': crypto_key, 'token': token})
+            payload.update({'crypto_key': crypto_key})
             eq_(self.endpoint._client_info.get('jwt'), payload)
             self.assertTrue(result)
 
@@ -972,6 +974,13 @@ class EndpointTestCase(unittest.TestCase):
     def test_util_extract_jwt(self):
         eq_(utils.extract_jwt('a.b.c', None), {})
         eq_(utils.extract_jwt(None, 'present_but_invalid_key'), {})
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+
+        (sig, crypto_key) = self._gen_jwt(header, payload)
+        eq_(utils.extract_jwt(sig, crypto_key), payload)
 
     def test_post_webpush_bad_sig(self):
         self.fernet_mock.decrypt.return_value = "123:456"

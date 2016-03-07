@@ -186,6 +186,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
             "remote_ip": self.request.headers.get("x-forwarded-for",
                                                   self.request.remote_ip),
             "authorization": self.request.headers.get("authorization", ""),
+            "message_ttl": self.request.headers.get("ttl", ""),
         }
 
     #############################################################
@@ -297,7 +298,6 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         if jwt.get('exp', 0) < time.time():
             raise VapidAuthException("Invalid bearer token: Auth expired")
         jwt['crypto_key'] = crypto_key
-        jwt['token'] = token
         self._client_info['jwt'] = jwt
         return result
 
