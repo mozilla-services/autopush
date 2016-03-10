@@ -290,6 +290,9 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
     def disconnect(self):
         self.ws.close()
 
+    def sleep(self, duration):
+        time.sleep(duration)
+
 
 class IntegrationBase(unittest.TestCase):
     track_objects = True
@@ -539,7 +542,15 @@ class TestSimple(IntegrationBase):
         yield client.connect()
         yield client.hello()
         yield client.disconnect()
-        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
+        times = 0
+        while times < 10:
+            c = yield deferToThread(self._settings.router.get_uaid,
+                                    client.uaid)
+            if has_connected_this_month(c):
+                break
+            else:  # pragma: nocover
+                times += 1
+                yield client.sleep(1)
         log.debug("Last connected time: %s", c.get("last_connect", "None"))
         eq_(True, has_connected_this_month(c))
 
