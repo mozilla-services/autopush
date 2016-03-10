@@ -188,11 +188,11 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 
     def send_notification(self, channel=None, version=None, data=None,
                           use_header=True, status=None, ttl=200,
-                          timeout=0.2, vapid=None):
+                          timeout=0.2, vapid=None, endpoint=None):
         if not channel:
             channel = random.choice(self.channels.keys())
 
-        endpoint = self.channels[channel]
+        endpoint = endpoint or self.channels[channel]
         url = urlparse.urlparse(endpoint)
         http = None
         if url.scheme == "https":  # pragma: nocover
@@ -375,6 +375,11 @@ class IntegrationBase(unittest.TestCase):
         )
         self.website = reactor.listenTCP(9020, site)
         self._settings = settings
+
+    def _make_v0_endpoint(self, uaid, chid):
+        return self._settings.endpoint_url + '/push/' + \
+            self._settings.fernet.encrypt(
+                (uaid + ":" + chid).encode('utf-8'))
 
     @inlineCallbacks
     def tearDown(self):
@@ -684,6 +689,18 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         result = yield client.send_notification(data=data)
+        eq_(result["headers"]["encryption"], client._crypto_key)
+        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["messageType"], "notification")
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_basic_delivery_v0_endpoint(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        endpoint = self._make_v0_endpoint(
+            client.uaid, client.channels.keys()[0])
+        result = yield client.send_notification(endpoint=endpoint, data=data)
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], urlsafe_b64encode(data))
         eq_(result["messageType"], "notification")

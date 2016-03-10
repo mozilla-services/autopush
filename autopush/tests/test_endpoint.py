@@ -21,6 +21,7 @@ from twisted.trial import unittest
 from twisted.web.client import Agent, Response
 from txstatsd.metrics.metrics import Metrics
 
+
 import autopush.endpoint as endpoint
 import autopush.utils as utils
 from autopush.db import (
@@ -33,6 +34,7 @@ from autopush.db import (
     has_connected_this_month,
     hasher
 )
+from autopush.exceptions import InvalidTokenException
 from autopush.settings import AutopushSettings
 from autopush.router.interface import IRouter, RouterResponse
 from autopush.senderids import SenderIDs
@@ -41,6 +43,7 @@ from autopush.utils import (generate_hash, decipher_public_key)
 mock_dynamodb2 = mock_dynamodb2()
 dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
 dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
+dummy_token = dummy_uaid + ":" + dummy_chid
 
 
 def setUp():
@@ -307,7 +310,7 @@ class EndpointTestCase(unittest.TestCase):
 
     def test_webpush_missing_ttl_user_offline(self):
         from autopush.router.interface import RouterException
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         del(self.request_mock.headers["ttl"])
         self.request_mock.headers["encryption"] = "stuff"
@@ -508,7 +511,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(data, 'bai')
 
     def test_put_data_too_large(self):
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.ap_settings.router.get_uaid.return_value = {}
         self.endpoint.ap_settings.max_data = 3
         self.endpoint.request.body = b'version=1&data=1234'
@@ -576,7 +579,7 @@ class EndpointTestCase(unittest.TestCase):
 
         self.endpoint.version, self.endpoint.data = 789, None
 
-        exc = self.assertRaises(ValueError,
+        exc = self.assertRaises(InvalidTokenException,
                                 self.endpoint._token_valid,
                                 ['invalid'])
         eq_(exc.message, "Wrong subscription token components")
@@ -585,7 +588,7 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_put_default_router(self):
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.return_value = dict()
         self.sp_router_mock.route_notification.return_value = RouterResponse()
 
@@ -602,7 +605,7 @@ class EndpointTestCase(unittest.TestCase):
         self.request_mock.headers["content-encoding"] = 'text'
         self.request_mock.headers["encryption-key"] = "encKey"
         self.request_mock.body = b' '
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.return_value = dict(
             router_type="webpush",
             router_data=dict(),
@@ -621,7 +624,7 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_put_router_needs_change(self):
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.return_value = dict(
             router_type="simplepush",
             router_data=dict(),
@@ -641,7 +644,7 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_put_router_needs_update(self):
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.return_value = dict(
             router_type="simplepush",
             router_data=dict(),
@@ -666,7 +669,7 @@ class EndpointTestCase(unittest.TestCase):
         self.request_mock.headers["encryption-key"] = "encKey"
         self.request_mock.headers["crypto-key"] = "fake=crypKey"
         self.request_mock.body = b' '
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.return_value = dict(
             router_type="webpush",
             router_data=dict(),
@@ -690,7 +693,7 @@ class EndpointTestCase(unittest.TestCase):
         self.request_mock.headers["authorization"] = "some auth"
         self.request_mock.headers["crypto-key"] = "crypKey"
         self.request_mock.body = b' '
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.return_value = dict(
             router_type="webpush",
             router_data=dict(),
@@ -714,7 +717,7 @@ class EndpointTestCase(unittest.TestCase):
         self.request_mock.headers["authorization"] = "invalid"
         self.request_mock.headers["crypto-key"] = "crypt=crap"
         self.request_mock.body = b' '
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.return_value = dict(
             router_type="webpush",
             router_data=dict(),
@@ -738,7 +741,7 @@ class EndpointTestCase(unittest.TestCase):
         self.request_mock.headers["authorization"] = "invalid"
         self.request_mock.headers["crypto-key"] = "p256ecdsa=crap"
         self.request_mock.body = b' '
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.return_value = dict(
             router_type="webpush",
             router_data=dict(),
@@ -761,7 +764,7 @@ class EndpointTestCase(unittest.TestCase):
         self.request_mock.headers["content-encoding"] = 'text'
         self.request_mock.headers["authorization"] = "some auth"
         self.request_mock.body = b' '
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.return_value = dict(
             router_type="webpush",
             router_data=dict(),
@@ -780,7 +783,7 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_post_webpush_with_headers_in_response(self):
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
@@ -811,7 +814,7 @@ class EndpointTestCase(unittest.TestCase):
         return (sig, crypto_key)
 
     def test_post_webpush_with_vapid_auth(self):
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
@@ -873,7 +876,7 @@ class EndpointTestCase(unittest.TestCase):
         self.assertRaises(ValueError, decipher_public_key, crap[:60])
 
     def test_post_webpush_with_other_than_vapid_auth(self):
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
@@ -905,7 +908,7 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_post_webpush_with_bad_vapid_auth(self):
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
@@ -937,7 +940,7 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_post_webpush_no_sig(self):
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
@@ -983,7 +986,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(utils.extract_jwt(sig, crypto_key), payload)
 
     def test_post_webpush_bad_sig(self):
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
@@ -1017,7 +1020,7 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_post_webpush_bad_exp(self):
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
@@ -1049,7 +1052,7 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_post_webpush_with_auth(self):
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
@@ -1077,7 +1080,7 @@ class EndpointTestCase(unittest.TestCase):
         import autopush.endpoint
         log_patcher = patch.object(autopush.endpoint.log, "msg", spec=True)
         mock_log = log_patcher.start()
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
@@ -1108,7 +1111,7 @@ class EndpointTestCase(unittest.TestCase):
         import autopush.endpoint
         log_patcher = patch.object(autopush.endpoint.log, "msg", spec=True)
         mock_log = log_patcher.start()
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
@@ -1138,7 +1141,7 @@ class EndpointTestCase(unittest.TestCase):
     @patch("twisted.python.log")
     def test_post_db_error_in_routing(self, mock_log):
         from autopush.router.interface import RouterException
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         self.request_mock.headers["encryption"] = "stuff"
         self.request_mock.headers["content-encoding"] = "aes128"
@@ -1167,7 +1170,7 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_put_db_error(self):
-        self.fernet_mock.decrypt.return_value = "123:456"
+        self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.side_effect = self._throw_provisioned_error
 
         def handle_finish(result):
@@ -1281,13 +1284,13 @@ class EndpointTestCase(unittest.TestCase):
 
         # v0 bad
         self.fernet_mock.decrypt.return_value = v1_valid
-        exc = self.assertRaises(ValueError,
+        exc = self.assertRaises(InvalidTokenException,
                                 self.settings.parse_endpoint,
                                 '/invalid')
         eq_(exc.message, 'Corrupted push token')
 
         self.fernet_mock.decrypt.return_value = v1_valid[:30]
-        exc = self.assertRaises(ValueError,
+        exc = self.assertRaises(InvalidTokenException,
                                 self.settings.parse_endpoint,
                                 'invalid', 'v1')
         eq_(exc.message, 'Corrupted push token')
@@ -1301,25 +1304,25 @@ class EndpointTestCase(unittest.TestCase):
         eq_(tokens, (uaid_strip, chid_strip))
 
         self.fernet_mock.decrypt.return_value = v1_valid + "invalid"
-        exc = self.assertRaises(ValueError,
+        exc = self.assertRaises(InvalidTokenException,
                                 self.settings.parse_endpoint,
                                 'invalid', 'v2', pub_key)
         eq_(exc.message, "Corrupted push token")
 
         self.fernet_mock.decrypt.return_value = v1_valid + v2_valid
-        exc = self.assertRaises(ValueError,
+        exc = self.assertRaises(InvalidTokenException,
                                 self.settings.parse_endpoint,
                                 'invalid', 'v2', pub_key[:30])
         eq_(exc.message, "Key mismatch")
 
         self.fernet_mock.decrypt.return_value = v1_valid + v2_invalid
-        exc = self.assertRaises(ValueError,
+        exc = self.assertRaises(InvalidTokenException,
                                 self.settings.parse_endpoint,
                                 'invalid', 'v2')
         eq_(exc.message, "Invalid key data")
 
         self.fernet_mock.decrypt.return_value = v1_valid + v2_invalid
-        exc = self.assertRaises(ValueError,
+        exc = self.assertRaises(InvalidTokenException,
                                 self.settings.parse_endpoint,
                                 'invalid', 'v2', pub_key)
         eq_(exc.message, "Key mismatch")

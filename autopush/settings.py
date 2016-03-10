@@ -24,6 +24,7 @@ from autopush.db import (
     Router,
     Message
 )
+from autopush.exceptions import InvalidTokenException
 from autopush.metrics import (
     DatadogMetrics,
     TwistedMetrics,
@@ -293,16 +294,16 @@ class AutopushSettings(object):
 
         if version == 'v0':
             if ':' not in token:
-                raise ValueError("Corrupted push token")
+                raise InvalidTokenException("Corrupted push token")
             return tuple(token.split(':'))
         if version == 'v1' and len(token) != 32:
-            raise ValueError("Corrupted push token")
+            raise InvalidTokenException("Corrupted push token")
         if version == 'v2':
             if len(token) != 64:
-                raise ValueError("Corrupted push token")
+                raise InvalidTokenException("Corrupted push token")
             if not public_key:
-                raise ValueError("Invalid key data")
+                raise InvalidTokenException("Invalid key data")
             if not constant_time.bytes_eq(sha256(public_key).digest(),
                                           token[32:]):
-                raise ValueError("Key mismatch")
+                raise InvalidTokenException("Key mismatch")
         return (token[:16].encode('hex'), token[16:32].encode('hex'))

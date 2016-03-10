@@ -45,6 +45,7 @@ from autopush.db import (
     hasher,
     normalize_id,
 )
+from autopush.exceptions import InvalidTokenException
 from autopush.router.interface import RouterException
 from autopush.utils import (
     generate_hash,
@@ -268,7 +269,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
 
     def _token_err(self, fail):
         """errBack for token decryption fail"""
-        fail.trap(InvalidToken, ValueError)
+        fail.trap(InvalidToken, InvalidTokenException)
         log.msg("Invalid token", **self._client_info)
         self._write_response(400, 102)
 
@@ -354,11 +355,11 @@ class MessageHandler(AutoendpointHandler):
         function"""
         info = result.split(":")
         if len(info) != 3:
-            raise ValueError("Wrong message token components")
+            raise InvalidTokenException("Wrong message token components")
 
         kind, uaid, chid = info
         if kind != 'm':
-            raise ValueError("Wrong message token kind")
+            raise InvalidTokenException("Wrong message token kind")
         return func(kind, uaid, chid)
 
     @cyclone.web.asynchronous
@@ -409,6 +410,7 @@ class EndpointHandler(AutoendpointHandler):
         Primary entry-point to handling a notification for a push client.
 
         """
+        api_ver = api_ver or "v0"
         self.start_time = time.time()
         public_key = None
         keys = {}
@@ -436,7 +438,7 @@ class EndpointHandler(AutoendpointHandler):
     def _token_valid(self, result):
         """Called after the token is decrypted successfully"""
         if len(result) != 2:
-            raise ValueError("Wrong subscription token components")
+            raise InvalidTokenException("Wrong subscription token components")
 
         self.uaid, self.chid = result
         d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
