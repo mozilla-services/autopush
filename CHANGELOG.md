@@ -1,3 +1,21 @@
+<a name="1.13.1"></a>
+## 1.13.1 (2016-03-10)
+
+
+#### Test
+
+*   fix timing issue in last connect test ([c4039df1](https://github.com/mozilla-services/autopush/commit/c4039df1e159d17f64a316dc8378a64c458ad7fe))
+
+#### Chore
+
+*   fix changelog and clog for past commit oopsies ([90c3ab16](https://github.com/mozilla-services/autopush/commit/90c3ab16addc150d17a161cf091b8a2ea9239d68))
+*   update version for 1.13.1 ([7a960b4c](https://github.com/mozilla-services/autopush/commit/7a960b4ce24e7c9225a053f63a038f3a5c6d28c5))
+
+#### Bug Fixes
+
+*   default api_ver to v0 for message endpoint ([86ba66d4](https://github.com/mozilla-services/autopush/commit/86ba66d46792c8cbd746c706c82390e6823ef686), closes [#395](https://github.com/mozilla-services/autopush/issues/395))
+
+
 <a name="1.13"></a>
 ## 1.13 (2016-03-07)
 
