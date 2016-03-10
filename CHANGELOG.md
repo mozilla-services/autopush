@@ -4,6 +4,7 @@
 
 #### Features
 
+*   allow channels to register with public key ([3d15b9bb](https://github.com/mozilla-services/autopush/commit/3d15b9bbc5002d8c6b03b3fd57418aa1892be0e7), closes [#326](https://github.com/mozilla-services/autopush/issues/326))
 *   accept nack messages, log code for ack/unreg/nack ([2030a4df](https://github.com/mozilla-services/autopush/commit/2030a4df980a9fc04c7edaae85fb57175510481e), closes [#380](https://github.com/mozilla-services/autopush/issues/380))
 
 #### Bug Fixes
