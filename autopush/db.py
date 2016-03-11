@@ -671,7 +671,7 @@ class Router(object):
             cond = "(node_id = :node) and (connected_at = :conn)"
             conn.put_item(
                 self.table.table_name,
-                item=item.get_raw_keys(),
+                item=self.encode(item),
                 condition_expression=cond,
                 expression_attribute_values=self.encode({
                     ":node": node_id,

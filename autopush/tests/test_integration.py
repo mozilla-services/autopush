@@ -293,6 +293,15 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
     def sleep(self, duration):
         time.sleep(duration)
 
+    def wait_for(self, func):
+        """Waits several seconds for a function to return True"""
+        times = 0
+        while not func():  # pragma: nocover
+            time.sleep(1)
+            times += 1
+            if times > 9:  # pragma: nocover
+                break
+
 
 class IntegrationBase(unittest.TestCase):
     track_objects = True
@@ -669,6 +678,7 @@ class TestWebPush(IntegrationBase):
         result = yield client.hello()
         ok_(result != {})
         eq_(result["use_webpush"], True)
+        yield client.wait_for(lambda: len(db.DB_CALLS) == 2)
         eq_(db.DB_CALLS, ['register_user', 'fetch_messages'])
         db.DB_CALLS = []
         db.TRACK_DB_CALLS = False
