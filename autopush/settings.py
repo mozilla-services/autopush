@@ -1,5 +1,6 @@
 """Autopush Settings Object and Setup"""
 import datetime
+import re
 import socket
 
 from hashlib import sha256
@@ -38,6 +39,9 @@ from autopush.router import (
 )
 from autopush.utils import canonical_url, resolve_ip
 from autopush.senderids import SENDERID_EXPRY, DEFAULT_BUCKET
+
+
+VALID_V0_TOKEN = re.compile(r'[0-9A-Za-z-]{32,36}:[0-9A-Za-z-]{32,36}')
 
 
 class AutopushSettings(object):
@@ -293,7 +297,7 @@ class AutopushSettings(object):
         token = self.fernet.decrypt(token.encode('utf8'))
 
         if version == 'v0':
-            if ':' not in token:
+            if not VALID_V0_TOKEN.match(token):
                 raise InvalidTokenException("Corrupted push token")
             return tuple(token.split(':'))
         if version == 'v1' and len(token) != 32:
