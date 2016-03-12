@@ -539,7 +539,12 @@ class Router(object):
 
         """
         try:
-            return self.table.get_item(consistent=True, uaid=hasher(uaid))
+            item = self.table.get_item(consistent=True, uaid=hasher(uaid))
+            if item.keys() == ['uaid']:
+                # Incomplete record, drop it.
+                self.drop_user(uaid)
+                raise ItemNotFound("uaid not found")
+            return item
         except ProvisionedThroughputExceededException:
             # We unfortunately have to catch this here, as track_provisioned
             # will not see this, since JSONResponseError is a subclass and
