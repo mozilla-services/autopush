@@ -538,6 +538,17 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.put(None, '')
         return self.finish_deferred
 
+    def test_put_v1_token_as_v0_token(self):
+        self.fernet_mock.decrypt.return_value = \
+            '\xcb\n<\x0c\xe6\xf3C4:\xa8\xaeO\xf5\xab\xfbb|'
+
+        def handle_finish(result):
+            self.status_mock.assert_called_with(400)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.put(None, '')
+        return self.finish_deferred
+
     def test_put_token_invalid(self):
         self.fernet_mock.configure_mock(**{
             'decrypt.side_effect': InvalidToken})
