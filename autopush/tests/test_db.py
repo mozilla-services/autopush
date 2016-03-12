@@ -478,11 +478,14 @@ class RouterTestCase(unittest.TestCase):
 
         # Register a node user
         router.register_user(dict(uaid=dummy_uaid, node_id="asdf",
-                                  connected_at=1234))
+                                  connected_at=1234,
+                                  router_key="webpush"))
 
         # Verify
         user = router.get_uaid(dummy_uaid)
         eq_(user["node_id"], "asdf")
+        eq_(user["connected_at"], 1234)
+        eq_(user["router_key"], "webpush")
 
         # Clear
         router.clear_node(user)
@@ -490,6 +493,8 @@ class RouterTestCase(unittest.TestCase):
         # Verify
         user = router.get_uaid(dummy_uaid)
         eq_(user.get("node_id"), None)
+        eq_(user["connected_at"], 1234)
+        eq_(user["router_key"], "webpush")
 
     def test_node_clear_fail(self):
         r = get_router_table()

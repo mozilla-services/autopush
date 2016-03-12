@@ -415,6 +415,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_hello_webpush_uses_one_db_call(self):
         db.TRACK_DB_CALLS = True
+        db.DB_CALLS = []
         self._connect()
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
