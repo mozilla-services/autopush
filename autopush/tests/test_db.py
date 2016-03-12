@@ -448,6 +448,15 @@ class RouterTestCase(unittest.TestCase):
         eq_(bool(result), True)
         eq_(result["node_id"], "me")
 
+    def test_incomplete_uaid(self):
+        uaid = str(uuid.uuid4())
+        r = get_router_table()
+        router = Router(r, SinkMetrics())
+        router.register_user(dict(uaid=uaid))
+        self.assertRaises(ItemNotFound, router.get_uaid, uaid)
+        self.assertRaises(ItemNotFound, router.table.get_item,
+                          consistent=True, uaid=uaid)
+
     def test_save_new(self):
         r = get_router_table()
         router = Router(r, SinkMetrics())
