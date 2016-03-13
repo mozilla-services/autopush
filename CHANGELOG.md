@@ -1,3 +1,17 @@
+<a name="1.13.2"></a>
+## 1.13.2 (2016-03-13)
+
+
+#### Features
+
+*   validate v0 tokens more thoroughly ([77373cd6](https://github.com/mozilla-services/autopush/commit/77373cd65d91603e39b80ed52d6312a86779ac75), closes [#406](https://github.com/mozilla-services/autopush/issues/406))
+
+#### Bug Fixes
+
+*   Clear corrupted router records ([5580e0d2](https://github.com/mozilla-services/autopush/commit/5580e0d2e3a99035c899721bf36e6f1018f38e38), closes [#400](https://github.com/mozilla-services/autopush/issues/400))
+*   clear only the node_id in the router record ([a1ee817c](https://github.com/mozilla-services/autopush/commit/a1ee817c4cabfc5f5352961bdec5262ece3131a0), closes [#401](https://github.com/mozilla-services/autopush/issues/401))
+
+
 <a name="1.13.1"></a>
 ## 1.13.1 (2016-03-10)
 
