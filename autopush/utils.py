@@ -58,49 +58,6 @@ def generate_hash(key, payload):
     return h.hexdigest()
 
 
-def parse_header(header, major=";", minor="="):
-    """Convert a multi-component header line (e.g. "a;b=c;d=e;...") to
-    a list.
-
-    For example, if the header content line is
-
-    `"a;c=1;b;d=2+3=5"`
-
-    and presuming default values for major and minor, then the
-    response would be:
-
-    `['a', 'b', {'c': '1', 'd': '2+3=5'}]`
-
-    items defined with values will always appear as a dictionary at the
-    end of the list. If no items are assigned values, then no dictionary
-    is appended.
-
-    :param header: Header content line to parse.
-    :param major: Major item separator.
-    :param minor: Minor item separator.
-
-    """
-    vals = dict()
-    items = []
-    if not header:
-        return items
-    for v in map(lambda x: x.strip().split(minor, 1),
-                 header.split(major)):
-        try:
-            val = v[1]
-            # Trim quotes equally off of start and end
-            # because ""this is "quoted""" is a thing.
-            while val[0] == val[-1] == '"':
-                val = val[1:-1]
-            vals[v[0].lower()] = val
-        except IndexError:
-            if len(v[0]):
-                items.append(v[0].strip('"'))
-    if vals:
-        items.append(vals)
-    return items
-
-
 def fix_padding(string):
     """ Some JWT fields may strip the end padding from base64 strings """
     if len(string) % 4:

@@ -39,6 +39,7 @@ from autopush.router import (
 )
 from autopush.utils import canonical_url, resolve_ip
 from autopush.senderids import SENDERID_EXPRY, DEFAULT_BUCKET
+from autopush.crypto_key import (CryptoKey, CryptoKeyException)
 
 
 VALID_V0_TOKEN = re.compile(r'[0-9A-Za-z-]{32,36}:[0-9A-Za-z-]{32,36}')
@@ -280,26 +281,34 @@ class AutopushSettings(object):
 
         return root + 'v2/' + self.fernet.encrypt(base + sha256(key).digest())
 
-    def parse_endpoint(self, token, version="v0", public_key=None):
+    def parse_endpoint(self, token, version="v0", ckey_header=None):
         """Parse an endpoint into component elements of UAID, CHID and optional
         key hash if v2
 
         :param token: The obscured subscription data.
         :param version: This is the API version of the token.
-        :param public_key: the public key (from Encryption-Key: p256ecdsa=)
+        :param ckey_header: the Crypto-Key header bearing the public key
+        (from Crypto-Key: p256ecdsa=)
 
         :raises ValueError: In the case of a malformed endpoint.
 
-        :returns: a tuple containing the (UAID, CHID)
+        :returns: a dict containing (uaid=UAID, chid=CHID, public_key=KEY)
 
         """
 
         token = self.fernet.decrypt(token.encode('utf8'))
+        public_key = None
+        if ckey_header:
+            try:
+                public_key = CryptoKey(ckey_header).get_label('p256ecdsa')
+            except CryptoKeyException:
+                raise InvalidTokenException("Invalid key data")
 
         if version == 'v0':
             if not VALID_V0_TOKEN.match(token):
                 raise InvalidTokenException("Corrupted push token")
-            return tuple(token.split(':'))
+            items = token.split(':')
+            return dict(uaid=items[0], chid=items[1], public_key=public_key)
         if version == 'v1' and len(token) != 32:
             raise InvalidTokenException("Corrupted push token")
         if version == 'v2':
@@ -310,4 +319,6 @@ class AutopushSettings(object):
             if not constant_time.bytes_eq(sha256(public_key).digest(),
                                           token[32:]):
                 raise InvalidTokenException("Key mismatch")
-        return (token[:16].encode('hex'), token[16:32].encode('hex'))
+        return dict(uaid=token[:16].encode('hex'),
+                    chid=token[16:32].encode('hex'),
+                    public_key=public_key)
