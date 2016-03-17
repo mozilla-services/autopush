@@ -51,7 +51,6 @@ from autopush.utils import (
     generate_hash,
     validate_uaid,
     ErrorLogger,
-    parse_header,
     extract_jwt,
 )
 
@@ -311,7 +310,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         log.msg("Invalid bearer token: " + message, **self._client_info)
         raise VapidAuthException("Invalid bearer token: " + message)
 
-    def _process_auth(self, result, keys):
+    def _process_auth(self, result):
         """Process the optional VAPID auth token.
 
         VAPID requires two headers to be present;
@@ -324,22 +323,16 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         # No auth present, so it's not a VAPID call.
         if not authorization:
             return result
-        if not keys:
-            raise VapidAuthException("Missing Crypto-Key")
-        if not isinstance(keys, dict):
-            raise VapidAuthException("Invalid Crypto-Key")
-        crypto_key = keys.get('p256ecdsa')
-        if not crypto_key:
-            raise VapidAuthException("Invalid bearer token: "
-                                     "improperly specified crypto-key")
+
+        public_key = result.get("public_key")
         try:
             (auth_type, token) = authorization.split(' ', 1)
         except ValueError:
             raise VapidAuthException("Invalid Authorization header")
         # if it's a bearer token containing what may be a JWT
         if auth_type.lower() == AUTH_SCHEME and '.' in token:
-            d = deferToThread(extract_jwt, token, crypto_key)
-            d.addCallback(self._store_auth, crypto_key, token, result)
+            d = deferToThread(extract_jwt, token, public_key)
+            d.addCallback(self._store_auth, public_key, token, result)
             d.addErrback(self._invalid_auth)
             return d
         # otherwise, it's not, so ignore the VAPID data.
@@ -412,20 +405,13 @@ class EndpointHandler(AutoendpointHandler):
         """
         api_ver = api_ver or "v0"
         self.start_time = time.time()
-        public_key = None
-        keys = {}
-        crypto_key = self.request.headers.get('crypto-key')
-        if crypto_key:
-            header_info = parse_header(crypto_key)
-            keys = header_info[-1]
-            if isinstance(keys, dict):
-                public_key = keys.get('p256ecdsa')
+        crypto_key_header = self.request.headers.get('crypto-key')
 
         d = deferToThread(self.ap_settings.parse_endpoint,
                           token,
                           api_ver,
-                          public_key)
-        d.addCallback(self._process_auth, keys)
+                          crypto_key_header)
+        d.addCallback(self._process_auth)
         d.addCallback(self._token_valid)
         d.addErrback(self._auth_err)
         d.addErrback(self._token_err)
@@ -437,10 +423,8 @@ class EndpointHandler(AutoendpointHandler):
     #############################################################
     def _token_valid(self, result):
         """Called after the token is decrypted successfully"""
-        if len(result) != 2:
-            raise InvalidTokenException("Wrong subscription token components")
-
-        self.uaid, self.chid = result
+        self.uaid = result.get("uaid")
+        self.chid = result.get("chid")
         d = deferToThread(self.ap_settings.router.get_uaid, self.uaid)
         d.addCallback(self._uaid_lookup_results)
         d.addErrback(self._uaid_not_found_err)

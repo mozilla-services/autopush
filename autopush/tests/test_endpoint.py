@@ -231,12 +231,6 @@ class EndpointTestCase(unittest.TestCase):
         eq_(d.get("errno"), errno)
         eq_(d.get("error"), error)
 
-    def test_parse_header(self):
-        result = utils.parse_header('fee; fie="foe";  fum=""foobar="five""";')
-        eq_(result[0], 'fee')
-        eq_(result[1], {'fum': 'foobar="five"', 'fie': 'foe'})
-        eq_([], utils.parse_header(""))
-
     def test_uaid_lookup_results(self):
         fresult = dict(router_type="test")
         frouter = Mock(spec=Router)
@@ -590,12 +584,7 @@ class EndpointTestCase(unittest.TestCase):
 
         self.endpoint.version, self.endpoint.data = 789, None
 
-        exc = self.assertRaises(InvalidTokenException,
-                                self.endpoint._token_valid,
-                                ['invalid'])
-        eq_(exc.message, "Wrong subscription token components")
-
-        self.endpoint._token_valid(['123', dummy_chid])
+        self.endpoint._token_valid(dict(uaid='123', chid=dummy_chid))
         return self.finish_deferred
 
     def test_put_default_router(self):
@@ -716,7 +705,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.assertTrue(result)
-            self.endpoint.set_status.assert_called_with(401)
+            self.endpoint.set_status.assert_called_with(400)
 
         self.finish_deferred.addCallback(handle_finish)
         self.endpoint.put(None, dummy_uaid)
@@ -751,29 +740,6 @@ class EndpointTestCase(unittest.TestCase):
         self.request_mock.headers["content-encoding"] = 'text'
         self.request_mock.headers["authorization"] = "invalid"
         self.request_mock.headers["crypto-key"] = "p256ecdsa=crap"
-        self.request_mock.body = b' '
-        self.fernet_mock.decrypt.return_value = dummy_token
-        self.router_mock.get_uaid.return_value = dict(
-            router_type="webpush",
-            router_data=dict(),
-        )
-        self.wp_router_mock.route_notification.return_value = RouterResponse(
-            status_code=200,
-            router_data={},
-        )
-
-        def handle_finish(result):
-            self.assertTrue(result)
-            self.endpoint.set_status.assert_called_with(401)
-
-        self.finish_deferred.addCallback(handle_finish)
-        self.endpoint.put(None, dummy_uaid)
-        return self.finish_deferred
-
-    def test_put_missing_vapid_crypto_header(self):
-        self.request_mock.headers["encryption"] = "ignored"
-        self.request_mock.headers["content-encoding"] = 'text'
-        self.request_mock.headers["authorization"] = "some auth"
         self.request_mock.body = b' '
         self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.return_value = dict(
@@ -1286,12 +1252,13 @@ class EndpointTestCase(unittest.TestCase):
         chid_dec = chid_strip.decode('hex')
         v1_valid = uaid_dec + chid_dec
         pub_key = uuid.uuid4().hex
+        crypto_key = "p256ecdsa=" + pub_key
         v2_valid = sha256(pub_key).digest()
         v2_invalid = sha256(uuid.uuid4().hex).digest()
         # v0 good
         self.fernet_mock.decrypt.return_value = v0_valid
         tokens = self.settings.parse_endpoint('/valid')
-        eq_(tokens, (dummy_uaid, dummy_chid))
+        eq_(tokens, dict(uaid=dummy_uaid, chid=dummy_chid, public_key=None))
 
         # v0 bad
         self.fernet_mock.decrypt.return_value = v1_valid
@@ -1308,22 +1275,24 @@ class EndpointTestCase(unittest.TestCase):
 
         self.fernet_mock.decrypt.return_value = v1_valid
         tokens = self.settings.parse_endpoint('valid', 'v1')
-        eq_(tokens, (uaid_strip, chid_strip))
+        eq_(tokens, dict(uaid=uaid_strip, chid=chid_strip, public_key=None))
 
         self.fernet_mock.decrypt.return_value = v1_valid + v2_valid
-        tokens = self.settings.parse_endpoint('valid', 'v2', pub_key)
-        eq_(tokens, (uaid_strip, chid_strip))
+        tokens = self.settings.parse_endpoint('valid', 'v2', crypto_key)
+        eq_(tokens,
+            dict(uaid=uaid_strip, chid=chid_strip, public_key=pub_key))
 
         self.fernet_mock.decrypt.return_value = v1_valid + "invalid"
         exc = self.assertRaises(InvalidTokenException,
                                 self.settings.parse_endpoint,
-                                'invalid', 'v2', pub_key)
+                                'invalid', 'v2', crypto_key)
         eq_(exc.message, "Corrupted push token")
 
         self.fernet_mock.decrypt.return_value = v1_valid + v2_valid
         exc = self.assertRaises(InvalidTokenException,
                                 self.settings.parse_endpoint,
-                                'invalid', 'v2', pub_key[:30])
+                                'invalid', 'v2',
+                                "p256ecdsa="+pub_key[:30])
         eq_(exc.message, "Key mismatch")
 
         self.fernet_mock.decrypt.return_value = v1_valid + v2_invalid
@@ -1335,7 +1304,7 @@ class EndpointTestCase(unittest.TestCase):
         self.fernet_mock.decrypt.return_value = v1_valid + v2_invalid
         exc = self.assertRaises(InvalidTokenException,
                                 self.settings.parse_endpoint,
-                                'invalid', 'v2', pub_key)
+                                'invalid', 'v2', crypto_key)
         eq_(exc.message, "Key mismatch")
 
     def test_make_endpoint(self):
