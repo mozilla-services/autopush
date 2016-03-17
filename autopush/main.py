@@ -383,8 +383,6 @@ def connection_main(sysargs=None, use_files=True):
     proto = "wss" if args.ssl_key else "ws"
     factory = WebSocketServerFactory(
         "%s://%s:%s/" % (proto, args.hostname, args.port),
-        debug=args.debug,
-        debugCodePaths=args.debug,
     )
     factory.protocol = PushServerProtocol
     factory.protocol.ap_settings = settings

@@ -695,7 +695,6 @@ class WebsocketTestCase(unittest.TestCase):
     def test_auto_ping(self):
         self.proto.ps.ping_time_out = False
         self.proto.dropConnection = Mock()
-        self.proto.debugCodePaths = False
         self.proto.onAutoPingTimeout()
         ok_(self.proto.ps.ping_time_out, True)
         ok_(self.proto.dropConnection.called)
