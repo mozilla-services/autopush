@@ -343,7 +343,7 @@ class IntegrationBase(unittest.TestCase):
 
         # Websocket server
         self._ws_url = "ws://localhost:9010/"
-        factory = WebSocketServerFactory(self._ws_url, debug=False)
+        factory = WebSocketServerFactory(self._ws_url)
         factory.protocol = PushServerProtocol
         factory.protocol.ap_settings = settings
         factory.setProtocolOptions(
