@@ -146,10 +146,10 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     #############################################################
     #                    Cyclone HTTP Methods
     #############################################################
-    def options(self, token):
+    def options(self, *args):
         """HTTP OPTIONS Handler"""
 
-    def head(self, token):
+    def head(self, *args):
         """HTTP HEAD Handler"""
 
     #############################################################
