@@ -290,7 +290,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
     def disconnect(self):
         self.ws.close()
 
-    def sleep(self, duration):
+    def sleep(self, duration):  # pragma: nocover
         time.sleep(duration)
 
     def wait_for(self, func):

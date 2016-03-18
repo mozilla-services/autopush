@@ -15,7 +15,6 @@ cyclone==1.1
 datadog==0.5.0
 decorator==4.0.0
 ecdsa==0.13
-eliot==0.11.0
 enum34==1.0.4
 funcsigs==0.4
 gcm-client==0.1.4

@@ -1,4 +1,3 @@
-import functools
 import json
 import sys
 import time
@@ -63,24 +62,6 @@ class FileConsumer(object):  # pragma: no cover
 
     def write(self, data):
         self.file.write(data)
-
-
-def patch_logger(test):
-    """Replaces the Twisted error logger with a mock implementation.
-
-    This uses Trial's ``patch()`` method instead of Mock's ``@patch``
-    decorator. The latter still causes the test to print a stack trace
-    and fail unless ``flushLoggedErrors()`` is called.
-
-    """
-    @functools.wraps(test)
-    def wrapper(self, *args, **kwargs):
-        log_mock = Mock()
-        self.patch(endpoint, 'log', log_mock)
-        self.patch(utils, 'log', log_mock)
-        params = args + (log_mock,)
-        return test(self, *params, **kwargs)
-    return wrapper
 
 
 class MessageTestCase(unittest.TestCase):
@@ -185,6 +166,7 @@ class EndpointTestCase(unittest.TestCase):
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
     def setUp(self, t):
+        from twisted.logger import Logger
         # this timeout *should* be set to 0.5, however Travis runs
         # so slow, that many of these tests will time out leading
         # to false failure rates and integration tests generally
@@ -220,6 +202,7 @@ class EndpointTestCase(unittest.TestCase):
         self.wp_router_mock = settings.routers["webpush"]
         self.status_mock = self.endpoint.set_status = Mock()
         self.write_mock = self.endpoint.write = Mock()
+        self.endpoint.log = Mock(spec=Logger)
 
         d = self.finish_deferred = Deferred()
         self.endpoint.finish = lambda: d.callback(True)
@@ -517,15 +500,14 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.put(None, '')
         return self.finish_deferred
 
-    @patch_logger
-    def test_put_token_error(self, log_mock):
+    def test_put_token_error(self):
         self.fernet_mock.configure_mock(**{
             'decrypt.side_effect': TypeError})
         self.endpoint.request.body = b'version=123'
 
         def handle_finish(value):
             self.fernet_mock.decrypt.assert_called_with(b'')
-            eq_(log_mock.err.called, True)
+            eq_(self.endpoint.log.failure.called, True)
             self._assert_error_response(value)
         self.finish_deferred.addCallback(handle_finish)
 
@@ -1054,9 +1036,6 @@ class EndpointTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_post_webpush_with_logged_delivered(self):
-        import autopush.endpoint
-        log_patcher = patch.object(autopush.endpoint.log, "msg", spec=True)
-        mock_log = log_patcher.start()
         self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         self.request_mock.headers["encryption"] = "stuff"
@@ -1076,18 +1055,14 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(201)
             self.endpoint.set_header.assert_called_with(
                 "Location", "Somewhere")
-            args, kwargs = mock_log.call_args
+            args, kwargs = self.endpoint.log.info.call_args
             eq_("Successful delivery", args[0])
-            log_patcher.stop()
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
     def test_post_webpush_with_logged_stored(self):
-        import autopush.endpoint
-        log_patcher = patch.object(autopush.endpoint.log, "msg", spec=True)
-        mock_log = log_patcher.start()
         self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
         self.request_mock.headers["encryption"] = "stuff"
@@ -1107,16 +1082,14 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_status.assert_called_with(201)
             self.endpoint.set_header.assert_called_with(
                 "Location", "Somewhere")
-            args, kwargs = mock_log.call_args
+            args, kwargs = self.endpoint.log.info.call_args
             eq_("Router miss, message stored.", args[0])
-            log_patcher.stop()
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
-    @patch("twisted.python.log")
-    def test_post_db_error_in_routing(self, mock_log):
+    def test_post_db_error_in_routing(self):
         from autopush.router.interface import RouterException
         self.fernet_mock.decrypt.return_value = dummy_token
         self.endpoint.set_header = Mock()
@@ -1207,8 +1180,7 @@ class EndpointTestCase(unittest.TestCase):
         eq_(endpoint._headers[ch3], self.CORS_HEADERS)
         eq_(endpoint._headers[ch4], self.CORS_RESPONSE_HEADERS)
 
-    @patch_logger
-    def test_write_error(self, log_mock):
+    def test_write_error(self):
         """ Write error is triggered by sending the app a request
         with an invalid method (e.g. "put" instead of "PUT").
         This is not code that is triggered within normal flow, but
@@ -1224,10 +1196,9 @@ class EndpointTestCase(unittest.TestCase):
 
         self.endpoint.write_error(999, exc_info=exc_info)
         self.status_mock.assert_called_with(999)
-        self.assertTrue(log_mock.err.called)
+        self.assertTrue(self.endpoint.log.called)
 
-    @patch_logger
-    def test_write_error_no_exc(self, log_mock):
+    def test_write_error_no_exc(self):
         """ Write error is triggered by sending the app a request
         with an invalid method (e.g. "put" instead of "PUT").
         This is not code that is triggered within normal flow, but
@@ -1235,7 +1206,7 @@ class EndpointTestCase(unittest.TestCase):
         """
         self.endpoint.write_error(999)
         self.status_mock.assert_called_with(999)
-        self.assertTrue(log_mock.err.called)
+        self.assertTrue(self.endpoint.log.called)
 
     def _assert_error_response(self, result):
         self.status_mock.assert_called_with(500)

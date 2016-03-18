@@ -3,8 +3,8 @@ import gcmclient
 import json
 from base64 import urlsafe_b64encode
 
-from twisted.python import log
 from twisted.internet.threads import deferToThread
+from twisted.logger import Logger
 
 from autopush.router.interface import RouterException, RouterResponse
 from autopush.senderids import SenderIDs
@@ -12,6 +12,7 @@ from autopush.senderids import SenderIDs
 
 class GCMRouter(object):
     """GCM Router Implementation"""
+    log = Logger()
     gcm = None
     dryRun = 0
     collapseKey = "simplepush"
@@ -30,7 +31,7 @@ class GCMRouter(object):
             self.gcm = gcmclient.GCM(senderID.get("auth"))
         except:
             raise IOError("GCM Bridge not initiated in main")
-        log.msg("Starting GCM router...")
+        self.log.debug("Starting GCM router...")
 
     def check_token(self, token):
         if token not in self.senderIDs.senderIDs():
@@ -123,7 +124,7 @@ class GCMRouter(object):
 
     def _error(self, err, status, **kwargs):
         """Error handler that raises the RouterException"""
-        log.err(err, **kwargs)
+        self.log.debug(err, **kwargs)
         return RouterException(err, status_code=status, response_body=err,
                                **kwargs)
 
@@ -133,14 +134,15 @@ class GCMRouter(object):
         #  for reg_id, msg_id in reply.success.items():
         # updates
         for old_id, new_id in reply.canonical.items():
-            log.msg("GCM id changed : %s => " % old_id, new_id)
+            self.log.debug("GCM id changed : {old} => {new}",
+                           old=old_id, new=new_id)
             return RouterResponse(status_code=503,
                                   response_body="Please try request again.",
                                   router_data=dict(token=new_id))
         # naks:
         # uninstall:
         for reg_id in reply.not_registered:
-            log.msg("GCM no longer registered: %s" % reg_id)
+            self.log.debug("GCM no longer registered: %s" % reg_id)
             return RouterResponse(
                 status_code=410,
                 response_body="Endpoint requires client update",
@@ -149,7 +151,8 @@ class GCMRouter(object):
 
         #  for reg_id, err_code in reply.failed.items():
         if len(reply.failed.items()) > 0:
-            log.msg("GCM failures: %s" % json.dumps(reply.failed.items()))
+            self.log.debug("GCM failures: {failed()}",
+                           failed=lambda: json.dumps(reply.failed.items()))
             raise RouterException("GCM failure to deliver", status_code=503,
                                   response_body="Please try request later.")
 

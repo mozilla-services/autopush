@@ -6,7 +6,7 @@ from boto.dynamodb2.exceptions import (
 )
 from twisted.internet.defer import DeferredList
 from twisted.internet.threads import deferToThread
-from twisted.python import log
+from twisted.logger import Logger
 
 from autopush import __version__
 
@@ -18,6 +18,8 @@ class MissingTableException(Exception):
 
 class HealthHandler(cyclone.web.RequestHandler):
     """HTTP Health Handler"""
+    log = Logger()
+
     @cyclone.web.asynchronous
     def get(self):
         """HTTP Get
@@ -54,7 +56,7 @@ class HealthHandler(cyclone.web.RequestHandler):
     def _check_error(self, failure, name):
         """Returns an error, and why"""
         self._healthy = False
-        log.err(failure, name)
+        self.log.failure(failure, name)
 
         cause = self._health_checks[name] = {"status": "NOT OK"}
         if failure.check(InternalServerError):

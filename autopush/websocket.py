@@ -52,8 +52,9 @@ from twisted.internet.error import (
 )
 from twisted.internet.interfaces import IProducer
 from twisted.internet.threads import deferToThread
+from twisted.logger import Logger
 from twisted.protocols import policies
-from twisted.python import failure, log
+from twisted.python import failure
 from zope.interface import implements
 from twisted.web.resource import Resource
 
@@ -103,7 +104,7 @@ def log_exception(func):
         try:
             return func(self, *args, **kwargs)
         except Exception:
-            self.log_err(failure.Failure())
+            self.log_failure(failure.Failure())
     return wrapper
 
 
@@ -226,6 +227,7 @@ class PushState(object):
 
 class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     """Main Websocket Connection Protocol"""
+    log = Logger()
 
     # Testing purposes
     parent_class = WebSocketServerProtocol
@@ -280,7 +282,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         def wrapper(result, *w_args, **w_kwargs):
             if isinstance(result, failure.Failure):
                 # This is an exception, log it
-                self.log_err(result)
+                self.log_failure(result)
 
             d = deferToThread(func, *args, **kwargs)
             d.addErrback(wrapper)
@@ -295,9 +297,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         bug"""
         return self.ps._base_tags if self.ps._base_tags else None
 
-    def log_err(self, failure, **kwargs):
-        """Log a twisted failure out through twisted's log.err"""
-        log.err(failure, **kwargs)
+    def log_failure(self, failure, **kwargs):
+        """Log a twisted failure out through twisted's log.failure"""
+        self.log.failure("Unexpected error", failure, **kwargs)
 
     @property
     def paused(self):
@@ -499,7 +501,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             message_id=notif.version,
             ttl=notif.ttl,
             timestamp=notif.timestamp,
-        ).addErrback(self.log_err)
+        ).addErrback(self.log_failure)
 
     def _save_simple_notif(self, channel_id, version):
         """Save a simplepush notification"""
@@ -508,7 +510,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             uaid=self.ps.uaid,
             chid=channel_id,
             version=version,
-        ).addErrback(self.log_err)
+        ).addErrback(self.log_failure)
 
     def _lookup_node(self, results):
         """Looks up the node to send a notify for it to check storage if
@@ -519,7 +521,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.uaid
         )
         d.addCallback(self._notify_node)
-        d.addErrback(self.log_err, extra="Failed to get UAID for redeliver")
+        d.addErrback(self.log_failure,
+                     extra="Failed to get UAID for redeliver")
 
     def _notify_node(self, result):
         """Checks the result of lookup node to send the notify if the client is
@@ -543,7 +546,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             "PUT",
             url.encode("utf8"),
         ).addCallback(IgnoreBody.ignore)
-        d.addErrback(self.log_err, extra="Failed to notify node")
+        d.addErrback(self.log_failure, extra="Failed to notify node")
 
     def returnError(self, messageType, reason, statusCode, close=True):
         """Return an error to a client, and optionally shut down the connection
@@ -657,7 +660,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def err_hello(self, failure):
         """errBack for hello failures"""
         self.transport.resumeProducing()
-        self.log_err(failure)
+        self.log_failure(failure)
         self.returnError("hello", "error", 503)
 
     def _copy_new_data(self, result):
@@ -732,7 +735,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                                               ResponseNeverReceived,
                                               ConnectionLost,
                                               ConnectionDone))
-                d.addErrback(self.log_err,
+                d.addErrback(self.log_failure,
                              extra="Failed to delete old node")
 
         # UDP clients are done at this point and timed out to ensure they
@@ -835,7 +838,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def error_notifications(self, fail):
         """errBack for notification check failing"""
         # If we error'd out on this important check, we drop the connection
-        self.log_err(fail)
+        self.log_failure(fail)
         self.sendClose()
 
     def finish_notifications(self, notifs):
@@ -933,7 +936,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         d.addCallback(self._register_rotated_channels)
         d.addErrback(self.trap_cancel)
         d.addErrback(self.err_overload, "notif")
-        d.addErrback(self.log_err)
+        d.addErrback(self.log_failure)
 
     def _register_rotated_channels(self, result):
         """Register the channels into a new entry in the current month"""
@@ -1052,8 +1055,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # Log out the unregister if it has a code in it
         if "code" in data:
             code = extract_code(data)
-            log.msg("Unregister", channelID=chid, uaid_hash=self.ps.uaid_hash,
-                    user_agent=self.ps.user_agent, code=code)
+            self.log.info("Unregister", channelID=chid,
+                          uaid_hash=self.ps.uaid_hash,
+                          user_agent=self.ps.user_agent, code=code)
 
         # Clear out any existing tracked messages for this channel
         if self.ps.use_webpush:
@@ -1112,10 +1116,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if found:
             msg = found[0]
             size = len(msg.data) if msg.data else 0
-            log.msg("Ack", router_key="webpush", channelID=chid,
-                    message_id=version, message_source="direct",
-                    message_size=size, uaid_hash=self.ps.uaid_hash,
-                    user_agent=self.ps.user_agent, code=code)
+            self.log.info("Ack", router_key="webpush", channelID=chid,
+                          message_id=version, message_source="direct",
+                          message_size=size, uaid_hash=self.ps.uaid_hash,
+                          user_agent=self.ps.user_agent, code=code)
             self.ps.direct_updates[chid].remove(msg)
             return
 
@@ -1123,10 +1127,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if found:
             msg = found[0]
             size = len(msg.data) if msg.data else 0
-            log.msg("Ack", router_key="webpush", channelID=chid,
-                    message_id=version, message_source="stored",
-                    message_size=size, uaid_hash=self.ps.uaid_hash,
-                    user_agent=self.ps.user_agent, code=code)
+            self.log.info("Ack", router_key="webpush", channelID=chid,
+                          message_id=version, message_source="stored",
+                          message_size=size, uaid_hash=self.ps.uaid_hash,
+                          user_agent=self.ps.user_agent, code=code)
             d = self.force_retry(self.ps.message.delete_message,
                                  uaid=self.ps.uaid,
                                  channel_id=chid,
@@ -1156,15 +1160,15 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if chid in self.ps.direct_updates and \
            self.ps.direct_updates[chid] <= version:
             del self.ps.direct_updates[chid]
-            log.msg("Ack", router_key="simplepush", channelID=chid,
-                    message_id=version, message_source="direct",
-                    uaid_hash=self.ps.uaid_hash,
-                    user_agent=self.ps.user_agent, code=code)
+            self.log.info("Ack", router_key="simplepush", channelID=chid,
+                          message_id=version, message_source="direct",
+                          uaid_hash=self.ps.uaid_hash,
+                          user_agent=self.ps.user_agent, code=code)
             return
-        log.msg("Ack", router_key="simplepush", channelID=chid,
-                message_id=version, message_source="stored",
-                uaid_hash=self.ps.uaid_hash,
-                user_agent=self.ps.user_agent, code=code)
+        self.log.info("Ack", router_key="simplepush", channelID=chid,
+                      message_id=version, message_source="stored",
+                      uaid_hash=self.ps.uaid_hash,
+                      user_agent=self.ps.user_agent, code=code)
         if chid in self.ps.updates_sent and \
            self.ps.updates_sent[chid] <= version:
             del self.ps.updates_sent[chid]
@@ -1199,9 +1203,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         version, updateid = version.split(":")
 
-        log.msg("Nack", uaid_hash=self.ps.uaid_hash,
-                user_agent=self.ps.user_agent, message_id=version,
-                code=code)
+        self.log.info("Nack", uaid_hash=self.ps.uaid_hash,
+                      user_agent=self.ps.user_agent, message_id=version,
+                      code=code)
 
     def check_missed_notifications(self, results, resume=False):
         """Check to see if notifications were missed"""

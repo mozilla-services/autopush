@@ -4,7 +4,7 @@ from boto.dynamodb2.exceptions import (
     InternalServerError,
 )
 from cyclone.web import Application
-from mock import (Mock, patch)
+from mock import Mock
 from moto import mock_dynamodb2
 from twisted.internet.defer import Deferred
 from twisted.trial import unittest
@@ -20,10 +20,10 @@ from autopush.settings import AutopushSettings
 
 class HealthTestCase(unittest.TestCase):
     def setUp(self):
+        from twisted.logger import Logger
         self.timeout = 0.5
         twisted.internet.base.DelayedCall.debug = True
 
-        self.log_mock = patch("autopush.health.log").start()
         self.mock_dynamodb2 = mock_dynamodb2()
         self.mock_dynamodb2.start()
 
@@ -36,6 +36,7 @@ class HealthTestCase(unittest.TestCase):
 
         self.request_mock = Mock()
         self.health = HealthHandler(Application(), self.request_mock)
+        self.health.log = self.log_mock = Mock(spec=Logger)
         self.status_mock = self.health.set_status = Mock()
         self.write_mock = self.health.write = Mock()
 
@@ -44,7 +45,6 @@ class HealthTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.mock_dynamodb2.stop()
-        self.log_mock.stop()
 
     def test_healthy(self):
         return self._assert_reply({
