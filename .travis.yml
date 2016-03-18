@@ -3,6 +3,10 @@ sudo: false
 python:
   - "pypy"
 install:
+  - wget https://bitbucket.org/pypy/pypy/downloads/pypy-5.0.0-linux64.tar.bz2
+  - tar xjvf pypy-5.0.0-linux64.tar.bz2
+  - virtualenv -p pypy-5.0.0-linux64/bin/pypy pypy
+  - source pypy/bin/activate
   - make travis
 script: tox -- --with-coverage --cover-xml --cover-package=autopush
 after_success:

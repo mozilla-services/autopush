@@ -2,8 +2,8 @@ SHELL := /bin/sh
 APPNAME = autopush
 DEPS =
 HERE = $(shell pwd)
-PTYPE=python
-BIN = $(HERE)/bin
+PTYPE=pypy
+BIN = $(HERE)/pypy/bin
 VIRTUALENV = virtualenv
 TESTS = $(APPNAME)/tests
 PYTHON = $(BIN)/$(PTYPE)
@@ -18,7 +18,7 @@ BUILD_DIRS = bin build deps include lib lib64 lib_pypy lib-python\
 
 all:	build
 
-travis: $(HERE)/ddb
+travis: $(HERE)/ddb $(BIN)/tox
 	pip install coverage nose mock moto codecov tox
 
 $(HERE)/ddb:
