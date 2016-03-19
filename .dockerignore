@@ -17,6 +17,7 @@ html_coverage
 site-packages/*
 lib-python/*
 bin/*
+ddb
 include/*
 lib_pypy/*
 pypy

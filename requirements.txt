@@ -10,7 +10,7 @@ autobahn[twisted]==0.13.0
 boto==2.38.0
 cffi==1.1.2
 characteristic==14.3.0
-cryptography==0.9.1
+cryptography==1.2.3
 cyclone==1.1
 datadog==0.5.0
 decorator==4.0.0
