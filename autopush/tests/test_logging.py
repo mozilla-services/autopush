@@ -10,7 +10,7 @@ from twisted.internet.defer import Deferred
 from twisted.logger import Logger
 from twisted.python import failure
 
-from autopush.logging import PushLogger
+from autopush.logging import PushLogger, FirehoseProcessor
 
 log = Logger()
 
@@ -81,3 +81,82 @@ class PushLoggerTestCase(twisted.trial.unittest.TestCase):
         with open("testfile.txt") as f:
             lines = f.readlines()
         eq_(len(lines), 1)
+
+    @patch("autopush.logging.boto3")
+    def test_firehose_only_output(self, mock_boto3):
+        obj = PushLogger("Autoput", log_output="none",
+                         firehose_delivery_stream="test")
+        obj.firehose = Mock(spec=FirehoseProcessor)
+        obj.start()
+        log.info("wow")
+        obj.stop()
+        eq_(len(obj.firehose.mock_calls), 3)
+        eq_(len(obj.firehose.process.mock_calls), 1)
+
+
+class FirehoseProcessorTestCase(twisted.trial.unittest.TestCase):
+    def setUp(self):
+        patcher = patch("autopush.logging.boto3")
+        self.patcher = patcher
+        self.mock_boto = patcher.start()
+
+    def tearDown(self):
+        self.patcher.stop()
+
+    def test_full_queue(self):
+        proc = FirehoseProcessor("test", 1)
+        proc.process("test")
+        eq_(proc._records.full(), True)
+        proc.process("another")
+        eq_(proc._records.qsize(), 1)
+        eq_(proc._records.get(), "test")
+
+    def test_message_max_size(self):
+        proc = FirehoseProcessor("test")
+        proc.MAX_REQUEST_SIZE = 1
+
+        # Setup the mock
+        proc._client.put_record_batch.return_value = dict(FailedPutCount=0)
+
+        # Start and log
+        proc.start()
+        proc.process("a decently larger message")
+        proc.stop()
+        eq_(len(self.mock_boto.mock_calls), 2)
+        eq_(len(proc._client.put_record_batch.mock_calls), 1)
+
+    def test_message_max_batch(self):
+        proc = FirehoseProcessor("test")
+        proc.MAX_RECORD_BATCH = 1
+
+        # Setup the mock
+        proc._client.put_record_batch.return_value = dict(FailedPutCount=0)
+
+        # Start and log
+        proc.start()
+        proc.process("a decently larger message")
+        proc.stop()
+        eq_(len(self.mock_boto.mock_calls), 2)
+        eq_(len(proc._client.put_record_batch.mock_calls), 1)
+
+    def test_queue_timeout(self):
+        proc = FirehoseProcessor("test")
+        proc.MAX_INTERVAL = 0
+
+        proc.start()
+        proc.stop()
+        eq_(len(self.mock_boto.mock_calls), 1)
+
+    def test_batch_send_failure(self):
+        proc = FirehoseProcessor("test")
+        proc.MAX_RECORD_BATCH = 1
+
+        # Setup the mock
+        proc._client.put_record_batch.return_value = dict(FailedPutCount=1)
+
+        # Start and log
+        proc.start()
+        proc.process("a decently larger message")
+        proc.stop()
+        eq_(len(self.mock_boto.mock_calls), 4)
+        eq_(len(proc._client.put_record_batch.mock_calls), 3)

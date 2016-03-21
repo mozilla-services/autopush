@@ -50,6 +50,9 @@ def add_shared_args(parser):
                         default="", env_var="LOG_LEVEL")
     parser.add_argument('--log_output', help="Log output, stdout or filename",
                         default="stdout", env_var="LOG_OUTPUT")
+    parser.add_argument('--firehose_stream_name', help="Firehose Delivery"
+                        " Stream Name", default="", env_var="STREAM_NAME",
+                        type=str)
     parser.add_argument('--crypto_key', help="Crypto key for tokens",
                         default=[], env_var="CRYPTO_KEY", type=str,
                         action="append")
@@ -359,9 +362,14 @@ def connection_main(sysargs=None, use_files=True):
     log_format = "text" if args.human_logs else "json"
     log_level = args.log_level or ("debug" if args.debug else "info")
     sentry_dsn = bool(os.environ.get("SENTRY_DSN"))
-    PushLogger.setup_logging("Autopush", log_level=log_level,
-                             log_format=log_format, log_output=args.log_output,
-                             sentry_dsn=sentry_dsn)
+    PushLogger.setup_logging(
+        "Autopush",
+        log_level=log_level,
+        log_format=log_format,
+        log_output=args.log_output,
+        sentry_dsn=sentry_dsn,
+        firehose_delivery_stream=args.firehose_stream_name
+    )
     settings = make_settings(
         args,
         port=args.port,
@@ -463,9 +471,14 @@ def endpoint_main(sysargs=None, use_files=True):
     log_level = args.log_level or ("debug" if args.debug else "info")
     log_format = "text" if args.human_logs else "json"
     sentry_dsn = bool(os.environ.get("SENTRY_DSN"))
-    PushLogger.setup_logging("Autoendpoint", log_level=log_level,
-                             log_format=log_format, log_output=args.log_output,
-                             sentry_dsn=sentry_dsn)
+    PushLogger.setup_logging(
+        "Autoendpoint",
+        log_level=log_level,
+        log_format=log_format,
+        log_output=args.log_output,
+        sentry_dsn=sentry_dsn,
+        firehose_delivery_stream=args.firehose_stream_name
+    )
 
     settings = make_settings(
         args,
