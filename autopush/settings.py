@@ -19,11 +19,10 @@ from autopush.db import (
     get_router_table,
     get_storage_table,
     get_rotating_message_table,
-    make_rotating_tablename,
     preflight_check,
     Storage,
     Router,
-    Message
+    Message,
 )
 from autopush.exceptions import InvalidTokenException
 from autopush.metrics import (
@@ -163,9 +162,13 @@ class AutopushSettings(object):
         self.router = Router(self.router_table, self.metrics)
 
         # Used to determine whether a connection is out of date with current
-        # db objects
-        self.current_msg_month = make_rotating_tablename(self._message_prefix)
-        self.current_month = datetime.date.today().month
+        # db objects. There are three noteworty cases:
+        # 1 "Last Month" the table requires a rollover.
+        # 2 "This Month" the most common case.
+        # 3 "Next Month" where the system will soon be rolling over, but with
+        #   timing, some nodes may roll over sooner. Ensuring the next month's
+        #   table is present before the switchover is the main reason for this,
+        #   just in case some nodes do switch sooner.
         self.create_initial_message_tables()
 
         # Run preflight check
@@ -204,18 +207,29 @@ class AutopushSettings(object):
         """Setter to set the current message table"""
         self.message_tables[self.current_msg_month] = value
 
+    def _tomorrow(self):
+        return datetime.date.today() + datetime.timedelta(days=1)
+
     def create_initial_message_tables(self):
         """Initializes a dict of the initial rotating messages tables.
 
-        An entry for last months table, and an entry for this months table.
+        An entry for last months table, an entry for this months table,
+        an entry for tomorrow, if tomorrow is a new month.
 
         """
+        today = datetime.date.today()
         last_month = get_rotating_message_table(self._message_prefix, -1)
         this_month = get_rotating_message_table(self._message_prefix)
+        self.current_month = today.month
+        self.current_msg_month = this_month.table_name
         self.message_tables = {
             last_month.table_name: Message(last_month, self.metrics),
-            this_month.table_name: Message(this_month, self.metrics),
+            this_month.table_name: Message(this_month, self.metrics)
         }
+        if self._tomorrow().month != today.month:
+            next_month = get_rotating_message_table(delta=1)
+            self.message_tables[next_month.table_name] = Message(
+                next_month, self.metrics)
 
     @inlineCallbacks
     def update_rotating_tables(self):
@@ -227,6 +241,15 @@ class AutopushSettings(object):
 
         """
         today = datetime.date.today()
+        tomorrow = self._tomorrow()
+        if ((tomorrow.month != today.month) and
+                sorted(self.message_tables.keys())[-1] !=
+                tomorrow.month):
+            next_month = get_rotating_message_table(
+                self._message_prefix, 0, tomorrow)
+            self.message_tables[next_month.table_name] = Message(
+                next_month, self.metrics)
+
         if today.month == self.current_month:
             # No change in month, we're fine.
             returnValue(False)
@@ -241,7 +264,6 @@ class AutopushSettings(object):
         self.current_msg_month = message_table.table_name
         self.message_tables[self.current_msg_month] = \
             Message(message_table, self.metrics)
-
         returnValue(True)
 
     def update(self, **kwargs):

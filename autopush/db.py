@@ -58,10 +58,11 @@ def normalize_id(id):
     return '-'.join((raw[:8], raw[8:12], raw[12:16], raw[16:20], raw[20:]))
 
 
-def make_rotating_tablename(prefix, delta=0):
+def make_rotating_tablename(prefix, delta=0, date=None):
     """Creates a tablename for table rotation based on a prefix with a given
     month delta."""
-    date = get_month(delta=delta)
+    if not date:
+        date = get_month(delta=delta)
     return "{}_{}_{}".format(prefix, date.year, date.month)
 
 
@@ -77,11 +78,11 @@ def create_rotating_message_table(prefix="message", read_throughput=5,
                         )
 
 
-def get_rotating_message_table(prefix="message", delta=0):
+def get_rotating_message_table(prefix="message", delta=0, date=None):
     """Gets the message table for the current month."""
     db = DynamoDBConnection()
     dblist = db.list_tables()["TableNames"]
-    tablename = make_rotating_tablename(prefix, delta)
+    tablename = make_rotating_tablename(prefix, delta, date)
     if tablename not in dblist:
         return create_rotating_message_table(prefix=prefix, delta=delta)
     else:

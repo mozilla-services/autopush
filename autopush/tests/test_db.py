@@ -70,6 +70,14 @@ class DbCheckTestCase(unittest.TestCase):
             'd8f614d06cdd592cb8470f31177c8331a')
         db.key_hash = ""
 
+    def test_normalize_id(self):
+        import autopush.db as db
+        abnormal = "deadbeef00000000decafbad00000000"
+        normal = "deadbeef-0000-0000-deca-fbad00000000"
+        eq_(db.normalize_id(abnormal), normal)
+        self.assertRaises(ValueError, db.normalize_id, "invalid")
+        eq_(db.normalize_id(abnormal.upper()), normal)
+
 
 class StorageTestCase(unittest.TestCase):
     def setUp(self):
