@@ -8,7 +8,6 @@ from moto import mock_dynamodb2, mock_s3
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
 from twisted.internet.error import ConnectError, ConnectionRefusedError
-from twisted.python import log
 
 import apns
 import gcmclient
@@ -82,6 +81,7 @@ dummy_uaid = str(uuid.uuid4())
 
 class APNSRouterTestCase(unittest.TestCase):
     def setUp(self):
+        from twisted.logger import Logger
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
@@ -90,6 +90,7 @@ class APNSRouterTestCase(unittest.TestCase):
         self.mock_apns = Mock(spec=apns.APNs)
         self.router = APNSRouter(settings, apns_config)
         self.router.apns = self.mock_apns
+        self.router.log = Mock(spec=Logger)
         self.notif = Notification(10, "data", dummy_chid, None, 200)
         self.router_data = dict(router_data=dict(token="connect_data"))
 
@@ -430,12 +431,14 @@ class GCMRouterTestCase(unittest.TestCase):
 
 class SimplePushRouterTestCase(unittest.TestCase):
     def setUp(self):
+        from twisted.logger import Logger
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
 
         self.router = SimpleRouter(settings, {})
+        self.router.log = Mock(spec=Logger)
         self.notif = Notification(10, "data", dummy_chid, None, 200)
         mock_result = Mock(spec=gcmclient.gcm.Result)
         mock_result.canonical = dict()
@@ -447,7 +450,6 @@ class SimplePushRouterTestCase(unittest.TestCase):
         self.agent_mock = Mock(spec=settings.agent)
         settings.agent = self.agent_mock
         self.router.metrics = Mock()
-        self.errors = []
 
     def tearDown(self):
         dead_cache.clear()
@@ -480,27 +482,17 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d.addBoth(verify_deliver)
         return d
 
-    def _mockObserver(self, event):
-        self.errors.append(event)
-
-    def _contains_err(self, string):
-        for err in self.errors:
-            if string in err['message'][0]:
-                return True
-        return False  # pragma: nocover
-
     def test_route_connection_fail_saved(self):
         self.agent_mock.request.side_effect = MockAssist(
             [self._raise_connection_refused_error])
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
         self.router_mock.clear_node.return_value = None
         self.router_mock.get_uaid.return_value = {}
-        log.addObserver(self._mockObserver)
         self.storage_mock.save_notification.return_value = True
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(reply):
-            ok_(self._contains_err('ConnectionRefusedError'))
+            eq_(len(self.router.log.debug.mock_calls), 1)
             ok_(reply.status_code, 202)
             eq_(len(self.router_mock.clear_node.mock_calls), 1)
 

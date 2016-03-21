@@ -30,9 +30,9 @@ import random
 from boto.s3.connection import S3Connection
 from boto.s3.key import Key
 from boto.exception import S3ResponseError
-from twisted.python import log
 from twisted.internet.threads import deferToThread
 from twisted.internet.task import LoopingCall
+from twisted.logger import Logger
 
 # re-read from source every 15 minutes or so.
 SENDERID_EXPRY = 15*60
@@ -41,6 +41,7 @@ DEFAULT_BUCKET = "oms_autopush"
 
 class SenderIDs(object):
     """Handle Read, Write and cache of SenderID values from S3"""
+    log = Logger()
 
     _expry = SENDERID_EXPRY
     _senderIDs = {}
@@ -58,14 +59,14 @@ class SenderIDs(object):
         self.service = LoopingCall(self._refresh)
         if senderIDs:
             if type(senderIDs) is not dict:
-                log.err("senderid_list is not a dict. Ignoring")
+                self.log.critical("senderid_list is not a dict. Ignoring")
             else:
                 # We're initializing, so it's ok to block.
                 self.update(senderIDs)
 
     def start(self):
         if self._use_s3:
-            log.msg("Starting SenderID service...")
+            self.log.debug("Starting SenderID service...")
             self.service.start(self._expry)
 
     def _write(self, senderIDs, *args):
@@ -93,8 +94,8 @@ class SenderIDs(object):
         candidates = json.loads(key.get_contents_as_string())
         if candidates:
             if type(candidates) is not dict:
-                log.err("Wrong data type stored for senderIDs. "
-                        "Should be dict. Ignoring.")
+                self.log.critical("Wrong data type stored for senderIDs. "
+                                  "Should be dict. Ignoring.")
                 return
             return candidates
 
@@ -116,7 +117,7 @@ class SenderIDs(object):
         if not senderIDs:
             return
         if type(senderIDs) is not dict:
-            log.err("Wrong data type for senderIDs. Should be dict.")
+            self.log.critical("Wrong data type for senderIDs. Should be dict.")
             return
         if not self._use_s3:
             # Skip using s3 (For debugging)
@@ -148,5 +149,5 @@ class SenderIDs(object):
 
     def stop(self):
         if self.service and self.service.running:
-            log.msg("Stopping SenderID service...")
+            self.log.debug("Stopping SenderID service...")
             self.service.stop()

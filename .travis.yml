@@ -1,11 +1,10 @@
 language: python
 sudo: false
 python:
-  - "pypy"
+  - "2.7"
 install:
-  - wget https://bitbucket.org/pypy/pypy/downloads/pypy-5.0.0-linux64.tar.bz2
-  - tar xjvf pypy-5.0.0-linux64.tar.bz2
-  - virtualenv -p pypy-5.0.0-linux64/bin/pypy pypy
+  - virtualenv pypy
+  - cd pypy/bin && ln -s python pypy && cd ../..
   - source pypy/bin/activate
   - make travis
 script: tox -- --with-coverage --cover-xml --cover-package=autopush

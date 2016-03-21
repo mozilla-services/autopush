@@ -8,7 +8,8 @@ import uuid
 import ecdsa
 from jose import jws
 
-from twisted.python import failure, log
+from twisted.logger import Logger
+from twisted.python import failure
 
 
 default_ports = {
@@ -102,7 +103,8 @@ def extract_jwt(token, crypto_key):
     return jws.verify(token, vk, algorithms=["ES256"])
 
 
-class ErrorLogger (object):
+class ErrorLogger(object):
+    log = Logger()
 
     def write_error(self, code, **kwargs):
         """Write the error (otherwise unhandled exception when dealing with
@@ -113,8 +115,9 @@ class ErrorLogger (object):
         """
         self.set_status(code)
         if "exc_info" in kwargs:
-            log.err(failure.Failure(*kwargs["exc_info"]),
-                    **self._client_info)
+            self.log.failure(failure.Failure(*kwargs["exc_info"]),
+                             **self._client_info)
         else:
-            log.err("Error in handler: %s" % code, **self._client_info)
+            self.log.failure("Error in handler: %s" % code,
+                             **self._client_info)
         self.finish()

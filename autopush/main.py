@@ -1,21 +1,23 @@
 """autopush/autoendpoint daemon scripts"""
+import json
+import os
+
 import configargparse
 import cyclone.web
-import json
-import autopush.db as db
-from autobahn.twisted.websocket import WebSocketServerFactory
 from autobahn.twisted.resource import WebSocketResource
+from autobahn.twisted.websocket import WebSocketServerFactory
 from twisted.internet import reactor, task
-from twisted.python import log
+from twisted.logger import Logger
 from twisted.web.server import Site
 
+import autopush.db as db
 from autopush.endpoint import (
     EndpointHandler,
     MessageHandler,
     RegistrationHandler,
 )
 from autopush.health import (HealthHandler, StatusHandler)
-from autopush.logging import setup_logging
+from autopush.logging import PushLogger
 from autopush.settings import AutopushSettings
 from autopush.ssl import AutopushSSLContextFactory
 from autopush.websocket import (
@@ -34,6 +36,7 @@ shared_config_files = [
     '~/.autopush_shared.ini',
     '.autopush_shared.ini',
 ]
+log = Logger()
 
 
 def add_shared_args(parser):
@@ -43,6 +46,10 @@ def add_shared_args(parser):
                         dest='config_file', is_config_file=True)
     parser.add_argument('--debug', help='Debug Info.', action="store_true",
                         default=False, env_var="DEBUG")
+    parser.add_argument('--log_level', help='Log level to log', type=str,
+                        default="", env_var="LOG_LEVEL")
+    parser.add_argument('--log_output', help="Log output, stdout or filename",
+                        default="stdout", env_var="LOG_OUTPUT")
     parser.add_argument('--crypto_key', help="Crypto key for tokens",
                         default=[], env_var="CRYPTO_KEY", type=str,
                         action="append")
@@ -124,7 +131,6 @@ def obsolete_args(parser):
     These are included to prevent startup errors with old config files.
 
     """
-    parser.add_argument('--log_level', help="OBSOLETE", type=int)
     parser.add_argument('--external_router', action="store_true",
                         help='OBSOLETE')
     parser.add_argument('--max_message_size', type=int, help="OBSOLETE")
@@ -297,7 +303,7 @@ def make_settings(args, **kwargs):
         # unaccounted.
         senderID = senderIDs.choose_ID()
         if senderID is None:
-            log.err("No GCM SenderIDs specified or found.")
+            log.critical("No GCM SenderIDs specified or found.")
             return
         router_conf["gcm"] = {"ttl": args.gcm_ttl,
                               "dryrun": args.gcm_dryrun,
@@ -350,7 +356,12 @@ def mount_health_handlers(site, settings):
 def connection_main(sysargs=None, use_files=True):
     """Main entry point to setup a connection node, aka the autopush script"""
     args, parser = _parse_connection(sysargs, use_files)
-    setup_logging("Autopush", args.human_logs)
+    log_format = "text" if args.human_logs else "json"
+    log_level = args.log_level or ("debug" if args.debug else "info")
+    sentry_dsn = bool(os.environ.get("SENTRY_DSN"))
+    PushLogger.setup_logging("Autopush", log_level=log_level,
+                             log_format=log_format, log_output=args.log_output,
+                             sentry_dsn=sentry_dsn)
     settings = make_settings(
         args,
         port=args.port,
@@ -445,11 +456,16 @@ def endpoint_main(sysargs=None, use_files=True):
     if args.senderid_list:
         try:
             senderid_list = json.loads(args.senderid_list)
-        except (ValueError, TypeError), x:
-            log.err("Invalid JSON specified for senderid_list.", x)
+        except (ValueError, TypeError):
+            log.critical("Invalid JSON specified for senderid_list")
             return
 
-    setup_logging("Autoendpoint", args.human_logs)
+    log_level = args.log_level or ("debug" if args.debug else "info")
+    log_format = "text" if args.human_logs else "json"
+    sentry_dsn = bool(os.environ.get("SENTRY_DSN"))
+    PushLogger.setup_logging("Autoendpoint", log_level=log_level,
+                             log_format=log_format, log_output=args.log_output,
+                             sentry_dsn=sentry_dsn)
 
     settings = make_settings(
         args,

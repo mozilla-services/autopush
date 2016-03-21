@@ -2,7 +2,7 @@
 import time
 
 import apns
-from twisted.python import log
+from twisted.logger import Logger
 from twisted.internet.threads import deferToThread
 
 from autopush.router.interface import RouterException, RouterResponse
@@ -11,6 +11,7 @@ from autopush.router.interface import RouterException, RouterResponse
 # https://github.com/djacobs/PyAPNs
 class APNSRouter(object):
     """APNS Router Implementation"""
+    log = Logger()
     apns = None
     messages = {}
     errors = {0: 'No error',
@@ -40,7 +41,7 @@ class APNSRouter(object):
         self.default_title = router_conf.get("default_title", "SimplePush")
         self.default_body = router_conf.get("default_body", "New Alert")
         self._connect()
-        log.msg("Starting APNS router...")
+        self.log.debug("Starting APNS router...")
 
     def register(self, uaid, router_data, *kwargs):
         """Validate that an APNs instance token is in the ``router_data``"""
@@ -86,12 +87,13 @@ class APNSRouter(object):
     def _error(self, err):
         """Error handler"""
         if err['status'] == 0:
-            log.msg("Success")
+            self.log.debug("Success")
             del self.messages[err['identifier']]
             return
-        log.err("APNs Error encountered: %s" % self.errors[err['status']])
+        self.log.debug("APNs Error encountered: {status}",
+                       status=self.errors[err['status']])
         if err['status'] in [1, 255]:
-            log.msg("Retrying...")
+            self.log.debug("Retrying...")
             self._connect()
             resend = self.messages.get(err.get('identifier'))
             if resend is None:

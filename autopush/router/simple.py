@@ -26,7 +26,7 @@ from twisted.internet.error import (
     ConnectionRefusedError,
     UserError
 )
-from twisted.python import log
+from twisted.logger import Logger
 from twisted.web.client import FileBodyProducer
 
 from autopush.protocol import IgnoreBody
@@ -48,6 +48,8 @@ class SimpleRouter(object):
     """Implements :class:`autopush.router.interface.IRouter` for internal
     routing to an Autopush node
     """
+    log = Logger()
+
     def __init__(self, ap_settings, router_conf):
         """Create a new SimpleRouter"""
         self.ap_settings = ap_settings
@@ -107,7 +109,9 @@ class SimpleRouter(object):
                 yield deferToThread(router.clear_node,
                                     uaid_data).addErrback(self._eat_db_err)
                 if isinstance(exc, ConnectionRefusedError):
-                    log.err("Could not route message: %s" % repr(exc))
+                    # Occurs if an IP record is now used by some other node
+                    # in AWS.
+                    self.log.debug("Could not route message: {exc}", exc=exc)
             if result and result.code == 200:
                 self.metrics.increment("router.broadcast.hit")
                 returnValue(self.delivered_response(notification))
@@ -159,7 +163,7 @@ class SimpleRouter(object):
             self.metrics.increment("updates.client.host_gone")
             dead_cache.put(node_key(node_id), True)
             if isinstance(exc, ConnectionRefusedError):
-                log.err("Could not route message: %s" % repr(exc))
+                self.log.debug("Could not route message: {exc}", exc=exc)
             yield deferToThread(
                 router.clear_node,
                 uaid_data).addErrback(self._eat_db_err)
@@ -181,8 +185,9 @@ class SimpleRouter(object):
                             data=urlencode(self.udp["data"]),
                             cert=self.conf.get("cert"),
                             timeout=self.conf.get("server_timeout", 3)))
-                except Exception, x:
-                    log.err("Could not send UDP wake request:", str(x))
+                except Exception as exc:
+                    self.log.debug("Could not send UDP wake request: {exc}",
+                                   exc=exc)
             returnValue(retVal)
 
     #############################################################

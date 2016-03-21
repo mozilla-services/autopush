@@ -2,7 +2,6 @@
 from __future__ import absolute_import
 
 import datetime
-import logging
 import random
 import time
 import uuid
@@ -20,9 +19,6 @@ from boto.dynamodb2.table import Table
 from boto.dynamodb2.types import NUMBER
 
 from autopush.utils import generate_hash
-
-
-log = logging.getLogger(__file__)
 
 key_hash = ""
 TRACK_DB_CALLS = False
@@ -53,8 +49,6 @@ def hasher(uaid):
 
 
 def normalize_id(id):
-    if not id:
-        return id
     if (len(id) == 36 and
             id[8] == id[13] == id[18] == id[23] == '-'):
         return id.lower()
@@ -434,7 +428,6 @@ class Message(object):
             else:
                 expr += " REMOVE #dd, headers"
             expr_values = self.encode({":%s" % k: v for k, v in item.items()})
-            log.debug(expr_values)
             conn.update_item(
                 self.table.table_name,
                 db_key,

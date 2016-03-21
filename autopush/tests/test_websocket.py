@@ -47,8 +47,10 @@ def tearDown():
 
 class WebsocketTestCase(unittest.TestCase):
     def setUp(self):
+        from twisted.logger import Logger
         twisted.internet.base.DelayedCall.debug = True
         self.proto = PushServerProtocol()
+        self.proto.log = Mock(spec=Logger)
 
         settings = AutopushSettings(
             hostname="localhost",
@@ -104,7 +106,6 @@ class WebsocketTestCase(unittest.TestCase):
         return d
 
     def test_exc_catcher(self):
-        self.proto.log_err = Mock()
         req = Mock()
 
         def raise_error(*args, **kwargs):
@@ -977,8 +978,6 @@ class WebsocketTestCase(unittest.TestCase):
         assert self.proto.force_retry.called
 
     def test_ws_unregister(self):
-        patcher = patch("autopush.websocket.log", spec=True)
-        mock_log = patcher.start()
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
@@ -989,8 +988,7 @@ class WebsocketTestCase(unittest.TestCase):
         def check_unregister_result(msg):
             eq_(msg["status"], 200)
             eq_(msg["channelID"], chid)
-            eq_(len(mock_log.mock_calls), 1)
-            patcher.stop()
+            eq_(len(self.proto.log.mock_calls), 1)
             d.callback(True)
 
         def check_hello_result(msg):
@@ -1040,14 +1038,11 @@ class WebsocketTestCase(unittest.TestCase):
         return d
 
     def test_ws_unregister_fail(self):
-        patcher = patch('autopush.websocket.log', spec=True)
-        mock_log = patcher.start()
         self._connect()
         self.proto.ps.uaid = str(uuid.uuid4())
         chid = str(uuid.uuid4())
 
         d = Deferred()
-        d.addBoth(lambda x: patcher.stop())
 
         # Replace storage delete with call to fail
         table = self.proto.ap_settings.storage.table
@@ -1063,9 +1058,9 @@ class WebsocketTestCase(unittest.TestCase):
                                 channelID=chid))
 
         def wait_for_times():  # pragma: nocover
-            if len(mock_log.mock_calls) > 0:
+            if len(self.proto.log.failure.mock_calls) > 0:
                 try:
-                    eq_(len(mock_log.mock_calls), 1)
+                    eq_(len(self.proto.log.failure.mock_calls), 1)
                 finally:
                     d.callback(True)
                     return
@@ -1133,14 +1128,11 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(args, None)
 
     def test_ack(self):
-        patcher = patch('autopush.websocket.log', spec=True)
-        mock_log = patcher.start()
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
         d = Deferred()
         chid = str(uuid.uuid4())
-        d.addBoth(lambda x: patcher.stop())
 
         # stick a notification to ack in
         self.proto.ps.direct_updates[chid] = 12
@@ -1155,8 +1147,8 @@ class WebsocketTestCase(unittest.TestCase):
 
             # Verify it was cleared out
             eq_(len(self.proto.ps.direct_updates), 0)
-            eq_(len(mock_log.mock_calls), 1)
-            args, kwargs = mock_log.msg.call_args
+            eq_(len(self.proto.log.info.mock_calls), 1)
+            args, kwargs = self.proto.log.info.call_args
             eq_(args[0], "Ack")
             eq_(kwargs["router_key"], "simplepush")
             eq_(kwargs["message_source"], "direct")
@@ -1171,8 +1163,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         eq_(self.proto.ack_update(None), None)
 
-    @patch('autopush.websocket.log', spec=True)
-    def test_ack_with_webpush_direct(self, mock_log):
+    def test_ack_with_webpush_direct(self):
         self._connect()
         self.proto.ps.uaid = str(uuid.uuid4())
         chid = str(uuid.uuid4())
@@ -1188,14 +1179,13 @@ class WebsocketTestCase(unittest.TestCase):
             version="bleh:asdjfilajsdilfj"
         ))
         eq_(self.proto.ps.direct_updates[chid], [])
-        eq_(len(mock_log.mock_calls), 1)
-        args, kwargs = mock_log.msg.call_args
+        eq_(len(self.proto.log.info.mock_calls), 1)
+        args, kwargs = self.proto.log.info.call_args
         eq_(args[0], "Ack")
         eq_(kwargs["router_key"], "webpush")
         eq_(kwargs["message_source"], "direct")
 
-    @patch('autopush.websocket.log', spec=True)
-    def test_ack_with_webpush_from_storage(self, mock_log):
+    def test_ack_with_webpush_from_storage(self):
         self._connect()
         chid = str(uuid.uuid4())
         self.proto.ps.use_webpush = True
@@ -1214,14 +1204,13 @@ class WebsocketTestCase(unittest.TestCase):
         ))
         assert self.proto.force_retry.called
         assert mock_defer.addBoth.called
-        eq_(len(mock_log.mock_calls), 1)
-        args, kwargs = mock_log.msg.call_args
+        eq_(len(self.proto.log.info.mock_calls), 1)
+        args, kwargs = self.proto.log.info.call_args
         eq_(args[0], "Ack")
         eq_(kwargs["router_key"], "webpush")
         eq_(kwargs["message_source"], "stored")
 
-    @patch('autopush.websocket.log', spec=True)
-    def test_nack(self, mock_log):
+    def test_nack(self):
         self._connect()
         self.proto.ps.uaid = str(uuid.uuid4())
         self.proto.onMessage(json.dumps(dict(
@@ -1229,17 +1218,16 @@ class WebsocketTestCase(unittest.TestCase):
             version="bleh:asdfhjklhjkl",
             code=200
         )), False)
-        eq_(len(mock_log.mock_calls), 1)
+        eq_(len(self.proto.log.info.mock_calls), 1)
 
-    @patch('autopush.websocket.log', spec=True)
-    def test_nack_no_version(self, mock_log):
+    def test_nack_no_version(self):
         self._connect()
         self.proto.ps.uaid = str(uuid.uuid4())
         self.proto.onMessage(json.dumps(dict(
             messageType="nack",
             code=200
         )), False)
-        eq_(len(mock_log.mock_calls), 0)
+        eq_(len(self.proto.log.info.mock_calls), 0)
 
     def test_ack_remove(self):
         self._connect()
@@ -1382,14 +1370,13 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ap_settings.storage = Mock(
             **{"fetch_notifications.side_effect": throw_error})
         self.proto.ps._check_notifications = True
-        self.proto.log_err = Mock()
         self.proto.process_notifications()
 
         d = Deferred()
 
         def check_error(result):
             eq_(self.proto.ps._check_notifications, False)
-            ok_(self.proto.log_err.called)
+            ok_(self.proto.log.failure.called)
             d.callback(True)
 
         self.proto.ps._notification_fetch.addBoth(check_error)

@@ -1,120 +1,130 @@
 """Custom Logging Setup
-
-This module sets up eliot structured logging, intercepts stdout output from
-twisted, and pipes it through eliot for later processing into Kibana per
-Mozilla Services standard structured logging.
-
 """
-# TWISTED_LOG_MESSAGE and EliotObserver licensed under APL 2.0 from
-# ClusterHQ/flocker
-# https://github.com/ClusterHQ/flocker/blob/master/flocker/common/script.py#L81-L106
+import io
 import json
-import os
 import pkg_resources
 import socket
 import sys
 
 import raven
-from eliot import (add_destination, fields,
-                   Logger, MessageType)
 from twisted.internet import reactor
-from twisted.python.log import textFromEventDict, startLoggingWithObserver
+from twisted.logger import (
+    formatEvent,
+    formatEventAsClassicLogText,
+    globalLogPublisher,
+    LogLevel,
+    ILogObserver
+)
+from zope.interface import implementer
 
 HOSTNAME = socket.getfqdn()
-LOGGER = None
-TWISTED_LOG_MESSAGE = MessageType("twisted:log",
-                                  fields(error=bool, message=unicode),
-                                  u"A log message from Twisted.")
-HUMAN = False
+
+# A complete set of keys we don't include in Fields from a log event
+IGNORED_KEYS = frozenset([
+    "factory",
+    "failure",
+    "format",
+    "isError",
+    "log_format",
+    "log_flattened",
+    "log_level",
+    "log_legacy",
+    "log_logger",
+    "log_source",
+    "log_system",
+    "log_text",
+    "log_time",
+    "log_trace",
+    "message",
+    "message_type",
+    "severity",
+    "task_level",
+    "time",
+    "timestamp",
+    "type",
+    "why",
+])
 
 
-class EliotObserver(object):
-    """A Twisted log observer that logs to Eliot"""
-    def __init__(self):
-        """Create the Eliot Observer"""
-        if os.environ.get("SENTRY_DSN"):
+@implementer(ILogObserver)
+class PushLogger(object):
+    def __init__(self, logger_name, log_level="debug", log_format="json",
+                 log_output="stdout", sentry_dsn=None):
+        self.logger_name = "-".join([
+            logger_name,
+            pkg_resources.get_distribution("autopush").version
+        ])
+        self._filename = None
+        self.log_level = LogLevel.lookupByName(log_level)
+        if log_output == "stdout":
+            self._output = sys.stdout
+        else:
+            self._filename = log_output
+            self._output = "file"
+        if log_format == "json":
+            self.format_event = self.json_format
+        else:
+            self.format_event = formatEventAsClassicLogText
+        if sentry_dsn:
             self.raven_client = raven.Client(
                 release=raven.fetch_package_version("autopush"))
         else:
             self.raven_client = None
-        self.logger = Logger()
 
-    def raven_log(self, event):
-        """Log out twisted exception failures to Raven"""
-        f = event['failure']
-        # Throw back to event loop
-        reactor.callFromThread(
-            self.raven_client.captureException,
-            (f.type, f.value, f.getTracebackObject())
-        )
+    def __call__(self, event):
+        if event["log_level"] < self.log_level:
+            return
 
-    def __call__(self, msg):
-        """Called to log out messages"""
-        error = bool(msg.get("isError"))
+        if self.raven_client and 'failure' in event:
+            f = event["failure"]
+            reactor.callFromThread(
+                self.raven_client.captureException,
+                (f.type, f.value, f.getTracebackObject())
+            )
 
-        if self.raven_client and 'failure' in msg:
-            self.raven_log(msg)
-            error = True
+        text = self.format_event(event)
+        self._output.write(unicode(text))
+        self._output.flush()
 
-        # Twisted log messages on Python 2 are bytes. We don't know the
-        # encoding, but assume it's ASCII superset. Charmap will translate
-        # ASCII correctly, and higher-bit characters just map to
-        # corresponding Unicode code points, and will never fail at decoding.
-        message = unicode(textFromEventDict(msg), "charmap")
-        kw = msg.copy()
-        for key in ["message", "isError", "failure", "why", "format"]:
-            kw.pop(key, None)
-        TWISTED_LOG_MESSAGE(error=error, message=message, **kw).write(
-            self.logger)
+    def json_format(self, event):
+        error = bool(event.get("isError")) or "failure" in event
+        ts = event["log_time"]
+
+        if error:
+            severity = 3
+        else:
+            severity = 5
+
+        msg = {
+            "Hostname": HOSTNAME,
+            "Timestamp": ts * 1000 * 1000 * 1000,
+            "Type": "twisted:log",
+            "Severity": event.get("severity") or severity,
+            "EnvVersion": "2.0",
+            "Fields": {k: v for k, v in event.iteritems()
+                       if k not in IGNORED_KEYS and
+                       type(v) in (str, unicode, list, int, float)},
+            "Logger": self.logger_name,
+        }
+        # Add the nicely formatted message
+        msg["Fields"]["message"] = formatEvent(event)
+        return json.dumps(msg, skipkeys=True) + "\n"
 
     def start(self):
-        """Start capturing Twisted logs."""
-        startLoggingWithObserver(self, setStdout=False)
+        if self._filename:
+            self._output = io.open(self._filename, "a", encoding="utf-8")
+        globalLogPublisher.addObserver(self)
 
+    def stop(self):
+        globalLogPublisher.removeObserver(self)
+        if self._filename:
+            self._output.close()
+            self._output = None
 
-def stdout(message):
-    """Format a message appropriately for structured logging capture of stdout
-    and then write it to stdout"""
-    if HUMAN:
-        if message['error']:
-            sys.stdout.write("ERROR: %s\n" % message['message'])
-        else:
-            sys.stdout.write("       %s\n" % message['message'])
-        return
-    msg = {}
-    ts = message.pop("timestamp")
-    message.pop("time")
-    del message["task_level"]
-    msg["Hostname"] = HOSTNAME
-    if message["error"]:
-        msg["Severity"] = 3
-    else:
-        msg["Severity"] = 5
-
-    # 'message_type' is used by twisted logging. Preserve this to the
-    # 'Type' tag.
-    if "message_type" in message:
-        msg["Type"] = message.pop("message_type")
-
-    for key in ["Severity", "type", "severity"]:
-        if key in message:
-            msg[key.title()] = message.pop(key)
-
-    msg["Timestamp"] = ts * 1000 * 1000 * 1000
-    msg["Fields"] = {k: v for k, v in message.items()
-                     if not k.startswith("log_")}
-    msg["EnvVersion"] = "2.0"
-    msg["Logger"] = LOGGER
-    sys.stdout.write(json.dumps(msg, skipkeys=True) + "\n")
-
-
-def setup_logging(logger_name, human=False):
-    """Patch in the Eliot logger and twisted log interception"""
-    global LOGGER, HUMAN
-    LOGGER = "-".join([logger_name,
-                       pkg_resources.get_distribution("autopush").version])
-    HUMAN = human
-    add_destination(stdout)
-    ellie = EliotObserver()
-    ellie.start()
-    return ellie
+    @classmethod
+    def setup_logging(cls, logger_name, log_level="info", log_format="json",
+                      log_output="stdout", sentry_dsn=None):
+        pl = cls(logger_name, log_level=log_level, log_format=log_format,
+                 log_output=log_output, sentry_dsn=sentry_dsn)
+        pl.start()
+        return pl
