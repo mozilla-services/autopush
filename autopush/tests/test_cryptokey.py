@@ -25,6 +25,13 @@ class CryptoKeyTestCase(unittest.TestCase):
         ok_(ckey.get_keyid("missing") is None)
         ok_(ckey.get_label("missing") is None)
 
+    def test_parse_different_order(self):
+        ckey = CryptoKey(self.valid_key)
+        ckey2 = CryptoKey(','.join(self.valid_key.split(',')[::-1]))
+        ok_(ckey.get_keyid("p256dh"), ckey2.get_keyid("p256dh"))
+        ok_(ckey.get_label("p256ecdsa") is not None)
+        ok_(ckey.get_label("p256ecdsa"), ckey2.get_label("p256ecdsa"))
+
     def test_parse_lenient(self):
         ckey = CryptoKey(self.valid_key.replace('"', ''))
         str = ckey.to_string()
