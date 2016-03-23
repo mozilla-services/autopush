@@ -776,9 +776,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.transport.pauseProducing()
         # Check for table rotation
         cur_month = previous.get("current_month")
+        # Previous month user or new user, flag for message rotation and
+        # set the message_month to the router month
         if cur_month != self.ps.message_month:
-            # Previous month user or new user, flag for message rotation and
-            # set the message_month to the router month
+            if cur_month not in self.ps.settings.message_tables:
+                # This UAID has expired. Force client to reregister.
+                self.ps.uaid = uuid.uuid4().hex
+                self._finish_webpush_hello()
+                return
             self.ps.message_month = cur_month
             self.ps.rotate_message_table = True
 

@@ -1,4 +1,5 @@
 import unittest
+import datetime
 
 from mock import Mock, patch
 from moto import mock_dynamodb2, mock_s3
@@ -44,6 +45,21 @@ class SettingsTestCase(unittest.TestCase):
         ip = resolve_ip("example.com")
         eq_(ip, "example.com")
 
+    def test_new_month(self):
+        today = datetime.date.today()
+        next_month = today.month + 1
+        next_year = today.year
+        if next_month > 12:  # pragma: nocover
+            next_month = 1
+            next_year += 1
+        tomorrow = datetime.datetime(year=next_year,
+                                     month=next_month,
+                                     day=1)
+        AutopushSettings._tomorrow = Mock()
+        AutopushSettings._tomorrow.return_value = tomorrow
+        settings = AutopushSettings()
+        eq_(len(settings.message_tables), 3)
+
 
 class SettingsAsyncTestCase(trialtest.TestCase):
     def test_update_rotating_tables(self):
@@ -61,6 +77,35 @@ class SettingsAsyncTestCase(trialtest.TestCase):
 
         def check_tables(result):
             eq_(len(settings.message_tables), 1)
+
+        d.addCallback(check_tables)
+        return d
+
+    def test_update_rotating_tables_month_end(self):
+        today = datetime.date.today()
+        next_month = today.month + 1
+        next_year = today.year
+        if next_month > 12:  # pragma: nocover
+            next_month = 1
+            next_year += 1
+        tomorrow = datetime.datetime(year=next_year,
+                                     month=next_month,
+                                     day=1)
+        AutopushSettings._tomorrow = Mock()
+        AutopushSettings._tomorrow.return_value = tomorrow
+        settings = AutopushSettings(
+            hostname="example.com", resolve_hostname=True)
+        # shift off tomorrow's table.
+
+        tomorrow_table = sorted(settings.message_tables.keys())[-1]
+        settings.message_tables.pop(tomorrow_table)
+
+        # Get the deferred back
+        d = settings.update_rotating_tables()
+
+        def check_tables(result):
+            eq_(len(settings.message_tables), 3)
+            eq_(sorted(settings.message_tables.keys())[-1], tomorrow_table)
 
         d.addCallback(check_tables)
         return d

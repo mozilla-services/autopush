@@ -1,4 +1,5 @@
 import json
+import datetime
 import time
 import uuid
 from hashlib import sha256
@@ -18,7 +19,9 @@ from twisted.internet.error import ConnectError
 from twisted.trial import unittest
 
 import autopush.db as db
-from autopush.db import create_rotating_message_table
+from autopush.db import (
+    create_rotating_message_table,
+)
 from autopush.settings import AutopushSettings
 from autopush.websocket import (
     PushState,
@@ -405,6 +408,133 @@ class WebsocketTestCase(unittest.TestCase):
             d.callback(True)
         reactor.callLater(0.1, wait_for_agent_call)
         return d
+
+    def test_hello_old(self):
+        orig_uaid = "deadbeef12345678decafbad12345678"
+        # router.register_user returns (registered, previous
+        target_day = datetime.date(2016, 2, 29)
+        msg_day = datetime.date(2015, 12, 15)
+        msg_date = "{}_{}_{}".format(
+            self.proto.ap_settings._message_prefix,
+            msg_day.year,
+            msg_day.month)
+        msg_data = {
+            "router_type": "webpush",
+            "node_id": "http://localhost",
+            "last_connect": int(msg_day.strftime("%s")),
+            "current_month": msg_date,
+        }
+
+        def fake_msg(data):
+            return (True, msg_data, data)
+
+        mock_msg = Mock(wraps=db.Message)
+        mock_msg.fetch_messages.return_value = []
+        self.proto.ap_settings.router.register_user = fake_msg
+        # massage message_tables to include our fake range
+        mt = self.proto.ps.settings.message_tables
+        for k in mt.keys():
+            del(mt[k])
+        mt['message_2016_1'] = mock_msg
+        mt['message_2016_2'] = mock_msg
+        mt['message_2016_3'] = mock_msg
+        with patch.object(datetime, 'date',
+                          Mock(wraps=datetime.date)) as patched:
+            patched.today.return_value = target_day
+            self._connect()
+            self._send_message(dict(messageType="hello",
+                               uaid=orig_uaid,
+                               channelIDs=[],
+                               use_webpush=True))
+
+        def check_result(msg):
+            eq_(self.proto.ps.rotate_message_table, False)
+            # it's fine you've not connected in a while, but
+            # you should recycle your endpoints since they're probably
+            # invalid by now anyway.
+            eq_(msg["status"], 200)
+            ok_(msg["uaid"] != orig_uaid)
+
+        return self._check_response(check_result)
+
+    def test_hello_tomorrow(self):
+        orig_uaid = "deadbeef12345678decafbad12345678"
+        # router.register_user returns (registered, previous
+        target_day = datetime.date(2016, 2, 29)
+        msg_day = datetime.date(2016, 3, 1)
+        msg_date = "{}_{}_{}".format(
+            self.proto.ap_settings._message_prefix,
+            msg_day.year,
+            msg_day.month)
+        msg_data = {
+            "router_type": "webpush",
+            "node_id": "http://localhost",
+            "last_connect": int(msg_day.strftime("%s")),
+            "current_month": msg_date,
+        }
+
+        def fake_msg(data):
+            return (True, msg_data, data)
+
+        mock_msg = Mock(wraps=db.Message)
+        mock_msg.fetch_messages.return_value = []
+        self.proto.ap_settings.router.register_user = fake_msg
+        # massage message_tables to include our fake range
+        mt = self.proto.ps.settings.message_tables
+        for k in mt.keys():
+            del(mt[k])
+        mt['message_2016_1'] = mock_msg
+        mt['message_2016_2'] = mock_msg
+        mt['message_2016_3'] = mock_msg
+        with patch.object(datetime, 'date',
+                          Mock(wraps=datetime.date)) as patched:
+            patched.today.return_value = target_day
+            self._connect()
+            self._send_message(dict(messageType="hello",
+                               uaid=orig_uaid,
+                               channelIDs=[],
+                               use_webpush=True))
+
+        def check_result(msg):
+            eq_(self.proto.ps.rotate_message_table, False)
+            # it's fine you've not connected in a while, but
+            # you should recycle your endpoints since they're probably
+            # invalid by now anyway.
+            eq_(msg["status"], 200)
+            eq_(msg["uaid"], orig_uaid)
+
+        return self._check_response(check_result)
+
+    """
+    def test_add_tomorrow(self):
+        today = datetime.date(2016, 2, 29)
+        yester = datetime.date(2016, 1, 1)
+        tomorrow = datetime.date(2016, 3, 1)
+        today_table = "{}_{}_{}".format(
+            self.proto.ap_settings._message_prefix,
+            today.year,
+            today.month)
+        yester_table = "{}_{}_{}".format(
+            self.proto.ap_settings._message_prefix,
+            yester.year,
+            yester.month)
+        tomorrow_table = "{}_{}_{}".format(
+            self.proto.ap_settings._message_prefix,
+            tomorrow.year,
+            tomorrow.month)
+
+        mock_msg = Mock(wraps=db.Message)
+        mock_msg.fetch_messages.return_value = []
+        mt = self.proto.ps.settings.message_tables
+        for k in mt.keys():
+            del(mt[k])
+        mt[yester_table] = mock_msg
+        mt[today_table] = mock_msg
+
+        self._connect()
+        self.proto.ps.settings.add_tomorrow(today, today_table)
+        ok_(tomorrow_table in self.proto.ps.settings.message_tables)
+    """
 
     def test_hello(self):
         self._connect()
