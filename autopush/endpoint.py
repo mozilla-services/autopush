@@ -306,8 +306,9 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         message = fail.value.message or repr(fail.value)
         if isinstance(fail.value, AssertionError):
             message = "A decryption error occurred"
-        self.log.debug("Invalid bearer token: " + message, **self._client_info)
-        raise VapidAuthException("Invalid bearer token: " + message)
+        self.log.debug("Invalid bearer token: " + repr(message),
+                       **self._client_info)
+        raise VapidAuthException("Invalid bearer token: " + repr(message))
 
     def _process_auth(self, result):
         """Process the optional VAPID auth token.

@@ -1212,8 +1212,17 @@ class EndpointTestCase(unittest.TestCase):
         self.status_mock.assert_called_with(500)
 
     def test_padding(self):
+        # Some values can't be padded and still decode.
+        eq_(utils.fix_padding("a"), "a===")
+        self.assertRaises(TypeError,
+                          base64.urlsafe_b64decode,
+                          utils.fix_padding("a"))
         eq_(utils.fix_padding("ab"), "ab==")
+        base64.urlsafe_b64decode(utils.fix_padding("ab"))
+        eq_(utils.fix_padding("abc"), "abc=")
+        base64.urlsafe_b64decode(utils.fix_padding("abc"))
         eq_(utils.fix_padding("abcd"), "abcd")
+        base64.urlsafe_b64decode(utils.fix_padding("abcd"))
 
     def test_parse_endpoint(self):
         v0_valid = dummy_uaid + ":" + dummy_chid
