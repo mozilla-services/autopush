@@ -2,12 +2,15 @@ language: python
 sudo: required
 dist: precise
 python:
-  - "2.7"
+- '2.7'
 install:
-  - virtualenv pypy
-  - cd pypy/bin && ln -s python pypy && cd ../..
-  - source pypy/bin/activate
-  - make travis
+- virtualenv pypy
+- cd pypy/bin && ln -s python pypy && cd ../..
+- source pypy/bin/activate
+- make travis
 script: tox -- --with-coverage --cover-xml --cover-package=autopush
 after_success:
-  - codecov
+- codecov
+notifications:
+  slack:
+    secure: LE+1Nelh5PLrb35LU6yJI1EV2LDVm4V90Tb+5LhUpeGrcfqr47HhMLMGXbBSnnjYPRLCiT75xog+oMN5eAF4VnZle4qza6Ue7G+YwRtGo/V0ud0i2zSUT557yXcr2QCYAzTKJVgetnxQNYvru/l1trdNZsRbsPUm1vexAjaX5yo=
