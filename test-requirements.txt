@@ -15,7 +15,7 @@ argparse==1.2.1
 autobahn[twisted]==0.13.0
 boto==2.38.0
 boto3==1.3.0
-#cffi==1.1.2
+cffi==1.5.2
 characteristic==14.3.0
 cryptography==1.2.3
 cyclone==1.1
