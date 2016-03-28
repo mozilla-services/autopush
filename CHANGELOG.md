@@ -1,10 +1,23 @@
+<a name="1.14.1"></a>
+## 1.14.1 (2016-03-28)
+
+
+#### Chore
+
+*   tag 1.14.1 ([8cf95035](https://github.com/mozilla-services/autopush/commit/8cf950355ee08421cc48aeebaa7d4427864fcb54))
+
+#### Bug Fixes
+
+*   update cffi dep and ensure test reqs matches reqs ([669e1b24](https://github.com/mozilla-services/autopush/commit/669e1b244cf5412df604059da27bdf850446b487))
+
+
 <a name="1.14.0"></a>
 ## 1.14.0 (2016-03-28)
 
 
 #### Chore
 
-*   tag 1.14.0 release ([e4e9d089](https://github.com/mozilla-services/autopush/commit/e4e9d08948cd5e4d94639338ce6fc538798db77b))
+*   tag 1.14.0 release ([bcfb4e30](https://github.com/mozilla-services/autopush/commit/bcfb4e301dceae020e12ff0599d805408406640e))
 *   add slack travis output ([aa662661](https://github.com/mozilla-services/autopush/commit/aa662661679f16e5d91384dfa66c15ed62bcc0ad))
 
 #### Bug Fixes
