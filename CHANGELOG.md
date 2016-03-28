@@ -1,3 +1,28 @@
+<a name="1.14.0"></a>
+## 1.14.0 (2016-03-28)
+
+
+#### Chore
+
+*   tag 1.14.0 release ([e4e9d089](https://github.com/mozilla-services/autopush/commit/e4e9d08948cd5e4d94639338ce6fc538798db77b))
+*   add slack travis output ([aa662661](https://github.com/mozilla-services/autopush/commit/aa662661679f16e5d91384dfa66c15ed62bcc0ad))
+
+#### Bug Fixes
+
+*   limit valid months to acceptable range ([a06c5ad6](https://github.com/mozilla-services/autopush/commit/a06c5ad683af9a60438dedec55b23be6e80355ba), closes [#350](https://github.com/mozilla-services/autopush/issues/350))
+*   enforce fail.value.message to string ([c3b39161](https://github.com/mozilla-services/autopush/commit/c3b39161cdf2e29c35bacaf1480d6c07ade8633f))
+*   fix dockerfile for automated builds ([b4f1dcef](https://github.com/mozilla-services/autopush/commit/b4f1dcef4da88a5f4abb8b74ca1c2e9d08ca11f0), closes [#414](https://github.com/mozilla-services/autopush/issues/414))
+*   Allow arbitrary args for options and head functions ([46d2c1dc](https://github.com/mozilla-services/autopush/commit/46d2c1dcd7062b4a3352f98905ddef075f76c1d2))
+*   decode and process crypto-key header correctly ([f546ed78](https://github.com/mozilla-services/autopush/commit/f546ed78585976d33534595dafcef401c118ea43), closes [#410](https://github.com/mozilla-services/autopush/issues/410))
+
+#### Features
+
+*   allow logging to batch send to aws firehose ([cad54238](https://github.com/mozilla-services/autopush/commit/cad5423867883f404ec12543c6b139d095aedaa5), closes [#421](https://github.com/mozilla-services/autopush/issues/421))
+*   update logging for newstyle twisted and file output ([547eb1ed](https://github.com/mozilla-services/autopush/commit/547eb1edbb62722b7636b1211ecfc405d3263beb), closes [#419](https://github.com/mozilla-services/autopush/issues/419))
+*   bump autobahn/twisted reqs to 0.13/16.0 for utf8 fix ([89dc0c28](https://github.com/mozilla-services/autopush/commit/89dc0c28fb261f76d309c57a1d9f06ece1c7072f), closes [#351](https://github.com/mozilla-services/autopush/issues/351))
+
+
+
 <a name="1.13.2"></a>
 ## 1.13.2 (2016-03-13)
 
