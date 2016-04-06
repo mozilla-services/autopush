@@ -296,8 +296,10 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     def _store_auth(self, jwt, crypto_key, token, result):
         if jwt.get('exp', 0) < time.time():
             raise VapidAuthException("Invalid bearer token: Auth expired")
-        jwt['crypto_key'] = crypto_key
-        self._client_info['jwt'] = jwt
+        # flatten the jwt into the _client_info record
+        self._client_info["jwt_crypto_key"] = crypto_key
+        for i in jwt:
+            self._client_info["jwt_" + i] = jwt[i]
         return result
 
     def _invalid_auth(self, fail):

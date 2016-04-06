@@ -806,7 +806,9 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result, crypto_key, token):
             self.endpoint.set_status.assert_called_with(201)
             payload.update({'crypto_key': crypto_key})
-            eq_(self.endpoint._client_info.get('jwt'), payload)
+            for i in payload:
+                n = 'jwt_' + i
+                eq_(self.endpoint._client_info.get(n), payload[i])
             self.assertTrue(result)
 
         self.finish_deferred.addCallback(handle_finish, crypto_key, token)
