@@ -1,3 +1,13 @@
+<a name="1.14.2"></a>
+## 1.14.2 (2016-04-07)
+
+
+#### Bug Fixes
+
+*   flatten JWT for logging. ([f56f8f1a](https://github.com/mozilla-services/autopush/commit/f56f8f1a887dd66855f7849f523d59a25f5b7d18))
+
+
+
 <a name="1.14.1"></a>
 ## 1.14.1 (2016-03-28)
 
