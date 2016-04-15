@@ -448,10 +448,11 @@ class EndpointHandler(AutoendpointHandler):
 
         # Only simplepush uses version/data out of body/query, GCM/APNS will
         # use data out of the request body 'WebPush' style.
-        if router_key == "simplepush":
+        use_simplepush = router_key == "simplepush"
+        if use_simplepush:
             self.version, data = parse_request_params(self.request)
             self._client_info['message_id'] = self.version
-        elif router_key == "webpush":
+        else:
             data = self.request.body
             if "ttl" not in self.request.headers:
                 ttl = None
@@ -469,9 +470,6 @@ class EndpointHandler(AutoendpointHandler):
                 return self._write_response(
                     400, 110, message="Invalid crypto headers")
             self._client_info["message_size"] = len(data) if data else 0
-        else:
-            # GCM/APNS pull data out of body
-            data = self.request.body
 
         if "ttl" not in self.request.headers:
             ttl = None
@@ -490,15 +488,15 @@ class EndpointHandler(AutoendpointHandler):
             return self._write_response(
                 413, 104, message="Data payload too large")
 
-        if router_key == "simplepush":
+        if use_simplepush:
             self._route_notification(self.version, result, data)
             return
 
-        # Web Push messages are encrypted binary blobs. We store and deliver
-        # these messages as Base64-encoded strings.
-        if router_key == "webpush":
-            data = urlsafe_b64encode(self.request.body)
+        # Web Push and bridged messages are encrypted binary blobs. We store
+        # and deliver these messages as Base64-encoded strings.
+        data = urlsafe_b64encode(self.request.body)
 
+        # Generate a message ID, then route the notification.
         d = deferToThread(self.ap_settings.fernet.encrypt, ':'.join([
             'm', self.uaid, self.chid]).encode('utf8'))
         d.addCallback(self._route_notification, result, data, ttl)

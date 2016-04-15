@@ -91,7 +91,11 @@ class APNSRouterTestCase(unittest.TestCase):
         self.router = APNSRouter(settings, apns_config)
         self.router.apns = self.mock_apns
         self.router.log = Mock(spec=Logger)
-        self.notif = Notification(10, "data", dummy_chid, None, 200)
+        self.headers = {"content-encoding": "aesgcm",
+                        "encryption": "test",
+                        "encryption-key": "test"}
+        self.notif = Notification(10, "q60d6g==", dummy_chid, self.headers,
+                                  200)
         self.router_data = dict(router_data=dict(token="connect_data"))
 
     def test_register(self):
@@ -121,6 +125,19 @@ class APNSRouterTestCase(unittest.TestCase):
             ok_(isinstance(result, RouterResponse))
             assert(self.mock_apns.gateway_server.send_notification.called)
             eq_(len(self.router.messages), 1)
+
+            payload = self.router.messages[now]['payload']
+            eq_(payload.alert, 'SimplePush')
+
+            custom = payload.custom
+            eq_(custom['Msg'], self.notif.data)
+            eq_(custom['Ver'], self.notif.version)
+            eq_(custom['Con'], 'aesgcm')
+            eq_(custom['Enc'], 'test')
+            eq_(custom['Enckey'], 'test')
+            eq_(custom['Chid'], self.notif.channel_id)
+            ok_('Cryptokey' not in custom)
+
         d.addCallback(check_results)
         return d
 
@@ -155,6 +172,36 @@ class APNSRouterTestCase(unittest.TestCase):
         (t, v) = self.router.check_token("")
         ok_(t)
 
+    def test_route_crypto_key(self):
+        headers = {"content-encoding": "aesgcm",
+                   "encryption": "test",
+                   "crypto-key": "test"}
+        self.notif = Notification(10, "q60d6g==", dummy_chid, headers, 200)
+        now = int(time.time())
+        self.router.messages = {now: {'token': 'dump', 'payload': {}},
+                                now-60: {'token': 'dump', 'payload': {}}}
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(result):
+            ok_(isinstance(result, RouterResponse))
+            assert(self.mock_apns.gateway_server.send_notification.called)
+            eq_(len(self.router.messages), 1)
+
+            payload = self.router.messages[now]['payload']
+            eq_(payload.alert, 'SimplePush')
+
+            custom = payload.custom
+            eq_(custom['Msg'], self.notif.data)
+            eq_(custom['Ver'], self.notif.version)
+            eq_(custom['Con'], 'aesgcm')
+            eq_(custom['Enc'], 'test')
+            eq_(custom['Cryptokey'], 'test')
+            eq_(custom['Chid'], self.notif.channel_id)
+            ok_('Enckey' not in custom)
+
+        d.addCallback(check_results)
+        return d
+
 
 class GCMRouterTestCase(unittest.TestCase):
 
@@ -174,9 +221,9 @@ class GCMRouterTestCase(unittest.TestCase):
         self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
-        # Data will most likely be binary values.
-        self.notif = Notification(10, "\xab\xad\x1d\xea", dummy_chid,
-                                  self.headers, 200)
+        # Payloads are Base64-encoded.
+        self.notif = Notification(10, "q60d6g==", dummy_chid, self.headers,
+                                  200)
         self.router_data = dict(
             router_data=dict(
                 token="connect_data",
@@ -247,7 +294,7 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_ttl_none(self):
         self.router.gcm = self.gcm
         self.notif = Notification(version=10,
-                                  data="\xab\xad\x1d\xea",
+                                  data="q60d6g==",
                                   channel_id=dummy_chid,
                                   headers=self.headers,
                                   ttl=None)
@@ -293,54 +340,6 @@ class GCMRouterTestCase(unittest.TestCase):
             ok_(isinstance(result, RouterResponse))
             assert(self.router.gcm.send.called)
         d.addCallback(check_results)
-        return d
-
-    def test_router_missing_enc_key_header(self):
-        self.router.gcm = self.gcm
-        del(self.notif.headers['encryption-key'])
-        d = self.router.route_notification(self.notif, self.router_data)
-
-        def check_results(result):
-            ok_(isinstance(result.value, RouterException))
-            eq_(result.value.status_code, 400)
-
-        d.addBoth(check_results)
-        return d
-
-    def test_router_bogus_headers(self):
-        self.router.gcm = self.gcm
-        self.notif.headers['crypto-key'] = "crypto"
-        d = self.router.route_notification(self.notif, self.router_data)
-
-        def check_results(result):
-            ok_(isinstance(result.value, RouterException))
-            eq_(result.value.status_code, 400)
-
-        d.addBoth(check_results)
-        return d
-
-    def test_router_missing_enc_header(self):
-        self.router.gcm = self.gcm
-        del(self.notif.headers['encryption'])
-        d = self.router.route_notification(self.notif, self.router_data)
-
-        def check_results(result):
-            ok_(isinstance(result.value, RouterException))
-            eq_(result.value.status_code, 400)
-
-        d.addBoth(check_results)
-        return d
-
-    def test_router_missing_cont_enc_header(self):
-        self.router.gcm = self.gcm
-        del(self.notif.headers['content-encoding'])
-        d = self.router.route_notification(self.notif, self.router_data)
-
-        def check_results(result):
-            ok_(isinstance(result.value, RouterException))
-            eq_(result.value.status_code, 400)
-
-        d.addBoth(check_results)
         return d
 
     def test_router_notification_gcm_auth_error(self):

@@ -65,12 +65,24 @@ class APNSRouter(object):
     def _route(self, notification, router_data):
         """Blocking APNS call to route the notification"""
         token = router_data["token"]
+        custom = {
+          "Chid": notification.channel_id,
+          "Ver": notification.version,
+        }
+        if notification.data:
+            custom["Msg"] = notification.data
+            custom["Con"] = notification.headers["content-encoding"]
+            custom["Enc"] = notification.headers["encryption"]
+
+            if "crypto-key" in notification.headers:
+                custom["Cryptokey"] = notification.headers["crypto-key"]
+            elif "encryption-key" in notification.headers:
+                custom["Enckey"] = notification.headers["encryption-key"]
+
         payload = apns.Payload(alert=router_data.get("title",
                                                      self.default_title),
                                content_available=1,
-                               custom={"Msg": notification.data,
-                                       "Chid": notification.channel_id,
-                                       "Ver": notification.version})
+                               custom=custom)
         now = int(time.time())
         self.messages[now] = {"token": token, "payload": payload}
         # TODO: Add listener for error handling.

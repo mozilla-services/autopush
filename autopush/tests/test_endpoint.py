@@ -392,27 +392,6 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
 
-    def test_other_payload_encoding(self):
-        fresult = dict(router_type="test")
-        frouter = Mock(spec=Router)
-        frouter.route_notification = Mock()
-        frouter.route_notification.return_value = RouterResponse()
-        self.endpoint.chid = dummy_chid
-        self.endpoint.ap_settings.routers["test"] = frouter
-
-        self.request_mock.body = b"stuff"
-        self.endpoint._uaid_lookup_results(fresult)
-
-        def handle_finish(value):
-            calls = frouter.route_notification.mock_calls
-            eq_(len(calls), 1)
-            (_, (notification, _), _) = calls[0]
-            eq_(notification.channel_id, dummy_chid)
-            eq_(notification.data, b"stuff")
-
-        self.finish_deferred.addCallback(handle_finish)
-        return self.finish_deferred
-
     def test_init_info(self):
         d = self.endpoint._init_info()
         eq_(d["request_id"], dummy_request_id)

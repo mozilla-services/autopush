@@ -1,7 +1,6 @@
 """GCM Router"""
 import gcmclient
 import json
-from base64 import urlsafe_b64encode
 
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
@@ -61,42 +60,26 @@ class GCMRouter(object):
     def _route(self, notification, router_data):
         """Blocking GCM call to route the notification"""
         data = {"chid": notification.channel_id}
-        # Payload data is optional.  If present, all of Content-Encoding,
-        # Encryption, and Encryption/Crypto-Key are required.  If one or
-        # more are missing, a 400 response is produced.
+        # Payload data is optional. The endpoint handler validates that the
+        # correct encryption headers are included with the data.
         if notification.data:
-            lead = "notification with data is missing header:"
-            con = notification.headers.get('content-encoding', None)
-            if not con:
-                raise self._error("%s Content-Encoding" % lead, 400)
-            enc = notification.headers.get('encryption', None)
-            if not enc:
-                raise self._error("%s Encryption" % lead, 400)
-            if ('crypto-key' in notification.headers and
-                    'encryption-key' in notification.headers):
-                raise self._error("notification with data has both"
-                                  "crypto-key and encryption-key headers",
-                                  400)
-            if not ('crypto-key' in notification.headers or
-                    'encryption-key' in notification.headers):
-                raise self._error("notification with data is missing " +
-                                  "key header", 400)
-            if ('encryption-key' in notification.headers):
-                data['enckey'] = notification.headers.get('encryption-key')
-            if ('crypto-key' in notification.headers):
-                data['cryptokey'] = notification.headers.get('crypto-key')
-            udata = urlsafe_b64encode(notification.data)
             mdata = self.config.get('max_data', 4096)
-            if len(udata) > mdata:
+            if len(notification.data) > mdata:
                 raise self._error("This message is intended for a " +
                                   "constrained device and is limited " +
                                   "to 3070 bytes. Converted buffer too " +
-                                  "long by %d bytes" % (len(udata) - mdata),
+                                  "long by %d bytes" %
+                                  (len(notification.data) - mdata),
                                   413, errno=104)
-            # TODO: if the data is longer than max_data, raise error
-            data['body'] = udata
-            data['con'] = con
-            data['enc'] = enc
+
+            data['body'] = notification.data
+            data['con'] = notification.headers['content-encoding']
+            data['enc'] = notification.headers['encryption']
+
+            if 'crypto-key' in notification.headers:
+                data['cryptokey'] = notification.headers['crypto-key']
+            elif 'encryption-key' in notification.headers:
+                data['enckey'] = notification.headers['encryption-key']
 
         # registration_ids are the GCM instance tokens (specified during
         # registration.
