@@ -1616,6 +1616,46 @@ class RegistrationTestCase(unittest.TestCase):
         return self.finish_deferred
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
+    def test_post_with_app_server_key(self, *args):
+        dummy_key = "RandomKeyString"
+        self.reg.request.body = json.dumps(dict(
+            type="simplepush",
+            key=utils.base64url_encode(dummy_key),
+            data={},
+        ))
+
+        def mock_encrypt(cleartext):
+            eq_(len(cleartext), 64)
+            # dummy_uaid
+            eq_(cleartext[0:16],
+                'abad1dea00000000aabbccdd00000000'.decode('hex'))
+            # dummy_chid
+            eq_(cleartext[16:32],
+                'deadbeef00000000decafbad00000000'.decode('hex'))
+            # sha256(dummy_key).digest()
+            eq_(cleartext[32:],
+                ('47aedd050b9e19171f0fa7b8b65ca670'
+                '28f0bc92cd3f2cd3682b1200ec759007').decode('hex'))
+            return 'abcd123'
+        self.fernet_mock.configure_mock(**{
+            'encrypt.side_effect': mock_encrypt,
+        })
+        self.reg.request.headers["Authorization"] = self.auth
+
+        def handle_finish(value):
+            call_args = self.reg.write.call_args
+            ok_(call_args is not None)
+            args = call_args[0]
+            call_arg = json.loads(args[0])
+            eq_(call_arg["channelID"], dummy_chid)
+            eq_(call_arg["endpoint"], "http://localhost/push/v2/abcd123")
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
+        self.reg.post(router_type="simplepush", uaid=dummy_uaid)
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     def test_put(self, *args):
         data = dict(token="some_token")
         self.router_mock.register = Mock()
