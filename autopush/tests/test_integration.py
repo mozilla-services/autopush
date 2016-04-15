@@ -1,4 +1,3 @@
-import base64
 import httplib
 import json
 import logging
@@ -9,7 +8,6 @@ import subprocess
 import time
 import urlparse
 import uuid
-from base64 import urlsafe_b64encode
 from unittest.case import SkipTest
 
 import boto
@@ -35,6 +33,7 @@ from autopush.db import (
     has_connected_this_month
 )
 from autopush.settings import AutopushSettings
+from autopush.utils import base64url_encode
 
 log = logging.getLogger(__name__)
 here_dir = os.path.abspath(os.path.dirname(__file__))
@@ -90,7 +89,7 @@ def _get_vapid(key=None, payload=None):
         key = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
     vk = key.get_verifying_key()
     auth = jws.sign(payload, key, algorithm="ES256").strip('=')
-    crypto_key = base64.urlsafe_b64encode('\4' + vk.to_string()).strip('=')
+    crypto_key = base64url_encode('\4' + vk.to_string())
     return {"auth": auth,
             "crypto-key": crypto_key,
             "key": key}
@@ -586,7 +585,7 @@ class TestData(IntegrationBase):
         ok_(result is not None)
         eq_(result["messageType"], "notification")
         eq_(result["channelID"], chan)
-        eq_(result["data"], "wyigoeIooQ==")
+        eq_(result["data"], "wyigoeIooQ")
 
         yield self.shut_down(client)
 
@@ -594,14 +593,14 @@ class TestData(IntegrationBase):
     def test_webpush_data_delivery_to_disconnected_client(self):
         tests = {
             "d248d4e0-0ef4-41d9-8db5-2533ad8e4041": dict(
-                data=b"\xe2\x82\x28\xf0\x28\x8c\xbc", result="4oIo8CiMvA=="),
+                data=b"\xe2\x82\x28\xf0\x28\x8c\xbc", result="4oIo8CiMvA"),
 
             "df2363be-4d55-49c5-a1e3-aeae9450692e": dict(
                 data=b"\xf0\x90\x28\xbc\xf0\x28\x8c\x28",
-                result="8JAovPAojCg="),
+                result="8JAovPAojCg"),
 
             "6c33e055-5762-47e5-b90c-90ad9bfe3f53": dict(
-                data=b"\xc3\x28\xa0\xa1\xe2\x28\xa1", result="wyigoeIooQ=="),
+                data=b"\xc3\x28\xa0\xa1\xe2\x28\xa1", result="wyigoeIooQ"),
         }
 
         client = Client("ws://localhost:9010/", use_webpush=True)
@@ -711,7 +710,7 @@ class TestWebPush(IntegrationBase):
         client = yield self.quick_register(use_webpush=True)
         result = yield client.send_notification(data=data)
         eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
         yield self.shut_down(client)
 
@@ -723,7 +722,7 @@ class TestWebPush(IntegrationBase):
             client.uaid, client.channels.keys()[0])
         result = yield client.send_notification(endpoint=endpoint, data=data)
         eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
         yield self.shut_down(client)
 
@@ -734,7 +733,7 @@ class TestWebPush(IntegrationBase):
         vapid_info = _get_vapid()
         result = yield client.send_notification(data=data, vapid=vapid_info)
         eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
         yield self.shut_down(client)
 
@@ -749,14 +748,14 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         ok_(result != {})
-        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["data"], base64url_encode(data))
 
         yield client.disconnect()
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
         ok_(result != {})
-        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["data"], base64url_encode(data))
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -772,20 +771,20 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         ok_(result != {})
-        ok_(result["data"] in map(urlsafe_b64encode, [data, data2]))
+        ok_(result["data"] in map(base64url_encode, [data, data2]))
         result = yield client.get_notification()
         ok_(result != {})
-        ok_(result["data"] in map(urlsafe_b64encode, [data, data2]))
+        ok_(result["data"] in map(base64url_encode, [data, data2]))
 
         yield client.disconnect()
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
         ok_(result != {})
-        ok_(result["data"] in map(urlsafe_b64encode, [data, data2]))
+        ok_(result["data"] in map(base64url_encode, [data, data2]))
         result = yield client.get_notification()
         ok_(result != {})
-        ok_(result["data"] in map(urlsafe_b64encode, [data, data2]))
+        ok_(result["data"] in map(base64url_encode, [data, data2]))
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -801,10 +800,10 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         ok_(result != {})
-        ok_(result["data"] in map(urlsafe_b64encode, [data, data2]))
+        ok_(result["data"] in map(base64url_encode, [data, data2]))
         result = yield client.get_notification()
         ok_(result != {})
-        ok_(result["data"] in map(urlsafe_b64encode, [data, data2]))
+        ok_(result["data"] in map(base64url_encode, [data, data2]))
         yield client.ack(result["channelID"], result["version"])
 
         yield client.disconnect()
@@ -812,7 +811,7 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         ok_(result != {})
-        ok_(result["data"] in map(urlsafe_b64encode, [data, data2]))
+        ok_(result["data"] in map(base64url_encode, [data, data2]))
         ok_(result["messageType"], "notification")
         result = yield client.get_notification()
         eq_(result, None)
@@ -831,10 +830,10 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         ok_(result != {})
-        ok_(result["data"] in map(urlsafe_b64encode, [data, data2]))
+        ok_(result["data"] in map(base64url_encode, [data, data2]))
         result2 = yield client.get_notification()
         ok_(result2 != {})
-        ok_(result2["data"] in map(urlsafe_b64encode, [data, data2]))
+        ok_(result2["data"] in map(base64url_encode, [data, data2]))
         yield client.ack(result2["channelID"], result2["version"])
         yield client.ack(result["channelID"], result["version"])
 
@@ -854,7 +853,7 @@ class TestWebPush(IntegrationBase):
 
         result = yield client.send_notification(data=data)
         eq_(result["channelID"], chan)
-        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["data"], base64url_encode(data))
         yield client.ack(result["channelID"], result["version"])
 
         yield client.unregister(chan)
@@ -874,7 +873,7 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         eq_(result["channelID"], chan)
-        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["data"], base64url_encode(data))
 
         yield client.unregister(chan)
         yield client.disconnect()
@@ -905,7 +904,7 @@ class TestWebPush(IntegrationBase):
         result = yield client.send_notification(data=data, ttl=None)
         assert(result is not None)
         eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
         yield self.shut_down(client)
 
@@ -916,7 +915,7 @@ class TestWebPush(IntegrationBase):
         result = yield client.send_notification(data=data, ttl=None)
         assert(result is not None)
         eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
         yield client.disconnect()
         yield client.connect()
@@ -932,7 +931,7 @@ class TestWebPush(IntegrationBase):
         result = yield client.send_notification(data=data, ttl=0)
         assert(result is not None)
         eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], urlsafe_b64encode(data))
+        eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
         yield self.shut_down(client)
 
