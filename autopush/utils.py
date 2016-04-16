@@ -59,11 +59,21 @@ def generate_hash(key, payload):
     return h.hexdigest()
 
 
-def fix_padding(string):
-    """ Some JWT fields may strip the end padding from base64 strings """
+def base64url_encode(string):
+    """Encodes an unpadded Base64 URL-encoded string per RFC 7515."""
+    return base64.urlsafe_b64encode(string).strip('=')
+
+
+def base64url_decode(string):
+    """Decodes a Base64 URL-encoded string per RFC 7515.
+
+    RFC 7515 (used for Encrypted Content-Encoding and JWT) requires unpadded
+    encoded strings, but Python's ``urlsafe_b64decode`` only accepts padded
+    strings.
+    """
     if len(string) % 4:
-        return string + '===='[len(string) % 4:]
-    return string
+        string = string + '===='[len(string) % 4:]
+    return base64.urlsafe_b64decode(string)
 
 
 def decipher_public_key(key_data):
@@ -97,8 +107,7 @@ def extract_jwt(token, crypto_key):
     if not token or not crypto_key:
         return {}
 
-    key = base64.urlsafe_b64decode(fix_padding(crypto_key))
-    key = decipher_public_key(key)
+    key = decipher_public_key(crypto_key)
     vk = ecdsa.VerifyingKey.from_string(key, curve=ecdsa.NIST256p)
     return jws.verify(token, vk, algorithms=["ES256"])
 

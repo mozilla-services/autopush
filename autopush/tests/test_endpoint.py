@@ -2,7 +2,6 @@ import json
 import sys
 import time
 import uuid
-import base64
 import random
 
 from hashlib import sha256
@@ -14,7 +13,7 @@ from cyclone.web import Application
 from jose import jws
 from mock import Mock, patch
 from moto import mock_dynamodb2, mock_s3
-from nose.tools import eq_, ok_
+from nose.tools import eq_, ok_, assert_raises
 from twisted.internet.defer import Deferred
 from twisted.trial import unittest
 from twisted.web.client import Agent, Response
@@ -387,7 +386,7 @@ class EndpointTestCase(unittest.TestCase):
             eq_(len(calls), 1)
             (_, (notification, _), _) = calls[0]
             eq_(notification.channel_id, dummy_chid)
-            eq_(notification.data, b"wyigoQ==")
+            eq_(notification.data, b"wyigoQ")
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -748,7 +747,7 @@ class EndpointTestCase(unittest.TestCase):
         sk256p = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
         vk = sk256p.get_verifying_key()
         sig = jws.sign(payload, sk256p, algorithm="ES256").strip('=')
-        crypto_key = base64.urlsafe_b64encode(vk.to_string()).strip('=')
+        crypto_key = utils.base64url_encode(vk.to_string())
         return (sig, crypto_key)
 
     def test_post_webpush_with_vapid_auth(self):
@@ -766,7 +765,7 @@ class EndpointTestCase(unittest.TestCase):
         auth = "Bearer %s" % token
         """ # to verify that the object is encoded correctly
 
-            kd2 = base64.urlsafe_b64decode(utils.fix_padding(crypto_key))
+            kd2 = utils.base64url_decode(crypto_key)
             vk2 = ecdsa.VerifyingKey.from_string(kd2, curve=ecdsa.NIST256p)
             res = jws.verify(token, vk2, algorithms=["ES256"])
             eq_(res, payload)
@@ -801,19 +800,19 @@ class EndpointTestCase(unittest.TestCase):
                    "exp": int(time.time()) + 86400,
                    "sub": "mailto:admin@example.com"}
         (_, crypto) = self._gen_jwt(header, payload)
-        crypto_key = base64.urlsafe_b64decode(utils.fix_padding(crypto))
+        crypto_key = utils.base64url_decode(crypto)
 
         spki_header = ('0V0\x10\x06\x04+\x81\x04p\x06\x08*'
                        '\x86H\xce=\x03\x01\x07\x03B\x00\x04')
         eq_(decipher_public_key(crypto_key), crypto_key)
         eq_(decipher_public_key('\x04' + crypto_key), crypto_key)
         eq_(decipher_public_key(spki_header + crypto_key), crypto_key)
-        self.assertRaises(ValueError, decipher_public_key, "banana")
+        assert_raises(ValueError, decipher_public_key, "banana")
         crap = ''.join([random.choice('012345abcdef') for i in range(0, 64)])
-        self.assertRaises(ValueError, decipher_public_key, '\x05' + crap)
-        self.assertRaises(ValueError, decipher_public_key,
-                          crap[:len(spki_header)] + crap)
-        self.assertRaises(ValueError, decipher_public_key, crap[:60])
+        assert_raises(ValueError, decipher_public_key, '\x05' + crap)
+        assert_raises(ValueError, decipher_public_key,
+                      crap[:len(spki_header)] + crap)
+        assert_raises(ValueError, decipher_public_key, crap[:60])
 
     def test_post_webpush_with_other_than_vapid_auth(self):
         self.fernet_mock.decrypt.return_value = dummy_token
@@ -923,7 +922,8 @@ class EndpointTestCase(unittest.TestCase):
                    "sub": "mailto:admin@example.com"}
 
         (sig, crypto_key) = self._gen_jwt(header, payload)
-        eq_(utils.extract_jwt(sig, crypto_key), payload)
+        eq_(utils.extract_jwt(sig, utils.base64url_decode(crypto_key)),
+            payload)
 
     def test_post_webpush_bad_sig(self):
         self.fernet_mock.decrypt.return_value = dummy_token
@@ -1194,16 +1194,12 @@ class EndpointTestCase(unittest.TestCase):
 
     def test_padding(self):
         # Some values can't be padded and still decode.
-        eq_(utils.fix_padding("a"), "a===")
-        self.assertRaises(TypeError,
-                          base64.urlsafe_b64decode,
-                          utils.fix_padding("a"))
-        eq_(utils.fix_padding("ab"), "ab==")
-        base64.urlsafe_b64decode(utils.fix_padding("ab"))
-        eq_(utils.fix_padding("abc"), "abc=")
-        base64.urlsafe_b64decode(utils.fix_padding("abc"))
-        eq_(utils.fix_padding("abcd"), "abcd")
-        base64.urlsafe_b64decode(utils.fix_padding("abcd"))
+        assert_raises(TypeError,
+                      utils.base64url_decode,
+                      "a===")
+        eq_(utils.base64url_decode("ab=="), "\x69")
+        eq_(utils.base64url_decode("abc="), "\x69\xb7")
+        eq_(utils.base64url_decode("abcd"), "\x69\xb7\x1d")
 
     def test_parse_endpoint(self):
         v0_valid = dummy_uaid + ":" + dummy_chid
@@ -1212,9 +1208,10 @@ class EndpointTestCase(unittest.TestCase):
         uaid_dec = uaid_strip.decode('hex')
         chid_dec = chid_strip.decode('hex')
         v1_valid = uaid_dec + chid_dec
-        pub_key = uuid.uuid4().hex
+        raw_pub_key = uuid.uuid4().bytes
+        pub_key = utils.base64url_encode(raw_pub_key)
         crypto_key = "p256ecdsa=" + pub_key
-        v2_valid = sha256(pub_key).digest()
+        v2_valid = sha256(raw_pub_key).digest()
         v2_invalid = sha256(uuid.uuid4().hex).digest()
         # v0 good
         self.fernet_mock.decrypt.return_value = v0_valid
@@ -1223,16 +1220,14 @@ class EndpointTestCase(unittest.TestCase):
 
         # v0 bad
         self.fernet_mock.decrypt.return_value = v1_valid
-        exc = self.assertRaises(InvalidTokenException,
-                                self.settings.parse_endpoint,
-                                '/invalid')
-        eq_(exc.message, 'Corrupted push token')
+        with assert_raises(InvalidTokenException) as cx:
+            self.settings.parse_endpoint('/invalid')
+        eq_(cx.exception.message, 'Corrupted push token')
 
         self.fernet_mock.decrypt.return_value = v1_valid[:30]
-        exc = self.assertRaises(InvalidTokenException,
-                                self.settings.parse_endpoint,
-                                'invalid', 'v1')
-        eq_(exc.message, 'Corrupted push token')
+        with assert_raises(InvalidTokenException) as cx:
+            self.settings.parse_endpoint('invalid', 'v1')
+        eq_(cx.exception.message, 'Corrupted push token')
 
         self.fernet_mock.decrypt.return_value = v1_valid
         tokens = self.settings.parse_endpoint('valid', 'v1')
@@ -1241,32 +1236,28 @@ class EndpointTestCase(unittest.TestCase):
         self.fernet_mock.decrypt.return_value = v1_valid + v2_valid
         tokens = self.settings.parse_endpoint('valid', 'v2', crypto_key)
         eq_(tokens,
-            dict(uaid=uaid_strip, chid=chid_strip, public_key=pub_key))
+            dict(uaid=uaid_strip, chid=chid_strip, public_key=raw_pub_key))
 
         self.fernet_mock.decrypt.return_value = v1_valid + "invalid"
-        exc = self.assertRaises(InvalidTokenException,
-                                self.settings.parse_endpoint,
-                                'invalid', 'v2', crypto_key)
-        eq_(exc.message, "Corrupted push token")
+        with assert_raises(InvalidTokenException) as cx:
+            self.settings.parse_endpoint('invalid', 'v2', crypto_key)
+        eq_(cx.exception.message, "Corrupted push token")
 
         self.fernet_mock.decrypt.return_value = v1_valid + v2_valid
-        exc = self.assertRaises(InvalidTokenException,
-                                self.settings.parse_endpoint,
-                                'invalid', 'v2',
-                                "p256ecdsa="+pub_key[:30])
-        eq_(exc.message, "Key mismatch")
+        with assert_raises(InvalidTokenException) as cx:
+            self.settings.parse_endpoint('invalid', 'v2',
+                                         "p256ecdsa="+pub_key[:12])
+        eq_(cx.exception.message, "Key mismatch")
 
         self.fernet_mock.decrypt.return_value = v1_valid + v2_invalid
-        exc = self.assertRaises(InvalidTokenException,
-                                self.settings.parse_endpoint,
-                                'invalid', 'v2')
-        eq_(exc.message, "Invalid key data")
+        with assert_raises(InvalidTokenException) as cx:
+            self.settings.parse_endpoint('invalid', 'v2')
+        eq_(cx.exception.message, "Invalid key data")
 
         self.fernet_mock.decrypt.return_value = v1_valid + v2_invalid
-        exc = self.assertRaises(InvalidTokenException,
-                                self.settings.parse_endpoint,
-                                'invalid', 'v2', crypto_key)
-        eq_(exc.message, "Key mismatch")
+        with assert_raises(InvalidTokenException) as cx:
+            self.settings.parse_endpoint('invalid', 'v2', crypto_key)
+        eq_(cx.exception.message, "Key mismatch")
 
     def test_make_endpoint(self):
 
@@ -1282,7 +1273,7 @@ class EndpointTestCase(unittest.TestCase):
         ep = self.settings.make_endpoint(dummy_uaid, dummy_chid)
         eq_(ep, 'http://localhost/push/v1/' + strip_uaid + strip_chid)
         ep = self.settings.make_endpoint(dummy_uaid, dummy_chid,
-                                         "RandomKeyString")
+                                         utils.base64url_encode(dummy_key))
         eq_(ep, 'http://localhost/push/v2/' + strip_uaid + strip_chid + sha)
 
 

@@ -36,7 +36,7 @@ from autopush.router import (
     SimpleRouter,
     WebPushRouter,
 )
-from autopush.utils import canonical_url, resolve_ip
+from autopush.utils import canonical_url, resolve_ip, base64url_decode
 from autopush.senderids import SENDERID_EXPRY, DEFAULT_BUCKET
 from autopush.crypto_key import (CryptoKey, CryptoKeyException)
 
@@ -290,7 +290,7 @@ class AutopushSettings(object):
 
         :param uaid: User Agent Identifier
         :param chid: Channel or Subscription ID
-        :param key: Optional provided Public Key
+        :param key: Optional Base64 URL-encoded application server key
         :returns: Push endpoint
 
         """
@@ -301,7 +301,9 @@ class AutopushSettings(object):
         if key is None:
             return root + 'v1/' + self.fernet.encrypt(base).strip('=')
 
-        return root + 'v2/' + self.fernet.encrypt(base + sha256(key).digest())
+        raw_key = base64url_decode(key.encode('utf8'))
+        return root + 'v2/' + self.fernet.encrypt(base +
+                                                  sha256(raw_key).digest())
 
     def parse_endpoint(self, token, version="v0", ckey_header=None):
         """Parse an endpoint into component elements of UAID, CHID and optional
@@ -322,9 +324,15 @@ class AutopushSettings(object):
         public_key = None
         if ckey_header:
             try:
-                public_key = CryptoKey(ckey_header).get_label('p256ecdsa')
+                crypto_key = CryptoKey(ckey_header)
             except CryptoKeyException:
                 raise InvalidTokenException("Invalid key data")
+            label = crypto_key.get_label('p256ecdsa')
+            try:
+                public_key = base64url_decode(label)
+            except:
+                # Ignore missing and malformed app server keys.
+                pass
 
         if version == 'v0':
             if not VALID_V0_TOKEN.match(token):

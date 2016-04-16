@@ -94,7 +94,7 @@ class APNSRouterTestCase(unittest.TestCase):
         self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
-        self.notif = Notification(10, "q60d6g==", dummy_chid, self.headers,
+        self.notif = Notification(10, "q60d6g", dummy_chid, self.headers,
                                   200)
         self.router_data = dict(router_data=dict(token="connect_data"))
 
@@ -176,7 +176,7 @@ class APNSRouterTestCase(unittest.TestCase):
         headers = {"content-encoding": "aesgcm",
                    "encryption": "test",
                    "crypto-key": "test"}
-        self.notif = Notification(10, "q60d6g==", dummy_chid, headers, 200)
+        self.notif = Notification(10, "q60d6g", dummy_chid, headers, 200)
         now = int(time.time())
         self.router.messages = {now: {'token': 'dump', 'payload': {}},
                                 now-60: {'token': 'dump', 'payload': {}}}
@@ -222,7 +222,7 @@ class GCMRouterTestCase(unittest.TestCase):
                         "encryption": "test",
                         "encryption-key": "test"}
         # Payloads are Base64-encoded.
-        self.notif = Notification(10, "q60d6g==", dummy_chid, self.headers,
+        self.notif = Notification(10, "q60d6g", dummy_chid, self.headers,
                                   200)
         self.router_data = dict(
             router_data=dict(
@@ -284,7 +284,7 @@ class GCMRouterTestCase(unittest.TestCase):
             assert(self.router.gcm.send.called)
             # Make sure the data was encoded as base64
             data = self.router.gcm.send.call_args[0][0].data
-            eq_(data['body'], 'q60d6g==')
+            eq_(data['body'], 'q60d6g')
             eq_(data['enc'], 'test')
             eq_(data['enckey'], 'test')
             eq_(data['con'], 'aesgcm')
@@ -294,7 +294,7 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_ttl_none(self):
         self.router.gcm = self.gcm
         self.notif = Notification(version=10,
-                                  data="q60d6g==",
+                                  data="q60d6g",
                                   channel_id=dummy_chid,
                                   headers=self.headers,
                                   ttl=None)
@@ -306,7 +306,7 @@ class GCMRouterTestCase(unittest.TestCase):
             # Make sure the data was encoded as base64
             data = self.router.gcm.send.call_args[0][0].data
             options = self.router.gcm.send.call_args[0][0].options
-            eq_(data['body'], 'q60d6g==')
+            eq_(data['body'], 'q60d6g')
             eq_(data['enc'], 'test')
             eq_(data['enckey'], 'test')
             eq_(data['con'], 'aesgcm')

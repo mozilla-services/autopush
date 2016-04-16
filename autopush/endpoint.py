@@ -28,7 +28,6 @@ import uuid
 import re
 
 from collections import namedtuple
-from base64 import urlsafe_b64encode
 
 import cyclone.web
 from boto.dynamodb2.exceptions import (
@@ -51,6 +50,7 @@ from autopush.utils import (
     validate_uaid,
     ErrorLogger,
     extract_jwt,
+    base64url_encode,
 )
 
 # Our max TTL is 60 days realistically with table rotation, so we hard-code it
@@ -297,7 +297,8 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         if jwt.get('exp', 0) < time.time():
             raise VapidAuthException("Invalid bearer token: Auth expired")
         # flatten the jwt into the _client_info record
-        self._client_info["jwt_crypto_key"] = crypto_key
+        jwt_crypto_key = base64url_encode(crypto_key)
+        self._client_info["jwt_crypto_key"] = jwt_crypto_key
         for i in jwt:
             self._client_info["jwt_" + i] = jwt[i]
         return result
@@ -494,7 +495,7 @@ class EndpointHandler(AutoendpointHandler):
 
         # Web Push and bridged messages are encrypted binary blobs. We store
         # and deliver these messages as Base64-encoded strings.
-        data = urlsafe_b64encode(self.request.body)
+        data = base64url_encode(self.request.body)
 
         # Generate a message ID, then route the notification.
         d = deferToThread(self.ap_settings.fernet.encrypt, ':'.join([

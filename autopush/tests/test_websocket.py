@@ -32,6 +32,7 @@ from autopush.websocket import (
     WebSocketServerProtocol,
     ms_time,
 )
+from autopush.utils import base64url_encode
 
 from .test_router import MockAssist
 
@@ -960,7 +961,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         res = self.proto.process_register(
             dict(channelID=chid,
-                 key=test_key))
+                 key=base64url_encode(test_key)))
         res.addCallback(check_register_result, test_endpoint)
         return d
 
