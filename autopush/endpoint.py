@@ -616,6 +616,7 @@ class RegistrationHandler(AutoendpointHandler):
             # Should this be different than websocket?
         self.uaid = uaid
         self.chid = params["channelID"]
+        self.app_server_key = params.get("key")
         if new_uaid:
             d = Deferred()
             d.addCallback(router.register, params, router_token)
@@ -681,7 +682,8 @@ class RegistrationHandler(AutoendpointHandler):
 
     def _register_channel(self, router_data=None):
         self.ap_settings.message.register_channel(self.uaid, self.chid)
-        endpoint = self.ap_settings.make_endpoint(self.uaid, self.chid)
+        endpoint = self.ap_settings.make_endpoint(self.uaid, self.chid,
+                                                  self.app_server_key)
         return endpoint, router_data
 
     @cyclone.web.asynchronous
