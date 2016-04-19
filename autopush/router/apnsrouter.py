@@ -66,8 +66,8 @@ class APNSRouter(object):
         """Blocking APNS call to route the notification"""
         token = router_data["token"]
         custom = {
-          "Chid": notification.channel_id,
-          "Ver": notification.version,
+            "Chid": notification.channel_id,
+            "Ver": notification.version,
         }
         if notification.data:
             custom["Msg"] = notification.data
