@@ -410,6 +410,19 @@ class EndpointHandler(AutoendpointHandler):
         self.start_time = time.time()
         crypto_key_header = self.request.headers.get('crypto-key')
 
+        content_encoding = self.request.headers.get('content-encoding', "")
+        if content_encoding.lower() == 'aesgcm128' and crypto_key_header:
+            self.log.debug("Invalid crypto state; aesgcm128 + Crypto-Key",
+                           **self._client_info)
+            wpe_url = ("https://developers.google.com/web/updates/2016/03/"
+                       "web-push-encryption")
+            self._write_response(
+                400,
+                110,
+                message="You're using outdated encryption; "
+                "Please update to the format described in " + wpe_url)
+            return
+
         d = deferToThread(self.ap_settings.parse_endpoint,
                           token,
                           api_ver,

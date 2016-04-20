@@ -207,11 +207,14 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.finish = lambda: d.callback(True)
         self.endpoint.start_time = time.time()
 
-    def _check_error(self, code, errno, error):
+    def _check_error(self, code, errno, error=None, message=None):
         d = json.loads(self.write_mock.call_args[0][0])
         eq_(d.get("code"), code)
         eq_(d.get("errno"), errno)
-        eq_(d.get("error"), error)
+        if error is not None:
+            eq_(d.get("error"), error)
+        if message:
+            eq_(d.get("message"), message)
 
     def test_uaid_lookup_results(self):
         fresult = dict(router_type="test")
@@ -313,6 +316,21 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.post(None, dummy_uaid)
+        return self.finish_deferred
+
+    def test_webpush_malformed_encryption(self):
+
+        def handle_finish(value):
+            err_msg = ("You're using outdated encryption; Please update "
+                       "to the format described in "
+                       "https://developers.google.com/web/updates/2016/"
+                       "03/web-push-encryption")
+            self._check_error(400, 110, message=err_msg)
+        self.request_mock.headers["content-encoding"] = "aesgcm128"
+        self.request_mock.headers["crypto-key"] = "content"
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.endpoint.put(None, dummy_uaid)
         return self.finish_deferred
 
     def test_webpush_bad_routertype(self):
