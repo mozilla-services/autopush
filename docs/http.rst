@@ -7,12 +7,13 @@ Autopush exposes three HTTP endpoints:
 
 `/push/...`
 
-This is tied to :class:`EndpointHandler` (:ref:`endpoint_module`). This endpoint is returned by the Push registration process and is used by the :term:`AppServer` to send Push alerts
-to the Application. See :ref:`send`.
+This is tied to :class:`EndpointHandler` (:ref:`endpoint_module`). This endpoint is returned by the Push registration process and is used by the
+:term:`AppServer` to send Push alerts to the Application. See :ref:`send`.
 
 `/m/...`
 
-This is tied to :class:`MessageHandler` (:ref:`endpoint_module`). This endpoint handles individual
+This is tied to :class:`MessageHandler` (:ref:`endpoint_module`). This
+endpoint handles individual
 message operations on messages pending delivery, such as deleting the
 message or updating the contents or Time To Live (TTL). See :ref:`cancel`
 and :ref:`update`.
@@ -42,12 +43,13 @@ Lexicon
 
    :{UAID}: The Push User Agent Registration ID
 
-Push assigns each remote recipient a unique identifier. This value is
-assigned during **Registration**
+Push assigns each remote recipient a unique identifier. {UAID}s are UUIDs in
+lower case, dashed format. (e.g. '01234567-abcd-abcd-abcd-012345678abc') This value is assigned during **Registration**
 
    :{CHID}: The :term:`Channel` Subscription ID
 
 Push assigns a unique identifier for each subscription for a given {UAID}.
+Like {UAID}s, {CHID}s are UUIDs in lower case, dashed format.
 This value is assigned during **Channel Subscription**
 
    :{message-id}: The unique Message ID
@@ -323,10 +325,10 @@ example:
 
 .. code-block:: json
 
-    < {"uaid": "abcdef012345",
+    < {"uaid": "01234567-0000-1111-2222-0123456789ab",
     < "secret": "0123abcdef",
     < "endpoint": "https://updates-push.services.mozaws.net/push/...",
-    < "channelID": "01234abcd"}
+    < "channelID": "00000000-0000-1111-2222-0123456789ab"}
 
 **Return Codes:**
 
@@ -420,7 +422,7 @@ example:
 
 .. code-block:: json
 
-    < {"channelID": "43210efgh"
+    < {"channelID": "01234567-0000-1111-2222-0123456789ab",
     < "endpoint": "https://updates-push.services.mozaws.net/push/..."}
 
 **Return Codes:**

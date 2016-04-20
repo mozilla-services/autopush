@@ -142,7 +142,9 @@ The Endpoint URL may seem excessively long. This may seem needless and
 confusing since the URL consists of the unique User Agent Identifier (UAID)
 and the Subscription Channel Identifier (CHID). Both of these are class 4
 Universially Unique Identifiers (UUID) meaning that an endpoint contains
-256 bits of entropy (2 * 128 bits).
+256 bits of entropy (2 * 128 bits). When used in string format, these UUIDs
+are always in lower case, dashed format (e.g.
+"01234567-0123-abcd-0123-0123456789ab").
 
 Unfortunately, since the endpoint contains an identifier that can be
 easily traced back to a specific device, and therefore a specific user,

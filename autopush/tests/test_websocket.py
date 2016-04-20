@@ -50,6 +50,7 @@ def tearDown():
 
 
 class WebsocketTestCase(unittest.TestCase):
+
     def setUp(self):
         from twisted.logger import Logger
         twisted.internet.base.DelayedCall.debug = True
@@ -411,7 +412,7 @@ class WebsocketTestCase(unittest.TestCase):
         return d
 
     def test_hello_old(self):
-        orig_uaid = "deadbeef12345678decafbad12345678"
+        orig_uaid = "deadbeef-0000-0000-abad-1dea00000000"
         # router.register_user returns (registered, previous
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2015, 12, 15)
@@ -459,7 +460,7 @@ class WebsocketTestCase(unittest.TestCase):
         return self._check_response(check_result)
 
     def test_hello_tomorrow(self):
-        orig_uaid = "deadbeef12345678decafbad12345678"
+        orig_uaid = "deadbeef-0000-0000-abad-1dea00000000"
         # router.register_user returns (registered, previous
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2016, 3, 1)
@@ -1001,6 +1002,51 @@ class WebsocketTestCase(unittest.TestCase):
         def check_hello_result(msg):
             assert "messageType" in msg
             self._send_message(dict(messageType="register", channelID="oof"))
+            self._check_response(check_register_result)
+
+        f = self._check_response(check_hello_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_register_bad_chid_upper(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        d = Deferred()
+        d.addCallback(lambda x: True)
+
+        def check_register_result(msg):
+            eq_(msg["status"], 401)
+            eq_(msg["messageType"], "register")
+            d.callback(True)
+
+        def check_hello_result(msg):
+            assert "messageType" in msg
+            self._send_message(dict(messageType="register",
+                                    channelID=str(uuid.uuid4()).upper()))
+            self._check_response(check_register_result)
+
+        f = self._check_response(check_hello_result)
+        f.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_register_bad_chid_nodash(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        d = Deferred()
+        d.addCallback(lambda x: True)
+
+        def check_register_result(msg):
+            eq_(msg["status"], 401)
+            eq_(msg["messageType"], "register")
+            d.callback(True)
+
+        def check_hello_result(msg):
+            assert "messageType" in msg
+            self._send_message(
+                dict(messageType="register",
+                     channelID=str(uuid.uuid4()).replace('-', '')))
             self._check_response(check_register_result)
 
         f = self._check_response(check_hello_result)

@@ -3,7 +3,7 @@
 Autopush Coding Style Guide
 ===========================
 
-Autopush uses Python styling guides based on `PEP8<https://www.python.org/dev/peps/pep-0008/>`_ and `PEP257<https://www.python.org/dev/peps/pep-0257/>`_.
+Autopush uses Python styling guides based on `PEP8 <https://www.python.org/dev/peps/pep-0008/>`_ and `PEP257 <https://www.python.org/dev/peps/pep-0257/>`_.
 
 Exceptions
 ----------
