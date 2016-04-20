@@ -1002,9 +1002,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             return self.bad_message("register")
         chid = data["channelID"]
         try:
-            uuid.UUID(chid)
+            if str(uuid.UUID(chid)) != chid:
+                return self.bad_message("register", "Bad UUID format, use"
+                                        "lower case, dashed format")
         except ValueError:
-            return self.bad_message("register")
+            return self.bad_message("register", "Invalid UUID specified")
         self.transport.pauseProducing()
 
         d = self.deferToThread(self.ap_settings.make_endpoint, self.ps.uaid,
@@ -1047,12 +1049,12 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def process_unregister(self, data):
         """Process an unregister message"""
         if "channelID" not in data:
-            return self.bad_message("unregister")
+            return self.bad_message("unregister", "Missing ChannelID")
         chid = data["channelID"]
         try:
             uuid.UUID(chid)
         except ValueError:
-            return self.bad_message("unregister")
+            return self.bad_message("unregister", "Invalid ChannelID")
 
         self.ps.metrics.increment("updates.client.unregister",
                                   tags=self.base_tags)
@@ -1231,9 +1233,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if self.ps._check_notifications or self.ps._more_notifications:
             self.process_notifications()
 
-    def bad_message(self, typ):
+    def bad_message(self, typ, message=None):
         """Error helper for sending a 401 status back"""
         msg = {"messageType": typ, "status": 401}
+        if message:
+            msg["message"] = message
         self.sendJSON(msg)
 
     def _newer_notification_sent(self, channel_id, version):
