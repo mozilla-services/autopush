@@ -394,7 +394,10 @@ class EndpointTestCase(unittest.TestCase):
         frouter = self.settings.routers["webpush"]
         frouter.route_notification.return_value = RouterResponse()
         self.endpoint.chid = dummy_chid
-        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["encryption"] = "keyid=p256;dh=stuff=="
+        self.request_mock.headers["crypto-key"] = (
+            "keyid=spad=;dh=AQ==,p256ecdsa=Ag=;foo=\"bar==\""
+        )
         self.request_mock.headers["content-encoding"] = "aes128"
         self.request_mock.body = b"\xc3\x28\xa0\xa1"
         self.endpoint._uaid_lookup_results(fresult)
@@ -403,8 +406,15 @@ class EndpointTestCase(unittest.TestCase):
             calls = frouter.route_notification.mock_calls
             eq_(len(calls), 1)
             (_, (notification, _), _) = calls[0]
+            eq_(notification.headers.get('encryption'),
+                'keyid=p256;dh=stuff')
+            eq_(notification.headers.get('crypto-key'),
+                'keyid=spad;dh=AQ,p256ecdsa=Ag;foo=bar')
             eq_(notification.channel_id, dummy_chid)
             eq_(notification.data, b"wyigoQ")
+            self.endpoint.set_status.assert_called_with(200)
+            ok_('Padded content detected' in
+                self.endpoint.write.call_args[0][0])
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred

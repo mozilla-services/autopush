@@ -395,6 +395,9 @@ class EndpointHandler(AutoendpointHandler):
                             "encryption-key", "content-type",
                             "authorization"]
     cors_response_headers = ["location", "www-authenticate"]
+    # Remove trailing padding characters from complex header items like
+    # Crypto-Key and Encryption
+    strip_padding = re.compile('=+(?=[,;]|$)')
 
     #############################################################
     #                    Cyclone HTTP Methods
@@ -409,7 +412,6 @@ class EndpointHandler(AutoendpointHandler):
         api_ver = api_ver or "v0"
         self.start_time = time.time()
         crypto_key_header = self.request.headers.get('crypto-key')
-
         content_encoding = self.request.headers.get('content-encoding', "")
         if content_encoding.lower() == 'aesgcm128' and crypto_key_header:
             self.log.debug("Invalid crypto state; aesgcm128 + Crypto-Key",
@@ -518,6 +520,14 @@ class EndpointHandler(AutoendpointHandler):
 
     def _route_notification(self, version, result, data, ttl=None):
         self.version = self._client_info['message_id'] = version
+        warning = ""
+        # Clean up the header values (remove padding)
+        for hdr in ['crypto-key', 'encryption']:
+            if self.strip_padding.search(self.request.headers.get(hdr, "")):
+                warning = ("Padded content detected. Please strip"
+                           " base64 encoding padding.")
+                head = self.request.headers[hdr].replace('"', '')
+                self.request.headers[hdr] = self.strip_padding.sub("", head)
         notification = Notification(version=version, data=data,
                                     channel_id=self.chid,
                                     headers=self.request.headers,
@@ -525,14 +535,14 @@ class EndpointHandler(AutoendpointHandler):
 
         d = Deferred()
         d.addCallback(self.router.route_notification, result)
-        d.addCallback(self._router_completed, result)
+        d.addCallback(self._router_completed, result, warning)
         d.addErrback(self._router_fail_err)
         d.addErrback(self._response_err)
 
         # Call the prepared router
         d.callback(notification)
 
-    def _router_completed(self, response, uaid_data):
+    def _router_completed(self, response, uaid_data, warning=""):
         """Called after router has completed successfully"""
         # TODO: Add some custom wake logic here
 
@@ -548,7 +558,8 @@ class EndpointHandler(AutoendpointHandler):
                               uaid_data)
             response.router_data = None
             d.addCallback(lambda x: self._router_completed(response,
-                                                           uaid_data))
+                                                           uaid_data,
+                                                           warning))
             return d
         else:
             if response.status_code == 200 or response.logged_status == 200:
@@ -558,6 +569,8 @@ class EndpointHandler(AutoendpointHandler):
                               **self._client_info)
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
+            response.response_body = (
+                response.response_body + " " + warning).strip()
             self._router_response(response)
 
 
