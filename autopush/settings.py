@@ -85,6 +85,7 @@ class AutopushSettings(object):
                  senderid_list={},
                  hello_timeout=0,
                  bear_hash_key=None,
+                 preflight_uaid="deadbeef00000000deadbeef000000000",
                  ):
         """Initialize the Settings object
 
@@ -172,7 +173,7 @@ class AutopushSettings(object):
         self.create_initial_message_tables()
 
         # Run preflight check
-        preflight_check(self.storage, self.router)
+        preflight_check(self.storage, self.router, preflight_uaid)
 
         # CORS
         self.cors = enable_cors

@@ -41,18 +41,29 @@ def tearDown():
 
 
 class DbCheckTestCase(unittest.TestCase):
-    def test_preflight_check(self):
-        router_table = get_router_table()
-        storage_table = get_storage_table()
+    def test_preflight_check_fail(self):
+        router = Router(get_router_table(), SinkMetrics())
+        storage = Storage(get_storage_table(), SinkMetrics())
 
         def raise_exc(*args, **kwargs):  # pragma: no cover
             raise Exception("Oops")
 
-        router_table.clear_node = Mock()
-        router_table.clear_node.side_effect = raise_exc
+        router.clear_node = Mock()
+        router.clear_node.side_effect = raise_exc
 
         with self.assertRaises(Exception):
-            preflight_check(storage_table, router_table)
+            preflight_check(storage, router)
+
+    def test_preflight_check(self):
+        router = Router(get_router_table(), SinkMetrics())
+        storage = Storage(get_storage_table(), SinkMetrics())
+
+        pf_uaid = "deadbeef00000000deadbeef01010101"
+        preflight_check(storage, router, pf_uaid)
+        # now check that the database reports no entries.
+        notifs = storage.fetch_notifications(pf_uaid)
+        eq_(len(notifs), 0)
+        self.assertRaises(ItemNotFound, router.get_uaid, pf_uaid)
 
     def test_get_month(self):
         from autopush.db import get_month

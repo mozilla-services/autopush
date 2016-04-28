@@ -161,14 +161,14 @@ def get_storage_table(tablename="storage", read_throughput=5,
                        write_throughput)
 
 
-def preflight_check(storage, router):
+def preflight_check(storage, router, uaid="deadbeef00000000deadbeef00000000"):
     """Performs a pre-flight check of the storage/router/message to ensure
     appropriate permissions for operation.
 
     Failure to run correctly will raise an exception.
 
     """
-    uaid = uuid.uuid4().hex
+    # Use a distinct UAID so it doesn't interfere with metrics
     chid = uuid.uuid4().hex
     node_id = "mynode:2020"
     connected_at = 0
@@ -186,7 +186,11 @@ def preflight_check(storage, router):
                               router_type="simplepush"))
     item = router.get_uaid(uaid)
     assert item.get("node_id") == node_id
+    # Clean up the preflight data.
     router.clear_node(item)
+    router.drop_user(uaid)
+    storage.table.delete_item(uaid=uaid, chid=chid)
+    storage.table.delete_item(uaid=uaid, chid=" ")
 
 
 def track_provisioned(func):

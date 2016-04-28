@@ -370,6 +370,8 @@ def connection_main(sysargs=None, use_files=True):
         sentry_dsn=sentry_dsn,
         firehose_delivery_stream=args.firehose_stream_name
     )
+    # Add some entropy to prevent potential conflicts.
+    postfix = os.urandom(4).encode('hex').ljust(8, '0')
     settings = make_settings(
         args,
         port=args.port,
@@ -381,6 +383,7 @@ def connection_main(sysargs=None, use_files=True):
         router_port=args.router_port,
         env=args.env,
         hello_timeout=args.hello_timeout,
+        preflight_uaid="deadbeef000000000deadbeef" + postfix,
     )
 
     r = RouterHandler
@@ -480,6 +483,8 @@ def endpoint_main(sysargs=None, use_files=True):
         firehose_delivery_stream=args.firehose_stream_name
     )
 
+    # Add some entropy to prevent potential conflicts.
+    postfix = os.urandom(4).encode('hex').ljust(8, '0')
     settings = make_settings(
         args,
         endpoint_scheme=args.endpoint_scheme,
@@ -490,6 +495,7 @@ def endpoint_main(sysargs=None, use_files=True):
         senderid_expry=args.senderid_expry,
         senderid_list=senderid_list,
         bear_hash_key=args.auth_key,
+        preflight_uaid="deadbeef000000000deadbeef" + postfix,
     )
 
     # Endpoint HTTP router
