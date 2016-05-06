@@ -219,14 +219,16 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         running.
 
         """
-        self.log.failure(fail, status_code=500, errno=999, **self._client_info)
+        fmt = fail.value.message or 'Exception'
+        self.log.failure(format=fmt, failure=fail,
+                         status_code=500, errno=999, **self._client_info)
         self._write_response(500, 999)
 
     def _overload_err(self, fail):
         """errBack for throughput provisioned exceptions"""
         fail.trap(ProvisionedThroughputExceededException)
-        self.log.info("Throughput Exceeded", status_code=503, errno=201,
-                      **self._client_info)
+        self.log.info(format="Throughput Exceeded", status_code=503,
+                      errno=201, **self._client_info)
         self._write_response(503, 201)
 
     def _router_response(self, response):
@@ -249,15 +251,18 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         exc = fail.value
         if isinstance(exc, RouterException):
             if exc.log_exception or exc.status_code >= 500:
-                self.log.failure(fail, status_code=exc.status_code,
+                fmt = fail.value.message or 'Exception'
+                self.log.failure(format=fmt,
+                                 failure=fail, status_code=exc.status_code,
                                  errno=exc.errno or "",
                                  **self._client_info)  # pragma nocover
             if 200 <= exc.status_code < 300:
-                self.log.info("Success", status_code=exc.status_code,
+                self.log.info(format="Success", status_code=exc.status_code,
                               logged_status=exc.logged_status or "",
                               **self._client_info)
             elif 400 <= exc.status_code < 500:
-                self.log.info("Client error", status_code=exc.status_code,
+                self.log.info(format="Client error",
+                              status_code=exc.status_code,
                               logged_status=exc.logged_status or "",
                               errno=exc.errno or "",
                               **self._client_info)
@@ -266,21 +271,23 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     def _uaid_not_found_err(self, fail):
         """errBack for uaid lookup not finding the user"""
         fail.trap(ItemNotFound)
-        self.log.debug("UAID not found in AWS.", status_code=410, errno=103,
+        self.log.debug(format="UAID not found in AWS.",
+                       status_code=410, errno=103,
                        **self._client_info)
         self._write_response(410, 103)
 
     def _token_err(self, fail):
         """errBack for token decryption fail"""
         fail.trap(InvalidToken, InvalidTokenException)
-        self.log.debug("Invalid token", status_code=400, errno=102,
+        self.log.debug(format="Invalid token",
+                       status_code=400, errno=102,
                        **self._client_info)
         self._write_response(400, 102)
 
     def _auth_err(self, fail):
         """errBack for invalid auth token"""
         fail.trap(VapidAuthException)
-        self.log.debug("Invalid Auth token",
+        self.log.debug(format="Invalid Auth token",
                        status_code=401,
                        errno=109,
                        **self._client_info)
@@ -289,7 +296,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     def _chid_not_found_err(self, fail):
         """errBack for unknown chid"""
         fail.trap(ItemNotFound, ValueError)
-        self.log.debug("CHID not found in AWS.",
+        self.log.debug(format="CHID not found in AWS.",
                        status_code=410, errno=106,
                        **self._client_info)
         self._write_response(410, 106)
@@ -319,7 +326,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         message = fail.value.message or repr(fail.value)
         if isinstance(fail.value, AssertionError):
             message = "A decryption error occurred"
-        self.log.debug("Invalid bearer token: " + repr(message),
+        self.log.debug(format="Invalid bearer token: " + repr(message),
                        **self._client_info)
         raise VapidAuthException("Invalid bearer token: " + repr(message))
 
@@ -393,7 +400,8 @@ class MessageHandler(AutoendpointHandler):
         return d
 
     def _delete_completed(self, response):
-        self.log.info("Message Deleted", status_code=204, **self._client_info)
+        self.log.info(format="Message Deleted", status_code=204,
+                      **self._client_info)
         self.set_status(204)
         self.finish()
 
@@ -424,9 +432,9 @@ class EndpointHandler(AutoendpointHandler):
         crypto_key_header = self.request.headers.get('crypto-key')
         content_encoding = self.request.headers.get('content-encoding', "")
         if content_encoding.lower() == 'aesgcm128' and crypto_key_header:
-            self.log.debug("Invalid crypto state; aesgcm128 + Crypto-Key",
-                           status_code=400, errno=110,
-                           **self._client_info)
+            self.log.debug(
+                format="Invalid crypto state; aesgcm128 + Crypto-Key",
+                status_code=400, errno=110, **self._client_info)
             wpe_url = ("https://developers.google.com/web/updates/2016/03/"
                        "web-push-encryption")
             self._write_response(
@@ -468,8 +476,9 @@ class EndpointHandler(AutoendpointHandler):
         try:
             self.router = self.ap_settings.routers[router_key]
         except KeyError:
-            self.log.debug("Invalid router requested", status_code=400,
-                           errno=108, **self._client_info)
+            self.log.debug(
+                format="Invalid router requested", status_code=400,
+                errno=108, **self._client_info)
             return self._write_response(400, 108,
                                         message="Invalid router")
 
@@ -487,13 +496,13 @@ class EndpointHandler(AutoendpointHandler):
             req_fields = ["content-encoding", "encryption"]
             if data and not all([x in self.request.headers
                                  for x in req_fields]):
-                self.log.debug("Client error", status_code=400, errno=101,
-                               **self._client_info)
+                self.log.debug(format="Client error", status_code=400,
+                               errno=101, **self._client_info)
                 return self._write_response(400, 101)
             if ("encryption-key" in self.request.headers and
                     "crypto-key" in self.request.headers):
-                self.log.debug("Client error", status_code=400, errno=110,
-                               **self._client_info)
+                self.log.debug(format="Client error", status_code=400,
+                               errno=110, **self._client_info)
                 return self._write_response(
                     400, 110, message="Invalid crypto headers")
             self._client_info["message_size"] = len(data) if data else 0
@@ -505,12 +514,12 @@ class EndpointHandler(AutoendpointHandler):
             # Cap the TTL to our MAX_TTL
             ttl = min(ttl, MAX_TTL)
         else:
-            self.log.debug("Client error", status_code=400,
+            self.log.debug(format="Client error", status_code=400,
                            errno=112, **self._client_info)
             return self._write_response(400, 112, message="Invalid TTL header")
 
         if data and len(data) > self.ap_settings.max_data:
-            self.log.debug("Client error", status_code=400, errno=104,
+            self.log.debug(format="Client error", status_code=400, errno=104,
                            **self._client_info)
             return self._write_response(
                 413, 104, message="Data payload too large")
@@ -574,9 +583,10 @@ class EndpointHandler(AutoendpointHandler):
             return d
         else:
             if response.status_code == 200 or response.logged_status == 200:
-                self.log.info("Successful delivery", **self._client_info)
+                self.log.info(format="Successful delivery",
+                              **self._client_info)
             elif response.status_code == 202 or response.logged_status == 202:
-                self.log.info("Router miss, message stored.",
+                self.log.info(format="Router miss, message stored.",
                               **self._client_info)
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
@@ -631,7 +641,7 @@ class RegistrationHandler(AutoendpointHandler):
 
         # normalize the path vars into parameters
         if router_type not in self.ap_settings.routers:
-            self.log.debug("Invalid router requested",
+            self.log.debug(format="Invalid router requested",
                            status_code=400, errno=108,
                            **self._client_info)
             return self._write_response(
@@ -687,7 +697,7 @@ class RegistrationHandler(AutoendpointHandler):
         self.uaid = uaid
         router_data = params
         if router_type not in self.ap_settings.routers or not router_data:
-            self.log.debug("Invalid router requested", status_code=400,
+            self.log.debug(format="Invalid router requested", status_code=400,
                            errno=108, **self._client_info)
             return self._write_response(
                 400, 108, message="Invalid router")
@@ -737,7 +747,7 @@ class RegistrationHandler(AutoendpointHandler):
             return self._write_unauthorized_response(
                 message="Invalid Authentication")
         if router_type not in self.ap_settings.routers:
-            self.log.debug("Invalid router requested",
+            self.log.debug(format="Invalid router requested",
                            status_code=400, errno=108,
                            **self._client_info)
             return self._write_response(
@@ -810,7 +820,8 @@ class RegistrationHandler(AutoendpointHandler):
         else:
             msg = dict(channelID=self.chid, endpoint=endpoint_data[0])
         self.write(json.dumps(msg))
-        self.log.debug("Endpoint registered via HTTP", **self._client_info)
+        self.log.debug(format="Endpoint registered via HTTP",
+                       **self._client_info)
         self.finish()
 
     def _success(self, result):

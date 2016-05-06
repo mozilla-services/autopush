@@ -433,6 +433,12 @@ class WebsocketTestCase(unittest.TestCase):
         mock_msg = Mock(wraps=db.Message)
         mock_msg.fetch_messages.return_value = []
         self.proto.ap_settings.router.register_user = fake_msg
+        # because we're faking the dates, process_notifications will key
+        # error and fail to return. This will cause the expected path for
+        # this test to fail. Since we're requesting the client to change
+        # UAIDs anyway, we can safely presume that the non-existant pending
+        # notifications are irrelevant for this test.
+        self.proto.process_notifications = Mock()
         # massage message_tables to include our fake range
         mt = self.proto.ps.settings.message_tables
         for k in mt.keys():
@@ -506,37 +512,6 @@ class WebsocketTestCase(unittest.TestCase):
             eq_(msg["uaid"], orig_uaid)
 
         return self._check_response(check_result)
-
-    """
-    def test_add_tomorrow(self):
-        today = datetime.date(2016, 2, 29)
-        yester = datetime.date(2016, 1, 1)
-        tomorrow = datetime.date(2016, 3, 1)
-        today_table = "{}_{}_{}".format(
-            self.proto.ap_settings._message_prefix,
-            today.year,
-            today.month)
-        yester_table = "{}_{}_{}".format(
-            self.proto.ap_settings._message_prefix,
-            yester.year,
-            yester.month)
-        tomorrow_table = "{}_{}_{}".format(
-            self.proto.ap_settings._message_prefix,
-            tomorrow.year,
-            tomorrow.month)
-
-        mock_msg = Mock(wraps=db.Message)
-        mock_msg.fetch_messages.return_value = []
-        mt = self.proto.ps.settings.message_tables
-        for k in mt.keys():
-            del(mt[k])
-        mt[yester_table] = mock_msg
-        mt[today_table] = mock_msg
-
-        self._connect()
-        self.proto.ps.settings.add_tomorrow(today, today_table)
-        ok_(tomorrow_table in self.proto.ps.settings.message_tables)
-    """
 
     def test_hello(self):
         self._connect()
@@ -1326,7 +1301,7 @@ class WebsocketTestCase(unittest.TestCase):
             eq_(len(self.proto.ps.direct_updates), 0)
             eq_(len(self.proto.log.info.mock_calls), 1)
             args, kwargs = self.proto.log.info.call_args
-            eq_(args[0], "Ack")
+            eq_(kwargs.get('format') or args[0], "Ack")
             eq_(kwargs["router_key"], "simplepush")
             eq_(kwargs["message_source"], "direct")
 
@@ -1358,7 +1333,7 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(self.proto.ps.direct_updates[chid], [])
         eq_(len(self.proto.log.info.mock_calls), 1)
         args, kwargs = self.proto.log.info.call_args
-        eq_(args[0], "Ack")
+        eq_(kwargs.get('format') or args[0], "Ack")
         eq_(kwargs["router_key"], "webpush")
         eq_(kwargs["message_source"], "direct")
 
@@ -1383,7 +1358,7 @@ class WebsocketTestCase(unittest.TestCase):
         assert mock_defer.addBoth.called
         eq_(len(self.proto.log.info.mock_calls), 1)
         args, kwargs = self.proto.log.info.call_args
-        eq_(args[0], "Ack")
+        eq_(kwargs.get('format') or args[0], "Ack")
         eq_(kwargs["router_key"], "webpush")
         eq_(kwargs["message_source"], "stored")
 

@@ -1065,7 +1065,7 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_header.assert_called_with(
                 "Location", "Somewhere")
             args, kwargs = self.endpoint.log.info.call_args
-            eq_("Successful delivery", args[0])
+            eq_("Successful delivery", kwargs.get('format') or args[0])
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.post(None, dummy_uaid)
@@ -1092,7 +1092,8 @@ class EndpointTestCase(unittest.TestCase):
             self.endpoint.set_header.assert_called_with(
                 "Location", "Somewhere")
             args, kwargs = self.endpoint.log.info.call_args
-            eq_("Router miss, message stored.", args[0])
+            eq_("Router miss, message stored.",
+                kwargs.get('format') or args[0])
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.post(None, dummy_uaid)
