@@ -306,7 +306,7 @@ def make_settings(args, **kwargs):
         # unaccounted.
         senderID = senderIDs.choose_ID()
         if senderID is None:
-            log.critical("No GCM SenderIDs specified or found.")
+            log.critical(format="No GCM SenderIDs specified or found.")
             return
         router_conf["gcm"] = {"ttl": args.gcm_ttl,
                               "dryrun": args.gcm_dryrun,
@@ -468,7 +468,7 @@ def endpoint_main(sysargs=None, use_files=True):
         try:
             senderid_list = json.loads(args.senderid_list)
         except (ValueError, TypeError):
-            log.critical("Invalid JSON specified for senderid_list")
+            log.critical(format="Invalid JSON specified for senderid_list")
             return
 
     log_level = args.log_level or ("debug" if args.debug else "info")

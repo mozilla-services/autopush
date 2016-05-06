@@ -91,7 +91,7 @@ class PushLogger(object):
             f = event["failure"]
             reactor.callFromThread(
                 self.raven_client.captureException,
-                (f.type, f.value, f.getTracebackObject())
+                exc_info=(f.type, f.value, f.getTracebackObject())
             )
 
         text = self.format_event(event)
@@ -124,8 +124,8 @@ class PushLogger(object):
             "Logger": self.logger_name,
         }
         # Add the nicely formatted message
-        msg["Fields"]["message"] = formatEvent(event)
 
+        msg["Fields"]["message"] = formatEvent(event)
         return json.dumps(msg, skipkeys=True) + "\n"
 
     def start(self):

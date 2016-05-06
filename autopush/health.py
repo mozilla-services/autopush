@@ -56,7 +56,8 @@ class HealthHandler(cyclone.web.RequestHandler):
     def _check_error(self, failure, name):
         """Returns an error, and why"""
         self._healthy = False
-        self.log.failure(failure, name)
+        fmt = failure.value.message or "Heath Exception"
+        self.log.failure(format=fmt, failure=failure, name=name)
 
         cause = self._health_checks[name] = {"status": "NOT OK"}
         if failure.check(InternalServerError):

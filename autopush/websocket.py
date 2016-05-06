@@ -299,7 +299,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def log_failure(self, failure, **kwargs):
         """Log a twisted failure out through twisted's log.failure"""
-        self.log.failure("Unexpected error", failure, **kwargs)
+        self.log.failure(format="Unexpected error", failure=failure, **kwargs)
 
     @property
     def paused(self):
@@ -1062,7 +1062,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # Log out the unregister if it has a code in it
         if "code" in data:
             code = extract_code(data)
-            self.log.info("Unregister", channelID=chid,
+            self.log.info(format="Unregister", channelID=chid,
                           uaid_hash=self.ps.uaid_hash,
                           user_agent=self.ps.user_agent, code=code)
 
@@ -1123,7 +1123,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if found:
             msg = found[0]
             size = len(msg.data) if msg.data else 0
-            self.log.info("Ack", router_key="webpush", channelID=chid,
+            self.log.info(format="Ack", router_key="webpush", channelID=chid,
                           message_id=version, message_source="direct",
                           message_size=size, uaid_hash=self.ps.uaid_hash,
                           user_agent=self.ps.user_agent, code=code)
@@ -1134,7 +1134,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if found:
             msg = found[0]
             size = len(msg.data) if msg.data else 0
-            self.log.info("Ack", router_key="webpush", channelID=chid,
+            self.log.info(format="Ack", router_key="webpush", channelID=chid,
                           message_id=version, message_source="stored",
                           message_size=size, uaid_hash=self.ps.uaid_hash,
                           user_agent=self.ps.user_agent, code=code)
@@ -1167,12 +1167,13 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if chid in self.ps.direct_updates and \
            self.ps.direct_updates[chid] <= version:
             del self.ps.direct_updates[chid]
-            self.log.info("Ack", router_key="simplepush", channelID=chid,
-                          message_id=version, message_source="direct",
+            self.log.info(format="Ack", router_key="simplepush",
+                          channelID=chid, message_id=version,
+                          message_source="direct",
                           uaid_hash=self.ps.uaid_hash,
                           user_agent=self.ps.user_agent, code=code)
             return
-        self.log.info("Ack", router_key="simplepush", channelID=chid,
+        self.log.info(format="Ack", router_key="simplepush", channelID=chid,
                       message_id=version, message_source="stored",
                       uaid_hash=self.ps.uaid_hash,
                       user_agent=self.ps.user_agent, code=code)
@@ -1210,7 +1211,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         version, updateid = version.split(":")
 
-        self.log.info("Nack", uaid_hash=self.ps.uaid_hash,
+        self.log.info(format="Nack", uaid_hash=self.ps.uaid_hash,
                       user_agent=self.ps.user_agent, message_id=version,
                       code=code)
 

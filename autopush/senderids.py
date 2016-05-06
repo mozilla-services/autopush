@@ -59,14 +59,16 @@ class SenderIDs(object):
         self.service = LoopingCall(self._refresh)
         if senderIDs:
             if type(senderIDs) is not dict:
-                self.log.critical("senderid_list is not a dict. Ignoring")
+                self.log.critical(
+                    format="senderid_list is not a dict. Ignoring")
             else:
                 # We're initializing, so it's ok to block.
                 self.update(senderIDs)
 
     def start(self):
         if self._use_s3:
-            self.log.debug("Starting SenderID service...")
+            self.log.debug(
+                format="Starting SenderID service...")
             self.service.start(self._expry)
 
     def _write(self, senderIDs, *args):
@@ -94,8 +96,9 @@ class SenderIDs(object):
         candidates = json.loads(key.get_contents_as_string())
         if candidates:
             if type(candidates) is not dict:
-                self.log.critical("Wrong data type stored for senderIDs. "
-                                  "Should be dict. Ignoring.")
+                self.log.critical(
+                    format=("Wrong data type stored for senderIDs. "
+                            "Should be dict. Ignoring."))
                 return
             return candidates
 
@@ -117,7 +120,8 @@ class SenderIDs(object):
         if not senderIDs:
             return
         if type(senderIDs) is not dict:
-            self.log.critical("Wrong data type for senderIDs. Should be dict.")
+            self.log.critical(
+                format="Wrong data type for senderIDs. Should be dict.")
             return
         if not self._use_s3:
             # Skip using s3 (For debugging)
@@ -149,5 +153,6 @@ class SenderIDs(object):
 
     def stop(self):
         if self.service and self.service.running:
-            self.log.debug("Stopping SenderID service...")
+            self.log.debug(
+                format="Stopping SenderID service...")
             self.service.stop()

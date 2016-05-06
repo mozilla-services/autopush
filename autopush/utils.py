@@ -124,8 +124,11 @@ class ErrorLogger(object):
         """
         self.set_status(code)
         if "exc_info" in kwargs:
-            self.log.failure(failure.Failure(*kwargs["exc_info"]),
-                             **self._client_info)
+            fmt = kwargs.get("format", "Exception")
+            self.log.failure(
+                format=fmt,
+                failure=failure.Failure(*kwargs["exc_info"]),
+                **self._client_info)
         else:
             self.log.failure("Error in handler: %s" % code,
                              **self._client_info)
