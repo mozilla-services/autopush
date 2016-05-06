@@ -857,7 +857,7 @@ class TestWebPush(IntegrationBase):
         yield client.ack(result["channelID"], result["version"])
 
         yield client.unregister(chan)
-        result = yield client.send_notification(data=data, status=404)
+        result = yield client.send_notification(data=data, status=410)
         eq_(result, None)
         yield self.shut_down(client)
 

@@ -66,17 +66,21 @@ class WebPushRouter(SimpleRouter):
         record = yield deferToThread(self.ap_settings.router.get_uaid, uaid)
 
         if 'current_month' not in record:
-            raise RouterException("No such subscription", status_code=404,
+            raise RouterException("No such subscription", status_code=410,
                                   log_exception=False, errno=106)
 
         month_table = record["current_month"]
+        if month_table not in self.ap_settings.message_tables:
+            yield deferToThread(self.ap_settings.router.drop_user, uaid)
+            raise RouterException("No such subscription", status_code=410,
+                                  log_exception=False, errno=106)
         exists, chans = yield deferToThread(
             self.ap_settings.message_tables[month_table].all_channels,
             uaid=uaid)
 
         if (not exists or channel_id.lower() not
                 in map(lambda x: normalize_id(x), chans)):
-            raise RouterException("No such subscription", status_code=404,
+            raise RouterException("No such subscription", status_code=410,
                                   log_exception=False, errno=106)
         returnValue(month_table)
 
