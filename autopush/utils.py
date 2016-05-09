@@ -64,6 +64,14 @@ def base64url_encode(string):
     return base64.urlsafe_b64encode(string).strip('=')
 
 
+def repad(string):
+    """Adds padding to strings for base64 decoding"""
+
+    if len(string) % 4:
+        string = string + '===='[len(string) % 4:]
+    return string
+
+
 def base64url_decode(string):
     """Decodes a Base64 URL-encoded string per RFC 7515.
 
@@ -71,9 +79,7 @@ def base64url_decode(string):
     encoded strings, but Python's ``urlsafe_b64decode`` only accepts padded
     strings.
     """
-    if len(string) % 4:
-        string = string + '===='[len(string) % 4:]
-    return base64.urlsafe_b64decode(string)
+    return base64.urlsafe_b64decode(repad(string))
 
 
 def decipher_public_key(key_data):

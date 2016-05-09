@@ -3,6 +3,7 @@ import sys
 import time
 import uuid
 import random
+import base64
 
 from hashlib import sha256
 
@@ -178,6 +179,7 @@ class EndpointTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
+        self.old_fernet = settings.fernet
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
         self.metrics_mock = settings.metrics = Mock(spec=Metrics)
         self.agent_mock = settings.agent = Mock(spec=Agent)
@@ -775,7 +777,7 @@ class EndpointTestCase(unittest.TestCase):
         sk256p = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
         vk = sk256p.get_verifying_key()
         sig = jws.sign(payload, sk256p, algorithm="ES256").strip('=')
-        crypto_key = utils.base64url_encode(vk.to_string())
+        crypto_key = utils.base64url_encode(vk.to_string()).strip('=')
         return (sig, crypto_key)
 
     def test_post_webpush_with_vapid_auth(self):
@@ -1229,6 +1231,29 @@ class EndpointTestCase(unittest.TestCase):
         eq_(utils.base64url_decode("ab=="), "\x69")
         eq_(utils.base64url_decode("abc="), "\x69\xb7")
         eq_(utils.base64url_decode("abcd"), "\x69\xb7\x1d")
+
+    def test_v2_padded_fernet_decode(self):
+        # Generate a previously valid URL that would cause the #466 issue
+        self.endpoint.ap_settings.fernet = self.old_fernet
+        # stripped, but valid crypto_key
+        dummy_key = ("BHolMkL36ucQsRe_0KRS70JyHB55H4C5Igv2YQEVNzCILN"
+                     "nedxFHSPtzI4KhzNtN2YPqHe7-mWW6_uvaIc5yEDk")
+        # Generate an endpoint, since the fernet key is not locked during
+        # testing.
+        while True:
+            ep = self.endpoint.ap_settings.make_endpoint(
+                dummy_uaid,
+                dummy_chid,
+                dummy_key)
+            token = ep.split("/")[-1]
+            if len(token) % 4:
+                break
+        reply = self.settings.parse_endpoint(token, "v2",
+                                             "p256ecdsa=" + dummy_key)
+        eq_(reply, {'public_key': base64.urlsafe_b64decode(
+                    utils.repad(dummy_key)),
+                    'chid': dummy_chid.replace('-', ''),
+                    'uaid': dummy_uaid.replace('-', '')})
 
     def test_parse_endpoint(self):
         v0_valid = dummy_uaid + ":" + dummy_chid

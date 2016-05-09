@@ -36,7 +36,12 @@ from autopush.router import (
     SimpleRouter,
     WebPushRouter,
 )
-from autopush.utils import canonical_url, resolve_ip, base64url_decode
+from autopush.utils import (
+    canonical_url,
+    resolve_ip,
+    repad,
+    base64url_decode
+)
 from autopush.senderids import SENDERID_EXPRY, DEFAULT_BUCKET
 from autopush.crypto_key import (CryptoKey, CryptoKeyException)
 
@@ -303,8 +308,8 @@ class AutopushSettings(object):
             return root + 'v1/' + self.fernet.encrypt(base).strip('=')
 
         raw_key = base64url_decode(key.encode('utf8'))
-        return root + 'v2/' + self.fernet.encrypt(base +
-                                                  sha256(raw_key).digest())
+        ep = self.fernet.encrypt(base + sha256(raw_key).digest()).strip('=')
+        return root + 'v2/' + ep
 
     def parse_endpoint(self, token, version="v0", ckey_header=None):
         """Parse an endpoint into component elements of UAID, CHID and optional
@@ -320,8 +325,7 @@ class AutopushSettings(object):
         :returns: a dict containing (uaid=UAID, chid=CHID, public_key=KEY)
 
         """
-
-        token = self.fernet.decrypt(token.encode('utf8'))
+        token = self.fernet.decrypt(repad(token).encode('utf8'))
         public_key = None
         if ckey_header:
             try:

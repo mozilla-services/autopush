@@ -1301,7 +1301,6 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         yield client.register(chid=chid, key=pk_hex)
-        # check that the client actually registered the key.
 
         # Send an update with a properly formatted key.
         yield client.send_notification(vapid=vapid)
