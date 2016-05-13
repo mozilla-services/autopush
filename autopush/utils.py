@@ -2,6 +2,7 @@
 import base64
 import hashlib
 import hmac
+import json
 import socket
 import uuid
 
@@ -115,7 +116,11 @@ def extract_jwt(token, crypto_key):
 
     key = decipher_public_key(crypto_key)
     vk = ecdsa.VerifyingKey.from_string(key, curve=ecdsa.NIST256p)
-    return jws.verify(token, vk, algorithms=["ES256"])
+    # jose offers jwt.decode(token, vk, ...) which does a full check
+    # on the JWT object. Vapid is a bit more creative in how it
+    # stores data into a JWT and breaks expectations. We would have to
+    # turn off most of the validation in order for it to be useful.
+    return json.loads(jws.verify(token, vk, algorithms=["ES256"]))
 
 
 class ErrorLogger(object):
