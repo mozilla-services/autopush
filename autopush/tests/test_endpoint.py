@@ -797,7 +797,7 @@ class EndpointTestCase(unittest.TestCase):
 
             kd2 = utils.base64url_decode(crypto_key)
             vk2 = ecdsa.VerifyingKey.from_string(kd2, curve=ecdsa.NIST256p)
-            res = jws.verify(token, vk2, algorithms=["ES256"])
+            res = json.loads(jws.verify(token, vk2, algorithms=["ES256"]))
             eq_(res, payload)
         """
         self.request_mock.headers["crypto-key"] = \
