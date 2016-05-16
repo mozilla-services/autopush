@@ -1,3 +1,42 @@
+<a name="1.15.0"></a>
+## 1.15.0 (2016-05-16)
+
+
+#### Doc
+
+*   Use shields.io image for code coverage ([4e767a71](https://github.com/mozilla-services/autopush/commit/4e767a71a7315cbff45710cb0c196179348a31d9))
+
+#### Chore
+
+*   update all libs to latest versions and fix jws conflict ([1cbf94f3](https://github.com/mozilla-services/autopush/commit/1cbf94f3168749105d3f0d14c788ca7b2573661c), closes [#453](https://github.com/mozilla-services/autopush/issues/453))
+
+#### Bug Fixes
+
+*   Normalize padding handling for restricted subscriptions ([17e885bf](https://github.com/mozilla-services/autopush/commit/17e885bf7412b7ca333d57081595ad4d6868152c), closes [#466](https://github.com/mozilla-services/autopush/issues/466))
+*   Fix logging message inconsistencies ([37d09b30](https://github.com/mozilla-services/autopush/commit/37d09b3007a4060b85999e6863febdc73c7f58cb), closes [#460](https://github.com/mozilla-services/autopush/issues/460))
+*   Check connected month bounds for preflight ([63ff016c](https://github.com/mozilla-services/autopush/commit/63ff016c3102e516d1966c964d054ce4ec2b17d1), closes [#461](https://github.com/mozilla-services/autopush/issues/461))
+*   Log status_code & errno for all errors ([d2c36fcd](https://github.com/mozilla-services/autopush/commit/d2c36fcdf696bd7706cbfc3853d8a6530736454e), closes [#457](https://github.com/mozilla-services/autopush/issues/457))
+*   Strip padding from key content ([ec48a6cc](https://github.com/mozilla-services/autopush/commit/ec48a6cc68bf1a5ff4fb3355bf3651abf958350a), closes [#451](https://github.com/mozilla-services/autopush/issues/451))
+*   Correct documents to strongly recommend well formatted UUIDs ([b58e6339](https://github.com/mozilla-services/autopush/commit/b58e6339d506838d253f8c0f6f04027088ebf642), closes [#392](https://github.com/mozilla-services/autopush/issues/392), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+*   Use static UAIDs for preflight, clean up after. ([e19329d5](https://github.com/mozilla-services/autopush/commit/e19329d5eb30405be4c852cbcf1e7ea5e1c31ab4), closes [#434](https://github.com/mozilla-services/autopush/issues/434))
+*   Canonicalize Base64 URL-encoded values per RFC 7515. ([9406e0d6](https://github.com/mozilla-services/autopush/commit/9406e0d6ca32df9604638b8d1990d7f5c9428c44))
+
+#### Breaking Changes
+
+*   Correct documents to strongly recommend well formatted UUIDs ([b58e6339](https://github.com/mozilla-services/autopush/commit/b58e6339d506838d253f8c0f6f04027088ebf642), closes [#392](https://github.com/mozilla-services/autopush/issues/392), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+
+#### Features
+
+*   use gnureadline instead of readline ([e2a6b727](https://github.com/mozilla-services/autopush/commit/e2a6b7279c85f01b29781bde39a7837a1e868a6a))
+*   Add extended err message for old encryption ([a236c90a](https://github.com/mozilla-services/autopush/commit/a236c90aac2d24b15bab42ef00cf8a50a42e3353))
+*   Support app server keys via the HTTP interface. ([88b1f037](https://github.com/mozilla-services/autopush/commit/88b1f03741bc776ce750b2f2bece3985f7825f2b), closes [#423](https://github.com/mozilla-services/autopush/issues/423))
+
+#### Refactor
+
+*   Remove duplicate validation logic in the GCM and APNs routers. ([c9fe7627](https://github.com/mozilla-services/autopush/commit/c9fe762772c031336611cffd069033aa51d8807f))
+
+
+
 <a name="1.14.2"></a>
 ## 1.14.2 (2016-04-07)
 
