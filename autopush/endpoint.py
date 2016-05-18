@@ -712,7 +712,8 @@ class RegistrationHandler(AutoendpointHandler):
         self.add_header("Content-Type", "application/json")
         d = Deferred()
         d.addCallback(router.register, router_data)
-        d.addCallback(self._save_router_data, router_type)
+        if params:
+            d.addCallback(self._save_router_data, router_type)
         d.addCallback(self._success)
         d.addErrback(self._router_fail_err)
         d.addErrback(self._response_err)
@@ -824,7 +825,7 @@ class RegistrationHandler(AutoendpointHandler):
                        **self._client_info)
         self.finish()
 
-    def _success(self, result):
+    def _success(self, result=None):
         """Writes out empty 200 response"""
         self.write({})
         self.finish()
@@ -867,3 +868,65 @@ class RegistrationHandler(AutoendpointHandler):
             return json.loads(self.request.body)
         except ValueError:
             return {}
+
+
+class BridgeMessageHandler(RegistrationHandler):
+    cors_methods = "PUT"
+
+    @cyclone.web.asynchronous
+    def put(self, uaid):
+        """HTTP PUT
+
+        Process message states for a UAID
+
+        """
+        self.start_time = time.time()
+        if not self._validate_auth(uaid):
+            return self._write_unauthorized_response(
+                message="Invalid Authentication")
+        params = self._load_params()
+        if 'nak' in params:
+            d = deferToThread(self._record_naks, uaid, naks=params['nak'])
+            d.addCallback(self._success)
+            d.addErrback(self._response_err)
+            return d
+        return self._success()
+
+    def _record_naks(self, o_uaid, naks):
+        """ Record the NAKs from the client
+
+        """
+        for nak in naks:
+            try:
+                result = self.ap_settings.fernet.decrypt(
+                    nak['id'].encode('utf8'))
+                kind, uaid, chid = result.split(":")
+                if kind != 'm':
+                    self.log.error(
+                        format="Improper messageID specified",
+                        message_id=result,
+                        uaid_hash=hasher(uaid),
+                        channel_id=chid,
+                        message=json.dumps(nak))
+                    continue
+                try:
+                    self.log.info(
+                        format="NAK",
+                        uaid_hash=hasher(uaid),
+                        channel_id=chid,
+                        user_agent=self.request.user_agent,
+                        message_id=result,
+                        message=nak.get("msg", None),
+                        code=nak.get("code", 0))
+                except Exception as e:
+                    self.log.failure(
+                        format="Unable to process record",
+                        uaid_hash=hasher(uaid),
+                        line=json.dumps(nak, sort_keys=True),
+                        error=repr(e))
+            except (ValueError, InvalidToken) as e:
+                self.log.failure(
+                    format="Invalid messageID specified",
+                    uaid_hash=hasher(o_uaid),
+                    line=json.dumps(nak, sort_keys=True),
+                    error=repr(e))

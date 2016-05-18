@@ -235,10 +235,14 @@ class EndpointMainTestCase(unittest.TestCase):
             "--s3_bucket=none",
         ])
 
-    def test_bad_senderidlist(self):
+    @patch('autopush.main._parse_endpoint')
+    def test_bad_senderidlist(self, parse):
+        ff = Mock()
+        ff.senderid_list = "[Invalid"
+        parse.return_value = (ff, Mock())
         endpoint_main([
             "--senderid_list='[Invalid'"
-        ])
+        ], False)
 
     def test_ping_settings(self):
         ap = make_settings(self.test_arg)

@@ -75,6 +75,7 @@ class GCMRouter(object):
             data['body'] = notification.data
             data['con'] = notification.headers['content-encoding']
             data['enc'] = notification.headers['encryption']
+            data['id'] = notification.version
 
             if 'crypto-key' in notification.headers:
                 data['cryptokey'] = notification.headers['crypto-key']

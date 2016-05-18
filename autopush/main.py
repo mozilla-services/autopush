@@ -15,6 +15,7 @@ from autopush.endpoint import (
     EndpointHandler,
     MessageHandler,
     RegistrationHandler,
+    BridgeMessageHandler,
 )
 from autopush.health import (HealthHandler, StatusHandler)
 from autopush.logging import PushLogger
@@ -201,7 +202,7 @@ def _parse_connection(sysargs, use_files=True):
             '.autopush_connection.ini'
         ]
     else:
-        config_files = []  # pragma: nocover
+        config_files = shared_config_files = []  # pragma: nocover
     parser = configargparse.ArgumentParser(
         description='Runs a Connection Node.',
         default_config_files=shared_config_files + config_files)
@@ -508,6 +509,9 @@ def endpoint_main(sysargs=None, use_files=True):
         (r"/v1/([^\/]+)/([^\/]+)/registration(?:/([^\/]+))"
             "?(?:/subscription)?(?:/([^\/]+))?",
          RegistrationHandler,
+         dict(ap_settings=settings)),
+        (r"/v1/naks/([^\/]+)",
+         BridgeMessageHandler,
          dict(ap_settings=settings)),
     ],
         default_host=settings.hostname, debug=args.debug,

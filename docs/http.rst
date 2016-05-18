@@ -3,7 +3,7 @@
 HTTP Endpoints for Notifications
 ================================
 
-Autopush exposes three HTTP endpoints:
+Autopush exposes four HTTP endpoints:
 
 `/push/...`
 
@@ -22,6 +22,13 @@ and :ref:`update`.
 
 This is tied to the :class:`RegistrationHandler` (:ref:`endpoint_module`). This endpoint is used by
 apps that wish to use :term:`bridging` protocols to register new channels.
+See :ref:`bridge_api`.
+
+`/v1/.../.../messages/...`
+
+This is tied to the :class:`BridgeMessageHandler` (ref:`endpoint_module`).
+This endpoint is used by apps that wish to use the :term:`bridging`
+protocols to report the status of handled messages.
 See :ref:`bridge_api`.
 
 ---
@@ -98,6 +105,7 @@ Unless otherwise specified, all calls return the following error codes:
        - Missing Crypto Headers - Include the appropriate encryption headers (`WebPush Encryption §3.2 <https://webpush-wg.github.io/webpush-encryption/#rfc.section.3.2>`_ and `WebPush VAPID §4 <https://martinthomson.github.io/webpush-vapid/#rfc.section.4>`_)
 
    - errno 112 - Invalid TTL header value
+   - errno 113 - Invalid ACK/NACK state
 
 -  401 - Bad Authorization
 
@@ -467,6 +475,7 @@ Remove a given ChannelID subscription from a UAID.
 
 **Call:**
 
+
 .. http:delete:: /v1/{type}/{token}/registration/{UAID}/subscription/{CHID}
 
 ::
@@ -479,6 +488,81 @@ Remove a given ChannelID subscription from a UAID.
 
 **Reply:**
 
+
+.. code-block:: json
+
+    {}
+
+**Return Codes:**
+
+See :ref:`errors`.
+
+Report ACKs and NAKs
+~~~~~~~~~~~~~~~~~~~~
+
+Report the processing status of messages for a given UAID.
+
+Because connections can be at a premium, only "batch" mode is
+supported.
+
+**Call:**
+
+.. http:put:: /v1/naks/{uaid}
+
+::
+
+   Authorization: Bearer {auth_token}
+
+**Parameters:**
+
+A JSON block containing the status of messages, divided by "ACK"
+(success) and "NAK" (failure). To save bandwidth, currently, only
+NAKs are recorded.
+
+For instance:
+
+.. code-block:: json
+
+    {"nak":[{"id": {Message ID}, "ver": {Message Version},
+             "code": {Return Code}, "msg": {Error Message}},
+            ...
+           ],
+     "ack":[{"id": {Message ID}, "ver": {Message Version}},
+            ...
+           ]
+    }
+
+
+For this example:
+
+    :id: The message ID included in the notification data.
+
+    :ver: The message version field included in the notification data.
+
+    :code: An optional return code indicating the type of error encountered. Error codes may be specific to individual bridge implementations.
+
+    :msg: An optional text describing the error encountered.  Error messages may be specific to individual bridge implementations.
+
+Bridge client authors are strongly encourage to return either a Return
+Code or Error Message for NAK messages as these may be displayed on the
+developer dashboard.
+
+Clients may return the following error codes:
+
+    :300: RESERVED
+
+    :301: The `push` handler threw an uncaught exception
+
+    :302: The promise passed to `pushEvent.waitUntil()` rejected with an error
+
+    :303: Some other error dispatching the event
+
+.. Note::
+    Because of how bridged messages are handled, it is possible to receive a
+    'nack' for a message that was previously 'ack'ed.
+
+
+**Reply:**
 
 .. code-block:: json
 

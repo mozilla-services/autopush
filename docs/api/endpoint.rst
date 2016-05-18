@@ -26,6 +26,11 @@ HTTP Endpoints
     :private-members:
     :member-order: bysource
 
+.. autoclass:: BridgeMessageHandler
+    :members:
+    :private-members:
+    :member-order: bysource
+
 .. autoclass:: MessageHandler
     :members:
     :private-members:

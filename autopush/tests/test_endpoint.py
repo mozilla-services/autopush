@@ -1337,6 +1337,7 @@ CORS_HEAD = "POST,PUT,DELETE"
 class RegistrationTestCase(unittest.TestCase):
 
     def setUp(self):
+        from twisted.logger import Logger
         twisted.internet.base.DelayedCall.debug = True
         settings = endpoint.RegistrationHandler.ap_settings =\
             AutopushSettings(
@@ -1361,6 +1362,7 @@ class RegistrationTestCase(unittest.TestCase):
                                                 self.request_mock,
                                                 ap_settings=settings)
 
+        self.reg.log = Mock(spec=Logger)
         self.status_mock = self.reg.set_status = Mock()
         self.write_mock = self.reg.write = Mock()
         self.auth = ("Bearer %s" %
@@ -1689,7 +1691,7 @@ class RegistrationTestCase(unittest.TestCase):
             # sha256(dummy_key).digest()
             eq_(cleartext[32:],
                 ('47aedd050b9e19171f0fa7b8b65ca670'
-                '28f0bc92cd3f2cd3682b1200ec759007').decode('hex'))
+                 '28f0bc92cd3f2cd3682b1200ec759007').decode('hex'))
             return 'abcd123'
         self.fernet_mock.configure_mock(**{
             'encrypt.side_effect': mock_encrypt,
@@ -1916,4 +1918,163 @@ class RegistrationTestCase(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.delete("test", "test", dummy_uaid, dummy_chid)
+        return self.finish_deferred
+
+
+class BridgeMessageTestCase(unittest.TestCase):
+
+    def setUp(self):
+        from twisted.logger import Logger
+        twisted.internet.base.DelayedCall.debug = True
+        settings = endpoint.BridgeMessageHandler.ap_settings =\
+            AutopushSettings(
+                hostname="localhost",
+                statsd_host=None,
+                bear_hash_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
+            )
+        self.router_mock = settings.router = Mock(spec=Router)
+        self.senderIDs_mock = settings.senderIDs = Mock(spec=SenderIDs)
+        self.senderIDs_mock.get_ID.return_value = "test_senderid"
+        self.router_mock.check_token = Mock()
+        self.router_mock.check_token.return_value = (True, 'test')
+        self.router_mock.register_user = Mock()
+        self.router_mock.register_user.return_value = (True, {}, {})
+        settings.routers["test"] = self.router_mock
+
+        self.request_mock = Mock(body=b'', arguments={}, headers={})
+        self.reg = endpoint.BridgeMessageHandler(Application(),
+                                                 self.request_mock,
+                                                 ap_settings=settings)
+
+        self.reg.log = Mock(spec=Logger)
+        self.status_mock = self.reg.set_status = Mock()
+        self.write_mock = self.reg.write = Mock()
+        self.auth = ("Bearer %s" %
+                     generate_hash(self.reg.ap_settings.bear_hash_key[0],
+                                   dummy_uaid))
+
+        d = self.finish_deferred = Deferred()
+        self.reg.finish = lambda: d.callback(True)
+        self.settings = settings
+
+    def _check_error(self, code, errno, error, message=None):
+        d = json.loads(self.write_mock.call_args[0][0])
+        eq_(d.get("code"), code)
+        eq_(d.get("errno"), errno)
+        eq_(d.get("error"), error)
+        if message:
+            eq_(d.get("message"), message)  # pragma: nocover
+
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
+    def test_put_bad_auth(self, *args):
+        self.reg.request.headers["Authorization"] = "Fred Smith"
+
+        def handle_finish(value):
+            self._check_error(401, 109, "Unauthorized")
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.put(uaid=dummy_uaid)
+        return self.finish_deferred
+
+    def test_put_no_naks(self):
+        mid = ':'.join(['m', dummy_uaid, dummy_chid])
+        valid_id = self.reg.ap_settings.fernet.encrypt(mid.encode('utf8'))
+        data = dict(ack=[{"id": valid_id, "code": 200}])
+        self.reg.log.info = Mock()
+        self.reg.request.body = json.dumps(data)
+
+        def handle_finish(value):
+            eq_(self.reg.log.info.call_count, 0)
+            eq_(self.reg.log.error.call_count, 0)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
+        self.reg.put(uaid=dummy_uaid)
+        return self.finish_deferred
+
+    def test_put_failure(self):
+        mid = ':'.join(['m', dummy_uaid, dummy_chid])
+        valid_id = self.reg.ap_settings.fernet.encrypt(mid.encode('utf8'))
+        data = dict(nak=[{"id": valid_id, "code": 401,
+                          "ver": "abc:def", "msg": "good_nak"}])
+        self.reg.log.info = Mock()
+        self.reg.log.configure_mock(**{
+            "info.side_effect": Exception})
+
+        self.reg.request.body = json.dumps(data)
+
+        def handle_finish(value):
+            eq_(self.reg.log.failure.call_count, 1)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
+        self.reg.put(uaid=dummy_uaid)
+        return self.finish_deferred
+
+    def test_put_naks(self):
+        mid = ':'.join(['m', dummy_uaid, dummy_chid])
+        valid_id = self.reg.ap_settings.fernet.encrypt(mid.encode('utf8'))
+        data = dict(nak=[{"id": valid_id, "code": 401,
+                          "ver": "abc:def", "msg": "good_nak"},
+                         {"id": "invalid", "code": 500,
+                          "msg": "bad_nak", "ver": "none"}],
+                    ack=[{}])
+        self.reg.log.info = Mock()
+        self.reg.log.error = Mock()
+        self.reg.request.body = json.dumps(data)
+
+        def handle_finish(value):
+            eq_(self.reg.log.info.call_count, 1)
+            call_args = self.reg.log.info.call_args[1]
+            eq_(call_args.get('code'), 401)
+            eq_(call_args.get('message_id'), mid)
+            eq_(call_args.get('channel_id'), dummy_chid)
+            eq_(self.reg.log.failure.call_count, 1)
+            call_args = self.reg.log.failure.call_args[1]
+            eq_(call_args.get('line'), json.dumps(data['nak'][1],
+                                                  sort_keys=True))
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
+        self.reg.put(uaid=dummy_uaid)
+        return self.finish_deferred
+
+    def test_put_improper_nak(self):
+        bad_id = self.reg.ap_settings.fernet.encrypt(
+            ':'.join(['a', dummy_uaid, dummy_chid]))
+        data = dict(nak=[{"id": bad_id, "code": 401,
+                          "ver": "abc:def", "msg": "bad_nak"}])
+        self.reg.log.info = Mock()
+        self.reg.log.error = Mock()
+        self.reg.request.body = json.dumps(data)
+
+        def handle_finish(value):
+            eq_(self.reg.log.info.call_count, 0)
+            eq_(self.reg.log.error.call_count, 1)
+            call_args = self.reg.log.error.call_args[1]
+            eq_(call_args.get("format"), "Improper messageID specified")
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
+        self.reg.put(uaid=dummy_uaid)
+        return self.finish_deferred
+
+    def test_put_invalid_nak(self):
+        bad_id = self.reg.ap_settings.fernet.encrypt(
+            ':'.join([dummy_uaid, dummy_chid]))
+        data = dict(nak=[{"id": bad_id, "code": 401,
+                          "ver": "abc:def", "msg": "bad_nak"}])
+        self.reg.log.info = Mock()
+        self.reg.log.error = Mock()
+        self.reg.request.body = json.dumps(data)
+
+        def handle_finish(value):
+            eq_(self.reg.log.info.call_count, 0)
+            eq_(self.reg.log.failure.call_count, 1)
+            call_args = self.reg.log.failure.call_args[1]
+            eq_(call_args.get("format"), "Invalid messageID specified")
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
+        self.reg.put(uaid=dummy_uaid)
         return self.finish_deferred
