@@ -191,13 +191,14 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     #############################################################
     #                    Error Callbacks
     #############################################################
-    def _write_response(self, status_code, errno, message=None, headers=None):
+    def _write_response(self, status_code, errno, message=None, headers=None,
+                        reason=None):
         """Writes out a full JSON error and sets the appropriate status"""
-        self.set_status(status_code)
+        self.set_status(status_code, reason)
         error_data = dict(
             code=status_code,
             errno=errno,
-            error=status_codes.get(status_code, "")
+            error=status_codes.get(status_code, reason or "")
         )
         if message:
             error_data["message"] = message
