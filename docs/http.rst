@@ -240,7 +240,7 @@ Push Service Bridge HTTP Interface
 ==================================
 
 Push allows for remote devices to perform some functions using an HTTP
-interface. This is mostly used by devices that are bridging via an
+interface. These function mimic the websocket protocol described by :ref:`protocol`
 external protocol like
 `GCM <https://developers.google.com/cloud-messaging/>`__ or
 `APNs <https://developer.apple.com/library/ios/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Introduction.html#//apple_ref/doc/uid/TP40008196-CH1-SW1>`__. All message bodies must be UTF-8 encoded.

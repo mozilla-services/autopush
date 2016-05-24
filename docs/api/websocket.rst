@@ -5,6 +5,8 @@
 
 .. automodule:: autopush.websocket
 
+.. _websocket_protocol:
+
 Websocket Protocol
 ++++++++++++++++++
 
