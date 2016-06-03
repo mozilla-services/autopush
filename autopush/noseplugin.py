@@ -15,6 +15,7 @@ except:
 
 
 _testing = False
+_compact = True
 _excludes = []
 tracked_objects = defaultdict(lambda: [])
 test_results = {}
@@ -62,12 +63,18 @@ class ObjectTracker(Plugin):  # pragma: nocover
             stream.write("\n%s\n" % test)
 
             for _, objects in tracked.items():
-                stream.write("\t%s\n" % objects[0][1])
+                stream.write("\t%s" % objects[0][1])
+                if not _compact:
+                    stream.write("\n")
                 sorted_tracked = sorted(objects, key=lambda v: v[0])
                 values = map(lambda v: v[2], objects)
                 min_val = min(values)
                 max_val = max(values)
                 delta = max_val - min_val
+                if _compact:
+                    stream.write("  Delta: {:,.2f}\n".format(delta))
+                    continue
+
                 for t, _, size, msg in sorted_tracked:
                     ft = "%.2f" % t
                     stream.write("\t\t%20s" % ft)
