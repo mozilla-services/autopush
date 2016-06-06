@@ -4,6 +4,7 @@ import datetime
 from mock import Mock, patch
 from moto import mock_dynamodb2, mock_s3
 from nose.tools import eq_
+from twisted.internet.defer import Deferred
 from twisted.trial import unittest as trialtest
 
 from autopush.main import (
@@ -73,13 +74,15 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         settings.message_tables = {}
 
         # Get the deferred back
+        e = Deferred()
         d = settings.update_rotating_tables()
 
         def check_tables(result):
             eq_(len(settings.message_tables), 1)
 
         d.addCallback(check_tables)
-        return d
+        d.addBoth(lambda x: e.callback(True))
+        return e
 
     def test_update_rotating_tables_month_end(self):
         today = datetime.date.today()
@@ -118,13 +121,15 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         settings.message_tables = {}
 
         # Get the deferred back
+        e = Deferred()
         d = settings.update_rotating_tables()
 
         def check_tables(result):
             eq_(len(settings.message_tables), 0)
 
         d.addCallback(check_tables)
-        return d
+        d.addBoth(lambda x: e.callback(True))
+        return e
 
 
 class ConnectionMainTestCase(unittest.TestCase):
