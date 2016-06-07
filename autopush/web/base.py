@@ -165,7 +165,7 @@ class BaseHandler(cyclone.web.RequestHandler):
         self.log.info(format="Request validation error",
                       status_code=exc.status_code,
                       errno=exc.errno)
-        self._write_response(exc.status_code, exc.errno)
+        self._write_response(exc.status_code, exc.errno, headers=exc.headers)
 
     def _response_err(self, fail):
         """errBack for all exceptions that should be logged
