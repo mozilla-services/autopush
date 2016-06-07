@@ -916,7 +916,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ap_settings.message.register_channel = Mock()
         test_key = "SomeRandomCryptoKeyString"
         test_sha = sha256(test_key).hexdigest()
-        test_endpoint = ('http://localhost/push/v2/' +
+        test_endpoint = ('http://localhost/wpush/v2/' +
                          self.proto.ps.uaid.replace('-', '') +
                          chid.replace('-', '') +
                          test_sha)

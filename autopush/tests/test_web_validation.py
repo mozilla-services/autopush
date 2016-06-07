@@ -1,23 +1,41 @@
+import time
 import uuid
 
+import ecdsa
 from boto.dynamodb2.exceptions import (
     ItemNotFound,
 )
+from jose import jws
 from marshmallow import Schema, fields
 from mock import Mock
+from moto import mock_dynamodb2
 from nose.tools import eq_, ok_, assert_raises
 from twisted.internet.defer import Deferred
 from twisted.trial import unittest
 
+from autopush.db import (
+    create_rotating_message_table,
+)
 from autopush.exceptions import (
     InvalidRequest,
     InvalidTokenException,
 )
+import autopush.utils as utils
 
 
 dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
 dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
 dummy_token = dummy_uaid + ":" + dummy_chid
+mock_dynamodb2 = mock_dynamodb2()
+
+
+def setUp():
+    mock_dynamodb2.start()
+    create_rotating_message_table()
+
+
+def tearDown():
+    mock_dynamodb2.stop()
 
 
 class InvalidSchema(Schema):
@@ -34,7 +52,7 @@ class TestThreadedValidate(unittest.TestCase):
         class Basic(Schema):
             pass
 
-        return Basic()
+        return Basic
 
     def _makeDummyRequest(self, method="GET", uri="/", **kwargs):
         from cyclone.httpserver import HTTPRequest
@@ -74,7 +92,7 @@ class TestThreadedValidate(unittest.TestCase):
         eq_(d, {})
 
     def test_validate_invalid_schema(self):
-        tv, rh = self._makeFull(schema=InvalidSchema())
+        tv, rh = self._makeFull(schema=InvalidSchema)
         d, errors = tv._validate_request(rh)
         ok_("afield" in errors)
         eq_(d, {})
@@ -88,7 +106,7 @@ class TestThreadedValidate(unittest.TestCase):
 
     def test_call_func_error(self):
         mock_func = Mock()
-        tv, rh = self._makeFull(schema=InvalidSchema())
+        tv, rh = self._makeFull(schema=InvalidSchema)
         result = tv._validate_request(rh)
         tv._call_func(result, mock_func, rh)
         self._mock_errors.assert_called()
@@ -261,3 +279,298 @@ class TestSimplePushRequestSchema(unittest.TestCase):
             schema.load(self._make_test_data(body="version=&data=asdfasdf"))
 
         eq_(cm.exception.errno, 104)
+
+
+class TestWebPushRequestSchema(unittest.TestCase):
+    def _makeFUT(self):
+        from autopush.web.validation import WebPushRequestSchema
+        schema = WebPushRequestSchema()
+        schema.context["settings"] = Mock()
+        schema.context["log"] = Mock()
+        return schema
+
+    def _make_test_data(self, headers=None, body="", path_args=None,
+                        path_kwargs=None, arguments=None):
+        return dict(
+            headers=headers or {},
+            body=body,
+            path_args=path_args or [],
+            path_kwargs=path_kwargs or {},
+            arguments=arguments or {},
+        )
+
+    def test_valid_data(self):
+        schema = self._makeFUT()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="webpush",
+        )
+        result, errors = schema.load(self._make_test_data())
+        eq_(errors, {})
+        ok_("message_id" in result)
+        eq_(str(result["subscription"]["uaid"]), dummy_uaid)
+
+    def test_invalid_simplepush_user(self):
+        schema = self._makeFUT()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="simplepush",
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(self._make_test_data())
+
+        eq_(cm.exception.errno, 108)
+
+    def test_invalid_token(self):
+        schema = self._makeFUT()
+
+        def throw_item(*args, **kwargs):
+            raise InvalidTokenException("Not found")
+
+        schema.context["settings"].parse_endpoint.side_effect = throw_item
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(self._make_test_data())
+
+        eq_(cm.exception.errno, 102)
+
+    def test_invalid_uaid_not_found(self):
+        schema = self._makeFUT()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+
+        def throw_item(*args, **kwargs):
+            raise ItemNotFound("Not found")
+
+        schema.context["settings"].router.get_uaid.side_effect = throw_item
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(self._make_test_data())
+
+        eq_(cm.exception.errno, 103)
+
+    def test_invalid_header_combo(self):
+        schema = self._makeFUT()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="webpush",
+        )
+        info = self._make_test_data(
+            headers={
+                "content-encoding": "aesgcm128",
+                "crypto-key": "asdfjialsjdfiasjld",
+            }
+        )
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.errno, 110)
+
+        info = self._make_test_data(
+            headers={
+                "encryption-key": "aesgcm128",
+                "crypto-key": "asdfjialsjdfiasjld",
+            }
+        )
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.errno, 110)
+
+    def test_invalid_data_size(self):
+        schema = self._makeFUT()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="webpush",
+        )
+        schema.context["settings"].max_data = 1
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(self._make_test_data(body="asdfasdfasdfasdfasd"))
+
+        eq_(cm.exception.errno, 104)
+
+    def test_invalid_data_must_have_crypto_headers(self):
+        schema = self._makeFUT()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="webpush",
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(self._make_test_data(body="asdfasdfasdfasdfasd"))
+
+        eq_(cm.exception.errno, 110)
+
+    def test_valid_data_crypto_padding_stripped(self):
+        schema = self._makeFUT()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="webpush",
+        )
+
+        padded_value = "asdfjiasljdf==="
+
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            headers={
+                "authorization": "not vapid",
+                "content-encoding": "aesgcm128",
+                "encryption": padded_value
+            }
+        )
+
+        result, errors = schema.load(info)
+        eq_(errors, {})
+        eq_(result["headers"]["encryption"], "asdfjiasljdf")
+
+    def test_invalid_vapid_crypto_header(self):
+        schema = self._makeFUT()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="webpush",
+        )
+
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            headers={
+                "content-encoding": "text",
+                "encryption": "ignored",
+                "authorization": "invalid",
+                "crypto-key": "crypt=crap",
+            }
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 401)
+
+
+class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
+    def _makeFUT(self):
+        from autopush.web.validation import WebPushRequestSchema
+        from autopush.settings import AutopushSettings
+        schema = WebPushRequestSchema()
+        schema.context["log"] = Mock()
+        schema.context["settings"] = AutopushSettings(
+            hostname="localhost",
+            statsd_host=None,
+        )
+        schema.context["settings"].router = Mock()
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="webpush",
+        )
+        schema.context["settings"].fernet = self.fernet_mock = Mock()
+        return schema
+
+    def _make_test_data(self, headers=None, body="", path_args=None,
+                        path_kwargs=None, arguments=None):
+        return dict(
+            headers=headers or {},
+            body=body,
+            path_args=path_args or [],
+            path_kwargs=path_kwargs or {},
+            arguments=arguments or {},
+        )
+
+    def _gen_jwt(self, header, payload):
+        sk256p = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
+        vk = sk256p.get_verifying_key()
+        sig = jws.sign(payload, sk256p, algorithm="ES256").strip('=')
+        crypto_key = utils.base64url_encode(vk.to_string()).strip('=')
+        return sig, crypto_key
+
+    def test_valid_vapid_crypto_header(self):
+        schema = self._makeFUT()
+        self.fernet_mock.decrypt.return_value = dummy_token
+
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+
+        token, crypto_key = self._gen_jwt(header, payload)
+        auth = "Bearer %s" % token
+        ckey = 'keyid="a1"; key="foo";p256ecdsa="%s"' % crypto_key
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            path_kwargs=dict(
+                api_ver="v0",
+                token="asdfasdf",
+            ),
+            headers={
+                "content-encoding": "aes128",
+                "encryption": "stuff",
+                "authorization": auth,
+                "crypto-key": ckey
+            }
+        )
+
+        result, errors = schema.load(info)
+        eq_(errors, {})
+        ok_("jwt" in result)
+
+    def test_expired_vapid_header(self):
+        schema = self._makeFUT()
+        self.fernet_mock.decrypt.return_value = dummy_token
+
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": 20,
+                   "sub": "mailto:admin@example.com"}
+
+        token, crypto_key = self._gen_jwt(header, payload)
+        auth = "Bearer %s" % token
+        ckey = 'keyid="a1"; key="foo";p256ecdsa="%s"' % crypto_key
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            path_kwargs=dict(
+                api_ver="v0",
+                token="asdfasdf",
+            ),
+            headers={
+                "content-encoding": "aes128",
+                "encryption": "stuff",
+                "authorization": auth,
+                "crypto-key": ckey
+            }
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 401)
+        eq_(cm.exception.errno, 109)
