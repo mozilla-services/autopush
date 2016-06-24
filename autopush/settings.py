@@ -286,8 +286,15 @@ class AutopushSettings(object):
             else:
                 setattr(self, key, val)
 
+    def make_simplepush_endpoint(self, uaid, chid):
+        """Create a simplepush endpoint"""
+        root = self.endpoint_url + "/spush/"
+        base = (uaid.replace('-', '').decode("hex") +
+                chid.replace('-', '').decode("hex"))
+        return root + 'v1/' + self.fernet.encrypt(base).strip('=')
+
     def make_endpoint(self, uaid, chid, key=None):
-        """Create an v1 or v2 endpoint from the indentifiers.
+        """Create an v1 or v2 WebPush endpoint from the identifiers.
 
         Both endpoints use bytes instead of hex to reduce ID length.
         v0 is uaid.hex + ':' + chid.hex and is deprecated.

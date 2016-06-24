@@ -69,6 +69,9 @@ from autopush.utils import validate_uaid, ErrorLogger
 from autopush.noseplugin import track_object
 
 
+USER_RECORD_VERSION = 1
+
+
 def extract_code(data):
     """Extracts and converts a code key if found in data dict"""
     code = data.get("code", None)
@@ -647,6 +650,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # users
         if not existing_user:
             user_item["last_connect"] = generate_last_connect()
+
+            # New users get a record_version so we can track changes that
+            # may require old user records to be expired on the fly
+            user_item["record_version"] = USER_RECORD_VERSION
             if self.ps.use_webpush:
                 user_item["current_month"] = self.ps.message_month
 
@@ -1009,8 +1016,12 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             return self.bad_message("register", "Invalid UUID specified")
         self.transport.pauseProducing()
 
-        d = self.deferToThread(self.ap_settings.make_endpoint, self.ps.uaid,
-                               chid, data.get("key"))
+        if self.ps.use_webpush:
+            d = self.deferToThread(self.ap_settings.make_endpoint,
+                                   self.ps.uaid, chid, data.get("key"))
+        else:
+            d = self.deferToThread(self.ap_settings.make_simplepush_endpoint,
+                                   self.ps.uaid, chid)
         d.addCallback(self.finish_register, chid)
         d.addErrback(self.trap_cancel)
         d.addErrback(self.error_register)

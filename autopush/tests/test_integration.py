@@ -324,6 +324,7 @@ class IntegrationBase(unittest.TestCase):
             DefaultResource,
             StatusResource,
         )
+        from autopush.web.simplepush import SimplePushHandler
         from twisted.web.server import Site
 
         router_table = os.environ.get("ROUTER_TABLE", "router_int_test")
@@ -374,6 +375,8 @@ class IntegrationBase(unittest.TestCase):
         site = cyclone.web.Application([
             (r"/push/(v\d+)?/?([^\/]+)", EndpointHandler,
              dict(ap_settings=settings)),
+            (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
+             SimplePushHandler, dict(ap_settings=settings)),
             (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
             # PUT /register/ => connect info
             # GET /register/uaid => chid + endpoint
