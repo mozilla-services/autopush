@@ -40,6 +40,7 @@ idna==2.1
 ipaddress==1.0.16
 itsdangerous==0.24
 jmespath==0.9.0
+marshmallow==2.7.3
 mccabe==0.4.0
 pbr==1.9.1
 pluggy==0.3.1

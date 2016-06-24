@@ -28,6 +28,7 @@ from autopush.websocket import (
     DefaultResource,
     StatusResource,
 )
+from autopush.web.simplepush import SimplePushHandler
 from autopush.senderids import SenderIDs, SENDERID_EXPRY, DEFAULT_BUCKET
 
 
@@ -500,8 +501,10 @@ def endpoint_main(sysargs=None, use_files=True):
 
     # Endpoint HTTP router
     site = cyclone.web.Application([
-        (r"/push/(?:(v\d+)\/)?([^\/]+)", EndpointHandler,
+        (r"/push/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)", EndpointHandler,
          dict(ap_settings=settings)),
+        (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
+         SimplePushHandler, dict(ap_settings=settings)),
         (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
         # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint
