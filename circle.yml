@@ -22,7 +22,10 @@ dependencies:
         "$CIRCLE_PROJECT_REPONAME"
         "$CIRCLE_BUILD_URL"
         > version.json
-    - docker build -t app:build .
+
+    - docker build -t app:buildpypy .
+
+    - docker build -f ./Dockerfile.python27 -t app:build27 .
 
     # write the sha256 sum to an artifact to make image verification easier
     - docker images --no-trunc | awk '/^app/ {print $3}' | tee $CIRCLE_ARTIFACTS/docker-image-shasum256.txt
@@ -38,8 +41,10 @@ deployment:
     commands:
       - "[ ! -z $DOCKERHUB_REPO ]"
       - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
-      - "docker tag app:build ${DOCKERHUB_REPO}:latest"
+      - "docker tag app:build27 ${DOCKERHUB_REPO}:latest"
+      - "docker tag app:buildpypy ${DOCKERHUB_REPO}:latest-pypy"
       - "docker push ${DOCKERHUB_REPO}:latest"
+      - "docker push ${DOCKERHUB_REPO}:latest-pypy"
 
   hub_releases:
     # push all tags
@@ -48,6 +53,8 @@ deployment:
       - "[ ! -z $DOCKERHUB_REPO ]"
       - docker login -e $DOCKER_EMAIL -u $DOCKER_USER -p $DOCKER_PASS
       - "echo ${DOCKERHUB_REPO}:${CIRCLE_TAG}"
-      - "docker tag app:build ${DOCKERHUB_REPO}:${CIRCLE_TAG}"
+      - "docker tag app:build27 ${DOCKERHUB_REPO}:${CIRCLE_TAG}"
+      - "docker tag app:buildpypy ${DOCKERHUB_REPO}:${CIRCLE_TAG}-pypy"
       - "docker images"
       - "docker push ${DOCKERHUB_REPO}:${CIRCLE_TAG}"
+      - "docker push ${DOCKERHUB_REPO}:${CIRCLE_TAG}-pypy"
