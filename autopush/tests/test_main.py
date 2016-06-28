@@ -208,6 +208,7 @@ class EndpointMainTestCase(unittest.TestCase):
         s3_bucket = "none"
         key_hash = "supersikkret"
         senderid_expry = 0
+        no_aws = True
 
     def setUp(self):
         mock_s3().start()
@@ -270,3 +271,13 @@ class EndpointMainTestCase(unittest.TestCase):
             """--senderid_list={"123":{"auth":"abcd"}}""",
             "--s3_bucket=none",
         ])
+
+    @patch("requests.get")
+    def test_aws_ami_id(self, request_mock):
+        class m_reply:
+            content = "ami_123"
+
+        request_mock.return_value = m_reply
+        self.test_arg.no_aws = False
+        ap = make_settings(self.test_arg)
+        eq_(ap.ami_id, "ami_123")

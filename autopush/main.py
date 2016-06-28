@@ -11,6 +11,7 @@ from twisted.logger import Logger
 from twisted.web.server import Site
 
 import autopush.db as db
+import autopush.utils as utils
 from autopush.endpoint import (
     EndpointHandler,
     MessageHandler,
@@ -124,6 +125,8 @@ def add_shared_args(parser):
     parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
                         type=int, default=8082, env_var="ENDPOINT_PORT")
     parser.add_argument('--human_logs', help="Enable human readable logs",
+                        action="store_true", default=False)
+    parser.add_argument('--no_aws', help="Skip AWS meta information checks",
                         action="store_true", default=False)
     # No ENV because this is for humans
     add_external_router_args(parser)
@@ -317,6 +320,11 @@ def make_settings(args, **kwargs):
                               "senderIDs": senderIDs,
                               "senderid_list": list}
 
+    ami_id = None
+    # Not a fan of double negatives, but this makes more understandable args
+    if not args.no_aws:
+        ami_id = utils.get_amid()
+
     return AutopushSettings(
         crypto_key=args.crypto_key,
         datadog_api_key=args.datadog_api_key,
@@ -337,6 +345,7 @@ def make_settings(args, **kwargs):
         router_write_throughput=args.router_write_throughput,
         resolve_hostname=args.resolve_hostname,
         wake_timeout=args.wake_timeout,
+        ami_id=ami_id,
         **kwargs
     )
 

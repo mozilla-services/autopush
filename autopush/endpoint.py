@@ -180,6 +180,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     def _init_info(self):
         """Returns a dict of additional client data"""
         return {
+            "ami_id": self.ap_settings.ami_id,
             "request_id": self.request_id,
             "user_agent": self.request.headers.get("user-agent", ""),
             "remote_ip": self.request.headers.get("x-forwarded-for",
