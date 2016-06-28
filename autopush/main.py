@@ -16,6 +16,7 @@ from autopush.endpoint import (
     MessageHandler,
     RegistrationHandler,
 )
+from autopush.log_check import LogCheckHandler
 from autopush.health import (HealthHandler, StatusHandler)
 from autopush.logging import PushLogger
 from autopush.settings import AutopushSettings
@@ -512,6 +513,8 @@ def endpoint_main(sysargs=None, use_files=True):
             "?(?:/subscription)?(?:/([^\/]+))?",
          RegistrationHandler,
          dict(ap_settings=settings)),
+        (r"/v1/err(?:/([^\/]+))?", LogCheckHandler,
+            dict(ap_settings=settings)),
     ],
         default_host=settings.hostname, debug=args.debug,
         log_function=skip_request_logging
