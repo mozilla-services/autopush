@@ -34,7 +34,7 @@ When submitting a PR:
   with the new relevant code.
 
 See the main
-[documentation](http://autopush.readthedocs.org/en/latest/install.html)
+[documentation](https://autopush.readthedocs.io/en/latest/install.html)
 for information on prerequisites, installing, running and testing.
 
 ## Code Review

@@ -307,7 +307,7 @@ class AutopushSettings(object):
         :returns: Push endpoint
 
         """
-        root = self.endpoint_url + '/push/'
+        root = self.endpoint_url + '/wpush/'
         base = (uaid.replace('-', '').decode("hex") +
                 chid.replace('-', '').decode("hex"))
 

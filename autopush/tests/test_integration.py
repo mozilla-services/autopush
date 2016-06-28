@@ -325,6 +325,7 @@ class IntegrationBase(unittest.TestCase):
             StatusResource,
         )
         from autopush.web.simplepush import SimplePushHandler
+        from autopush.web.webpush import WebPushHandler
         from twisted.web.server import Site
 
         router_table = os.environ.get("ROUTER_TABLE", "router_int_test")
@@ -378,6 +379,9 @@ class IntegrationBase(unittest.TestCase):
             (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
              SimplePushHandler, dict(ap_settings=settings)),
             (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
+            (r"/wpush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
+             WebPushHandler, dict(ap_settings=settings)),
+
             # PUT /register/ => connect info
             # GET /register/uaid => chid + endpoint
             (r"/register(?:/(.+))?", RegistrationHandler,

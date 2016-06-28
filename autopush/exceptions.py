@@ -12,7 +12,8 @@ class InvalidTokenException(Exception):
 class InvalidRequest(AutopushException):
     """Invalid request exception, may include custom status_code and message
     to write for the error"""
-    def __init__(self, message, status_code=400, errno=None):
+    def __init__(self, message, status_code=400, errno=None, headers={}):
         super(AutopushException, self).__init__(message)
         self.status_code = status_code
         self.errno = errno
+        self.headers = headers

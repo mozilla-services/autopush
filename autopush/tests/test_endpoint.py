@@ -95,7 +95,7 @@ class MessageTestCase(unittest.TestCase):
             "decrypt.side_effect": InvalidToken})
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(400)
+            self.status_mock.assert_called_with(400, None)
         self.finish_deferred.addCallback(handle_finish)
 
         self.message.delete('')
@@ -105,7 +105,7 @@ class MessageTestCase(unittest.TestCase):
         self.fernet_mock.decrypt.return_value = "123:456"
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(400)
+            self.status_mock.assert_called_with(400, None)
         self.finish_deferred.addCallback(handle_finish)
 
         self.message.delete('')
@@ -115,7 +115,7 @@ class MessageTestCase(unittest.TestCase):
         self.fernet_mock.decrypt.return_value = "r:123:456"
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(400)
+            self.status_mock.assert_called_with(400, None)
         self.finish_deferred.addCallback(handle_finish)
 
         self.message.delete('')
@@ -143,7 +143,7 @@ class MessageTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.assertTrue(result)
-            self.status_mock.assert_called_with(503)
+            self.status_mock.assert_called_with(503, None)
         self.finish_deferred.addCallback(handle_finish)
 
         self.message.delete('')
@@ -248,7 +248,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
-            self.endpoint.set_status.assert_called_with(400)
+            self.endpoint.set_status.assert_called_with(400, None)
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -314,7 +314,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.flushLoggedErrors()
-            self.endpoint.set_status.assert_called_with(400)
+            self.endpoint.set_status.assert_called_with(400, None)
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.post(None, dummy_uaid)
@@ -341,7 +341,7 @@ class EndpointTestCase(unittest.TestCase):
         self.request_mock.body = b"stuff"
         self.endpoint._uaid_lookup_results(fresult)
 
-        self.endpoint.set_status.assert_called_with(400)
+        self.endpoint.set_status.assert_called_with(400, None)
         data = self.write_mock.call_args[0][0]
         d = json.loads(data)
         eq_(d.get("errno"), 108)
@@ -356,7 +356,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
-            self.endpoint.set_status.assert_called_with(400)
+            self.endpoint.set_status.assert_called_with(400, None)
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -502,7 +502,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.request.body = b'version=1&data=1234'
 
         def handle_finish(result):
-            self.endpoint.set_status.assert_called_with(413)
+            self.endpoint.set_status.assert_called_with(413, None)
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put(None, '')
@@ -527,7 +527,7 @@ class EndpointTestCase(unittest.TestCase):
             '\xcb\n<\x0c\xe6\xf3C4:\xa8\xaeO\xf5\xab\xfbb|'
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(400)
+            self.status_mock.assert_called_with(400, None)
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put(None, '')
@@ -539,7 +539,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.request.body = b'version=123&data=bad-token'
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(400)
+            self.status_mock.assert_called_with(400, None)
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put(None, '')
@@ -550,7 +550,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.request.body = b'version=123'
 
         def handle_finish(result):
-            self.status_mock.assert_called_with(400)
+            self.status_mock.assert_called_with(400, None)
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put(None, '')
@@ -568,7 +568,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.router_mock.get_uaid.assert_called_with('123')
-            self.status_mock.assert_called_with(410)
+            self.status_mock.assert_called_with(410, None)
             self._check_error(410, 103, "")
         self.finish_deferred.addCallback(handle_finish)
 
@@ -626,7 +626,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.assertTrue(result)
-            self.endpoint.set_status.assert_called_with(500)
+            self.endpoint.set_status.assert_called_with(500, None)
             assert(self.router_mock.register_user.called)
         self.finish_deferred.addCallback(handle_finish)
 
@@ -646,7 +646,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.assertTrue(result)
-            self.endpoint.set_status.assert_called_with(503)
+            self.endpoint.set_status.assert_called_with(503, None)
             assert(self.router_mock.register_user.called)
         self.finish_deferred.addCallback(handle_finish)
 
@@ -671,7 +671,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.assertTrue(result)
-            self.endpoint.set_status.assert_called_with(400)
+            self.endpoint.set_status.assert_called_with(400, None)
 
         self.finish_deferred.addBoth(handle_finish)
         self.endpoint.put(None, dummy_uaid)
@@ -695,7 +695,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.assertTrue(result)
-            self.endpoint.set_status.assert_called_with(400)
+            self.endpoint.set_status.assert_called_with(400, None)
 
         self.finish_deferred.addCallback(handle_finish)
         self.endpoint.put(None, dummy_uaid)
@@ -719,7 +719,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.assertTrue(result)
-            self.endpoint.set_status.assert_called_with(401)
+            self.endpoint.set_status.assert_called_with(401, None)
 
         self.finish_deferred.addCallback(handle_finish)
         self.endpoint.put(None, dummy_uaid)
@@ -743,7 +743,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.assertTrue(result)
-            self.endpoint.set_status.assert_called_with(401)
+            self.endpoint.set_status.assert_called_with(401, None)
 
         self.finish_deferred.addCallback(handle_finish)
         self.endpoint.put(None, dummy_uaid)
@@ -900,7 +900,7 @@ class EndpointTestCase(unittest.TestCase):
         )
 
         def handle_finish(result):
-            self.endpoint.set_status.assert_called_with(401)
+            self.endpoint.set_status.assert_called_with(401, None)
             eq_(self.endpoint._client_info.get('jwt'), None)
             self.assertTrue(result)
 
@@ -936,7 +936,7 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             eq_(self.endpoint._client_info.get('jwt'), None)
             self.assertTrue(result)
-            self.endpoint.set_status.assert_called_with(401)
+            self.endpoint.set_status.assert_called_with(401, None)
 
         self.finish_deferred.addCallback(handle_finish)
 
@@ -983,7 +983,7 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             eq_(self.endpoint._client_info.get('jwt'), None)
             self.assertTrue(result)
-            self.endpoint.set_status.assert_called_with(401)
+            self.endpoint.set_status.assert_called_with(401, None)
 
         self.finish_deferred.addCallback(handle_finish)
         self.endpoint.post(None, dummy_uaid)
@@ -1015,7 +1015,7 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             eq_(self.endpoint._client_info.get('jwt'), None)
             self.assertTrue(result)
-            self.endpoint.set_status.assert_called_with(401)
+            self.endpoint.set_status.assert_called_with(401, None)
 
         self.finish_deferred.addCallback(handle_finish)
         self.endpoint.post(None, dummy_uaid)
@@ -1101,6 +1101,35 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
+    def test_post_db_error_with_success(self):
+        from autopush.router.interface import RouterException
+        self.fernet_mock.decrypt.return_value = dummy_token
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+
+        def raise_error(*args):
+            raise RouterException(
+                "Provisioned throughput error",
+                status_code=202,
+                response_body="Success",
+                log_exception=False
+            )
+
+        self.wp_router_mock.route_notification.side_effect = raise_error
+
+        def handle_finish(result):
+            self.flushLoggedErrors()
+            self.endpoint.set_status.assert_called_with(202)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.post(None, dummy_uaid)
+        return self.finish_deferred
+
     def test_post_db_error_in_routing(self):
         from autopush.router.interface import RouterException
         self.fernet_mock.decrypt.return_value = dummy_token
@@ -1125,7 +1154,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.flushLoggedErrors()
-            self.endpoint.set_status.assert_called_with(503)
+            self.endpoint.set_status.assert_called_with(503, None)
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.post(None, dummy_uaid)
@@ -1137,7 +1166,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             self.assertTrue(result)
-            self.endpoint.set_status.assert_called_with(503)
+            self.endpoint.set_status.assert_called_with(503, None)
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put(None, dummy_uaid)
@@ -1221,7 +1250,7 @@ class EndpointTestCase(unittest.TestCase):
         self.assertTrue(self.endpoint.log.called)
 
     def _assert_error_response(self, result):
-        self.status_mock.assert_called_with(500)
+        self.status_mock.assert_called_with(500, None)
 
     def test_padding(self):
         # Some values can't be padded and still decode.
@@ -1325,10 +1354,10 @@ class EndpointTestCase(unittest.TestCase):
         dummy_key = "RandomKeyString"
         sha = sha256(dummy_key).hexdigest()
         ep = self.settings.make_endpoint(dummy_uaid, dummy_chid)
-        eq_(ep, 'http://localhost/push/v1/' + strip_uaid + strip_chid)
+        eq_(ep, 'http://localhost/wpush/v1/' + strip_uaid + strip_chid)
         ep = self.settings.make_endpoint(dummy_uaid, dummy_chid,
                                          utils.base64url_encode(dummy_key))
-        eq_(ep, 'http://localhost/push/v2/' + strip_uaid + strip_chid + sha)
+        eq_(ep, 'http://localhost/wpush/v2/' + strip_uaid + strip_chid + sha)
 
 
 CORS_HEAD = "POST,PUT,DELETE"
@@ -1487,7 +1516,7 @@ class RegistrationTestCase(unittest.TestCase):
             call_arg = json.loads(args[0])
             eq_(call_arg["uaid"], dummy_uaid.replace('-', ''))
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/wpush/v1/abcd123")
             ok_("secret" in call_arg)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -1526,7 +1555,7 @@ class RegistrationTestCase(unittest.TestCase):
             call_arg = json.loads(args[0])
             eq_(call_arg["uaid"], dummy_uaid.replace('-', ''))
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/wpush/v1/abcd123")
             calls = self.reg.ap_settings.router.register_user.call_args
             call_args = calls[0][0]
             eq_(True, has_connected_this_month(call_args))
@@ -1582,7 +1611,7 @@ class RegistrationTestCase(unittest.TestCase):
             args = call_args[0]
             call_arg = json.loads(args[0])
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/wpush/v1/abcd123")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
@@ -1637,7 +1666,7 @@ class RegistrationTestCase(unittest.TestCase):
             args = call_args[0]
             call_arg = json.loads(args[0])
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/wpush/v1/abcd123")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
@@ -1662,7 +1691,7 @@ class RegistrationTestCase(unittest.TestCase):
             args = call_args[0]
             call_arg = json.loads(args[0])
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/wpush/v1/abcd123")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
@@ -1702,7 +1731,7 @@ class RegistrationTestCase(unittest.TestCase):
             args = call_args[0]
             call_arg = json.loads(args[0])
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/v2/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/wpush/v2/abcd123")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
@@ -1833,7 +1862,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.request.headers["Authorization"] = self.auth
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(401)
+            self.reg.set_status.assert_called_with(401, None)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.delete("test", "test", "invalid")
@@ -1843,7 +1872,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.request.headers["Authorization"] = self.auth
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(410)
+            self.reg.set_status.assert_called_with(410, None)
 
         self.router_mock.drop_user = Mock()
         self.router_mock.drop_user.return_value = False
@@ -1855,7 +1884,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.request.headers["Authorization"] = "Invalid"
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(401)
+            self.reg.set_status.assert_called_with(401, None)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.delete("test", "test", dummy_uaid)
@@ -1865,7 +1894,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.request.headers['Authorization'] = self.auth
 
         def handle_finish(value):
-            self.reg.set_status.assert_called_with(400)
+            self.reg.set_status.assert_called_with(400, None)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.delete("invalid", "test", dummy_uaid)
