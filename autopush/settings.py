@@ -91,6 +91,7 @@ class AutopushSettings(object):
                  hello_timeout=0,
                  bear_hash_key=None,
                  preflight_uaid="deadbeef00000000deadbeef000000000",
+                 ami_id=None,
                  ):
         """Initialize the Settings object
 
@@ -202,6 +203,8 @@ class AutopushSettings(object):
         self.env = env
 
         self.hello_timeout = hello_timeout
+
+        self.ami_id = ami_id
 
     @property
     def message(self):
