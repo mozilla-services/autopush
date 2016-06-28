@@ -15,7 +15,7 @@ from autopush.web.validation import (
 class SimplePushHandler(BaseHandler):
     cors_methods = "PUT"
 
-    @threaded_validate(SimplePushRequestSchema())
+    @threaded_validate(SimplePushRequestSchema)
     def put(self, api_ver="v1", token=None):
         sub = self.valid_input["subscription"]
         user_data = sub["user_data"]

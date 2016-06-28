@@ -1101,6 +1101,35 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint.post(None, dummy_uaid)
         return self.finish_deferred
 
+    def test_post_db_error_with_success(self):
+        from autopush.router.interface import RouterException
+        self.fernet_mock.decrypt.return_value = dummy_token
+        self.endpoint.set_header = Mock()
+        self.request_mock.headers["encryption"] = "stuff"
+        self.request_mock.headers["content-encoding"] = "aes128"
+        self.router_mock.get_uaid.return_value = dict(
+            router_type="webpush",
+            router_data=dict(),
+        )
+
+        def raise_error(*args):
+            raise RouterException(
+                "Provisioned throughput error",
+                status_code=202,
+                response_body="Success",
+                log_exception=False
+            )
+
+        self.wp_router_mock.route_notification.side_effect = raise_error
+
+        def handle_finish(result):
+            self.flushLoggedErrors()
+            self.endpoint.set_status.assert_called_with(202)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.post(None, dummy_uaid)
+        return self.finish_deferred
+
     def test_post_db_error_in_routing(self):
         from autopush.router.interface import RouterException
         self.fernet_mock.decrypt.return_value = dummy_token
@@ -1325,10 +1354,10 @@ class EndpointTestCase(unittest.TestCase):
         dummy_key = "RandomKeyString"
         sha = sha256(dummy_key).hexdigest()
         ep = self.settings.make_endpoint(dummy_uaid, dummy_chid)
-        eq_(ep, 'http://localhost/push/v1/' + strip_uaid + strip_chid)
+        eq_(ep, 'http://localhost/wpush/v1/' + strip_uaid + strip_chid)
         ep = self.settings.make_endpoint(dummy_uaid, dummy_chid,
                                          utils.base64url_encode(dummy_key))
-        eq_(ep, 'http://localhost/push/v2/' + strip_uaid + strip_chid + sha)
+        eq_(ep, 'http://localhost/wpush/v2/' + strip_uaid + strip_chid + sha)
 
 
 CORS_HEAD = "POST,PUT,DELETE"
@@ -1487,7 +1516,7 @@ class RegistrationTestCase(unittest.TestCase):
             call_arg = json.loads(args[0])
             eq_(call_arg["uaid"], dummy_uaid.replace('-', ''))
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/wpush/v1/abcd123")
             ok_("secret" in call_arg)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -1526,7 +1555,7 @@ class RegistrationTestCase(unittest.TestCase):
             call_arg = json.loads(args[0])
             eq_(call_arg["uaid"], dummy_uaid.replace('-', ''))
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/wpush/v1/abcd123")
             calls = self.reg.ap_settings.router.register_user.call_args
             call_args = calls[0][0]
             eq_(True, has_connected_this_month(call_args))
@@ -1582,7 +1611,7 @@ class RegistrationTestCase(unittest.TestCase):
             args = call_args[0]
             call_arg = json.loads(args[0])
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/wpush/v1/abcd123")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
@@ -1637,7 +1666,7 @@ class RegistrationTestCase(unittest.TestCase):
             args = call_args[0]
             call_arg = json.loads(args[0])
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/wpush/v1/abcd123")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
@@ -1662,7 +1691,7 @@ class RegistrationTestCase(unittest.TestCase):
             args = call_args[0]
             call_arg = json.loads(args[0])
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/v1/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/wpush/v1/abcd123")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
@@ -1702,7 +1731,7 @@ class RegistrationTestCase(unittest.TestCase):
             args = call_args[0]
             call_arg = json.loads(args[0])
             eq_(call_arg["channelID"], dummy_chid)
-            eq_(call_arg["endpoint"], "http://localhost/push/v2/abcd123")
+            eq_(call_arg["endpoint"], "http://localhost/wpush/v2/abcd123")
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
