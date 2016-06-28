@@ -7,6 +7,7 @@ import socket
 import uuid
 
 import ecdsa
+import requests
 from jose import jws
 
 from twisted.logger import Logger
@@ -81,6 +82,19 @@ def base64url_decode(string):
     strings.
     """
     return base64.urlsafe_b64decode(repad(string))
+
+
+def get_amid():
+    """Fetch the AMI instance ID
+
+    """
+    try:
+        resp = requests.get(
+            "http://169.254.169.254/latest/meta-data/ami-id",
+            timeout=1)
+        return resp.content
+    except:
+        return "Unknown"
 
 
 def decipher_public_key(key_data):
