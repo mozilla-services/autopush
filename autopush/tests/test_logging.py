@@ -1,5 +1,7 @@
+import json
 import os
 
+import cyclone.web
 import twisted.internet
 import twisted.trial.unittest
 
@@ -15,29 +17,44 @@ from autopush.logging import PushLogger, FirehoseProcessor
 log = Logger()
 
 
+class LocalSentryChomper(cyclone.web.RequestHandler):
+    def post(self):
+        self.logged.append(json.loads(self.request.body.decode("zlib")))
+        return ""
+
+
 class SentryLogTestCase(twisted.trial.unittest.TestCase):
     def setUp(self):
+        from autopush.main import skip_request_logging
         twisted.internet.base.DelayedCall.debug = True
-        raven_patcher = patch("autopush.logging.raven")
-        self.mock_raven = raven_patcher.start()
-        self.mock_client = Mock()
-        self.mock_raven.Client.return_value = self.mock_client
+        sentry = LocalSentryChomper
+        sentry.logged = []
+        site = cyclone.web.Application([
+            (r"/.*", sentry),
+        ],
+            log_function=skip_request_logging
+        )
+        self.sentry = sentry
+        self._site = site
+        self._port = reactor.listenTCP(9999, site)
 
     def tearDown(self):
-        self.mock_raven.stop()
+        reactor.removeAll()
 
     def test_sentry_logging(self):
-        os.environ["SENTRY_DSN"] = "some_locale"
-        PushLogger.setup_logging("Autopush", sentry_dsn=True)
-        eq_(len(self.mock_raven.mock_calls), 2)
+        dsn = "http://PUBKEY:SECKEY@localhost:9999/1"
+        os.environ["SENTRY_DSN"] = dsn
+        pl = PushLogger.setup_logging("Autopush", sentry_dsn=True)
 
         log.failure("error", failure.Failure(Exception("eek")))
         self.flushLoggedErrors()
         d = Deferred()
 
         def check():
-            if len(self.mock_client.mock_calls):
-                eq_(len(self.mock_client.mock_calls), 1)
+            if len(self.sentry.logged):
+                eq_(len(self.sentry.logged), 1)
+                self._port.stopListening()
+                pl.stop()
                 d.callback(True)
             else:  # pragma: nocover
                 reactor.callLater(0, check)
