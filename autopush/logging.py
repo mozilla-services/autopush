@@ -11,6 +11,7 @@ import threading
 
 import boto3
 import raven
+from raven.transport.twisted import TwistedHTTPTransport
 from twisted.internet import reactor
 from twisted.logger import (
     formatEvent,
@@ -29,6 +30,7 @@ IGNORED_KEYS = frozenset([
     "failure",
     "format",
     "isError",
+    "log_failure",
     "log_format",
     "log_flattened",
     "log_level",
@@ -74,7 +76,9 @@ class PushLogger(object):
             self.format_event = formatEventAsClassicLogText
         if sentry_dsn:
             self.raven_client = raven.Client(
-                release=raven.fetch_package_version("autopush"))
+                release=raven.fetch_package_version("autopush"),
+                transport=TwistedHTTPTransport,
+            )
         else:
             self.raven_client = None
         if firehose_delivery_stream:
@@ -84,15 +88,16 @@ class PushLogger(object):
             self.firehose = None
 
     def __call__(self, event):
-        if event["log_level"] < self.log_level:
-            return
-
-        if self.raven_client and 'failure' in event:
-            f = event["failure"]
+        if self.raven_client and ('failure' in event or
+                                  'log_failure' in event):
+            f = event.get("log_failure", event["failure"])
             reactor.callFromThread(
                 self.raven_client.captureException,
                 exc_info=(f.type, f.value, f.getTracebackObject())
             )
+
+        if event["log_level"] < self.log_level:
+            return
 
         text = self.format_event(event)
 
