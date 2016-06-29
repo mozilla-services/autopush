@@ -37,6 +37,7 @@ class APNSRouter(object):
     def __init__(self, ap_settings, router_conf):
         """Create a new APNS router and connect to APNS"""
         self.ap_settings = ap_settings
+        self._base_tags = []
         self.config = router_conf
         self.default_title = router_conf.get("default_title", "SimplePush")
         self.default_body = router_conf.get("default_body", "New Alert")
@@ -87,6 +88,10 @@ class APNSRouter(object):
         self.messages[now] = {"token": token, "payload": payload}
         # TODO: Add listener for error handling.
         self.apns.gateway_server.register_response_listener(self._error)
+        self.ap_settings.metrics.increment(
+            "updates.client.bridge.apns.attempted",
+            self._base_tags)
+
         self.apns.gateway_server.send_notification(token, payload, now)
 
         # cleanup sent messages
@@ -94,6 +99,9 @@ class APNSRouter(object):
             for time_sent in self.messages.keys():
                 if time_sent < now - self.config.get("expry", 10):
                     del self.messages[time_sent]
+        self.ap_settings.metrics.increment(
+            "updates.client.bridge.apns.succeed",
+            self._base_tags)
         return RouterResponse(status_code=200, response_body="Message sent")
 
     def _error(self, err):

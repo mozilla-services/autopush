@@ -252,7 +252,12 @@ class GCMRouterTestCase(unittest.TestCase):
             raise AttributeError
         fsenderids = Mock()
         fsenderids.choose_ID.side_effect = throw_ex
-        self.assertRaises(IOError, GCMRouter, {}, {"senderIDs": fsenderids})
+        settings = AutopushSettings(
+            hostname="localhost",
+            statsd_host=None,
+        )
+        self.assertRaises(IOError, GCMRouter, settings,
+                          {"senderIDs": fsenderids})
 
     def test_register(self):
         result = self.router.register("uaid", {"token": "connect_data"})
