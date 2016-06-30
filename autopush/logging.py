@@ -78,6 +78,7 @@ class PushLogger(object):
             self.raven_client = raven.Client(
                 release=raven.fetch_package_version("autopush"),
                 transport=TwistedHTTPTransport,
+                enable_breadcrumbs=False,
             )
         else:
             self.raven_client = None
@@ -88,9 +89,8 @@ class PushLogger(object):
             self.firehose = None
 
     def __call__(self, event):
-        if self.raven_client and ('failure' in event or
-                                  'log_failure' in event):
-            f = event.get("log_failure", event["failure"])
+        if self.raven_client and 'log_failure' in event:
+            f = event["log_failure"]
             reactor.callFromThread(
                 self.raven_client.captureException,
                 exc_info=(f.type, f.value, f.getTracebackObject())
@@ -109,7 +109,7 @@ class PushLogger(object):
             self._output.flush()
 
     def json_format(self, event):
-        error = bool(event.get("isError")) or "failure" in event
+        error = bool(event.get("isError")) or "log_failure" in event
         ts = event["log_time"]
 
         if error:
