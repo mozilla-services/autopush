@@ -23,6 +23,8 @@ class GCMRouter(object):
         self.dryRun = router_conf.get("dryrun", False)
         self.collapseKey = router_conf.get("collapseKey", "simplepush")
         self.senderIDs = router_conf.get("senderIDs")
+        self.metrics = ap_settings.metrics
+        self._base_tags = []
         if not self.senderIDs:
             self.senderIDs = SenderIDs(router_conf)
         try:
@@ -103,6 +105,8 @@ class GCMRouter(object):
         except Exception, e:
             raise self._error("Unhandled exception in GCM Routing: %s" % e,
                               500)
+        self.metrics.increment("updates.client.bridge.gcm.attempted",
+                               self._base_tags)
         return self._process_reply(result)
 
     def _error(self, err, status, **kwargs):
@@ -144,4 +148,6 @@ class GCMRouter(object):
             raise RouterException("GCM failure to deliver", status_code=503,
                                   response_body="Please try request later.")
 
+        self.metrics.increment("updates.client.bridge.gcm.succeeded",
+                               self._base_tags)
         return RouterResponse(status_code=200, response_body="Message Sent")
