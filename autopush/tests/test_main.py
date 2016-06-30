@@ -73,12 +73,19 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         settings.current_month = last_month.month
         settings.message_tables = {}
 
+        # Create the next month's table, just in case today is the day before
+        # a new month, in which case the lack of keys will cause an error in
+        # update_rotating_tables
+        next_month = get_month(1)
+        settings.message_tables[next_month.month] = None
+
         # Get the deferred back
         e = Deferred()
         d = settings.update_rotating_tables()
 
         def check_tables(result):
-            eq_(len(settings.message_tables), 1)
+            eq_(len(settings.message_tables), 2)
+            eq_(settings.current_month, get_month().month)
 
         d.addCallback(check_tables)
         d.addBoth(lambda x: e.callback(True))
@@ -114,18 +121,25 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         return d
 
     def test_update_not_needed(self):
+        from autopush.db import get_month
         settings = AutopushSettings(
             hostname="google.com", resolve_hostname=True)
 
         # Erase the tables it has on init, and move current month back one
         settings.message_tables = {}
 
+        # Create the next month's table, just in case today is the day before
+        # a new month, in which case the lack of keys will cause an error in
+        # update_rotating_tables
+        next_month = get_month(1)
+        settings.message_tables[next_month.month] = None
+
         # Get the deferred back
         e = Deferred()
         d = settings.update_rotating_tables()
 
         def check_tables(result):
-            eq_(len(settings.message_tables), 0)
+            eq_(len(settings.message_tables), 1)
 
         d.addCallback(check_tables)
         d.addBoth(lambda x: e.callback(True))
