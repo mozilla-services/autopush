@@ -13,7 +13,6 @@ from autopush.main import (
     make_settings,
     skip_request_logging,
 )
-from autopush.senderids import SenderIDs
 from autopush.utils import (
     resolve_ip,
 )
@@ -219,9 +218,7 @@ class EndpointMainTestCase(unittest.TestCase):
         message_read_throughput = 0
         message_write_throughput = 0
         senderid_list = '{"12345":{"auth":"abcd"}}'
-        s3_bucket = "none"
         key_hash = "supersikkret"
-        senderid_expry = 0
         no_aws = True
 
     def setUp(self):
@@ -244,21 +241,19 @@ class EndpointMainTestCase(unittest.TestCase):
 
     def test_basic(self):
         endpoint_main([
-            "--s3_bucket=none",
-        ])
+        ], False)
 
     def test_ssl(self):
         endpoint_main([
             "--ssl_dh_param=keys/dhparam.pem",
             "--ssl_cert=keys/server.crt",
             "--ssl_key=keys/server.key",
-            "--s3_bucket=none",
         ])
 
     def test_bad_senderidlist(self):
         endpoint_main([
             "--senderid_list='[Invalid'"
-        ])
+        ], False)
 
     def test_ping_settings(self):
         ap = make_settings(self.test_arg)
@@ -277,9 +272,7 @@ class EndpointMainTestCase(unittest.TestCase):
         eq_(ap, None)
         self.test_arg.senderid_list = oldList
 
-    @patch("autopush.main.SenderIDs", spec=SenderIDs)
-    def test_gcm_start(self, fsi):
-        fsi.choose_ID.return_value = "123"
+    def test_gcm_start(self):
         endpoint_main([
             "--gcm_enabled",
             """--senderid_list={"123":{"auth":"abcd"}}""",

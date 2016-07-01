@@ -608,15 +608,6 @@ class RegistrationHandler(AutoendpointHandler):
         tags.append("host:%s" % self.request.host)
         return tags
 
-    def _relocate(self, router_type, router_token, uaid="", chid=""):
-        relo = "%s/v1/%s/%s/register" % (self.ap_settings.endpoint_url,
-                                         router_type, router_token)
-        if uaid:
-            relo += "/%s" % uaid
-        if chid:
-            relo += "/subscription/%s" % chid
-        return relo
-
     #############################################################
     #                    Cyclone HTTP Methods
     #############################################################
@@ -649,12 +640,6 @@ class RegistrationHandler(AutoendpointHandler):
             return self._write_response(
                 400, 108, message="Invalid router")
         router = self.ap_settings.routers[router_type]
-        valid, router_token = router.check_token(router_token)
-        if not valid:
-            newUrl = self._relocate(router_type, router_token, uaid, chid)
-            return self._write_response(
-                301, 0, message=("Location: %s" % newUrl),
-                headers={"Location": newUrl})
 
         if uaid:
             if not self._validate_auth(uaid):
@@ -704,12 +689,6 @@ class RegistrationHandler(AutoendpointHandler):
             return self._write_response(
                 400, 108, message="Invalid router")
         router = self.ap_settings.routers[router_type]
-        valid, router_token = router.check_token(router_token)
-        if not valid:
-            newUrl = self._relocate(router_type, router_token, uaid, chid)
-            return self._write_response(
-                301, 0, "Location: %s" % newUrl,
-                headers={"Location": newUrl})
 
         self.add_header("Content-Type", "application/json")
         d = Deferred()
@@ -754,13 +733,6 @@ class RegistrationHandler(AutoendpointHandler):
                            **self._client_info)
             return self._write_response(
                 400, 108, message="Invalid router")
-        router = self.ap_settings.routers[router_type]
-        valid, router_token = router.check_token(router_token)
-        if not valid:
-            newUrl = self._relocate(router_type, router_token, uaid, chid)
-            return self._write_response(
-                301, 0, "Location: %s" % newUrl,
-                headers={"Location": newUrl})
 
         if chid:
             # mark channel as dead

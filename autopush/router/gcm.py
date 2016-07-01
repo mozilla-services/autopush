@@ -6,7 +6,6 @@ from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
 from autopush.router.interface import RouterException, RouterResponse
-from autopush.senderids import SenderIDs
 
 
 class GCMRouter(object):
@@ -25,19 +24,14 @@ class GCMRouter(object):
         self.senderIDs = router_conf.get("senderIDs")
         self.metrics = ap_settings.metrics
         self._base_tags = []
-        if not self.senderIDs:
-            self.senderIDs = SenderIDs(router_conf)
         try:
-            senderID = self.senderIDs.choose_ID()
-            self.gcm = gcmclient.GCM(senderID.get("auth"))
+            sid = self.senderIDs.keys()
+            self.senderID = sid[0]
+            self.auth = self.senderIDs.get(sid[0], {}).get('auth')
+            self.gcm = gcmclient.GCM(self.auth)
         except:
             raise IOError("GCM Bridge not initiated in main")
         self.log.debug("Starting GCM router...")
-
-    def check_token(self, token):
-        if token not in self.senderIDs.senderIDs():
-            return (False, self.senderIDs.choose_ID().get('senderID'))
-        return (True, token)
 
     def amend_msg(self, msg, data=None):
         if data is not None:
@@ -50,7 +44,7 @@ class GCMRouter(object):
             raise self._error("connect info missing GCM Instance 'token'",
                               status=401)
         # Assign a senderid
-        router_data["creds"] = self.senderIDs.get_ID(router_token)
+        router_data["creds"] = {"senderID": self.senderID, "auth": self.auth}
         return router_data
 
     def route_notification(self, notification, uaid_data):
