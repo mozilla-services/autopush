@@ -42,7 +42,6 @@ from autopush.utils import (
     repad,
     base64url_decode
 )
-from autopush.senderids import SENDERID_EXPRY, DEFAULT_BUCKET
 from autopush.crypto_key import (CryptoKey, CryptoKeyException)
 
 
@@ -85,8 +84,6 @@ class AutopushSettings(object):
                  wake_timeout=0,
                  env='development',
                  enable_cors=False,
-                 s3_bucket=DEFAULT_BUCKET,
-                 senderid_expry=SENDERID_EXPRY,
                  senderid_list={},
                  hello_timeout=0,
                  bear_hash_key=None,

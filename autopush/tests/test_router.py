@@ -72,7 +72,6 @@ class RouterInterfaceTestCase(TestCase):
         self.assertRaises(NotImplementedError, ir.route_notification, "uaid",
                           {})
         self.assertRaises(NotImplementedError, ir.amend_msg, {})
-        self.assertRaises(NotImplementedError, ir.check_token, {})
 
 
 dummy_chid = str(uuid.uuid4())
@@ -168,10 +167,6 @@ class APNSRouterTestCase(unittest.TestCase):
         resp = {"key": "value"}
         eq_(resp, self.router.amend_msg(resp))
 
-    def test_check_token(self):
-        (t, v) = self.router.check_token("")
-        ok_(t)
-
     def test_route_crypto_key(self):
         headers = {"content-encoding": "aesgcm",
                    "encryption": "test",
@@ -214,8 +209,8 @@ class GCMRouterTestCase(unittest.TestCase):
         self.gcm_config = {'s3_bucket': 'None',
                            'max_data': 32,
                            'ttl': 60,
-                           'senderid_list': {'test123':
-                                             {"auth": "12345678abcdefg"}}}
+                           'senderIDs': {'test123':
+                                         {"auth": "12345678abcdefg"}}}
         self.gcm = fgcm
         self.router = GCMRouter(settings, self.gcm_config)
         self.headers = {"content-encoding": "aesgcm",
@@ -236,9 +231,6 @@ class GCMRouterTestCase(unittest.TestCase):
         self.mock_result = mock_result
         fgcm.send.return_value = mock_result
 
-    def tearDown(self):
-        self.router.senderIDs.stop()
-
     def _check_error_call(self, exc, code):
         ok_(isinstance(exc, RouterException))
         eq_(exc.status_code, code)
@@ -246,18 +238,13 @@ class GCMRouterTestCase(unittest.TestCase):
         self.flushLoggedErrors()
 
     def test_init(self):
-        self.router.senderIDs.get_ID = Mock()
 
-        def throw_ex():
-            raise AttributeError
-        fsenderids = Mock()
-        fsenderids.choose_ID.side_effect = throw_ex
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
         self.assertRaises(IOError, GCMRouter, settings,
-                          {"senderIDs": fsenderids})
+                          {"senderIDs": {}})
 
     def test_register(self):
         result = self.router.register("uaid", {"token": "connect_data"})
@@ -268,17 +255,6 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_register_bad(self):
         self.assertRaises(RouterException, self.router.register, "uaid", {})
-
-    def test_invalid_token(self):
-        self.router.gcm = self.gcm
-
-        (t, v) = self.router.check_token("test123")
-        ok_(t)
-        eq_(v, self.gcm_config['senderid_list'].keys()[0])
-
-        (t, v) = self.router.check_token("invalid")
-        eq_(t, False)
-        eq_(v, self.gcm_config['senderid_list'].keys()[0])
 
     def test_route_notification(self):
         self.router.gcm = self.gcm
@@ -834,7 +810,3 @@ class WebPushRouterTestCase(unittest.TestCase):
     def test_ammend(self):
         resp = {"key": "value"}
         eq_(resp, self.router.amend_msg(resp))
-
-    def test_check_token(self):
-        (t, v) = self.router.check_token("")
-        ok_(t)

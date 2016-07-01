@@ -54,9 +54,6 @@ class APNSRouter(object):
     def amend_msg(self, msg, router_data=None):
         return msg
 
-    def check_token(self, token):
-        return (True, token)
-
     def route_notification(self, notification, uaid_data):
         """Start the APNS notification routing, returns a deferred"""
         router_data = uaid_data["router_data"]

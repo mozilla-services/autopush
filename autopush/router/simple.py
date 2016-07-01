@@ -64,9 +64,6 @@ class SimpleRouter(object):
     def amend_msg(self, msg, router_data=None):
         return msg
 
-    def check_token(self, token):
-        return (True, token)
-
     def preflight_check(self, uaid, channel_id):
         """Verifies this routing call can be done successfully"""
         return True
