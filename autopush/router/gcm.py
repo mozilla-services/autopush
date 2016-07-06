@@ -121,15 +121,19 @@ class GCMRouter(object):
         #  for reg_id, msg_id in reply.success.items():
         # updates
         for old_id, new_id in reply.canonical.items():
-            self.log.debug("GCM id changed : {old} => {new}",
-                           old=old_id, new=new_id)
+            self.log.info("GCM id changed : {old} => {new}",
+                          old=old_id, new=new_id)
+            self.metrics.increment("updates.client.bridge.gcm.failed.rereg",
+                                   self._base_tags)
             return RouterResponse(status_code=503,
                                   response_body="Please try request again.",
                                   router_data=dict(token=new_id))
         # naks:
         # uninstall:
         for reg_id in reply.not_registered:
-            self.log.debug("GCM no longer registered: %s" % reg_id)
+            self.metrics.increment("updates.client.bridge.gcm.failed.unreg",
+                                   self._base_tags)
+            self.log.info("GCM no longer registered: %s" % reg_id)
             return RouterResponse(
                 status_code=410,
                 response_body="Endpoint requires client update",
@@ -138,14 +142,21 @@ class GCMRouter(object):
 
         #  for reg_id, err_code in reply.failed.items():
         if len(reply.failed.items()) > 0:
-            self.log.debug("GCM failures: {failed()}",
-                           failed=lambda: json.dumps(reply.failed.items()))
+            self.metrics.increment("updates.client.bridge.gcm.failed.failure",
+                                   self._base_tags)
+            self.log.critical("GCM failures: {failed()}",
+                              failed=lambda: json.dumps(reply.failed.items()))
             raise RouterException("GCM failure to deliver", status_code=503,
                                   response_body="Please try request later.")
 
         # retries:
         if reply.needs_retry():
-            raise RouterException("GCM failure to deliver", status_code=503,
+            self.log.warn("GCM retry requested: {failed()}",
+                          failed=lambda: json.dumps(reply.failed.items()))
+            self.metrics.increment("updates.client.bridge.gcm.failed.retry",
+                                   self._base_tags)
+            raise RouterException("GCM failure to deliver, retry",
+                                  status_code=503,
                                   response_body="Please try request later.")
 
         self.metrics.increment("updates.client.bridge.gcm.succeeded",
