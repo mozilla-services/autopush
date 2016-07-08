@@ -31,7 +31,6 @@ from autopush.websocket import (
     StatusResource,
 )
 from autopush.web.simplepush import SimplePushHandler
-from autopush.senderids import SenderIDs, SENDERID_EXPRY, DEFAULT_BUCKET
 
 
 shared_config_files = [
@@ -142,6 +141,8 @@ def obsolete_args(parser):
     parser.add_argument('--external_router', action="store_true",
                         help='OBSOLETE')
     parser.add_argument('--max_message_size', type=int, help="OBSOLETE")
+    parser.add_argument('--s3_bucket', help='OBSOLETE')
+    parser.add_argument('--senderid_expry', help='OBSOLETE')
 
 
 def add_external_router_args(parser):
@@ -161,12 +162,6 @@ def add_external_router_args(parser):
                         help="%s string to collapse messages" % label,
                         type=str, default="simplepush",
                         env_var="GCM_COLLAPSEKEY")
-    parser.add_argument('--s3_bucket', help='S3 Bucket for SenderIDs',
-                        type=str, default=DEFAULT_BUCKET,
-                        env_var='S3-BUCKET')
-    parser.add_argument('--senderid_expry', help='Cache expry for senderIDs',
-                        type=int, default=SENDERID_EXPRY,
-                        env_var='SENDERID_EXPRY')
     parser.add_argument('--senderid_list', help='SenderIDs to load to S3',
                         type=str, default="{}")
     # Apple Push Notification system (APNs) for iOS
@@ -300,17 +295,13 @@ def make_settings(args, **kwargs):
                                    "key_file": args.apns_key_file}
     if args.gcm_enabled:
         # Create a common gcmclient
-        slist = json.loads(args.senderid_list)
-        senderIDs = SenderIDs(dict(
-            s3_bucket=args.s3_bucket,
-            senderid_expry=args.senderid_expry,
-            use_s3=args.s3_bucket.lower() != "none",
-            senderid_list=slist))
-        # This is an init check to verify that things are configured
-        # correctly. Otherwise errors may creep in later that go
-        # unaccounted.
-        senderID = senderIDs.choose_ID()
-        if senderID is None:
+        try:
+            senderIDs = json.loads(args.senderid_list)
+            # This is an init check to verify that things are configured
+            # correctly. Otherwise errors may creep in later that go
+            # unaccounted.
+            senderIDs[senderIDs.keys()[0]]
+        except (IndexError, TypeError):
             log.critical(format="No GCM SenderIDs specified or found.")
             return
         router_conf["gcm"] = {"ttl": args.gcm_ttl,
@@ -318,7 +309,7 @@ def make_settings(args, **kwargs):
                               "max_data": args.max_data,
                               "collapsekey": args.gcm_collapsekey,
                               "senderIDs": senderIDs,
-                              "senderid_list": list}
+                              "senderid_list": args.senderid_list}
 
     ami_id = None
     # Not a fan of double negatives, but this makes more understandable args
@@ -502,8 +493,6 @@ def endpoint_main(sysargs=None, use_files=True):
         endpoint_hostname=args.endpoint_hostname or args.hostname,
         endpoint_port=args.endpoint_port,
         enable_cors=not args.no_cors,
-        s3_bucket=args.s3_bucket,
-        senderid_expry=args.senderid_expry,
         senderid_list=senderid_list,
         bear_hash_key=args.auth_key,
         preflight_uaid="deadbeef000000000deadbeef" + postfix,
@@ -533,11 +522,6 @@ def endpoint_main(sysargs=None, use_files=True):
     settings.metrics.start()
 
     # start the senderIDs refresh timer
-    if settings.routers.get('gcm') and settings.routers['gcm'].senderIDs:
-        # The following shows coverage on my local machine, but not
-        # travis.
-        settings.routers['gcm'].senderIDs.start()  # pragma: nocover
-
     if args.ssl_key:
         contextFactory = AutopushSSLContextFactory(args.ssl_key,
                                                    args.ssl_cert)

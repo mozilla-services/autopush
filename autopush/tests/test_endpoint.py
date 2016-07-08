@@ -36,7 +36,6 @@ from autopush.db import (
 from autopush.exceptions import InvalidTokenException
 from autopush.settings import AutopushSettings
 from autopush.router.interface import IRouter, RouterResponse
-from autopush.senderids import SenderIDs
 from autopush.utils import (generate_hash, decipher_public_key)
 
 mock_dynamodb2 = mock_dynamodb2()
@@ -186,8 +185,6 @@ class EndpointTestCase(unittest.TestCase):
         self.response_mock = Mock(spec=Response)
         self.router_mock = settings.router = Mock(spec=Router)
         self.storage_mock = settings.storage = Mock(spec=Storage)
-        self.senderIDs_mock = settings.senderIDs = Mock(spec=SenderIDs)
-        self.senderIDs_mock.get_ID.return_value = "test_senderid"
 
         self.request_mock = Mock(body=b'', arguments={},
                                  headers={"ttl": "0"},
@@ -1377,10 +1374,6 @@ class RegistrationTestCase(unittest.TestCase):
         self.metrics_mock = settings.metrics = Mock(spec=Metrics)
         self.router_mock = settings.router = Mock(spec=Router)
         self.storage_mock = settings.storage = Mock(spec=Storage)
-        self.senderIDs_mock = settings.senderIDs = Mock(spec=SenderIDs)
-        self.senderIDs_mock.get_ID.return_value = "test_senderid"
-        self.router_mock.check_token = Mock()
-        self.router_mock.check_token.return_value = (True, 'test')
         self.router_mock.register_user = Mock()
         self.router_mock.register_user.return_value = (True, {}, {})
         settings.routers["test"] = self.router_mock
@@ -1401,6 +1394,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.settings = settings
 
     def test_base_tags(self):
+        self.reg._base_tags = []
         self.reg.request = Mock(headers={'user-agent': 'test'},
                                 host='example.com:8080')
         tags = self.reg.base_tags()
@@ -1411,8 +1405,6 @@ class RegistrationTestCase(unittest.TestCase):
         eq_(d.get("code"), code)
         eq_(d.get("errno"), errno)
         eq_(d.get("error"), error)
-        if message:
-            eq_(d.get("message"), message)
 
     def test_init_info(self):
         h = self.request_mock.headers
@@ -1526,18 +1518,9 @@ class RegistrationTestCase(unittest.TestCase):
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
     def test_post_gcm(self, *args):
         from autopush.router.gcm import GCMRouter
-        from autopush.senderids import SenderIDs
         sids = {"182931248179192": {"auth": "aailsjfilajdflijdsilfjsliaj"}}
-        senderIDs = SenderIDs(
-            dict(
-                s3_bucket="",
-                senderid_expry=15*60,
-                use_s3=False,
-                senderid_list=sids
-            )
-        )
         gcm = GCMRouter(self.settings,
-                        {"dryrun": True, "senderIDs": senderIDs})
+                        {"dryrun": True, "senderIDs": sids})
         self.reg.ap_settings.routers["gcm"] = gcm
         self.reg.request.body = json.dumps(dict(
             channelID=dummy_chid,
@@ -1906,43 +1889,3 @@ class RegistrationTestCase(unittest.TestCase):
         eq_(True, self.reg._validate_auth(dummy_uaid))
         self.reg.ap_settings.bear_hash_key = []
         eq_(True, self.reg._validate_auth(dummy_uaid))
-
-    def test_post_relocate(self):
-        self.router_mock.check_token.return_value = (False, "newval")
-        self.reg.request.headers['Authorization'] = self.auth
-
-        def handle_finish(value):
-            url = ("http://localhost/v1/test/newval/register/"
-                   "%s/subscription/%s" % (dummy_uaid, dummy_chid))
-            self._check_error(301, 0, "", "Location: %s" % url)
-
-        self.finish_deferred.addCallback(handle_finish)
-        self.reg.post("test", "test", dummy_uaid, dummy_chid)
-        return self.finish_deferred
-
-    def test_put_relocate(self):
-        self.router_mock.check_token.return_value = (False, "newval")
-        self.reg.request.headers['Authorization'] = self.auth
-        self.reg.request.body = json.dumps(dict(token="sometoken"))
-
-        def handle_finish(value):
-            url = ("http://localhost/v1/test/newval/register/"
-                   "%s" % (dummy_uaid))
-            self._check_error(301, 0, "", "Location: %s" % url)
-
-        self.finish_deferred.addCallback(handle_finish)
-        self.reg.put("test", "test", dummy_uaid)
-        return self.finish_deferred
-
-    def test_del_relocate(self):
-        self.router_mock.check_token.return_value = (False, "newval")
-        self.reg.request.headers['Authorization'] = self.auth
-
-        def handle_finish(value):
-            url = ("http://localhost/v1/test/newval/register/"
-                   "%s/subscription/%s" % (dummy_uaid, dummy_chid))
-            self._check_error(301, 0, "", "Location: %s" % url)
-
-        self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete("test", "test", dummy_uaid, dummy_chid)
-        return self.finish_deferred
