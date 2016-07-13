@@ -248,7 +248,7 @@ class EndpointMainTestCase(unittest.TestCase):
             "--ssl_dh_param=keys/dhparam.pem",
             "--ssl_cert=keys/server.crt",
             "--ssl_key=keys/server.key",
-        ])
+        ], False)
 
     def test_bad_senderidlist(self):
         endpoint_main([
@@ -277,7 +277,7 @@ class EndpointMainTestCase(unittest.TestCase):
             "--gcm_enabled",
             """--senderid_list={"123":{"auth":"abcd"}}""",
             "--s3_bucket=none",
-        ])
+        ], False)
 
     @patch("requests.get")
     def test_aws_ami_id(self, request_mock):
