@@ -33,7 +33,7 @@ class EndpointDiagnosticCLI(object):
 
     def _load_args(self, sysargs, use_files):
         if use_files:
-            config_files = [
+            config_files = shared_config_files + [  # pragma: nocover
                 '/etc/autopush_endpoint.ini',
                 '~/.autopush_endpoint.ini',
                 '.autopush_endpoint.ini'
@@ -43,7 +43,7 @@ class EndpointDiagnosticCLI(object):
 
         parser = configargparse.ArgumentParser(
             description='Runs endpoint diagnostics.',
-            default_config_files=shared_config_files + config_files)
+            default_config_files=config_files)
         parser.add_argument('endpoint', help="Endpoint to parse")
 
         add_shared_args(parser)

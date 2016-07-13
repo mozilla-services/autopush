@@ -23,7 +23,7 @@ class FakeDict(dict):
 class DiagnosticCLITestCase(unittest.TestCase):
     def _makeFUT(self, *args, **kwargs):
         from autopush.diagnostic_cli import EndpointDiagnosticCLI
-        return EndpointDiagnosticCLI(*args, **kwargs)
+        return EndpointDiagnosticCLI(*args, use_files=False, **kwargs)
 
     def test_basic_load(self):
         cli = self._makeFUT([
@@ -56,5 +56,5 @@ class DiagnosticCLITestCase(unittest.TestCase):
         run_endpoint_diagnostic_cli([
             "--router_tablename=fred",
             "http://something/wpush/v1/legit_endpoint",
-        ])
+        ], use_files=False)
         mock_message_table.all_channels.assert_called()
