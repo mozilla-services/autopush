@@ -31,6 +31,7 @@ from autopush.websocket import (
     StatusResource,
 )
 from autopush.web.simplepush import SimplePushHandler
+from autopush.web.webpush import WebPushHandler
 
 
 shared_config_files = [
@@ -504,6 +505,8 @@ def endpoint_main(sysargs=None, use_files=True):
          dict(ap_settings=settings)),
         (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
          SimplePushHandler, dict(ap_settings=settings)),
+        (r"/wpush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
+         WebPushHandler, dict(ap_settings=settings)),
         (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
         # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint
