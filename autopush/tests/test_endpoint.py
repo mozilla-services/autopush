@@ -1234,7 +1234,7 @@ class EndpointTestCase(unittest.TestCase):
 
         self.endpoint.write_error(999, exc_info=exc_info)
         self.status_mock.assert_called_with(999)
-        self.assertTrue(self.endpoint.log.called)
+        eq_(self.endpoint.log.failure.called, True)
 
     def test_write_error_no_exc(self):
         """ Write error is triggered by sending the app a request
@@ -1244,7 +1244,7 @@ class EndpointTestCase(unittest.TestCase):
         """
         self.endpoint.write_error(999)
         self.status_mock.assert_called_with(999)
-        self.assertTrue(self.endpoint.log.called)
+        eq_(self.endpoint.log.failure.called, True)
 
     def _assert_error_response(self, result):
         self.status_mock.assert_called_with(500, None)
@@ -1434,24 +1434,24 @@ class RegistrationTestCase(unittest.TestCase):
             type="test",
         ))
         result = self.reg._load_params()
-        self.assert_(isinstance(result, dict))
+        ok_(isinstance(result, dict))
         eq_(result["channelID"], dummy_chid)
 
     def test_load_params_invalid_body(self):
         self.reg.request.body = b'connect={"type":"test"}'
-        self.assertTrue(not self.reg._load_params())
+        ok_(not self.reg._load_params())
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     def test_load_params_prefer_body(self, t):
         args = self.reg.request.arguments
         args['connect'] = ['{"type":"invalid"}']
         self.reg.request.body = b'connect={"type":"test"}'
-        self.assertTrue(self.reg._load_params())
+        eq_(self.reg._load_params(), {})
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     def test_load_params_no_conn(self, t):
         self.reg.request.body = b'noconnect={"type":"test"}'
-        self.assertTrue(not self.reg._load_params())
+        ok_(not self.reg._load_params())
 
     def test_cors(self):
         ch1 = "Access-Control-Allow-Origin"
