@@ -1690,9 +1690,11 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
 
-        def wait_for_clear():
+        def wait_for_clear(count=0.0):
             if self.proto.ps.updates_sent:  # pragma: nocover
-                reactor.callLater(0.1, wait_for_clear)
+                if count > 5.0:
+                    raise Exception("Time-out waiting")
+                reactor.callLater(0.1, wait_for_clear, count+0.1)
                 return
 
             # Accepting again
@@ -1739,10 +1741,12 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
 
-        def check_mock_call():
+        def check_mock_call(count=0.0):
             calls = self.proto.process_notifications.mock_calls
             if len(calls) < 1:
-                reactor.callLater(0.1, check_mock_call)
+                if count > 5.0:  # pragma: nocover
+                    raise Exception("Time-out waiting")
+                reactor.callLater(0.1, check_mock_call, count+0.1)
                 return
 
             eq_(len(calls), 1)
