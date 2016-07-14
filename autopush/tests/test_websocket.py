@@ -11,7 +11,7 @@ from boto.dynamodb2.exceptions import (
 from cyclone.web import Application
 from mock import Mock, patch
 from moto import mock_dynamodb2
-from nose.tools import (eq_, ok_)
+from nose.tools import eq_, ok_
 from txstatsd.metrics.metrics import Metrics
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
@@ -118,8 +118,8 @@ class WebsocketTestCase(unittest.TestCase):
 
         req.headers.get.side_effect = raise_error
 
-        with self.assertRaises(Exception):
-            self.proto.onConnect(req)
+        self.proto.onConnect(req)
+        self.proto.log.failure.assert_called()
 
     @patch("autopush.websocket.reactor")
     def test_autoping_no_uaid(self, mock_reactor):
@@ -1690,9 +1690,11 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
 
-        def wait_for_clear():
+        def wait_for_clear(count=0.0):
             if self.proto.ps.updates_sent:  # pragma: nocover
-                reactor.callLater(0.1, wait_for_clear)
+                if count > 5.0:
+                    raise Exception("Time-out waiting")
+                reactor.callLater(0.1, wait_for_clear, count+0.1)
                 return
 
             # Accepting again
@@ -1739,10 +1741,12 @@ class WebsocketTestCase(unittest.TestCase):
 
         d = Deferred()
 
-        def check_mock_call():
+        def check_mock_call(count=0.0):
             calls = self.proto.process_notifications.mock_calls
             if len(calls) < 1:
-                reactor.callLater(0.1, check_mock_call)
+                if count > 5.0:  # pragma: nocover
+                    raise Exception("Time-out waiting")
+                reactor.callLater(0.1, check_mock_call, count+0.1)
                 return
 
             eq_(len(calls), 1)

@@ -31,6 +31,7 @@ from autopush.websocket import (
     StatusResource,
 )
 from autopush.web.simplepush import SimplePushHandler
+from autopush.web.webpush import WebPushHandler
 
 
 shared_config_files = [
@@ -195,7 +196,7 @@ def _parse_connection(sysargs, use_files=True):
     # For testing, do not use the configuration files since they can
     # produce unexpected results.
     if use_files:  # pragma: nocover
-        config_files = [
+        config_files = shared_config_files + [  # pragma: nocover
             '/etc/autopush_connection.ini',
             '~/.autopush_connection.ini',
             '.autopush_connection.ini'
@@ -204,7 +205,7 @@ def _parse_connection(sysargs, use_files=True):
         config_files = []  # pragma: nocover
     parser = configargparse.ArgumentParser(
         description='Runs a Connection Node.',
-        default_config_files=shared_config_files + config_files)
+        default_config_files=config_files)
     parser.add_argument('--config-connection',
                         help="Connection node configuration file path",
                         dest='config_file', is_config_file=True)
@@ -249,7 +250,7 @@ def _parse_connection(sysargs, use_files=True):
 def _parse_endpoint(sysargs, use_files=True):
     """Parses out endpoint arguments for an autoendpoint node"""
     if use_files:
-        config_files = [
+        config_files = shared_config_files + [
             '/etc/autopush_endpoint.ini',
             '~/.autopush_endpoint.ini',
             '.autopush_endpoint.ini'
@@ -258,7 +259,7 @@ def _parse_endpoint(sysargs, use_files=True):
         config_files = []  # pragma: nocover
     parser = configargparse.ArgumentParser(
         description='Runs an Endpoint Node.',
-        default_config_files=shared_config_files + config_files)
+        default_config_files=config_files)
     parser.add_argument('--config-endpoint',
                         help="Endpoint node configuration file path",
                         dest='config_file', is_config_file=True)
@@ -504,6 +505,8 @@ def endpoint_main(sysargs=None, use_files=True):
          dict(ap_settings=settings)),
         (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
          SimplePushHandler, dict(ap_settings=settings)),
+        (r"/wpush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
+         WebPushHandler, dict(ap_settings=settings)),
         (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
         # PUT /register/ => connect info
         # GET /register/uaid => chid + endpoint

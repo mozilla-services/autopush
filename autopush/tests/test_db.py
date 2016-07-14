@@ -11,7 +11,7 @@ from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.items import Item
 from mock import Mock
 from moto import mock_dynamodb2
-from nose.tools import eq_
+from nose.tools import eq_, assert_raises
 
 from autopush.db import (
     get_rotating_message_table,
@@ -51,7 +51,7 @@ class DbCheckTestCase(unittest.TestCase):
         router.clear_node = Mock()
         router.clear_node.side_effect = raise_exc
 
-        with self.assertRaises(Exception):
+        with assert_raises(Exception):
             preflight_check(storage, router)
 
     def test_preflight_check(self):
@@ -63,7 +63,29 @@ class DbCheckTestCase(unittest.TestCase):
         # now check that the database reports no entries.
         notifs = storage.fetch_notifications(pf_uaid)
         eq_(len(notifs), 0)
-        self.assertRaises(ItemNotFound, router.get_uaid, pf_uaid)
+        assert_raises(ItemNotFound, router.get_uaid, pf_uaid)
+
+    def test_preflight_check_wait(self):
+        router = Router(get_router_table(), SinkMetrics())
+        storage = Storage(get_storage_table(), SinkMetrics())
+
+        storage.table.describe = mock_describe = Mock()
+
+        values = [
+            dict(Table=dict(TableStatus="PENDING")),
+            dict(Table=dict(TableStatus="ACTIVE")),
+        ]
+
+        def return_vals(*args, **kwargs):
+            return values.pop(0)
+
+        mock_describe.side_effect = return_vals
+        pf_uaid = "deadbeef00000000deadbeef01010101"
+        preflight_check(storage, router, pf_uaid)
+        # now check that the database reports no entries.
+        notifs = storage.fetch_notifications(pf_uaid)
+        eq_(len(notifs), 0)
+        assert_raises(ItemNotFound, router.get_uaid, pf_uaid)
 
     def test_get_month(self):
         from autopush.db import get_month
@@ -86,7 +108,7 @@ class DbCheckTestCase(unittest.TestCase):
         abnormal = "deadbeef00000000decafbad00000000"
         normal = "deadbeef-0000-0000-deca-fbad00000000"
         eq_(db.normalize_id(abnormal), normal)
-        self.assertRaises(ValueError, db.normalize_id, "invalid")
+        assert_raises(ValueError, db.normalize_id, "invalid")
         eq_(db.normalize_id(abnormal.upper()), normal)
 
 
@@ -139,7 +161,7 @@ class StorageTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         storage.table.connection.put_item.side_effect = raise_error
-        with self.assertRaises(ProvisionedThroughputExceededException):
+        with assert_raises(ProvisionedThroughputExceededException):
             storage.save_notification(dummy_uaid, dummy_chid, 12)
 
     def test_save_over_provisioned(self):
@@ -151,7 +173,7 @@ class StorageTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         storage.table.query_2.side_effect = raise_error
-        with self.assertRaises(ProvisionedThroughputExceededException):
+        with assert_raises(ProvisionedThroughputExceededException):
             storage.fetch_notifications(dummy_uaid)
 
     def test_delete_over_provisioned(self):

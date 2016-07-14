@@ -168,6 +168,15 @@ def preflight_check(storage, router, uaid="deadbeef00000000deadbeef00000000"):
     Failure to run correctly will raise an exception.
 
     """
+    # Verify tables are ready for use if they just got created
+    ready = False
+    while not ready:
+        tbl_status = [x.describe()["Table"]["TableStatus"]
+                      for x in [storage.table, router.table]]
+        ready = all([status == "ACTIVE" for status in tbl_status])
+        if not ready:
+            time.sleep(1)
+
     # Use a distinct UAID so it doesn't interfere with metrics
     chid = uuid.uuid4().hex
     node_id = "mynode:2020"
