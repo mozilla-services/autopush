@@ -39,8 +39,8 @@ from autopush.router.interface import IRouter, RouterResponse
 from autopush.utils import (generate_hash, decipher_public_key)
 
 mock_dynamodb2 = mock_dynamodb2()
-dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
-dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
+dummy_uaid = uuid.UUID("abad1dea00000000aabbccdd00000000").hex
+dummy_chid = str(uuid.UUID("deadbeef-0000-0000-deca-fbad00000000"))
 dummy_token = dummy_uaid + ":" + dummy_chid
 
 

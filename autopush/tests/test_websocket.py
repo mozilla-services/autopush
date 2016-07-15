@@ -139,7 +139,7 @@ class WebsocketTestCase(unittest.TestCase):
         WebSocketServerProtocol._sendAutoPing = Mock()
         self.proto.sendClose = self.orig_close
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto._sendAutoPing()
         assert(mock_reactor.callLater.called)
         assert(WebSocketServerProtocol.sendClose.called)
@@ -149,7 +149,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.transport = Mock()
         self._connect()
         self.proto.state = ""
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.nukeConnection()
         assert(self.proto.ap_settings.metrics.increment.called)
 
@@ -157,7 +157,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_nuke_connection_shutdown_ran(self, mock_reactor):
         self.proto.transport = Mock()
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto._shutdown_ran = True
         self.proto.nukeConnection()
         eq_(len(mock_reactor.mock_calls), 0)
@@ -290,7 +290,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_close_with_delivery_cleanup(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ap_settings.clients["asdf"] = self.proto
         chid = str(uuid.uuid4())
 
@@ -320,7 +320,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_close_with_delivery_cleanup_using_webpush(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ap_settings.clients["asdf"] = self.proto
         self.proto.ps.use_webpush = True
         chid = str(uuid.uuid4())
@@ -355,7 +355,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_close_with_delivery_cleanup_and_no_get_result(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ap_settings.clients["asdf"] = self.proto
         chid = str(uuid.uuid4())
 
@@ -385,7 +385,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_close_with_delivery_cleanup_and_no_node_id(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ap_settings.clients["asdf"] = self.proto
         chid = str(uuid.uuid4())
 
@@ -412,7 +412,7 @@ class WebsocketTestCase(unittest.TestCase):
         return d
 
     def test_hello_old(self):
-        orig_uaid = "deadbeef-0000-0000-abad-1dea00000000"
+        orig_uaid = "deadbeef00000000abad1dea00000000"
         # router.register_user returns (registered, previous
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2015, 12, 15)
@@ -466,7 +466,7 @@ class WebsocketTestCase(unittest.TestCase):
         return self._check_response(check_result)
 
     def test_hello_tomorrow(self):
-        orig_uaid = "deadbeef-0000-0000-abad-1dea00000000"
+        orig_uaid = "deadbeef00000000abad1dea00000000"
         # router.register_user returns (registered, previous
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2016, 3, 1)
@@ -548,7 +548,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_hello_with_uaid(self):
         self._connect()
-        uaid = str(uuid.uuid4())
+        uaid = uuid.uuid4().hex
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 uaid=uaid))
 
@@ -559,7 +559,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_hello_with_uaid_no_hypen(self):
         self._connect()
-        uaid = str(uuid.uuid4()).replace('-', '')
+        uaid = uuid.uuid4().hex
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 uaid=uaid))
 
@@ -571,6 +571,28 @@ class WebsocketTestCase(unittest.TestCase):
     def test_hello_with_bad_uaid(self):
         self._connect()
         uaid = "ajsidlfjlsdjflasjjailsdf"
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                uaid=uaid))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            assert msg["uaid"] != uaid
+        return self._check_response(check_result)
+
+    def test_hello_with_bad_uaid_dash(self):
+        self._connect()
+        uaid = str(uuid.uuid4())
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                uaid=uaid))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            assert msg["uaid"] != uaid
+        return self._check_response(check_result)
+
+    def test_hello_with_bad_uaid_case(self):
+        self._connect()
+        uaid = uuid.uuid4().hex.upper()
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 uaid=uaid))
 
@@ -895,7 +917,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         self.proto.ps.use_webpush = True
         chid = str(uuid.uuid4())
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ap_settings.message.register_channel = Mock()
 
         d = Deferred()
@@ -912,7 +934,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         self.proto.ps.use_webpush = True
         chid = str(uuid.uuid4())
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ap_settings.message.register_channel = Mock()
         test_key = "SomeRandomCryptoKeyString"
         test_sha = sha256(test_key).hexdigest()
@@ -1030,7 +1052,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_register_bad_crypto(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
 
         def throw_error(*args, **kwargs):
             raise Exception("Crypto explosion")
@@ -1057,7 +1079,7 @@ class WebsocketTestCase(unittest.TestCase):
         mock_agent = Mock()
         self.proto.ap_settings.agent = mock_agent
         nodeId = "http://otherhost"
-        uaid = "deadbeef-0000-0000-0000-000000000000"
+        uaid = "deadbeef000000000000000000000000"
         self.proto.ps.uaid = uaid
         connected = int(time.time())
         res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
@@ -1072,7 +1094,7 @@ class WebsocketTestCase(unittest.TestCase):
         d = Deferred()
         self.proto.ap_settings.agent.request.return_value = d
         nodeId = "http://otherhost"
-        uaid = "deadbeef-0000-0000-0000-000000000000"
+        uaid = "deadbeef000000000000000000000000"
         self.proto.ps.uaid = uaid
         connected = int(time.time())
         res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
@@ -1085,7 +1107,7 @@ class WebsocketTestCase(unittest.TestCase):
         mock_agent = Mock()
         self.proto.ap_settings.agent = mock_agent
         nodeId = "http://localhost"
-        uaid = "deadbeef-0000-0000-0000-000000000000"
+        uaid = "deadbeef000000000000000000000000"
         # Test that the 'existing' connection is newer than the current one.
         connected = int(time.time() * 1000)
         ca = connected + 30000
@@ -1106,7 +1128,7 @@ class WebsocketTestCase(unittest.TestCase):
         mock_agent = Mock()
         self.proto.ap_settings.agent = mock_agent
         nodeId = "http://localhost"
-        uaid = "deadbeef-0000-0000-0000-000000000000"
+        uaid = "deadbeef000000000000000000000000"
         # Test that the 'existing' connection is older than the current one.
         connected = int(time.time() * 1000)
         ca = connected - 30000
@@ -1157,7 +1179,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_ws_unregister_without_chid(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self._send_message(dict(messageType="unregister"))
 
         d = Deferred()
@@ -1174,7 +1196,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_ws_unregister_bad_chid(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self._send_message(dict(messageType="unregister",
                                 channelID="}{$@!asdf"))
 
@@ -1191,7 +1213,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_ws_unregister_fail(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         chid = str(uuid.uuid4())
 
         d = Deferred()
@@ -1223,7 +1245,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_notification(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         chid = str(uuid.uuid4())
 
         # Send ourself a notification
@@ -1249,7 +1271,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_notification_with_webpush(self):
         self._connect()
         self.proto.ps.use_webpush = True
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
 
         chid = str(uuid.uuid4())
         self.proto.ps.direct_updates[chid] = []
@@ -1266,7 +1288,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_notification_avoid_newer_delivery(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
 
         chid = str(uuid.uuid4())
         self.proto.ps.updates_sent[chid] = 14
@@ -1317,7 +1339,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_ack_with_webpush_direct(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         chid = str(uuid.uuid4())
 
         self.proto.ps.use_webpush = True
@@ -1364,7 +1386,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_nack(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.onMessage(json.dumps(dict(
             messageType="nack",
             version="bleh:asdfhjklhjkl",
@@ -1374,7 +1396,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_nack_no_version(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.onMessage(json.dumps(dict(
             messageType="nack",
             code=200
@@ -1408,7 +1430,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_ack_fails_first_time(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
 
         class FailFirst(object):
             def __init__(self):
@@ -1452,7 +1474,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_ack_missing_updates(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.sendJSON = Mock()
 
         self._send_message(dict(messageType="ack"))
@@ -1462,7 +1484,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_ack_missing_chid_version(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
 
         self._send_message(dict(messageType="ack",
                                 updates=[{"something": 2}]))
@@ -1472,7 +1494,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_ack_untracked(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
 
         self._send_message(dict(messageType="ack",
                                 updates=[{"channelID": str(uuid.uuid4()),
@@ -1484,7 +1506,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_process_notifications(self):
         twisted.internet.base.DelayedCall.debug = True
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
 
         # Swap out fetch_notifications
         self.proto.ap_settings.storage.fetch_notifications = Mock(
@@ -1514,7 +1536,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_process_notification_error(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
 
         def throw_error(*args, **kwargs):
             raise Exception("An error happened!")
@@ -1537,7 +1559,7 @@ class WebsocketTestCase(unittest.TestCase):
     @patch("autopush.websocket.random.randrange", return_value=0.1)
     def test_process_notification_provisioned_error(self, t):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
 
         def throw_error(*args, **kwargs):
             raise ProvisionedThroughputExceededException(None, None)
@@ -1557,7 +1579,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_process_notif_doesnt_run_with_webpush_outstanding(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ps.use_webpush = True
         self.proto.ps.updates_sent["chid"] = [
             Notification(channel_id="chid", data="bleh", headers={},
@@ -1570,7 +1592,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_process_notif_doesnt_run_when_paused(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ps.pauseProducing()
         with patch("autopush.websocket.reactor") as mr:
             self.proto.process_notifications()
@@ -1578,14 +1600,14 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_process_notif_doesnt_run_after_stop(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ps._should_stop = True
         self.proto.process_notifications()
         eq_(self.proto.ps._notification_fetch, None)
 
     def test_process_notif_paused_on_finish(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ps.pauseProducing()
         with patch("autopush.websocket.reactor") as mr:
             self.proto.finish_notifications(None)
@@ -1593,7 +1615,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_notif_finished_with_webpush(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ps.use_webpush = True
         self.proto.deferToLater = Mock()
         self.proto.ps._check_notifications = True
@@ -1602,7 +1624,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_notif_finished_with_webpush_with_notifications(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ps.use_webpush = True
         self.proto.ps._check_notifications = True
         self.proto.process_notifications = Mock()
@@ -1616,7 +1638,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_notif_finished_with_webpush_with_old_notifications(self):
         self._connect()
-        self.proto.ps.uaid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ps.use_webpush = True
         self.proto.ps._check_notifications = True
         self.proto.process_notifications = Mock()
@@ -1632,7 +1654,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_notification_results(self):
         # Populate the database for ourself
-        uaid = str(uuid.uuid4())
+        uaid = uuid.uuid4().hex
         chid = str(uuid.uuid4())
         chid2 = str(uuid.uuid4())
         chid3 = str(uuid.uuid4())
@@ -1680,7 +1702,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_notification_dont_deliver_after_ack(self):
         self._connect()
 
-        uaid = str(uuid.uuid4())
+        uaid = uuid.uuid4().hex
         chid = str(uuid.uuid4())
 
         storage = self.proto.ap_settings.storage
@@ -1730,7 +1752,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_notification_dont_deliver(self):
         # Populate the database for ourself
-        uaid = str(uuid.uuid4())
+        uaid = uuid.uuid4().hex
         chid = str(uuid.uuid4())
         storage = self.proto.ap_settings.storage
         storage.save_notification(uaid, chid, 12)
@@ -1801,7 +1823,7 @@ class RouterHandlerTestCase(unittest.TestCase):
         self.handler.write = self.write_mock = Mock()
 
     def test_client_connected(self):
-        uaid = str(uuid.uuid4())
+        uaid = uuid.uuid4().hex
         self.mock_request.body = "{}"
         self.ap_settings.clients[uaid] = client_mock = Mock()
         client_mock.paused = False
@@ -1810,7 +1832,7 @@ class RouterHandlerTestCase(unittest.TestCase):
         eq_(len(client_mock.mock_calls), 1)
 
     def test_client_not_connected(self):
-        uaid = str(uuid.uuid4())
+        uaid = uuid.uuid4().hex
         self.mock_request.body = "{}"
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
@@ -1818,7 +1840,7 @@ class RouterHandlerTestCase(unittest.TestCase):
         eq_(self.status_mock.call_args, ((404,),))
 
     def test_client_connected_but_busy(self):
-        uaid = str(uuid.uuid4())
+        uaid = uuid.uuid4().hex
         self.mock_request.body = "{}"
         self.ap_settings.clients[uaid] = client_mock = Mock()
         client_mock.accept_notification = False
@@ -1845,7 +1867,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
         self.handler.write = self.write_mock = Mock()
 
     def test_connected_and_free(self):
-        uaid = str(uuid.uuid4())
+        uaid = uuid.uuid4().hex
         self.mock_request.body = "{}"
         self.ap_settings.clients[uaid] = client_mock = Mock()
         client_mock.paused = False
@@ -1854,7 +1876,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
         eq_(len(client_mock.mock_calls), 1)
 
     def test_connected_and_busy(self):
-        uaid = str(uuid.uuid4())
+        uaid = uuid.uuid4().hex
         self.mock_request.body = "{}"
         self.ap_settings.clients[uaid] = client_mock = Mock()
         client_mock.paused = True
@@ -1865,14 +1887,14 @@ class NotificationHandlerTestCase(unittest.TestCase):
         eq_(self.status_mock.call_args, ((202,),))
 
     def test_not_connected(self):
-        uaid = str(uuid.uuid4())
+        uaid = uuid.uuid4().hex
         self.mock_request.body = "{}"
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
         eq_(self.status_mock.call_args, ((404,),))
 
     def test_delete(self):
-        uaid = str(uuid.uuid4())
+        uaid = uuid.uuid4().hex
         now = int(time.time() * 1000)
         self.ap_settings.clients[uaid] = mock_client = Mock()
         mock_client.ps = Mock()

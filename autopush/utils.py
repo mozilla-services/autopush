@@ -45,7 +45,8 @@ def validate_uaid(uaid):
     uaid, or a new uaid if its invalid"""
     if uaid:
         try:
-            return bool(uuid.UUID(uaid)), uaid
+            if uuid.UUID(uaid).hex == uaid:
+                return True, uaid
         except ValueError:
             pass
     return False, uuid.uuid4().hex

@@ -16,7 +16,7 @@ from autopush.db import (
 from autopush.router.interface import IRouter, RouterResponse
 from autopush.settings import AutopushSettings
 
-dummy_request_id = "11111111-1234-1234-1234-567812345678"
+dummy_request_id = "11111111123412341234567812345678"
 dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
 dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
 dummy_token = dummy_uaid + ":" + dummy_chid

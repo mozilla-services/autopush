@@ -104,6 +104,7 @@ class DbCheckTestCase(unittest.TestCase):
         db.key_hash = ""
 
     def test_normalize_id(self):
+        # Note, yes, we forbid dashes in UAIDs, and we add them here.
         import autopush.db as db
         abnormal = "deadbeef00000000decafbad00000000"
         normal = "deadbeef-0000-0000-deca-fbad00000000"
