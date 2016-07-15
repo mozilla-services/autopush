@@ -273,34 +273,34 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     def _uaid_not_found_err(self, fail):
         """errBack for uaid lookup not finding the user"""
         fail.trap(ItemNotFound)
-        self.log.debug(format="UAID not found in AWS.",
-                       status_code=410, errno=103,
-                       **self._client_info)
+        self.log.info(format="UAID not found in AWS.",
+                      status_code=410, errno=103,
+                      **self._client_info)
         self._write_response(410, 103)
 
     def _token_err(self, fail):
         """errBack for token decryption fail"""
         fail.trap(InvalidToken, InvalidTokenException)
-        self.log.debug(format="Invalid token",
-                       status_code=400, errno=102,
-                       **self._client_info)
+        self.log.info(format="Invalid token",
+                      status_code=400, errno=102,
+                      **self._client_info)
         self._write_response(400, 102)
 
     def _auth_err(self, fail):
         """errBack for invalid auth token"""
         fail.trap(VapidAuthException)
-        self.log.debug(format="Invalid Auth token",
-                       status_code=401,
-                       errno=109,
-                       **self._client_info)
+        self.log.info(format="Invalid Auth token",
+                      status_code=401,
+                      errno=109,
+                      **self._client_info)
         self._write_unauthorized_response(message=fail.value.message)
 
     def _chid_not_found_err(self, fail):
         """errBack for unknown chid"""
         fail.trap(ItemNotFound, ValueError)
-        self.log.debug(format="CHID not found in AWS.",
-                       status_code=410, errno=106,
-                       **self._client_info)
+        self.log.info(format="CHID not found in AWS.",
+                      status_code=410, errno=106,
+                      **self._client_info)
         self._write_response(410, 106)
 
     #############################################################
