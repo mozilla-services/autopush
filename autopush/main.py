@@ -249,7 +249,7 @@ def _parse_connection(sysargs, use_files=True):
 
 def _parse_endpoint(sysargs, use_files=True):
     """Parses out endpoint arguments for an autoendpoint node"""
-    if use_files:
+    if use_files:  # pragma: nocover
         config_files = shared_config_files + [
             '/etc/autopush_endpoint.ini',
             '~/.autopush_endpoint.ini',
