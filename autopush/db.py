@@ -580,7 +580,8 @@ class Router(object):
         """
         # Fetch a senderid for this user
         conn = self.table.connection
-        db_key = self.encode({"uaid": hasher(data.pop("uaid"))})
+        db_key = self.encode({"uaid": hasher(data["uaid"])})
+        del data["uaid"]
         # Generate our update expression
         expr = "SET " + ", ".join(["%s=:%s" % (x, x) for x in data.keys()])
         expr_values = self.encode({":%s" % k: v for k, v in data.items()})
@@ -613,22 +614,6 @@ class Router(object):
             return (True, result, data)
         except ConditionalCheckFailedException:
             return (False, {}, data)
-
-    @track_provisioned
-    def update_last_connect(self, uaid):
-        """Update the last_connect value for a user to this month"""
-        conn = self.table.connection
-        db_key = self.encode({"uaid": uaid})
-        val = generate_last_connect()
-        expr = "SET last_connect=:last_connect"
-        expr_values = self.encode({":last_connect": val})
-        conn.update_item(
-            self.table.table_name,
-            db_key,
-            update_expression=expr,
-            expression_attribute_values=expr_values,
-        )
-        return True
 
     @track_provisioned
     def drop_user(self, uaid):

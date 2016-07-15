@@ -84,10 +84,15 @@ class WebsocketTestCase(unittest.TestCase):
     def _send_message(self, msg):
         self.proto.onMessage(json.dumps(msg).encode('utf8'), False)
 
-    def _wait_for_message(self, d):
+    def _wait_for_message(self, d, count=0.0):
         args = self.send_mock.call_args_list
         if len(args) < 1:
-            reactor.callLater(0.1, self._wait_for_message, d)
+            if count > 5.0:  # pragma: nocover
+                try:
+                    raise Exception("Timeout waiting for a message to send")
+                except:
+                    d.errback()
+            reactor.callLater(0.1, self._wait_for_message, d, count+0.1)
             return
 
         args = self.send_mock.call_args_list.pop(0)
@@ -413,6 +418,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_hello_old(self):
         orig_uaid = "deadbeef00000000abad1dea00000000"
+
         # router.register_user returns (registered, previous
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2015, 12, 15)
@@ -426,6 +432,12 @@ class WebsocketTestCase(unittest.TestCase):
             "last_connect": int(msg_day.strftime("%s")),
             "current_month": msg_date,
         }
+        router = self.proto.ap_settings.router
+        router.register_user(dict(
+            uaid=orig_uaid,
+            connected_at=ms_time(),
+            current_month=msg_date,
+        ))
 
         def fake_msg(data):
             return (True, msg_data, data)
@@ -467,6 +479,13 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_hello_tomorrow(self):
         orig_uaid = "deadbeef00000000abad1dea00000000"
+        router = self.proto.ap_settings.router
+        router.register_user(dict(
+            uaid=orig_uaid,
+            connected_at=ms_time(),
+            current_month="message_2016_3",
+        ))
+
         # router.register_user returns (registered, previous
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2016, 3, 1)
@@ -549,17 +568,11 @@ class WebsocketTestCase(unittest.TestCase):
     def test_hello_with_uaid(self):
         self._connect()
         uaid = uuid.uuid4().hex
-        self._send_message(dict(messageType="hello", channelIDs=[],
-                                uaid=uaid))
-
-        def check_result(msg):
-            eq_(msg["status"], 200)
-            eq_(msg["uaid"], uaid)
-        return self._check_response(check_result)
-
-    def test_hello_with_uaid_no_hypen(self):
-        self._connect()
-        uaid = uuid.uuid4().hex
+        router = self.proto.ap_settings.router
+        router.register_user(dict(
+            uaid=uaid,
+            connected_at=ms_time(),
+        ))
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 uaid=uaid))
 
@@ -616,9 +629,9 @@ class WebsocketTestCase(unittest.TestCase):
 
         return self._check_response(check_result)
 
-    @patch("autopush.websocket.random.randrange", return_value=0.1)
-    def test_hello_provisioned_exception(self, mock_rand):
+    def test_hello_provisioned_exception(self):
         self._connect()
+        self.proto.randrange = Mock(return_value=0.1)
         # Fail out the register_user call
 
         def throw_error(*args, **kwargs):
@@ -636,26 +649,6 @@ class WebsocketTestCase(unittest.TestCase):
 
         return self._check_response(check_result)
 
-    def test_hello_check_collision(self):
-        self._connect()
-
-        mock_register = self.proto.ap_settings.router.register_user = Mock()
-
-        def register_user(data):
-            registered = len(mock_register.mock_calls) > 1
-            return (registered, {}, {})
-
-        mock_register.side_effect = register_user
-
-        uaid = "8c658b5b-8b79-4cfc-a18d-c34516661bd9"
-        self._send_message(dict(messageType="hello", uaid=uaid))
-
-        def check_result(msg):
-            eq_(len(mock_register.mock_calls), 2)
-            eq_(msg["status"], 200)
-            ok_(msg["uaid"] != uaid)
-        return self._check_response(check_result)
-
     def test_hello_check_fail(self):
         self._connect()
 
@@ -667,7 +660,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         def check_result(msg):
             calls = self.proto.ap_settings.router.register_user.mock_calls
-            eq_(len(calls), 2)
+            eq_(len(calls), 1)
             eq_(msg["status"], 500)
             eq_(msg["reason"], "already_connected")
         return self._check_response(check_result)
@@ -1556,9 +1549,9 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps._notification_fetch.addBoth(check_error)
         return d
 
-    @patch("autopush.websocket.random.randrange", return_value=0.1)
-    def test_process_notification_provisioned_error(self, t):
+    def test_process_notification_provisioned_error(self):
         self._connect()
+        self.proto.randrange = Mock(return_value=0.1)
         self.proto.ps.uaid = uuid.uuid4().hex
 
         def throw_error(*args, **kwargs):
@@ -1658,6 +1651,14 @@ class WebsocketTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
         chid2 = str(uuid.uuid4())
         chid3 = str(uuid.uuid4())
+
+        # Create a router record
+        router = self.proto.ap_settings.router
+        router.register_user(dict(
+            uaid=uaid,
+            connected_at=ms_time(),
+        ))
+
         storage = self.proto.ap_settings.storage
         storage.save_notification(uaid, chid, 12)
         storage.save_notification(uaid, chid2, 8)
@@ -1705,8 +1706,19 @@ class WebsocketTestCase(unittest.TestCase):
         uaid = uuid.uuid4().hex
         chid = str(uuid.uuid4())
 
+        # Create a dummy router record
+        router = self.proto.ap_settings.router
+        router.register_user(dict(
+            uaid=uaid,
+            connected_at=ms_time(),
+        ))
+
         storage = self.proto.ap_settings.storage
         storage.save_notification(uaid, chid, 10)
+
+        # Verify the message is stored
+        results = storage.fetch_notifications(uaid)
+        eq_(len(results), 1)
 
         self._send_message(dict(messageType="hello", channelIDs=[], uaid=uaid))
 
@@ -1715,7 +1727,7 @@ class WebsocketTestCase(unittest.TestCase):
         def wait_for_clear(count=0.0):
             if self.proto.ps.updates_sent:  # pragma: nocover
                 if count > 5.0:
-                    raise Exception("Time-out waiting")
+                    d.errback(Exception("Time-out waiting"))
                 reactor.callLater(0.1, wait_for_clear, count+0.1)
                 return
 
@@ -1754,8 +1766,20 @@ class WebsocketTestCase(unittest.TestCase):
         # Populate the database for ourself
         uaid = uuid.uuid4().hex
         chid = str(uuid.uuid4())
+
+        # Create a dummy router record
+        router = self.proto.ap_settings.router
+        router.register_user(dict(
+            uaid=uaid,
+            connected_at=ms_time(),
+        ))
+
         storage = self.proto.ap_settings.storage
         storage.save_notification(uaid, chid, 12)
+
+        # Verify the message is stored
+        results = storage.fetch_notifications(uaid)
+        eq_(len(results), 1)
 
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[],

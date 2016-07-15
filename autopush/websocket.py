@@ -30,15 +30,18 @@ not be publicly exposed.
 
 """
 import json
-import random
 import time
 import uuid
 from collections import defaultdict, namedtuple
 from functools import wraps
+from random import randrange
 
 import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
-from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
+from boto.dynamodb2.exceptions import (
+    ProvisionedThroughputExceededException,
+    ItemNotFound
+)
 from twisted.internet import reactor
 from twisted.internet.defer import (
     Deferred,
@@ -234,6 +237,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     # Testing purposes
     parent_class = WebSocketServerProtocol
+    randrange = randrange
 
     # Defer helpers
     def deferToThread(self, func, *args, **kwargs):
@@ -572,7 +576,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         """
         failure.trap(ProvisionedThroughputExceededException)
         self.transport.pauseProducing()
-        d = self.deferToLater(random.randrange(4, 9), self.err_finish_overload,
+        d = self.deferToLater(self.randrange(4, 9), self.err_finish_overload,
                               message_type)
         d.addErrback(self.trap_cancel)
 
@@ -629,9 +633,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         self.transport.pauseProducing()
 
-        d = self._register_user(existing_user)
-        d.addCallback(self._copy_new_data)
-        d.addCallback(self._check_collision)
+        d = self.deferToThread(self._register_user, existing_user)
+        d.addCallback(self._check_other_nodes)
         d.addErrback(self.trap_cancel)
         d.addErrback(self.err_overload, "hello")
         d.addErrback(self.err_hello)
@@ -639,21 +642,27 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         return d
 
     def _register_user(self, existing_user=True):
-        user_item = dict(
-            uaid=self.ps.uaid,
-            node_id=self.ap_settings.router_url,
-            connected_at=self.ps.connected_at,
-            router_type=self.ps.router_type,
-        )
+        """Register a returning or new user
 
-        # Write out the last_connect and current_month as applicable for new
-        # users
-        if not existing_user:
-            user_item["last_connect"] = generate_last_connect()
+        :type existing_user: bool
 
-            # New users get a record_version so we can track changes that
-            # may require old user records to be expired on the fly
-            user_item["record_version"] = USER_RECORD_VERSION
+        """
+        # If it's an existing user, verify the record is valid
+        user_item = None
+        if existing_user:
+            user_item = self._verify_user_record()
+
+        if not user_item:
+            # No valid user record, consider this a new user
+            self.ps.uaid = uuid.uuid4().hex
+            user_item = dict(
+                uaid=self.ps.uaid,
+                node_id=self.ap_settings.router_url,
+                connected_at=self.ps.connected_at,
+                router_type=self.ps.router_type,
+                last_connect=generate_last_connect(),
+                record_version=USER_RECORD_VERSION,
+            )
             if self.ps.use_webpush:
                 user_item["current_month"] = self.ps.message_month
 
@@ -661,8 +670,46 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if self.ps.wake_data:
             user_item["wake_data"] = self.ps.wake_data
 
-        return self.deferToThread(self.ap_settings.router.register_user,
-                                  user_item)
+        return self.ap_settings.router.register_user(user_item)
+
+    def _verify_user_record(self):
+        """Verify a user record is valid
+
+        Returns a record that is ready for registering in the database if
+        the user record was found.
+
+        :rtype: :class:`~boto.dynamodb2.items.Item` or None
+
+        """
+        try:
+            record = self.ap_settings.router.get_uaid(self.ps.uaid)
+        except ItemNotFound:
+            return None
+
+        # Validate webpush records
+        if self.ps.use_webpush:
+            # Current month must exist and be a valid prior month
+            if ("current_month" not in record) or record["current_month"] \
+                    not in self.ps.settings.message_tables:
+                self.force_retry(self.ap_settings.router.drop_user,
+                                 self.ps.uaid)
+                return None
+
+            # Determine if message table rotation is needed
+            if record["current_month"] != self.ps.message_month:
+                self.ps.message_month = record["current_month"]
+                self.ps.rotate_message_table = True
+
+        # Include and update last_connect if needed, otherwise exclude
+        if has_connected_this_month(record):
+            del record["last_connect"]
+        else:
+            record["last_connect"] = generate_last_connect()
+
+        # Update the node_id, connected_at for this node/connected_at
+        record["node_id"] = self.ap_settings.router_url
+        record["connected_at"] = self.ps.connected_at
+        return record
 
     def err_hello(self, failure):
         """errBack for hello failures"""
@@ -670,44 +717,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.log_failure(failure)
         self.returnError("hello", "error", 503)
 
-    def _copy_new_data(self, result):
-        """Copies data for a new user to the previous record for later
-        checks"""
-        _, previous, data = result
-        if "last_connect" in data:
-            previous["last_connect"] = data["last_connect"]
-        if "current_month" in data:
-            previous["current_month"] = data["current_month"]
-        return result
-
-    def _check_collision(self, result):
-        """callback to reset the UAID if router registration fails"""
-        registered, previous, _ = result
-
-        # Existing user with rotation, or new user getting rotation get to
-        # keep their UAID
-        existing_webpush_rotator = self.ps.use_webpush and \
-            previous.get("current_month")
-
-        # If registered and not a webpush user, continue
-        if not self.ps.use_webpush and registered:
-            return self._check_other_nodes(result)
-
-        # Or if we are a webpush user and have table rotation already
-        if existing_webpush_rotator:
-            return self._check_other_nodes(result)
-
-        # If registration fails, try resetting the UAID.
-        self.ps.uaid = uuid.uuid4().hex
-        d = self._register_user(existing_user=False)
-        d.addCallback(self._copy_new_data)
-        d.addCallback(self._check_other_nodes)
-        return d
-
     def _check_other_nodes(self, result):
         """callback to check other nodes for clients and send them a delete as
         needed"""
         self.transport.resumeProducing()
+
         registered, previous, _ = result
         if not registered:
             # Registration failed
@@ -749,60 +763,18 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # drop their connection
         timeout = self.ap_settings.wake_timeout if self.ps.wake_data else None
         self.setTimeout(timeout)
-
         self.finish_hello(previous)
-
-    def _update_last_connect(self, previous):
-        """Update last_connect given old router values if needed"""
-        if has_connected_this_month(previous):
-            return
-
-        self.force_retry(self.ap_settings.router.update_last_connect,
-                         self.ps.uaid)
 
     def finish_hello(self, previous):
         """callback for successful hello message, that sends hello reply"""
         self.ps._register = None
+        msg = {"messageType": "hello", "uaid": self.ps.uaid, "status": 200}
         if self.ps.use_webpush:
-            return self._check_message_table_rotation(previous)
+            msg["use_webpush"] = True
 
-        # Check and update last connect
-        self._update_last_connect(previous)
-        msg = {"messageType": "hello", "uaid": self.ps.uaid, "status": 200}
         if self.autoPingInterval:
             msg["ping"] = self.autoPingInterval
 
-        msg['env'] = self.ap_settings.env
-        self.ap_settings.clients[self.ps.uaid] = self
-        self.sendJSON(msg)
-        self.ps.metrics.increment("updates.client.hello", tags=self.base_tags)
-        self.process_notifications()
-
-    def _check_message_table_rotation(self, previous):
-        """Check for webpush users if we need to rotate the message table"""
-        self.transport.pauseProducing()
-        # Check for table rotation
-        cur_month = previous.get("current_month")
-        # Previous month user or new user, flag for message rotation and
-        # set the message_month to the router month
-        if cur_month != self.ps.message_month:
-            if cur_month not in self.ps.settings.message_tables:
-                # This UAID has expired. Force client to reregister.
-                self.ps.uaid = uuid.uuid4().hex
-                self._finish_webpush_hello()
-                return
-            self.ps.message_month = cur_month
-            self.ps.rotate_message_table = True
-
-        # Proceed with hello response
-        self._finish_webpush_hello()
-
-    def _finish_webpush_hello(self, *ignored_result):
-        self.transport.resumeProducing()
-        msg = {"messageType": "hello", "uaid": self.ps.uaid, "status": 200}
-        if self.autoPingInterval:
-            msg["ping"] = self.autoPingInterval
-        msg["use_webpush"] = True
         msg['env'] = self.ap_settings.env
         self.ap_settings.clients[self.ps.uaid] = self
         self.sendJSON(msg)
