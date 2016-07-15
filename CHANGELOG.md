@@ -1,3 +1,65 @@
+<a name="1.16.0"></a>
+## 1.16.0 (2016-07-15)
+
+
+#### Bug Fixes
+
+*   refactor register uaid lookup to verify proper records ([a01dabd7](https://github.com/mozilla-services/autopush/commit/a01dabd7808f4a050595fe25e274e7808eba2291), closes [#523](https://github.com/mozilla-services/autopush/issues/523))
+*   restore pragma line for full coverage ([677e72dd](https://github.com/mozilla-services/autopush/commit/677e72dda1cc6c8c4ee0a0d0103e1011a46e58d4))
+*   Invalidate UAIDs that are not lowercase or contain dashes ([265d7689](https://github.com/mozilla-services/autopush/commit/265d7689412afcd90bcf04b805abaea419bea4a7), closes [#519](https://github.com/mozilla-services/autopush/issues/519))
+*   log message errors as info instead of debug ([ccc2d685](https://github.com/mozilla-services/autopush/commit/ccc2d6858b27a0f3e542785293fcc57578bf5998), closes [#518](https://github.com/mozilla-services/autopush/issues/518))
+*   remove shared file inclusion for tests ([465bcb34](https://github.com/mozilla-services/autopush/commit/465bcb349c301a0f7048c5941042b9716eb0070e), closes [#515](https://github.com/mozilla-services/autopush/issues/515))
+*   include webpush handler in endpoint config ([b4493acb](https://github.com/mozilla-services/autopush/commit/b4493acbc58b6c23d4d2ec94ac6d63bf4d0b6911))
+*   Elevate GCM reported error states ([04080539](https://github.com/mozilla-services/autopush/commit/040805397c49842cc9b580aa05cd6368790e9319))
+*   handle different behavior in rotating table tests at month-end ([19973721](https://github.com/mozilla-services/autopush/commit/199737218444aaf50e9bbacd78e262967fccc734), closes [#502](https://github.com/mozilla-services/autopush/issues/502))
+*   remove failing key check from sentry logging ([6c90f8dc](https://github.com/mozilla-services/autopush/commit/6c90f8dcb5641e8f13199bbfaa20edfa66975279))
+*   add integration testing and verification of sentry reporting ([ee4e3398](https://github.com/mozilla-services/autopush/commit/ee4e3398eb3d525a54c0199ba93b76358c7fd1ef), closes [#493](https://github.com/mozilla-services/autopush/issues/493))
+*   Elevate GCM reported error states ([fb5ae0b3](https://github.com/mozilla-services/autopush/commit/fb5ae0b324678ce2f8ed0a2bc1fac5ac6b588c9e))
+*   handle different behavior in rotating table tests at month-end ([bd60b39e](https://github.com/mozilla-services/autopush/commit/bd60b39e3f99cd960f48d5cdb6cad2b58b24241f), closes [#502](https://github.com/mozilla-services/autopush/issues/502))
+*   remove failing key check from sentry logging ([3782024b](https://github.com/mozilla-services/autopush/commit/3782024b9de099df6650a776ba8dae6d9dc6379d))
+*   add integration testing and verification of sentry reporting ([9c70b88f](https://github.com/mozilla-services/autopush/commit/9c70b88f6c8515ac8f5bfdcc099075e0701123b7), closes [#493](https://github.com/mozilla-services/autopush/issues/493))
+
+#### Test
+
+*   lower time-outs for failed notification checks ([ed7a69f4](https://github.com/mozilla-services/autopush/commit/ed7a69f4e2a87451be52862425a0c5a45e24d0a9))
+*   fix/add remaining tests for 100% test coverage ([c505edf7](https://github.com/mozilla-services/autopush/commit/c505edf71d294ea7ed42212503a282fe78b241a9))
+
+#### Breaking Changes
+
+*   add AMI instance ID to the logged information ([058c601b](https://github.com/mozilla-services/autopush/commit/058c601b423e70ec191da35a5251e147aa1c26a8), closes [#483](https://github.com/mozilla-services/autopush/issues/483), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+*   add AMI instance ID to the logged information ([663eec02](https://github.com/mozilla-services/autopush/commit/663eec021b41482ea6171582fa35951b92cfdeb6), closes [#483](https://github.com/mozilla-services/autopush/issues/483), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+
+#### Features
+
+*   wait for tables to be active in pre-flight check ([fb143a9b](https://github.com/mozilla-services/autopush/commit/fb143a9b9068a1130607a5894c7e87ade1fbe8bc), closes [#433](https://github.com/mozilla-services/autopush/issues/433))
+*   add diagnostic CLI tool for endpoints ([a17679f3](https://github.com/mozilla-services/autopush/commit/a17679f3c9fede9833f451fd910781c924557ad6), closes [#509](https://github.com/mozilla-services/autopush/issues/509))
+*   change how bad bridge tokens are handled ([0c73fd0b](https://github.com/mozilla-services/autopush/commit/0c73fd0b39c93af0276df9d215dea2ed2b2d17dd))
+*   add metrics to bridge protocols ([e45b82dd](https://github.com/mozilla-services/autopush/commit/e45b82dd995f4dbe28e0b6888bc25404bdf8efc1))
+*   add AMI instance ID to the logged information ([058c601b](https://github.com/mozilla-services/autopush/commit/058c601b423e70ec191da35a5251e147aa1c26a8), closes [#483](https://github.com/mozilla-services/autopush/issues/483), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+*   refactor webpush endpoint for validation schemas ([c1923e1c](https://github.com/mozilla-services/autopush/commit/c1923e1ca827d919932e48c94d71b3d1ac15899a), closes [#379](https://github.com/mozilla-services/autopush/issues/379))
+*   refactor simplepush endpoint for validation schemas ([050d7038](https://github.com/mozilla-services/autopush/commit/050d7038c2ffb3c76dbf25872fc507071ae6e845))
+*   Add endpoint to test logging ([824d102d](https://github.com/mozilla-services/autopush/commit/824d102d53dce066a2c6ff49c5b730a2f684840e), closes [#478](https://github.com/mozilla-services/autopush/issues/478))
+*   change how bad bridge tokens are handled ([0eb471b6](https://github.com/mozilla-services/autopush/commit/0eb471b69f5af596cf020dd2c52e0657ff5b5f9e))
+*   add metrics to bridge protocols ([126203bb](https://github.com/mozilla-services/autopush/commit/126203bb7bd4a161191dc10202249822de404752))
+*   add AMI instance ID to the logged information ([663eec02](https://github.com/mozilla-services/autopush/commit/663eec021b41482ea6171582fa35951b92cfdeb6), closes [#483](https://github.com/mozilla-services/autopush/issues/483), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+*   refactor webpush endpoint for validation schemas ([f5f366fc](https://github.com/mozilla-services/autopush/commit/f5f366fc95c6bcb4eddb084c3c4eff8a7c5a1612), closes [#379](https://github.com/mozilla-services/autopush/issues/379))
+*   refactor simplepush endpoint for validation schemas ([d66102b7](https://github.com/mozilla-services/autopush/commit/d66102b74c22f442ce49ef35c6b2be15a81b5471))
+*   Add endpoint to test logging ([0684d898](https://github.com/mozilla-services/autopush/commit/0684d898b0ebdfcf75d10823ea999ee921f141f2), closes [#478](https://github.com/mozilla-services/autopush/issues/478))
+
+#### Chore
+
+*   add python27 dockerfile (#495) ([bfc4f16a](https://github.com/mozilla-services/autopush/commit/bfc4f16a79771c07f42de297d5036b7aa992fb26))
+*   add requirements - gnureadline for pypy (#477) ([58f9919d](https://github.com/mozilla-services/autopush/commit/58f9919d032cd94006c0b6b6b06d561d86089589))
+*   add default.nix for nix/nixos users ([62454d65](https://github.com/mozilla-services/autopush/commit/62454d65a85466553d76ab6f4ef3e6bdf9671c40))
+*   add python27 dockerfile (#495) ([183d2984](https://github.com/mozilla-services/autopush/commit/183d2984c1c45d3ffbb45369395196acf2c991fd))
+*   add requirements - gnureadline for pypy (#477) ([d2baf047](https://github.com/mozilla-services/autopush/commit/d2baf04793bdaa62945458ce4c26ae9e7b574cdd))
+*   add default.nix for nix/nixos users ([19e939b6](https://github.com/mozilla-services/autopush/commit/19e939b64415c3c0a705d62412ff1c4eac5a0615))
+* **Dockerfile:**
+  *  die quickly if build command fails (#476) ([1cb329fa](https://github.com/mozilla-services/autopush/commit/1cb329fa99f663b80189ff4eef745faeafdcc9a1))
+  *  die quickly if build command fails (#476) ([aecedaf6](https://github.com/mozilla-services/autopush/commit/aecedaf6f8a0256e0fe0058528ed830aa8ab1ef4))
+
+
+
 <a name="1.15.0"></a>
 ## 1.15.0 (2016-05-16)
 
