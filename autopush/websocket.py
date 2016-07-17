@@ -686,6 +686,12 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         except ItemNotFound:
             return None
 
+        # All records must have a router_type and connected_at, in some odd
+        # cases a record exists for some users that doesn't
+        if "router_type" not in record or "connected_at" not in record:
+            self.force_retry(self.ap_settings.router.drop_user, self.ps.uaid)
+            return None
+
         # Validate webpush records
         if self.ps.use_webpush:
             # Current month must exist and be a valid prior month
