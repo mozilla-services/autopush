@@ -484,6 +484,7 @@ class WebsocketTestCase(unittest.TestCase):
             uaid=orig_uaid,
             connected_at=ms_time(),
             current_month="message_2016_3",
+            router_type="simplepush",
         ))
 
         # router.register_user returns (registered, previous
@@ -565,6 +566,39 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(self.proto.base_tags, ['use_webpush:True'])
         return self._check_response(check_result)
 
+    def test_hello_with_missing_router_type(self):
+        self._connect()
+        uaid = uuid.uuid4().hex
+        router = self.proto.ap_settings.router
+        router.register_user(dict(
+            uaid=uaid,
+            connected_at=ms_time(),
+        ))
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                uaid=uaid))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            ok_(msg["uaid"] != uaid)
+        return self._check_response(check_result)
+
+    def test_hello_with_missing_current_month(self):
+        self._connect()
+        uaid = uuid.uuid4().hex
+        router = self.proto.ap_settings.router
+        router.register_user(dict(
+            uaid=uaid,
+            connected_at=ms_time(),
+            router_type="webpush",
+        ))
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                uaid=uaid, use_webpush=True))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            ok_(msg["uaid"] != uaid)
+        return self._check_response(check_result)
+
     def test_hello_with_uaid(self):
         self._connect()
         uaid = uuid.uuid4().hex
@@ -572,6 +606,7 @@ class WebsocketTestCase(unittest.TestCase):
         router.register_user(dict(
             uaid=uaid,
             connected_at=ms_time(),
+            router_type="simplepush",
         ))
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 uaid=uaid))
@@ -1657,6 +1692,7 @@ class WebsocketTestCase(unittest.TestCase):
         router.register_user(dict(
             uaid=uaid,
             connected_at=ms_time(),
+            router_type="simplepush",
         ))
 
         storage = self.proto.ap_settings.storage
@@ -1711,6 +1747,7 @@ class WebsocketTestCase(unittest.TestCase):
         router.register_user(dict(
             uaid=uaid,
             connected_at=ms_time(),
+            router_type="simplepush",
         ))
 
         storage = self.proto.ap_settings.storage
@@ -1772,6 +1809,7 @@ class WebsocketTestCase(unittest.TestCase):
         router.register_user(dict(
             uaid=uaid,
             connected_at=ms_time(),
+            router_type="simplepush",
         ))
 
         storage = self.proto.ap_settings.storage
