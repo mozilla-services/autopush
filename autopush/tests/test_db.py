@@ -10,7 +10,6 @@ from boto.dynamodb2.exceptions import (
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.items import Item
 from mock import Mock
-from moto import mock_dynamodb2
 from nose.tools import eq_, assert_raises
 
 from autopush.db import (
@@ -27,17 +26,18 @@ from autopush.db import (
 from autopush.metrics import SinkMetrics
 
 
-mock_db2 = mock_dynamodb2()
 dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
 dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
 
 
 def setUp():
-    mock_db2.start()
+    from .test_integration import setUp
+    setUp()
 
 
 def tearDown():
-    mock_db2.stop()
+    from .test_integration import tearDown
+    tearDown()
 
 
 class DbCheckTestCase(unittest.TestCase):
@@ -232,7 +232,7 @@ class MessageTestCase(unittest.TestCase):
         rows = m.query_2(uaid__eq=self.uaid, chidmessageid__eq=" ")
         results = list(rows)
         assert(len(results) == 1)
-        eq_(results[0]["chids"], set([]))
+        eq_(results[0]["chids"], None)
 
         # Test for the very unlikely case that there's no 'chid'
         m.connection.update_item = Mock()
@@ -377,12 +377,11 @@ class MessageTestCase(unittest.TestCase):
         data1 = str(uuid.uuid4())
         data2 = str(uuid.uuid4())
         time1 = self._nstime()
-        time2 = self._nstime()+100
         ttl = self._nstime()+1000
         message.store_message(self.uaid, chid, time1, ttl, data1, {})
-        message.update_message(self.uaid, chid, time2, ttl, data2, {})
+        message.update_message(self.uaid, chid, time1, ttl, data2, {})
         messages = list(message.fetch_messages(self.uaid))
-        eq_(data2, messages[0]['#dd'])
+        eq_(data2, messages[0]['data'])
 
     def test_update_message_fail(self):
         message = Message(get_rotating_message_table(), SinkMetrics)
@@ -476,25 +475,14 @@ class RouterTestCase(unittest.TestCase):
                                            connected_at="1234",
                                            node_id="asdf")))
 
-    def test_save_uaid(self):
-        uaid = str(uuid.uuid4())
-        r = get_router_table()
-        router = Router(r, SinkMetrics())
-        result = router.register_user(dict(uaid=uaid, node_id="me",
-                                      connected_at=1234))
-        eq_(result[0], True)
-        eq_(result[1], {"uaid": uaid,
-                        "connected_at": 1234,
-                        "node_id": "me"})
-        result = router.get_uaid(uaid)
-        eq_(bool(result), True)
-        eq_(result["node_id"], "me")
-
     def test_incomplete_uaid(self):
         uaid = str(uuid.uuid4())
         r = get_router_table()
         router = Router(r, SinkMetrics())
-        router.register_user(dict(uaid=uaid))
+        try:
+            router.register_user(dict(uaid=uaid))
+        except:
+            pass
         self.assertRaises(ItemNotFound, router.get_uaid, uaid)
         self.assertRaises(ItemNotFound, router.table.get_item,
                           consistent=True, uaid=uaid)
@@ -530,13 +518,13 @@ class RouterTestCase(unittest.TestCase):
         # Register a node user
         router.register_user(dict(uaid=dummy_uaid, node_id="asdf",
                                   connected_at=1234,
-                                  router_key="webpush"))
+                                  router_type="webpush"))
 
         # Verify
         user = router.get_uaid(dummy_uaid)
         eq_(user["node_id"], "asdf")
         eq_(user["connected_at"], 1234)
-        eq_(user["router_key"], "webpush")
+        eq_(user["router_type"], "webpush")
 
         # Clear
         router.clear_node(user)
@@ -545,7 +533,7 @@ class RouterTestCase(unittest.TestCase):
         user = router.get_uaid(dummy_uaid)
         eq_(user.get("node_id"), None)
         eq_(user["connected_at"], 1234)
-        eq_(user["router_key"], "webpush")
+        eq_(user["router_type"], "webpush")
 
     def test_node_clear_fail(self):
         r = get_router_table()
@@ -565,8 +553,8 @@ class RouterTestCase(unittest.TestCase):
         r = get_router_table()
         router = Router(r, SinkMetrics())
         # Register a node user
-        router.register_user(dict(uaid=uaid, node_id="asdf",
-                                  connected_at=1234))
+        router.table.put_item(data=dict(uaid=uaid, node_id="asdf",
+                                        connected_at=1234))
         result = router.drop_user(uaid)
         eq_(result, True)
         # Deleting already deleted record should return false.
