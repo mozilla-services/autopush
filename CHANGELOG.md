@@ -1,3 +1,17 @@
+<a name="1.16.1"></a>
+## 1.16.1 (2016-07-19)
+
+
+#### Bug Fixes
+
+*   catch InvalidToken exceptions from fernet ([b00ae57c](https://github.com/mozilla-services/autopush/commit/b00ae57c2b6f6613ce81c0567815c7336cd30783), closes [#530](https://github.com/mozilla-services/autopush/issues/530))
+*   overwrite existing messages instead of throwing an error ([aa738816](https://github.com/mozilla-services/autopush/commit/aa738816ca3dd7c5ed803cffaa14c7ef8abc9f5f), closes [#535](https://github.com/mozilla-services/autopush/issues/535))
+*   fix up AWS conditional binding and assoc. conditions ([9e3fedbe](https://github.com/mozilla-services/autopush/commit/9e3fedbefcfc3b35863020281f4eaadb2453fee2))
+*   remove use of buggy moto from websocket/db tests ([07fd0caf](https://github.com/mozilla-services/autopush/commit/07fd0cafe5fd1087173f7894030788d3a41b4e90), closes [#531](https://github.com/mozilla-services/autopush/issues/531))
+*   ensure router_type is present in all records ([aeeea3ab](https://github.com/mozilla-services/autopush/commit/aeeea3abf4cd697e6400bbe8dd61c5eb2b3131f9), closes [#526](https://github.com/mozilla-services/autopush/issues/526))
+
+
+
 <a name="1.16.0"></a>
 ## 1.16.0 (2016-07-15)
 
