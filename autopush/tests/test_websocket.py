@@ -435,6 +435,7 @@ class WebsocketTestCase(unittest.TestCase):
             uaid=orig_uaid,
             connected_at=ms_time(),
             current_month=msg_date,
+            router_type="webpush"
         ))
 
         def fake_msg(data):
@@ -1865,6 +1866,19 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps._register.addCallback(after_hello)
         self.proto.ps._register.addErrback(lambda x: d.errback(x))
         return d
+
+    def test_incomplete_uaid(self):
+        mm = self.proto.ap_settings.router = Mock()
+        fr = self.proto.force_retry = Mock()
+        uaid = uuid.uuid4().hex
+        mm.get_uaid.return_value = {
+            'uaid': uaid
+        }
+        self.proto.ps.uaid = uaid
+        reply = self.proto._verify_user_record()
+        eq_(reply, None)
+        assert(fr.called)
+        eq_(fr.call_args[0], (mm.drop_user, uaid))
 
 
 class RouterHandlerTestCase(unittest.TestCase):

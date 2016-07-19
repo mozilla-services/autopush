@@ -94,9 +94,9 @@ class GCMRouter(object):
         except KeyError:
             raise self._error("Server error, missing bridge credentials " +
                               "for %s" % creds.get("senderID"), 500)
-        except gcmclient.GCMAuthenticationError, e:
+        except gcmclient.GCMAuthenticationError as e:
             raise self._error("Authentication Error: %s" % e, 500)
-        except Exception, e:
+        except Exception as e:
             raise self._error("Unhandled exception in GCM Routing: %s" % e,
                               500)
         self.metrics.increment("updates.client.bridge.gcm.attempted",

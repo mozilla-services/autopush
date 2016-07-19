@@ -10,7 +10,7 @@ from boto.dynamodb2.exceptions import (
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.items import Item
 from mock import Mock
-from nose.tools import eq_, assert_raises
+from nose.tools import eq_, assert_raises, ok_
 
 from autopush.db import (
     get_rotating_message_table,
@@ -459,7 +459,8 @@ class RouterTestCase(unittest.TestCase):
         router.table.connection.update_item.side_effect = raise_error
         with self.assertRaises(ProvisionedThroughputExceededException):
             router.register_user(dict(uaid=dummy_uaid, node_id="me",
-                                 connected_at=1234))
+                                      connected_at=1234,
+                                      router_type="simplepush"))
 
     def test_clear_node_provision_failed(self):
         r = get_router_table()
@@ -473,19 +474,24 @@ class RouterTestCase(unittest.TestCase):
         with self.assertRaises(ProvisionedThroughputExceededException):
             router.clear_node(Item(r, dict(uaid=dummy_uaid,
                                            connected_at="1234",
-                                           node_id="asdf")))
+                                           node_id="asdf",
+                                           router_type="simplepush")))
 
     def test_incomplete_uaid(self):
+        # Older records may be incomplete. We can't inject them using normal
+        # methods.
         uaid = str(uuid.uuid4())
         r = get_router_table()
         router = Router(r, SinkMetrics())
+        router.table.get_item = Mock()
+        router.drop_user = Mock()
+        router.table.get_item.return_value = {"uaid": uuid.uuid4().hex}
         try:
             router.register_user(dict(uaid=uaid))
         except:
             pass
         self.assertRaises(ItemNotFound, router.get_uaid, uaid)
-        self.assertRaises(ItemNotFound, router.table.get_item,
-                          consistent=True, uaid=uaid)
+        ok_(router.drop_user.called)
 
     def test_save_new(self):
         r = get_router_table()
@@ -495,6 +501,7 @@ class RouterTestCase(unittest.TestCase):
         router.table.connection = Mock()
         router.table.connection.update_item.return_value = {}
         result = router.register_user(dict(uaid="", node_id="me",
+                                           router_type="simplepush",
                                            connected_at=1234))
         eq_(result[0], True)
 
@@ -507,7 +514,8 @@ class RouterTestCase(unittest.TestCase):
 
         router.table.connection = Mock()
         router.table.connection.update_item.side_effect = raise_condition
-        router_data = dict(uaid=dummy_uaid, node_id="asdf", connected_at=1234)
+        router_data = dict(uaid=dummy_uaid, node_id="asdf", connected_at=1234,
+                           router_type="simplepush")
         result = router.register_user(router_data)
         eq_(result, (False, {}, router_data))
 
@@ -519,7 +527,6 @@ class RouterTestCase(unittest.TestCase):
         router.register_user(dict(uaid=dummy_uaid, node_id="asdf",
                                   connected_at=1234,
                                   router_type="webpush"))
-
         # Verify
         user = router.get_uaid(dummy_uaid)
         eq_(user["node_id"], "asdf")
@@ -553,8 +560,9 @@ class RouterTestCase(unittest.TestCase):
         r = get_router_table()
         router = Router(r, SinkMetrics())
         # Register a node user
-        router.table.put_item(data=dict(uaid=uaid, node_id="asdf",
-                                        connected_at=1234))
+        router.register_user(dict(uaid=uaid, node_id="asdf",
+                                  router_type="simplepush",
+                                  connected_at=1234))
         result = router.drop_user(uaid)
         eq_(result, True)
         # Deleting already deleted record should return false.

@@ -624,7 +624,7 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.assertTrue(result)
             self.endpoint.set_status.assert_called_with(500, None)
-            assert(self.router_mock.register_user.called)
+            ok_(not self.router_mock.register_user.called)
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put(None, dummy_uaid)
