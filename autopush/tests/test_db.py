@@ -306,6 +306,35 @@ class MessageTestCase(unittest.TestCase):
         all_messages = list(message.fetch_messages(self.uaid))
         eq_(len(all_messages), 0)
 
+    def test_message_storage_overwrite(self):
+        """Test that store_message can overwrite existing messages which
+        can occur in some reconnect cases but shouldn't error"""
+        chid = str(uuid.uuid4())
+        chid2 = str(uuid.uuid4())
+        m = get_rotating_message_table()
+        message = Message(m, SinkMetrics())
+        message.register_channel(self.uaid, chid)
+        message.register_channel(self.uaid, chid2)
+
+        data1 = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        ttl = int(time.time())+100
+        time1, time2 = self._nstime(), self._nstime()+1
+        message.store_message(self.uaid, chid, time1, ttl, data1, {})
+        message.store_message(self.uaid, chid, time1, ttl, data2, {})
+        message.store_message(self.uaid, chid2, time2, ttl, data1, {})
+
+        all_messages = list(message.fetch_messages(self.uaid))
+        eq_(len(all_messages), 2)
+
+        message.delete_messages_for_channel(self.uaid, chid2)
+        all_messages = list(message.fetch_messages(self.uaid))
+        eq_(len(all_messages), 1)
+
+        message.delete_message(self.uaid, chid, time1)
+        all_messages = list(message.fetch_messages(self.uaid))
+        eq_(len(all_messages), 0)
+
     def test_delete_user(self):
         chid = str(uuid.uuid4())
         chid2 = str(uuid.uuid4())

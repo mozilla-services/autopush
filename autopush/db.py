@@ -411,7 +411,7 @@ class Message(object):
         if data:
             item["headers"] = headers
             item["data"] = data
-        self.table.put_item(data=item)
+        self.table.put_item(data=item, overwrite=True)
         return True
 
     @track_provisioned
