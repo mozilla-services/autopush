@@ -10,7 +10,6 @@ from boto.dynamodb2.exceptions import (
 )
 from cyclone.web import Application
 from mock import Mock, patch
-from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
 from txstatsd.metrics.metrics import Metrics
 from twisted.internet import reactor
@@ -37,16 +36,15 @@ from autopush.utils import base64url_encode
 from .test_router import MockAssist
 
 
-mock_dynamodb2 = mock_dynamodb2()
-
-
 def setUp():
-    mock_dynamodb2.start()
+    from .test_integration import setUp
+    setUp()
     create_rotating_message_table()
 
 
 def tearDown():
-    mock_dynamodb2.stop()
+    from .test_integration import tearDown
+    tearDown()
 
 
 class WebsocketTestCase(unittest.TestCase):
@@ -433,7 +431,7 @@ class WebsocketTestCase(unittest.TestCase):
             "current_month": msg_date,
         }
         router = self.proto.ap_settings.router
-        router.register_user(dict(
+        router.table.put_item(data=dict(
             uaid=orig_uaid,
             connected_at=ms_time(),
             current_month=msg_date,
@@ -570,10 +568,11 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         uaid = uuid.uuid4().hex
         router = self.proto.ap_settings.router
-        router.register_user(dict(
+        router.table.put_item(data=dict(
             uaid=uaid,
-            connected_at=ms_time(),
+            connected_at=ms_time()-1000,
         ))
+
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 uaid=uaid))
 
