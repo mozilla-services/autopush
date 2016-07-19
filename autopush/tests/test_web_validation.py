@@ -5,6 +5,7 @@ import ecdsa
 from boto.dynamodb2.exceptions import (
     ItemNotFound,
 )
+from cryptography.fernet import InvalidToken
 from jose import jws
 from marshmallow import Schema, fields
 from mock import Mock
@@ -335,6 +336,19 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         def throw_item(*args, **kwargs):
             raise InvalidTokenException("Not found")
+
+        schema.context["settings"].parse_endpoint.side_effect = throw_item
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(self._make_test_data())
+
+        eq_(cm.exception.errno, 102)
+
+    def test_invalid_fernet_token(self):
+        schema = self._makeFUT()
+
+        def throw_item(*args, **kwargs):
+            raise InvalidToken
 
         schema.context["settings"].parse_endpoint.side_effect = throw_item
 
