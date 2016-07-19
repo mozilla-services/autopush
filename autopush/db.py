@@ -18,6 +18,7 @@ from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table
 from boto.dynamodb2.types import NUMBER
 
+from autopush.exceptions import AutopushException
 from autopush.utils import generate_hash
 
 key_hash = ""
@@ -582,6 +583,10 @@ class Router(object):
         conn = self.table.connection
         db_key = self.encode({"uaid": hasher(data["uaid"])})
         del data["uaid"]
+        if "router_type" not in data or "connected_at" not in data:
+            # Not specifying these values will generate an exception in AWS.
+            raise AutopushException("data is missing router_type"
+                                    "or connected_at")
         # Generate our update expression
         expr = "SET " + ", ".join(["%s=:%s" % (x, x) for x in data.keys()])
         expr_values = self.encode({":%s" % k: v for k, v in data.items()})

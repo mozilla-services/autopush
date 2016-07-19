@@ -569,12 +569,8 @@ class EndpointHandler(AutoendpointHandler):
         # TODO: Add some custom wake logic here
 
         # Were we told to update the router data?
-        if response.router_data is not None:
-            if not response.router_data:
-                del uaid_data["router_data"]
-                del uaid_data["router_type"]
-            else:
-                uaid_data["router_data"] = response.router_data
+        if response.router_data:
+            uaid_data["router_data"] = response.router_data
             uaid_data["connected_at"] = int(time.time() * 1000)
             d = deferToThread(self.ap_settings.router.register_user,
                               uaid_data)
