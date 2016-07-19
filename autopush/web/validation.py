@@ -7,6 +7,7 @@ from functools import wraps
 from boto.dynamodb2.exceptions import (
     ItemNotFound,
 )
+from cryptography.fernet import InvalidToken
 from marshmallow import (
     Schema,
     fields,
@@ -194,7 +195,7 @@ class WebPushSubscriptionSchema(Schema):
                 version=d["api_ver"],
                 ckey_header=d["ckey_header"],
             )
-        except InvalidTokenException:
+        except (InvalidTokenException, InvalidToken):
             raise InvalidRequest("invalid token", errno=102)
         return result
 
