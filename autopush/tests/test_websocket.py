@@ -1261,11 +1261,9 @@ class WebsocketTestCase(unittest.TestCase):
 
         def wait_for_times():  # pragma: nocover
             if len(self.proto.log.failure.mock_calls) > 0:
-                try:
-                    eq_(len(self.proto.log.failure.mock_calls), 1)
-                finally:
-                    d.callback(True)
-                    return
+                eq_(len(self.proto.log.failure.mock_calls), 1)
+                d.callback(True)
+                return
             reactor.callLater(0.1, wait_for_times)
 
         reactor.callLater(0.1, wait_for_times)
