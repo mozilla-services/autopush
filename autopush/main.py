@@ -165,6 +165,25 @@ def add_external_router_args(parser):
                         env_var="GCM_COLLAPSEKEY")
     parser.add_argument('--senderid_list', help='SenderIDs to load to S3',
                         type=str, default="{}")
+    # FCM
+    parser.add_argument('--fcm_enabled', help="Enable FCM Bridge",
+                        action="store_true", default=False,
+                        env_var="FCM_ENABLED")
+    label = "FCM Router:"
+    parser.add_argument('--fcm_ttl', help="%s Time to Live" % label,
+                        type=int, default=60, env_var="FCM_TTL")
+    parser.add_argument('--fcm_dryrun',
+                        help="%s Dry run (no message sent)" % label,
+                        action="store_true", default=False,
+                        env_var="FCM_DRYRUN")
+    parser.add_argument('--fcm_collapsekey',
+                        help="%s string to collapse messages" % label,
+                        type=str, default="simplepush",
+                        env_var="FCM_COLLAPSEKEY")
+    parser.add_argument('--fcm_auth', help='Auth Key for FCM',
+                        type=str, default="")
+    parser.add_argument('--fcm_senderid', help='SenderID for FCM',
+                        type=str, default="")
     # Apple Push Notification system (APNs) for iOS
     parser.add_argument('--apns_enabled', help="Enable APNS Bridge",
                         action="store_true", default=False,
@@ -311,6 +330,20 @@ def make_settings(args, **kwargs):
                               "collapsekey": args.gcm_collapsekey,
                               "senderIDs": senderIDs,
                               "senderid_list": args.senderid_list}
+    if args.fcm_enabled:
+        # Create a common gcmclient
+        if not args.fcm_auth:
+            log.critical(format="No Authorization Key found for FCM")
+            return
+        if not args.fcm_senderid:
+            log.critical(format="No SenderID found for FCM")
+            return
+        router_conf["fcm"] = {"ttl": args.fcm_ttl,
+                              "dryrun": args.fcm_dryrun,
+                              "max_data": args.max_data,
+                              "collapsekey": args.fcm_collapsekey,
+                              "auth": args.fcm_auth,
+                              "senderid": args.fcm_senderid}
 
     ami_id = None
     # Not a fan of double negatives, but this makes more understandable args

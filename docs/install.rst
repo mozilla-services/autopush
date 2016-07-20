@@ -62,13 +62,14 @@ environment variable, and add your OpenSSL library path to ``LDFLAGS`` and
     # `/usr/local`.
     export LDFLAGS="-L/usr/local/lib" CFLAGS="-I/usr/local/include"
 
-Notes on GCM support
+Notes on GCM/FCM support
 ====================
-autopush is capable of routing messages over Google Cloud Messaging for android
-devices. You will need to set up a valid GCM `account <http://developer.android.com/google/gcm/index.html>`_. Once you have an account open the Google Developer Console:
+autopush is capable of routing messages over Google Cloud Messaging/Firebase Cloud Messaging for android
+devices. You will need to set up a valid `GCM <http://developer.android.com/google/gcm/index.html>`_ / `FCM <https://firebase.google.com/docs/cloud-messaging/>`_ account. Once you have an account open the Google Developer Console:
 
 * create a new project. Record the Project Number as "SENDER_ID". You will need this value for your android application.
-* create a new Auth Credential Key for your project. This is available under **APIs & Auth** >> **Credentials** of the Google Developer Console. Store this value as ``gcm_apikey`` in ``.autopush_endpoint`` server configuration file.
+* create a new Auth Credential Key for your project. This is available under **APIs & Auth** >> **Credentials** of the Google Developer Console. Store this value as ``gcm_apikey`` or ``fcm_apikey`` (as appropriate) in ``.autopush_endpoint`` server configuration file.
 * add ``gcm_enabled`` to the ``.autopush_shared`` server configuration file to enable GCM routing.
+* add ``fcm_enabled`` to the ``.autopush_shared`` server configuration file to enable FCM routing.
 
-Additional notes on using the GCM bridge are available `on the wiki <https://github.com/mozilla-services/autopush/wiki/Bridging-Via-GCM>`_.
+Additional notes on using the GCM/FCM bridge are available `on the wiki <https://github.com/mozilla-services/autopush/wiki/Bridging-Via-GCM>`_.

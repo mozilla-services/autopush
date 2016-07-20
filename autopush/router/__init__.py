@@ -8,5 +8,7 @@ from autopush.router.apnsrouter import APNSRouter
 from autopush.router.gcm import GCMRouter
 from autopush.router.simple import SimpleRouter
 from autopush.router.webpush import WebPushRouter
+from autopush.router.fcm import FCMRouter
 
-__all__ = ["APNSRouter", "GCMRouter", "SimpleRouter", "WebPushRouter"]
+__all__ = ["APNSRouter", "FCMRouter", "GCMRouter", "SimpleRouter",
+           "WebPushRouter"]
