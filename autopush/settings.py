@@ -66,7 +66,7 @@ class AutopushSettings(object):
                  endpoint_scheme=None,
                  endpoint_hostname=None,
                  endpoint_port=None,
-                 router_conf={},
+                 router_conf=None,
                  router_tablename="router",
                  router_read_throughput=5,
                  router_write_throughput=5,
@@ -84,7 +84,7 @@ class AutopushSettings(object):
                  wake_timeout=0,
                  env='development',
                  enable_cors=False,
-                 senderid_list={},
+                 senderid_list=None,
                  hello_timeout=0,
                  bear_hash_key=None,
                  preflight_uaid="deadbeef00000000deadbeef000000000",
@@ -138,6 +138,8 @@ class AutopushSettings(object):
         self.endpoint_hostname = endpoint_hostname or self.hostname
         self.router_hostname = router_hostname or self.hostname
 
+        if router_conf is None:
+            router_conf = {}
         self.router_conf = router_conf
         self.router_url = canonical_url(
             router_scheme or 'http',
