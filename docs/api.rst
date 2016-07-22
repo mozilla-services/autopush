@@ -17,6 +17,7 @@ documentation is organized alphabetically by module name.
    api/protocol
    api/router/apnsrouter
    api/router/gcm
+   api/router/fcm
    api/router/interface
    api/router/simple
    api/senderids

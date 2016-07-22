@@ -220,6 +220,12 @@ class EndpointMainTestCase(unittest.TestCase):
         senderid_list = '{"12345":{"auth":"abcd"}}'
         key_hash = "supersikkret"
         no_aws = True
+        fcm_enabled = True
+        fcm_ttl = 999
+        fcm_dryrun = False
+        fcm_collapsekey = "collapse"
+        fcm_senderid = '12345'
+        fcm_auth = 'abcde'
 
     def setUp(self):
         mock_s3().start()
@@ -271,6 +277,18 @@ class EndpointMainTestCase(unittest.TestCase):
         ap = make_settings(self.test_arg)
         eq_(ap, None)
         self.test_arg.senderid_list = oldList
+
+    def test_bad_fcm_senders(self):
+        old_auth = self.test_arg.fcm_auth
+        old_senderid = self.test_arg.fcm_senderid
+        self.test_arg.fcm_auth = ""
+        ap = make_settings(self.test_arg)
+        eq_(ap, None)
+        self.test_arg.fcm_auth = old_auth
+        self.test_arg.fcm_senderid = ""
+        ap = make_settings(self.test_arg)
+        eq_(ap, None)
+        self.test_arg.fcm_senderid = old_senderid
 
     def test_gcm_start(self):
         endpoint_main([

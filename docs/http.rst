@@ -144,7 +144,7 @@ Send a notification to the given endpoint identified by it's `token`.
     .. note::
 
         Some bridged connections require data transcription and may limit the
-        length of data that can be sent. For instance, using a GCM bridge
+        length of data that can be sent. For instance, using a GCM/FCM bridge
         will require that the data be converted to base64. This means that
         data may be limited to only 2744 bytes instead of the normal 4096
         bytes.
@@ -242,7 +242,7 @@ Push Service Bridge HTTP Interface
 Push allows for remote devices to perform some functions using an HTTP
 interface. This is mostly used by devices that are bridging via an
 external protocol like
-`GCM <https://developers.google.com/cloud-messaging/>`__ or
+`GCM <https://developers.google.com/cloud-messaging/>`__/`FCM <https://firebase.google.com/docs/cloud-messaging/>`__ or
 `APNs <https://developer.apple.com/library/ios/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Introduction.html#//apple_ref/doc/uid/TP40008196-CH1-SW1>`__. All message bodies must be UTF-8 encoded.
 
 Lexicon
@@ -252,13 +252,13 @@ For the following call definitions:
 
    :{type}: The bridge type.
 
-Allowed bridges are `gcm` (Google Cloud Messaging) and `apns` (Apple
-Push Notification system)
+Allowed bridges are `gcm` (Google Cloud Messaging), `fcm` (Firebase Cloud
+Messaging), and `apns` (Apple Push Notification system)
 
    :{token}: The bridge specific public exchange token
 
 Each protocol requires a unique token that addresses the remote application.
-For GCM, this is the `SenderID` and is pre-negotiated outside of the push
+For GCM/FCM, this is the `SenderID` and is pre-negotiated outside of the push
 service.
 
    :{instanceid}: The bridge specific private identifier token
@@ -319,7 +319,7 @@ example:
 
 .. code-block:: http
 
-    > POST /v1/gcm/a1b2c3/registration
+    > POST /v1/fcm/a1b2c3/registration
     >
     > {"token": "1ab2c3"}
 
@@ -371,7 +371,7 @@ example:
 
 .. code-block:: http
 
-    > PUT /v1/gcm/a1b2c3/registration/abcdef012345
+    > PUT /v1/fcm/a1b2c3/registration/abcdef012345
     > Authorization: Bearer 0123abcdef
     >
     > {"token": "5e6g7h8i"}
@@ -415,7 +415,7 @@ example:
 
 .. code-block:: http
 
-    > POST /v1/gcm/a1b2c3/registration/abcdef012345/subscription
+    > POST /v1/fcm/a1b2c3/registration/abcdef012345/subscription
     > Authorization: Bearer 0123abcdef
     >
     > {}
