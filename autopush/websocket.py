@@ -73,6 +73,8 @@ from autopush.noseplugin import track_object
 
 
 USER_RECORD_VERSION = 1
+DEFAULT_WS_ERR = "http://autopush.readthedocs.io/en/" \
+                 "latest/api/websocket.html#private-http-endpoint"
 
 
 def extract_code(data):
@@ -555,12 +557,16 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         ).addCallback(IgnoreBody.ignore)
         d.addErrback(self.log_failure, extra="Failed to notify node")
 
-    def returnError(self, messageType, reason, statusCode, close=True):
+    def returnError(self, messageType, reason, statusCode, close=True,
+                    message="", url=DEFAULT_WS_ERR):
         """Return an error to a client, and optionally shut down the connection
         safely"""
-        self.sendJSON({"messageType": messageType,
-                       "reason": reason,
-                       "status": statusCode})
+        send = {"messageType": messageType,
+                "reason": reason,
+                "status": statusCode}
+        if url:
+            send["more_info"] = url
+        self.sendJSON(send)
         if close:
             self.sendClose()
 
@@ -723,7 +729,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.log_failure(failure)
         self.returnError("hello", "error", 503)
 
-    def _check_other_nodes(self, result):
+    def _check_other_nodes(self, result, url=DEFAULT_WS_ERR):
         """callback to check other nodes for clients and send them a delete as
         needed"""
         self.transport.resumeProducing()
@@ -732,7 +738,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if not registered:
             # Registration failed
             msg = {"messageType": "hello", "reason": "already_connected",
-                   "status": 500}
+                   "status": 500,
+                   "more_info": url}
             self.sendJSON(msg)
             return
 
@@ -1008,7 +1015,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def error_register(self, fail):
         """errBack handler for registering to fail"""
         self.transport.resumeProducing()
-        msg = {"messageType": "register", "status": 500}
+        msg = {"messageType": "register", "status": 500,
+               "reason": "An unexpected server error occurred"}
         self.sendJSON(msg)
 
     def finish_register(self, endpoint, chid):
@@ -1223,11 +1231,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if self.ps._check_notifications or self.ps._more_notifications:
             self.process_notifications()
 
-    def bad_message(self, typ, message=None):
+    def bad_message(self, typ, message=None, url=DEFAULT_WS_ERR):
         """Error helper for sending a 401 status back"""
-        msg = {"messageType": typ, "status": 401}
+        msg = {"messageType": typ, "status": 401, "more_info": url}
         if message:
-            msg["message"] = message
+            msg["reason"] = message
         self.sendJSON(msg)
 
     def _newer_notification_sent(self, channel_id, version):
@@ -1293,6 +1301,7 @@ class RouterHandler(cyclone.web.RequestHandler, ErrorLogger):
 
         if client.paused:
             self.set_status(503)
+
             settings.metrics.increment("updates.router.busy")
             return self.write("Client busy.")
 

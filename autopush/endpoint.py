@@ -52,6 +52,8 @@ from autopush.utils import (
     extract_jwt,
     base64url_encode,
 )
+from autopush.web.base import DEFAULT_ERR_URL
+
 
 # Our max TTL is 60 days realistically with table rotation, so we hard-code it
 MAX_TTL = 60 * 60 * 24 * 60
@@ -193,16 +195,18 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     #                    Error Callbacks
     #############################################################
     def _write_response(self, status_code, errno, message=None, headers=None,
-                        reason=None):
+                        reason=None, url=None):
         """Writes out a full JSON error and sets the appropriate status"""
         self.set_status(status_code, reason)
         error_data = dict(
             code=status_code,
             errno=errno,
-            error=status_codes.get(status_code, reason or "")
+            error=status_codes.get(status_code, reason or ""),
         )
         if message:
             error_data["message"] = message
+        if status_code > 299 and url is None:
+            error_data["more_info"] = DEFAULT_ERR_URL
         self.write(json.dumps(error_data))
         self.set_header("Content-Type", "application/json")
         if headers:
@@ -210,9 +214,9 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
                 self.set_header(header, headers.get(header))
         self.finish()
 
-    def _write_unauthorized_response(self, message=None):
+    def _write_unauthorized_response(self, message="Invalid authentication"):
         headers = {"www-authenticate": AUTH_SCHEME}
-        self._write_response(401, 109, message, headers)
+        self._write_response(401, errno=109, message=message, headers=headers)
 
     def _response_err(self, fail):
         """errBack for all exceptions that should be logged
@@ -224,14 +228,16 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         fmt = fail.value.message or 'Exception'
         self.log.failure(format=fmt, failure=fail,
                          status_code=500, errno=999, **self._client_info)
-        self._write_response(500, 999)
+        self._write_response(500, errno=999,
+                             message="Unexpected server error occurred")
 
     def _overload_err(self, fail):
         """errBack for throughput provisioned exceptions"""
         fail.trap(ProvisionedThroughputExceededException)
         self.log.info(format="Throughput Exceeded", status_code=503,
                       errno=201, **self._client_info)
-        self._write_response(503, 201)
+        self._write_response(503, errno=201,
+                             message="Please slow message send rate")
 
     def _router_response(self, response):
         for name, val in response.headers.items():
@@ -276,7 +282,9 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         self.log.info(format="UAID not found in AWS.",
                       status_code=410, errno=103,
                       **self._client_info)
-        self._write_response(410, 103)
+        self._write_response(410, errno=103,
+                             message="Endpoint has expired. "
+                                     "Do not send messages to this endpoint.")
 
     def _token_err(self, fail):
         """errBack for token decryption fail"""
@@ -284,7 +292,8 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         self.log.info(format="Invalid token",
                       status_code=400, errno=102,
                       **self._client_info)
-        self._write_response(400, 102)
+        self._write_response(400, 102,
+                             message="Invalid endpoint.")
 
     def _auth_err(self, fail):
         """errBack for invalid auth token"""
@@ -301,7 +310,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         self.log.info(format="CHID not found in AWS.",
                       status_code=410, errno=106,
                       **self._client_info)
-        self._write_response(410, 106)
+        self._write_response(410, 106, message="Invalid endpoint.")
 
     #############################################################
     #                    Utility Methods
@@ -441,7 +450,7 @@ class EndpointHandler(AutoendpointHandler):
                        "web-push-encryption")
             self._write_response(
                 400,
-                110,
+                errno=110,
                 message="You're using outdated encryption; "
                 "Please update to the format described in " + wpe_url)
             return
@@ -500,7 +509,8 @@ class EndpointHandler(AutoendpointHandler):
                                  for x in req_fields]):
                 self.log.debug(format="Client error", status_code=400,
                                errno=101, **self._client_info)
-                return self._write_response(400, 101)
+                return self._write_response(
+                    400, errno=101, message="Missing necessary crypto keys.")
             if ("encryption-key" in self.request.headers and
                     "crypto-key" in self.request.headers):
                 self.log.debug(format="Client error", status_code=400,
