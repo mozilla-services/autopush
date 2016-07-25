@@ -1198,7 +1198,8 @@ class EndpointTestCase(unittest.TestCase):
         endpoint = self.endpoint
         endpoint.ap_settings.cors = True
         endpoint.prepare()
-        endpoint.head(None)
+        args = {"api_ver": "v1", "token": "test"}
+        endpoint.head(args)
         eq_(endpoint._headers[ch1], "*")
         eq_(endpoint._headers[ch2], self.CORS_METHODS)
         eq_(endpoint._headers[ch3], self.CORS_HEADERS)
@@ -1212,7 +1213,8 @@ class EndpointTestCase(unittest.TestCase):
         endpoint = self.endpoint
         endpoint.ap_settings.cors = True
         endpoint.prepare()
-        endpoint.options(None)
+        args = {"api_ver": "v1", "token": "test"}
+        endpoint.options(args)
         eq_(endpoint._headers[ch1], "*")
         eq_(endpoint._headers[ch2], self.CORS_METHODS)
         eq_(endpoint._headers[ch3], self.CORS_HEADERS)

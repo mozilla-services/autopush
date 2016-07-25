@@ -104,7 +104,8 @@ class TestBase(unittest.TestCase):
         base = self.base
         base.ap_settings.cors = True
         base.prepare()
-        base.head(None)
+        args = {"api_ver": "v1", "token": "test"}
+        base.head(args)
         eq_(base._headers[ch1], "*")
         eq_(base._headers[ch2], self.CORS_METHODS)
         eq_(base._headers[ch3], self.CORS_HEADERS)
@@ -115,10 +116,13 @@ class TestBase(unittest.TestCase):
         ch2 = "Access-Control-Allow-Methods"
         ch3 = "Access-Control-Allow-Headers"
         ch4 = "Access-Control-Expose-Headers"
+        # These should match the full endpoint arguments specified in
+        # autopush.main.endpoint_main
+        args = {"api_ver": "v1", "token": "test"}
         base = self.base
         base.ap_settings.cors = True
         base.prepare()
-        base.options(None)
+        base.options(args)
         eq_(base._headers[ch1], "*")
         eq_(base._headers[ch2], self.CORS_METHODS)
         eq_(base._headers[ch3], self.CORS_HEADERS)
