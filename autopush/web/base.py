@@ -29,6 +29,9 @@ status_codes = {
     503: "Service Unavailable",
 }
 
+DEFAULT_ERR_URL = ("http://autopush.readthedocs.io/en/latest/http.html"
+                   "#error-codes")
+
 
 class Notification(namedtuple("Notification",
                    "version data channel_id headers ttl")):
@@ -141,13 +144,15 @@ class BaseHandler(cyclone.web.RequestHandler):
     #############################################################
     #                    Error Callbacks
     #############################################################
-    def _write_response(self, status_code, errno, message=None, headers=None):
+    def _write_response(self, status_code, errno, message=None, headers=None,
+                        url=DEFAULT_ERR_URL):
         """Writes out a full JSON error and sets the appropriate status"""
         self.set_status(status_code)
         error_data = dict(
             code=status_code,
             errno=errno,
-            error=status_codes.get(status_code, "")
+            error=status_codes.get(status_code, ""),
+            more_info=url,
         )
         if message:
             error_data["message"] = message
@@ -165,7 +170,9 @@ class BaseHandler(cyclone.web.RequestHandler):
         self.log.info(format="Request validation error",
                       status_code=exc.status_code,
                       errno=exc.errno)
-        self._write_response(exc.status_code, exc.errno, headers=exc.headers)
+        self._write_response(exc.status_code, exc.errno,
+                             message="Request did not validate",
+                             headers=exc.headers)
 
     def _response_err(self, fail):
         """errBack for all exceptions that should be logged
@@ -177,14 +184,16 @@ class BaseHandler(cyclone.web.RequestHandler):
         fmt = fail.value.message or 'Exception'
         self.log.failure(format=fmt, failure=fail,
                          status_code=500, errno=999, **self._client_info)
-        self._write_response(500, 999)
+        self._write_response(500, 999, message="An unexpected server error"
+                                               " occurred.")
 
     def _overload_err(self, fail):
         """errBack for throughput provisioned exceptions"""
         fail.trap(ProvisionedThroughputExceededException)
         self.log.info(format="Throughput Exceeded", status_code=503,
                       errno=201, **self._client_info)
-        self._write_response(503, 201)
+        self._write_response(503, 201,
+                             message="Please slow message send rate")
 
     def _router_response(self, response):
         for name, val in response.headers.items():

@@ -1701,7 +1701,7 @@ class RegistrationTestCase(unittest.TestCase):
             # sha256(dummy_key).digest()
             eq_(cleartext[32:],
                 ('47aedd050b9e19171f0fa7b8b65ca670'
-                '28f0bc92cd3f2cd3682b1200ec759007').decode('hex'))
+                 '28f0bc92cd3f2cd3682b1200ec759007').decode('hex'))
             return 'abcd123'
         self.fernet_mock.configure_mock(**{
             'encrypt.side_effect': mock_encrypt,

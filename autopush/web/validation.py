@@ -206,7 +206,7 @@ class WebPushSubscriptionSchema(Schema):
         except ItemNotFound:
             raise InvalidRequest("UAID not found", status_code=410, errno=103)
 
-        if result.get("router_type") not in ["webpush", "gcm", "apns"]:
+        if result.get("router_type") not in ["webpush", "gcm", "apns", "fcm"]:
             raise InvalidRequest("Wrong URL for user", errno=108)
 
         # Propagate the looked up user data back out
