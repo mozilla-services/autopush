@@ -1018,6 +1018,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         msg = {"messageType": "register", "status": 500,
                "reason": "An unexpected server error occurred"}
         self.sendJSON(msg)
+        self.log_failure(fail, extra="Failed to register")
 
     def finish_register(self, endpoint, chid):
         """callback for successful endpoint creation, sends register reply"""
@@ -1042,6 +1043,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.sendJSON(msg)
         self.ps.metrics.increment("updates.client.register",
                                   tags=self.base_tags)
+        self.log.info(format="Register", channelID=chid,
+                      endpoint=endpoint,
+                      uaid_hash=self.ps.uaid_hash,
+                      user_agent=self.ps.user_agent)
 
     def process_unregister(self, data):
         """Process an unregister message"""
@@ -1056,12 +1061,12 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.ps.metrics.increment("updates.client.unregister",
                                   tags=self.base_tags)
 
-        # Log out the unregister if it has a code in it
+        event = dict(format="Unregister", channelID=chid,
+                     uaid_hash=self.ps.uaid_hash,
+                     user_agent=self.ps.user_agent)
         if "code" in data:
-            code = extract_code(data)
-            self.log.info(format="Unregister", channelID=chid,
-                          uaid_hash=self.ps.uaid_hash,
-                          user_agent=self.ps.user_agent, code=code)
+            event["code"] = extract_code(data)
+        self.log.info(**event)
 
         # Clear out any existing tracked messages for this channel
         if self.ps.use_webpush:
