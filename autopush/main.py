@@ -317,6 +317,10 @@ def make_settings(args, **kwargs):
         # Create a common gcmclient
         try:
             senderIDs = json.loads(args.senderid_list)
+        except (ValueError, TypeError):
+            log.critical(format="Invalid JSON specified for senderid_list")
+            return
+        try:
             # This is an init check to verify that things are configured
             # correctly. Otherwise errors may creep in later that go
             # unaccounted.
@@ -328,8 +332,7 @@ def make_settings(args, **kwargs):
                               "dryrun": args.gcm_dryrun,
                               "max_data": args.max_data,
                               "collapsekey": args.gcm_collapsekey,
-                              "senderIDs": senderIDs,
-                              "senderid_list": args.senderid_list}
+                              "senderIDs": senderIDs}
     if args.fcm_enabled:
         # Create a common gcmclient
         if not args.fcm_auth:
@@ -421,6 +424,8 @@ def connection_main(sysargs=None, use_files=True):
         hello_timeout=args.hello_timeout,
         preflight_uaid="deadbeef000000000deadbeef" + postfix,
     )
+    if not settings:
+        return 1  # pragma: nocover
 
     r = RouterHandler
     r.ap_settings = settings
@@ -499,14 +504,6 @@ def endpoint_main(sysargs=None, use_files=True):
     """Main entry point to setup an endpoint node, aka the autoendpoint
     script"""
     args, parser = _parse_endpoint(sysargs, use_files)
-    senderid_list = None
-    if args.senderid_list:
-        try:
-            senderid_list = json.loads(args.senderid_list)
-        except (ValueError, TypeError):
-            log.critical(format="Invalid JSON specified for senderid_list")
-            return
-
     log_level = args.log_level or ("debug" if args.debug else "info")
     log_format = "text" if args.human_logs else "json"
     sentry_dsn = bool(os.environ.get("SENTRY_DSN"))
@@ -527,10 +524,11 @@ def endpoint_main(sysargs=None, use_files=True):
         endpoint_hostname=args.endpoint_hostname or args.hostname,
         endpoint_port=args.endpoint_port,
         enable_cors=not args.no_cors,
-        senderid_list=senderid_list,
         bear_hash_key=args.auth_key,
         preflight_uaid="deadbeef000000000deadbeef" + postfix,
     )
+    if not settings:
+        return 1
 
     # Endpoint HTTP router
     site = cyclone.web.Application([

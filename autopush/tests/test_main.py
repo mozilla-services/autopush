@@ -257,7 +257,8 @@ class EndpointMainTestCase(unittest.TestCase):
         ], False)
 
     def test_bad_senderidlist(self):
-        endpoint_main([
+        assert endpoint_main([
+            "--gcm_enabled",
             "--senderid_list='[Invalid'"
         ], False)
 

@@ -84,7 +84,6 @@ class AutopushSettings(object):
                  wake_timeout=0,
                  env='development',
                  enable_cors=False,
-                 senderid_list=None,
                  hello_timeout=0,
                  bear_hash_key=None,
                  preflight_uaid="deadbeef00000000deadbeef000000000",
