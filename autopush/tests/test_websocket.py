@@ -47,7 +47,7 @@ def tearDown():
     tearDown()
 
 
-def assert_called_included(mock, **kwargs):
+def assert_called_included(mock, **kwargs):  # pragma: nocover
     """Like assert_called_with but asserts a call was made including
     the specified kwargs (but allowing additional args/kwargs)"""
     mock.assert_called()
