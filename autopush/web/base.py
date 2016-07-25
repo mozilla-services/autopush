@@ -95,10 +95,10 @@ class BaseHandler(cyclone.web.RequestHandler):
     #############################################################
     #                    Cyclone HTTP Methods
     #############################################################
-    def options(self, *args):
+    def options(self, *args, **kwargs):
         """HTTP OPTIONS Handler"""
 
-    def head(self, *args):
+    def head(self, *args, **kwargs):
         """HTTP HEAD Handler"""
 
     #############################################################
