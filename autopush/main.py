@@ -424,6 +424,8 @@ def connection_main(sysargs=None, use_files=True):
         hello_timeout=args.hello_timeout,
         preflight_uaid="deadbeef000000000deadbeef" + postfix,
     )
+    if not settings:
+        return 1  # pragma: nocover
 
     r = RouterHandler
     r.ap_settings = settings
@@ -525,6 +527,8 @@ def endpoint_main(sysargs=None, use_files=True):
         bear_hash_key=args.auth_key,
         preflight_uaid="deadbeef000000000deadbeef" + postfix,
     )
+    if not settings:
+        return 1
 
     # Endpoint HTTP router
     site = cyclone.web.Application([
