@@ -58,8 +58,8 @@ from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 from twisted.protocols import policies
 from twisted.python import failure
-from zope.interface import implements
 from twisted.web.resource import Resource
+from zope.interface import implements
 
 from autopush import __version__
 from autopush.db import (
@@ -68,7 +68,11 @@ from autopush.db import (
     generate_last_connect
 )
 from autopush.protocol import IgnoreBody
-from autopush.utils import validate_uaid, ErrorLogger
+from autopush.utils import (
+    ErrorLogger,
+    parse_user_agent,
+    validate_uaid,
+)
 from autopush.noseplugin import track_object
 
 
@@ -134,6 +138,7 @@ class PushState(object):
         'metrics',
         'uaid',
         'uaid_hash',
+        'raw_agent',
         'last_ping',
         'check_storage',
         'use_webpush',
@@ -173,8 +178,11 @@ class PushState(object):
         else:
             self._user_agent = None
         self._base_tags = []
+        self.raw_agent = {}
         if self._user_agent:
-            self._base_tags.append("user_agent:%s" % self._user_agent)
+            dd_tags, self.raw_agent = parse_user_agent(self._user_agent)
+            for tag_name, tag_value in dd_tags.items():
+                self._base_tags.append("%s:%s" % (tag_name, tag_value))
         if host:
             self._base_tags.append("host:%s" % host)
 
@@ -791,6 +799,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         msg['env'] = self.ap_settings.env
         self.ap_settings.clients[self.ps.uaid] = self
         self.sendJSON(msg)
+        self.log.info(format="hello", uaid_hash=self.ps.uaid_hash,
+                      **self.ps.raw_agent)
         self.ps.metrics.increment("updates.client.hello", tags=self.base_tags)
         self.process_notifications()
 
@@ -1046,7 +1056,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.log.info(format="Register", channelID=chid,
                       endpoint=endpoint,
                       uaid_hash=self.ps.uaid_hash,
-                      user_agent=self.ps.user_agent)
+                      user_agent=self.ps.user_agent,
+                      **self.ps.raw_agent)
 
     def process_unregister(self, data):
         """Process an unregister message"""
@@ -1063,7 +1074,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         event = dict(format="Unregister", channelID=chid,
                      uaid_hash=self.ps.uaid_hash,
-                     user_agent=self.ps.user_agent)
+                     user_agent=self.ps.user_agent,
+                     **self.ps.raw_agent)
         if "code" in data:
             event["code"] = extract_code(data)
         self.log.info(**event)
@@ -1128,7 +1140,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.log.info(format="Ack", router_key="webpush", channelID=chid,
                           message_id=version, message_source="direct",
                           message_size=size, uaid_hash=self.ps.uaid_hash,
-                          user_agent=self.ps.user_agent, code=code)
+                          user_agent=self.ps.user_agent, code=code,
+                          **self.ps.raw_agent)
             self.ps.direct_updates[chid].remove(msg)
             return
 
@@ -1139,7 +1152,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.log.info(format="Ack", router_key="webpush", channelID=chid,
                           message_id=version, message_source="stored",
                           message_size=size, uaid_hash=self.ps.uaid_hash,
-                          user_agent=self.ps.user_agent, code=code)
+                          user_agent=self.ps.user_agent, code=code,
+                          **self.ps.raw_agent)
             d = self.force_retry(self.ps.message.delete_message,
                                  uaid=self.ps.uaid,
                                  channel_id=chid,
@@ -1173,12 +1187,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                           channelID=chid, message_id=version,
                           message_source="direct",
                           uaid_hash=self.ps.uaid_hash,
-                          user_agent=self.ps.user_agent, code=code)
+                          user_agent=self.ps.user_agent, code=code,
+                          **self.ps.raw_agent)
             return
         self.log.info(format="Ack", router_key="simplepush", channelID=chid,
                       message_id=version, message_source="stored",
                       uaid_hash=self.ps.uaid_hash,
-                      user_agent=self.ps.user_agent, code=code)
+                      user_agent=self.ps.user_agent, code=code,
+                      **self.ps.raw_agent)
         if chid in self.ps.updates_sent and \
            self.ps.updates_sent[chid] <= version:
             del self.ps.updates_sent[chid]
@@ -1215,7 +1231,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         self.log.info(format="Nack", uaid_hash=self.ps.uaid_hash,
                       user_agent=self.ps.user_agent, message_id=version,
-                      code=code)
+                      code=code, **self.ps.raw_agent)
 
     def check_missed_notifications(self, results, resume=False):
         """Check to see if notifications were missed"""
