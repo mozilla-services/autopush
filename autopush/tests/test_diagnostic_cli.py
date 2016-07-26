@@ -32,14 +32,12 @@ class DiagnosticCLITestCase(unittest.TestCase):
         ])
         eq_(cli._settings.router_table.table_name, "fred")
 
-    @patch("sys.exit")
-    def test_bad_endpoint(self, mock_exit):
+    def test_bad_endpoint(self):
         cli = self._makeFUT([
             "--router_tablename=fred",
             "http://someendpoint",
         ])
-        cli.run()
-        mock_exit.assert_called()
+        assert cli.run()
 
     @patch("autopush.diagnostic_cli.AutopushSettings")
     def test_successfull_lookup(self, mock_settings_class):

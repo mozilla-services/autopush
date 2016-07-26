@@ -52,8 +52,7 @@ class EndpointDiagnosticCLI(object):
     def run(self):
         match = PUSH_RE.search(self._endpoint)
         if not match:
-            sys.exit("Not a valid endpoint")
-            return  # Included purely for testing purposes
+            return "Not a valid endpoint"
 
         md = match.groupdict()
         api_ver, token = md.get("api_ver", "v0"), md["token"]
@@ -79,4 +78,4 @@ class EndpointDiagnosticCLI(object):
 
 def run_endpoint_diagnostic_cli(sysargs=None, use_files=True):
     cli = EndpointDiagnosticCLI(sysargs, use_files)
-    cli.run()
+    return cli.run()
