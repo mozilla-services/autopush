@@ -9,10 +9,19 @@ import uuid
 import ecdsa
 import requests
 from jose import jws
-
 from twisted.logger import Logger
 from twisted.python import failure
+from ua_parser import user_agent_parser
 
+
+# List of valid user-agent attributes to keep, anything not in this list is
+# considered 'Other'. We log the user-agent on connect always to retain the
+# full string, but for DD more tags are expensive so we limit to these.
+VALID_UA_BROWSER = ["Chrome", "Firefox", "Safari", "Opera"]
+# See test_os.yaml in github.com/ua-parser/uap-core for full list
+# We special case Windows since it has 8 values, and we only care that its
+# Windows
+VALID_UA_OS = ["Firefox OS", "Linux", "Mac OS X"]
 
 default_ports = {
     "ws": 80,
@@ -136,6 +145,57 @@ def extract_jwt(token, crypto_key):
     # stores data into a JWT and breaks expectations. We would have to
     # turn off most of the validation in order for it to be useful.
     return json.loads(jws.verify(token, vk, algorithms=["ES256"]))
+
+
+def parse_user_agent(agent_string):
+    """Extracts user-agent data from a UA string
+
+    Parses the user-agent into two forms. A limited one suitable for Datadog
+    logging with limited tags, and a full string suitable for complete logging.
+
+    :returns: A tuple of dicts, the first being the Datadog limited and the
+              second being the complete info.
+    :rtype: (dict, dict)
+
+    """
+    parsed = user_agent_parser.Parse(agent_string)
+    dd_info = {}
+    raw_info = {}
+
+    # Parse out the OS family
+    ua_os = parsed["os"]
+    ua_os_family = raw_info["ua_os_family"] = ua_os["family"]
+    if ua_os_family.startswith("Windows"):
+        # Windows has a bunch of additional version bits in the family string
+        dd_info["ua_os_family"] = "Windows"
+    elif ua_os_family in VALID_UA_OS:
+        dd_info["ua_os_family"] = ua_os_family
+    elif "Linux" in agent_string:
+        # Incredibly annoying, but the user agent parser returns things like
+        # 'Mandriva' and 'Unbuntu' sometimes instead of just saying Linux
+        dd_info["ua_os_family"] = "Linux"
+    else:
+        dd_info["ua_os_family"] = "Other"
+
+    # Parse out the full version for raw info, too many combos for DataDog
+    bits = ["major", "minor", "patch", "patch_minor"]
+    os_bits = [ua_os[x] for x in bits]
+    raw_info["ua_os_ver"] = ".".join(filter(None, os_bits))
+
+    # Parse out the browser family
+    ua_browser = parsed["user_agent"]
+    ua_browser_family = raw_info["ua_browser_family"] = ua_browser["family"]
+    if ua_browser_family in VALID_UA_BROWSER:
+        dd_info["ua_browser_family"] = ua_browser_family
+    else:
+        dd_info["ua_browser_family"] = "Other"
+
+    # Parse out the full browser version
+    bits = ["major", "minor", "patch"]
+    browser_bits = [ua_browser[x] for x in bits]
+    raw_info["ua_browser_ver"] = ".".join(filter(None, browser_bits))
+
+    return dd_info, raw_info
 
 
 class ErrorLogger(object):

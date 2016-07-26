@@ -74,7 +74,9 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ap_settings = settings
         self.proto.sendMessage = self.send_mock = Mock()
         self.orig_close = self.proto.sendClose
-        self.proto.ps = PushState(settings=settings, request=Mock())
+        request_mock = Mock()
+        request_mock.headers = {}
+        self.proto.ps = PushState(settings=settings, request=request_mock)
         self.proto.sendClose = self.close_mock = Mock()
         self.proto.transport = self.transport_mock = Mock()
         self.proto.closeHandshakeTimeout = 0
@@ -197,11 +199,13 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_base_tags(self):
         req = Mock()
-        req.headers = {'user-agent': "tester"}
+        req.headers = {'user-agent': "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2.3) Gecko/20100401 Firefox/3.6.3 (.NET CLR 3.5.30729)"}  # NOQA
         req.host = "example.com:8080"
         ps = PushState(settings=self.proto.ap_settings, request=req)
-        eq_(ps._base_tags, ['user_agent:tester',
-                            'host:example.com:8080'])
+        eq_(sorted(ps._base_tags),
+            sorted(['ua_os_family:Windows',
+                    'ua_browser_family:Firefox',
+                    'host:example.com:8080']))
 
     def test_reporter(self):
         from autopush.websocket import periodic_reporter
@@ -1205,7 +1209,7 @@ class WebsocketTestCase(unittest.TestCase):
         def check_unregister_result(msg):
             eq_(msg["status"], 200)
             eq_(msg["channelID"], chid)
-            eq_(len(self.proto.log.mock_calls), 1)
+            eq_(len(self.proto.log.mock_calls), 2)
             assert_called_included(self.proto.log.info, format="Unregister")
             d.callback(True)
 
@@ -1365,7 +1369,7 @@ class WebsocketTestCase(unittest.TestCase):
 
             # Verify it was cleared out
             eq_(len(self.proto.ps.direct_updates), 0)
-            eq_(len(self.proto.log.info.mock_calls), 1)
+            eq_(len(self.proto.log.info.mock_calls), 2)
             assert_called_included(self.proto.log.info,
                                    format="Ack",
                                    router_key="simplepush",
