@@ -209,6 +209,11 @@ class WebPushSubscriptionSchema(Schema):
         if result.get("router_type") not in ["webpush", "gcm", "apns", "fcm"]:
             raise InvalidRequest("Wrong URL for user", errno=108)
 
+        if result.get("critical_failure"):
+            raise InvalidRequest("Critical Failure: %s" %
+                                 result.get("critical_failure"),
+                                 status_code=410,
+                                 errno=105)
         # Propagate the looked up user data back out
         d["user_data"] = result
 

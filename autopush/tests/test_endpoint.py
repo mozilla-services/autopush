@@ -1526,7 +1526,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.ap_settings.routers["gcm"] = gcm
         self.reg.request.body = json.dumps(dict(
             channelID=dummy_chid,
-            token="token",
+            token="182931248179192",
         ))
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',

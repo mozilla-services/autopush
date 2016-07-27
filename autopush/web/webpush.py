@@ -11,6 +11,7 @@ from autopush.web.validation import (
     threaded_validate,
     WebPushRequestSchema,
 )
+from autopush.websocket import ms_time
 
 
 class WebPushHandler(BaseHandler):
@@ -62,7 +63,7 @@ class WebPushHandler(BaseHandler):
                 del uaid_data["router_type"]
             else:
                 uaid_data["router_data"] = response.router_data
-            uaid_data["connected_at"] = int(time.time() * 1000)
+            uaid_data["connected_at"] = ms_time()
             d = deferToThread(self.ap_settings.router.register_user,
                               uaid_data)
             response.router_data = None

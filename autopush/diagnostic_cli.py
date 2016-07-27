@@ -2,7 +2,6 @@ from __future__ import print_function
 
 import pprint
 import re
-import sys
 
 import configargparse
 from twisted.logger import Logger

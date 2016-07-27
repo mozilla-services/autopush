@@ -53,6 +53,7 @@ from autopush.utils import (
     base64url_encode,
 )
 from autopush.web.base import DEFAULT_ERR_URL
+from autopush.websocket import ms_time
 
 
 # Our max TTL is 60 days realistically with table rotation, so we hard-code it
@@ -581,7 +582,7 @@ class EndpointHandler(AutoendpointHandler):
         # Were we told to update the router data?
         if response.router_data:
             uaid_data["router_data"] = response.router_data
-            uaid_data["connected_at"] = int(time.time() * 1000)
+            uaid_data["connected_at"] = ms_time()
             d = deferToThread(self.ap_settings.router.register_user,
                               uaid_data)
             response.router_data = None
@@ -766,7 +767,7 @@ class RegistrationHandler(AutoendpointHandler):
             uaid=self.uaid,
             router_type=router_type,
             router_data=router_data,
-            connected_at=int(time.time() * 1000),
+            connected_at=ms_time(),
             last_connect=generate_last_connect(),
         )
         return deferToThread(self.ap_settings.router.register_user, user_item)
