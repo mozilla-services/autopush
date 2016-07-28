@@ -248,9 +248,11 @@ class GCMRouterTestCase(unittest.TestCase):
                           {"senderIDs": {}})
 
     def test_register(self):
-        result = self.router.register("uaid", {"token": "connect_data"})
+        result = self.router.register(uaid="uaid",
+                                      router_data={"token": "test123"},
+                                      router_token="test123")
         # Check the information that will be recorded for this user
-        eq_(result, {"token": "connect_data",
+        eq_(result, {"token": "test123",
                      "creds": {"senderID": "test123",
                                "auth": "12345678abcdefg"}})
 
@@ -378,7 +380,7 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
-            self._check_error_call(fail.value, 503)
+            self._check_error_call(fail.value, 410)
         d.addBoth(check_results)
         return d
 
@@ -401,13 +403,20 @@ class GCMRouterTestCase(unittest.TestCase):
         d.addBoth(check_results)
         return d
 
-    def test_ammend(self):
-        self.router.register("uaid", {"token": "connect_data"})
+    def test_amend(self):
+        self.router.register(uaid="uaid",
+                             router_data={"token": "test123"},
+                             router_token="test123")
         resp = {"key": "value"}
         result = self.router.amend_msg(resp,
                                        self.router_data.get('router_data'))
         eq_({"key": "value", "senderid": "test123"},
             result)
+
+    def test_register_invalid_token(self):
+        self.assertRaises(RouterException, self.router.register,
+                          uaid="uaid", router_data={"token": "invalid"},
+                          router_token="invalid")
 
 
 class FCMRouterTestCase(unittest.TestCase):
@@ -462,9 +471,11 @@ class FCMRouterTestCase(unittest.TestCase):
         self.assertRaises(IOError, FCMRouter, settings, {})
 
     def test_register(self):
-        result = self.router.register("uaid", {"token": "connect_data"})
+        result = self.router.register(uaid="uaid",
+                                      router_data={"token": "test123"},
+                                      router_token="test123")
         # Check the information that will be recorded for this user
-        eq_(result, {"token": "connect_data",
+        eq_(result, {"token": "test123",
                      "creds": {"senderID": "test123",
                                "auth": "12345678abcdefg"}})
 

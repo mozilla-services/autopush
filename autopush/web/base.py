@@ -171,7 +171,8 @@ class BaseHandler(cyclone.web.RequestHandler):
                       status_code=exc.status_code,
                       errno=exc.errno)
         self._write_response(exc.status_code, exc.errno,
-                             message="Request did not validate",
+                             message="Request did not validate %s" %
+                                     (exc.message or ""),
                              headers=exc.headers)
 
     def _response_err(self, fail):

@@ -6,6 +6,7 @@ from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
 from autopush.router.interface import RouterException, RouterResponse
+from autopush.websocket import ms_time
 
 
 class GCMRouter(object):
@@ -24,6 +25,7 @@ class GCMRouter(object):
         self.senderIDs = router_conf.get("senderIDs")
         self.metrics = ap_settings.metrics
         self._base_tags = []
+        self.router_table = ap_settings.router
         try:
             sid = self.senderIDs.keys()
             self.senderID = sid[0]
@@ -43,18 +45,26 @@ class GCMRouter(object):
         if "token" not in router_data:
             raise self._error("connect info missing GCM Instance 'token'",
                               status=401)
+        # router_token and router_data['token'] are semi-legacy from when
+        # we were considering having multiple senderids for outbound
+        # GCM support. That was abandoned, but it is still useful to
+        # ensure that the client's senderid value matches what we need
+        # it to be. (If the client has an unexpected or invalid SenderID,
+        # it is impossible for us to reach them.
+        if not (router_token == router_data['token'] == self.senderID):
+            raise self._error("Invalid SenderID", status=410, errno=105)
         # Assign a senderid
         router_data["creds"] = {"senderID": self.senderID, "auth": self.auth}
         return router_data
 
     def route_notification(self, notification, uaid_data):
         """Start the GCM notification routing, returns a deferred"""
-        router_data = uaid_data["router_data"]
         # Kick the entire notification routing off to a thread
-        return deferToThread(self._route, notification, router_data)
+        return deferToThread(self._route, notification, uaid_data)
 
-    def _route(self, notification, router_data):
+    def _route(self, notification, uaid_data):
         """Blocking GCM call to route the notification"""
+        router_data = uaid_data["router_data"]
         data = {"chid": notification.channel_id}
         # Payload data is optional. The endpoint handler validates that the
         # correct encryption headers are included with the data.
@@ -101,7 +111,7 @@ class GCMRouter(object):
                               500)
         self.metrics.increment("updates.client.bridge.gcm.attempted",
                                self._base_tags)
-        return self._process_reply(result)
+        return self._process_reply(result, uaid_data)
 
     def _error(self, err, status, **kwargs):
         """Error handler that raises the RouterException"""
@@ -109,7 +119,7 @@ class GCMRouter(object):
         return RouterException(err, status_code=status, response_body=err,
                                **kwargs)
 
-    def _process_reply(self, reply):
+    def _process_reply(self, reply, uaid_data):
         """Process GCM send reply"""
         # acks:
         #  for reg_id, msg_id in reply.success.items():
@@ -138,10 +148,18 @@ class GCMRouter(object):
         if len(reply.failed.items()) > 0:
             self.metrics.increment("updates.client.bridge.gcm.failed.failure",
                                    self._base_tags)
-            self.log.critical("GCM failures: {failed()}",
-                              failed=lambda: json.dumps(reply.failed.items()))
-            raise RouterException("GCM failure to deliver", status_code=503,
-                                  response_body="Please try request later.")
+            self.log.info("GCM failures: {failed()}",
+                          failed=lambda: json.dumps(reply.failed.items()))
+            self.router_table.register_user(
+                {"uaid": uaid_data.get('uaid'),
+                 "router_type": uaid_data.get("router_type", "gcm"),
+                 "connected_at": ms_time(),
+                 "critical_failure": "Client is unreachable due to a "
+                                     "configuration error. Unable to "
+                                     "send message.",
+                 })
+            raise RouterException("GCM unable to deliver", status_code=410,
+                                  response_body="GCM recipient not available.")
 
         # retries:
         if reply.needs_retry():

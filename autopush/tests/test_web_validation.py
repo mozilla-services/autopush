@@ -375,6 +375,23 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         eq_(cm.exception.errno, 103)
 
+    def test_critical_failure(self):
+        schema = self._makeFUT()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="fcm",
+            critical_failure="Bad SenderID",
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(self._make_test_data())
+
+        eq_(cm.exception.errno, 105)
+
     def test_invalid_header_combo(self):
         schema = self._makeFUT()
         schema.context["settings"].parse_endpoint.return_value = dict(
