@@ -64,7 +64,7 @@ class SimpleRouter(object):
     def amend_msg(self, msg, router_data=None):
         return msg
 
-    def preflight_check(self, uaid, channel_id):
+    def preflight_check(self, uaid_data, channel_id):
         """Verifies this routing call can be done successfully"""
         return True
 
@@ -87,7 +87,7 @@ class SimpleRouter(object):
 
         # Preflight check, hook used by webpush to verify channel id, extra
         # stores any additional data to pass to storing the message
-        extra = yield self.preflight_check(uaid, notification.channel_id)
+        extra = yield self.preflight_check(uaid_data, notification.channel_id)
 
         # Node_id is present, attempt delivery.
         # - Send Notification to node

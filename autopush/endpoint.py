@@ -773,12 +773,12 @@ class RegistrationHandler(AutoendpointHandler):
         return deferToThread(self.ap_settings.router.register_user, user_item)
 
     def _create_endpoint(self, result=None):
+        """Called to register a new channel and create its endpoint."""
         router_data = None
         try:
             router_data = result[2]
         except (IndexError, TypeError):
             pass
-        """Called to register a new channel and create its endpoint."""
         return deferToThread(self._register_channel, router_data)
 
     def _return_endpoint(self, endpoint_data, new_uaid, router=None):

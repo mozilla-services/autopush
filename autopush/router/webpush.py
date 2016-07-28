@@ -60,21 +60,20 @@ class WebPushRouter(SimpleRouter):
         return data
 
     @inlineCallbacks
-    def preflight_check(self, uaid, channel_id):
+    def preflight_check(self, uaid_data, channel_id):
         """Verifies this routing call can be done successfully"""
-        # Locate the user agent's message table
-        record = yield deferToThread(self.ap_settings.router.get_uaid, uaid)
-
-        if 'current_month' not in record:
+        uaid = uaid_data["uaid"]
+        if 'current_month' not in uaid_data:
             self.log.info("Record missing 'current_month' {record}",
-                          record=json.dumps(record))
+                          record=json.dumps(uaid_data))
+            yield deferToThread(self.ap_settings.router.drop_user, uaid)
             raise RouterException("No such subscription", status_code=410,
                                   log_exception=False, errno=106)
 
-        month_table = record["current_month"]
+        month_table = uaid_data["current_month"]
         if month_table not in self.ap_settings.message_tables:
             self.log.info("'current_month' out of scope: {record}",
-                          records=json.dumps(record))
+                          records=json.dumps(uaid_data))
             yield deferToThread(self.ap_settings.router.drop_user, uaid)
             raise RouterException("No such subscription", status_code=410,
                                   log_exception=False, errno=106)
