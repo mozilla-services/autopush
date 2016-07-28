@@ -73,7 +73,7 @@ class FCMRouter(object):
                                   "to 3070 bytes. Converted buffer too " +
                                   "long by %d bytes" %
                                   (len(notification.data) - mdata),
-                                  413, errno=104)
+                                  413, errno=104, log_exception=False)
 
             data['body'] = notification.data
             data['con'] = notification.headers['content-encoding']

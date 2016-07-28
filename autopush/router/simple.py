@@ -147,6 +147,7 @@ class SimpleRouter(object):
             raise RouterException("User was deleted",
                                   status_code=410,
                                   response_body="Invalid UAID",
+                                  log_exception=False,
                                   errno=105)
 
         # Verify there's a node_id in here, if not we're done

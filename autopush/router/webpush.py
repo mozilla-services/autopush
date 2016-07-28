@@ -73,7 +73,7 @@ class WebPushRouter(SimpleRouter):
         month_table = uaid_data["current_month"]
         if month_table not in self.ap_settings.message_tables:
             self.log.info("'current_month' out of scope: {record}",
-                          records=json.dumps(uaid_data))
+                          record=json.dumps(uaid_data))
             yield deferToThread(self.ap_settings.router.drop_user, uaid)
             raise RouterException("No such subscription", status_code=410,
                                   log_exception=False, errno=106)
@@ -84,7 +84,7 @@ class WebPushRouter(SimpleRouter):
         if (not exists or channel_id.lower() not
                 in map(lambda x: normalize_id(x), chans)):
             self.log.info("Unknown subscription: {channel_id}",
-                          channelid=channel_id)
+                          channel_id=channel_id)
             raise RouterException("No such subscription", status_code=410,
                                   log_exception=False, errno=106)
         returnValue(month_table)
