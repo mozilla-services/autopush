@@ -214,6 +214,7 @@ class WebPushSubscriptionSchema(Schema):
                                  result.get("critical_failure"),
                                  status_code=410,
                                  errno=105)
+
         # Propagate the looked up user data back out
         d["user_data"] = result
 
