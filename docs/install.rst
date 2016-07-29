@@ -33,7 +33,7 @@ For instance, if installing on an Amazon EC2 machine:
     libncurses5-devel openssl-devel patch python-devel \
     python-virtualenv readline-devel -y
 
-Autopush uses the `Boto python library <https://boto.readthedocs.io/en/latest/>`_. Be sure to `properly set up <https://boto.readthedocs.io/en/latest/boto_config_tut.html>`_ your ``.boto`` configuration file.
+Autopush uses the `Boto python library <https://boto.readthedocs.io/en/latest/>`_. Be sure to `properly set up <https://boto.readthedocs.io/en/latest/boto_config_tut.html>`_ your boto configuration file.
 
 Python 2.7.7+ w/virtualenv
 ==========================
