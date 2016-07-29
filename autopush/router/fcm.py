@@ -50,6 +50,14 @@ class FCMRouter(object):
         if "token" not in router_data:
             raise self._error("connect info missing FCM Instance 'token'",
                               status=401)
+        # router_token and router_data['token'] are semi-legacy from when
+        # we were considering having multiple senderids for outbound
+        # GCM support. That was abandoned, but it is still useful to
+        # ensure that the client's senderid value matches what we need
+        # it to be. (If the client has an unexpected or invalid SenderID,
+        # it is impossible for us to reach them.
+        if not (router_token == router_data['token'] == self.senderID):
+            raise self._error("Invalid SenderID", status=410, errno=105)
         # Assign a senderid
         router_data["creds"] = {"senderID": self.senderID, "auth": self.auth}
         return router_data
