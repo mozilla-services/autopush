@@ -626,13 +626,20 @@ class FCMRouterTestCase(unittest.TestCase):
         d.addBoth(check_results)
         return d
 
-    def test_ammend(self):
-        self.router.register("uaid", {"token": "connect_data"})
+    def test_amend(self):
+        self.router.register(uaid="uaid",
+                             router_data={"token": "test123"},
+                             router_token="test123")
         resp = {"key": "value"}
         result = self.router.amend_msg(resp,
                                        self.router_data.get('router_data'))
         eq_({"key": "value", "senderid": "test123"},
             result)
+
+    def test_register_invalid_token(self):
+        self.assertRaises(RouterException, self.router.register,
+                          uaid="uaid", router_data={"token": "invalid"},
+                          router_token="invalid")
 
 
 class SimplePushRouterTestCase(unittest.TestCase):
