@@ -8,7 +8,7 @@ from boto.dynamodb2.exceptions import (
 from cryptography.fernet import InvalidToken
 from jose import jws
 from marshmallow import Schema, fields
-from mock import Mock
+from mock import Mock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_, ok_, assert_raises
 from twisted.internet.defer import Deferred
@@ -573,6 +573,41 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         result, errors = schema.load(info)
         eq_(errors, {})
         ok_("jwt" in result)
+
+    @patch("autopush.web.validation.extract_jwt")
+    def test_invalid_vapid_crypto_header(self, mock_jwt):
+        schema = self._makeFUT()
+        self.fernet_mock.decrypt.return_value = dummy_token
+        mock_jwt.side_effect = ValueError("Unknown public key "
+                                          "format specified")
+
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+
+        token, crypto_key = self._gen_jwt(header, payload)
+        auth = "Bearer %s" % token
+        ckey = 'keyid="a1"; key="foo";p256ecdsa="%s"' % crypto_key
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            path_kwargs=dict(
+                api_ver="v0",
+                token="asdfasdf",
+            ),
+            headers={
+                "content-encoding": "aes128",
+                "encryption": "stuff",
+                "authorization": auth,
+                "crypto-key": ckey
+            }
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 401)
+        eq_(cm.exception.errno, 109)
 
     def test_expired_vapid_header(self):
         schema = self._makeFUT()

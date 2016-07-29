@@ -215,9 +215,11 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
                 self.set_header(header, headers.get(header))
         self.finish()
 
-    def _write_unauthorized_response(self, message="Invalid authentication"):
+    def _write_unauthorized_response(self, message="Invalid authentication",
+                                     **kwargs):
         headers = {"www-authenticate": AUTH_SCHEME}
-        self._write_response(401, errno=109, message=message, headers=headers)
+        self._write_response(401, errno=109, message=message, headers=headers,
+                             **kwargs)
 
     def _response_err(self, fail):
         """errBack for all exceptions that should be logged
@@ -298,12 +300,15 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
 
     def _auth_err(self, fail):
         """errBack for invalid auth token"""
-        fail.trap(VapidAuthException)
+        fail.trap(VapidAuthException, ValueError)
         self.log.info(format="Invalid Auth token",
                       status_code=401,
                       errno=109,
                       **self._client_info)
-        self._write_unauthorized_response(message=fail.value.message)
+        self._write_unauthorized_response(
+            message=fail.value.message,
+            url="https://datatracker.ietf.org/doc/"
+                "draft-thomson-webpush-vapid/")
 
     def _chid_not_found_err(self, fail):
         """errBack for unknown chid"""
@@ -336,7 +341,8 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         if isinstance(fail.value, VapidAuthException):
             raise fail.value
         message = fail.value.message or repr(fail.value)
-        if isinstance(fail.value, AssertionError):
+        if (isinstance(fail.value, AssertionError) or
+                isinstance(fail.value, ValueError)):
             message = "A decryption error occurred"
         self.log.debug(format="Invalid bearer token: " + repr(message),
                        **self._client_info)

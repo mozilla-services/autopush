@@ -302,7 +302,12 @@ class WebPushRequestSchema(Schema):
         if auth_type.lower() != AUTH_SCHEME or '.' not in token:
             return
 
-        jwt = extract_jwt(token, public_key)
+        try:
+            jwt = extract_jwt(token, public_key)
+        except ValueError:
+            raise InvalidRequest("Invalid Authorization Header",
+                                 status_code=401, errno=109,
+                                 headers={"www-authenticate": AUTH_SCHEME})
         if jwt.get('exp', 0) < time.time():
             raise InvalidRequest("Invalid bearer token: Auth expired",
                                  status_code=401, errno=109,
