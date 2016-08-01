@@ -54,8 +54,8 @@ Firefox/FirefoxOS.
 dev
 ---
 
-* Websocket: wss://autopush-dev.stage.mozaws.net/
-* Endpoint: https://updates-autopush-dev.stage.mozaws.net/
+* Websocket: wss://autopush.dev.mozaws.net/
+* Endpoint: https://updates-autopush.dev.mozaws.net/
 
 stage
 -----
