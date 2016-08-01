@@ -585,7 +585,7 @@ class Router(object):
         del data["uaid"]
         if "router_type" not in data or "connected_at" not in data:
             # Not specifying these values will generate an exception in AWS.
-            raise AutopushException("data is missing router_type"
+            raise AutopushException("data is missing router_type "
                                     "or connected_at")
         # Generate our update expression
         expr = "SET " + ", ".join(["%s=:%s" % (x, x) for x in data.keys()])

@@ -60,7 +60,6 @@ class WebPushHandler(BaseHandler):
         if response.router_data is not None:
             if not response.router_data:
                 del uaid_data["router_data"]
-                del uaid_data["router_type"]
             else:
                 uaid_data["router_data"] = response.router_data
             uaid_data["connected_at"] = ms_time()
