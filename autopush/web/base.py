@@ -205,7 +205,7 @@ class BaseHandler(cyclone.web.RequestHandler):
             self.write(response.response_body)
             self.finish()
         else:
-            return self._write_response(
+            self._write_response(
                 response.status_code,
                 errno=response.errno or 999,
                 message=response.response_body)
