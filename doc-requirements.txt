@@ -27,7 +27,6 @@ funcsigs==1.0.2
 future==0.15.2
 futures==3.0.5
 gcm-client==0.1.4
-gnureadline==6.3.3
 greenlet==0.4.9
 httpretty==0.8.14
 idna==2.1

@@ -44,7 +44,6 @@ pyflakes==1.2.3
 python-dateutil==2.5.3
 python-jose==0.6.1
 raven==5.16.0
-readline==6.2.4.1
 repoze.lru==0.6
 requests==2.10.0
 service-identity==16.0.0
