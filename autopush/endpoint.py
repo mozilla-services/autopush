@@ -584,11 +584,23 @@ class EndpointHandler(AutoendpointHandler):
     def _router_completed(self, response, uaid_data, warning=""):
         """Called after router has completed successfully"""
         # TODO: Add some custom wake logic here
-
         # Were we told to update the router data?
-        if response.router_data:
+        if response.router_data is not None:
+            if not response.router_data:
+                # An empty router_data object indicates that the record should
+                # be deleted. There is no longer valid route information for
+                # this record.
+                d = deferToThread(self.ap_settings.router.drop_user,
+                                  self.uaid)
+                d.addCallback(lambda x: self._router_response(response))
+                return d
+            # The router data needs to be updated to include any changes
+            # requested by the bridge system.
             uaid_data["router_data"] = response.router_data
+            # set the AWS mandatory data.
             uaid_data["connected_at"] = ms_time()
+            uaid_data["router_type"] = uaid_data.get("router_type",
+                                                     self.router_key)
             d = deferToThread(self.ap_settings.router.register_user,
                               uaid_data)
             response.router_data = None
@@ -597,6 +609,7 @@ class EndpointHandler(AutoendpointHandler):
                                                            warning))
             return d
         else:
+            # No changes are requested by the bridge system, proceed as normal
             if response.status_code == 200 or response.logged_status == 200:
                 self.log.info(format="Successful delivery",
                               **self._client_info)

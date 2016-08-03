@@ -56,12 +56,19 @@ class WebPushHandler(BaseHandler):
     def _router_completed(self, response, uaid_data, warning=""):
         """Called after router has completed successfully"""
         # Were we told to update the router data?
-        # GCM/APNS bridges can result in data updates
         if response.router_data is not None:
             if not response.router_data:
-                del uaid_data["router_data"]
-            else:
-                uaid_data["router_data"] = response.router_data
+                # An empty router_data object indicates that the record should
+                # be deleted. There is no longer valid route information for
+                # this record.
+                d = deferToThread(self.ap_settings.router.drop_user,
+                                  self.uaid)
+                d.addCallback(lambda x: self._router_response(response))
+                return d
+            # The router data needs to be updated to include any changes
+            # requested by the bridge system
+            uaid_data["router_data"] = response.router_data
+            # set the AWS mandatory data
             uaid_data["connected_at"] = ms_time()
             d = deferToThread(self.ap_settings.router.register_user,
                               uaid_data)
@@ -71,6 +78,7 @@ class WebPushHandler(BaseHandler):
                                                            warning))
             return d
         else:
+            # No changes are requested by the bridge system, proceed as normal
             if response.status_code == 200 or response.logged_status == 200:
                 self.log.info(format="Successful delivery",
                               **self._client_info)
