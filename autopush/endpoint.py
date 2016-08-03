@@ -118,8 +118,8 @@ def parse_request_params(request):
 class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     """Common overrides for Autoendpoint handlers"""
     cors_methods = ""
-    cors_request_headers = []
-    cors_response_headers = []
+    cors_request_headers = ()
+    cors_response_headers = ()
 
     #############################################################
     #                    Cyclone API Methods
@@ -379,7 +379,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
 
 class MessageHandler(AutoendpointHandler):
     cors_methods = "DELETE"
-    cors_response_headers = ["location"]
+    cors_response_headers = ("location",)
 
     def _token_valid(self, result, func):
         """Handles valid token processing, then dispatches to supplied
@@ -426,11 +426,11 @@ class MessageHandler(AutoendpointHandler):
 
 class EndpointHandler(AutoendpointHandler):
     cors_methods = "POST,PUT"
-    cors_request_headers = ["content-encoding", "encryption",
+    cors_request_headers = ("content-encoding", "encryption",
                             "crypto-key", "ttl",
                             "encryption-key", "content-type",
-                            "authorization"]
-    cors_response_headers = ["location", "www-authenticate"]
+                            "authorization")
+    cors_response_headers = ("location", "www-authenticate")
     # Remove trailing padding characters from complex header items like
     # Crypto-Key and Encryption
     strip_padding = re.compile('=+(?=[,;]|$)')
@@ -612,10 +612,10 @@ class EndpointHandler(AutoendpointHandler):
 
 class RegistrationHandler(AutoendpointHandler):
     cors_methods = "POST,PUT,DELETE"
-    _base_tags = []
+    _base_tags = ()
 
     def base_tags(self):
-        tags = self._base_tags
+        tags = list(self._base_tags)
         tags.append("user_agent:%s" %
                     self.request.headers.get("user-agent"))
         tags.append("host:%s" % self.request.host)

@@ -20,7 +20,6 @@ http://tools.ietf.org/html/draft-ietf-httpbis-encryption-encoding-00#section-4
     passed on.
 
     """
-    _values = []
 
     def __init__(self, header):
         """Parse the Crypto-Key header
@@ -28,9 +27,8 @@ http://tools.ietf.org/html/draft-ietf-httpbis-encryption-encoding-00#section-4
         :param header: Header content string.
 
         """
+        self._values = []
         chunks = header.split(",")
-        if self._values:
-            self._values = []
         for chunk in chunks:
             bits = chunk.split(";")
             hash = {}
