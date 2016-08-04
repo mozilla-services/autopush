@@ -23,6 +23,7 @@ Reference Docs
    install
    testing
    running
+   releasing
    architecture
    api
    Changelog <https://github.com/mozilla-services/autopush/blob/master/CHANGELOG.md>
