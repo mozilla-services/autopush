@@ -1401,6 +1401,9 @@ class RegistrationTestCase(unittest.TestCase):
                                 host='example.com:8080')
         tags = self.reg.base_tags()
         eq_(tags, ['user_agent:test', 'host:example.com:8080'])
+        # previously failed
+        tags = self.reg.base_tags()
+        eq_(tags, ['user_agent:test', 'host:example.com:8080'])
 
     def _check_error(self, code, errno, error, message=None):
         d = json.loads(self.write_mock.call_args[0][0])
