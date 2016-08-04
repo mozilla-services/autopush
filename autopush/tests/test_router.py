@@ -236,7 +236,7 @@ class GCMRouterTestCase(unittest.TestCase):
     def _check_error_call(self, exc, code):
         ok_(isinstance(exc, RouterException))
         eq_(exc.status_code, code)
-        assert(self.router.gcm.send.called)
+        assert(self.router.gcm['test123'].send.called)
         self.flushLoggedErrors()
 
     def test_init(self):
@@ -250,7 +250,7 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_register(self):
         result = self.router.register(uaid="uaid",
                                       router_data={"token": "test123"},
-                                      router_token="test123")
+                                      senderid="test123")
         # Check the information that will be recorded for this user
         eq_(result, {"token": "test123",
                      "creds": {"senderID": "test123",
@@ -258,16 +258,31 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_register_bad(self):
         self.assertRaises(RouterException, self.router.register, "uaid", {})
+        self.assertRaises(RouterException,
+                          self.router.register,
+                          "uaid",
+                          {"token": "abcd1234"},
+                          "test123")
+
+    @patch("gcmclient.GCM")
+    def test_gcmclient_fail(self, fgcm):
+        fgcm.side_effect = Exception
+        settings = AutopushSettings(
+            hostname="localhost",
+            statsd_host=None,
+        )
+        self.assertRaises(IOError, GCMRouter, settings,
+                          {"senderIDs": {"test123": {"auth": "abcd"}}})
 
     def test_route_notification(self):
-        self.router.gcm = self.gcm
+        self.router.gcm['test123'] = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            assert(self.router.gcm.send.called)
+            assert(self.router.gcm['test123'].send.called)
             # Make sure the data was encoded as base64
-            data = self.router.gcm.send.call_args[0][0].data
+            data = self.router.gcm['test123'].send.call_args[0][0].data
             eq_(data['body'], 'q60d6g')
             eq_(data['enc'], 'test')
             eq_(data['enckey'], 'test')
@@ -276,7 +291,7 @@ class GCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_ttl_none(self):
-        self.router.gcm = self.gcm
+        self.router.gcm['test123'] = self.gcm
         self.notif = Notification(version=10,
                                   data="q60d6g",
                                   channel_id=dummy_chid,
@@ -286,10 +301,10 @@ class GCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            assert(self.router.gcm.send.called)
+            assert(self.router.gcm['test123'].send.called)
             # Make sure the data was encoded as base64
-            data = self.router.gcm.send.call_args[0][0].data
-            options = self.router.gcm.send.call_args[0][0].options
+            data = self.router.gcm['test123'].send.call_args[0][0].data
+            options = self.router.gcm['test123'].send.call_args[0][0].options
             eq_(data['body'], 'q60d6g')
             eq_(data['enc'], 'test')
             eq_(data['enckey'], 'test')
@@ -300,7 +315,7 @@ class GCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_long_data(self):
-        self.router.gcm = self.gcm
+        self.router.gcm['test123'] = self.gcm
         badNotif = Notification(
             10, "\x01abcdefghijklmnopqrstuvwxyz0123456789", dummy_chid,
             self.headers, 200)
@@ -315,14 +330,14 @@ class GCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_route_crypto_notification(self):
-        self.router.gcm = self.gcm
+        self.router.gcm['test123'] = self.gcm
         del(self.notif.headers['encryption-key'])
         self.notif.headers['crypto-key'] = 'crypto'
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            assert(self.router.gcm.send.called)
+            assert(self.router.gcm['test123'].send.called)
         d.addCallback(check_results)
         return d
 
@@ -330,7 +345,7 @@ class GCMRouterTestCase(unittest.TestCase):
         def throw_auth(arg):
             raise gcmclient.GCMAuthenticationError()
         self.gcm.send.side_effect = throw_auth
-        self.router.gcm = self.gcm
+        self.router.gcm['test123'] = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -342,7 +357,7 @@ class GCMRouterTestCase(unittest.TestCase):
         def throw_other(arg):
             raise Exception("oh my!")
         self.gcm.send.side_effect = throw_other
-        self.router.gcm = self.gcm
+        self.router.gcm['test123'] = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -352,31 +367,31 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_router_notification_gcm_id_change(self):
         self.mock_result.canonical["old"] = "new"
-        self.router.gcm = self.gcm
+        self.router.gcm['test123'] = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict(token="new"))
-            assert(self.router.gcm.send.called)
+            assert(self.router.gcm['test123'].send.called)
         d.addCallback(check_results)
         return d
 
     def test_router_notification_gcm_not_regged(self):
         self.mock_result.not_registered = {"connect_data": True}
-        self.router.gcm = self.gcm
+        self.router.gcm['test123'] = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict())
-            assert(self.router.gcm.send.called)
+            assert(self.router.gcm['test123'].send.called)
         d.addCallback(check_results)
         return d
 
     def test_router_notification_gcm_failed_items(self):
         self.mock_result.failed = dict(connect_data=True)
-        self.router.gcm = self.gcm
+        self.router.gcm['test123'] = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -386,7 +401,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_router_notification_gcm_needs_retry(self):
         self.mock_result.needs_retry.return_value = True
-        self.router.gcm = self.gcm
+        self.router.gcm['test123'] = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -406,7 +421,7 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_amend(self):
         self.router.register(uaid="uaid",
                              router_data={"token": "test123"},
-                             router_token="test123")
+                             senderid="test123")
         resp = {"key": "value"}
         result = self.router.amend_msg(resp,
                                        self.router_data.get('router_data'))
@@ -416,7 +431,7 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_register_invalid_token(self):
         self.assertRaises(RouterException, self.router.register,
                           uaid="uaid", router_data={"token": "invalid"},
-                          router_token="invalid")
+                          senderid="invalid")
 
 
 class FCMRouterTestCase(unittest.TestCase):
@@ -473,7 +488,7 @@ class FCMRouterTestCase(unittest.TestCase):
     def test_register(self):
         result = self.router.register(uaid="uaid",
                                       router_data={"token": "test123"},
-                                      router_token="test123")
+                                      senderid="test123")
         # Check the information that will be recorded for this user
         eq_(result, {"token": "test123",
                      "creds": {"senderID": "test123",
@@ -629,7 +644,7 @@ class FCMRouterTestCase(unittest.TestCase):
     def test_amend(self):
         self.router.register(uaid="uaid",
                              router_data={"token": "test123"},
-                             router_token="test123")
+                             senderid="test123")
         resp = {"key": "value"}
         result = self.router.amend_msg(resp,
                                        self.router_data.get('router_data'))
@@ -639,7 +654,7 @@ class FCMRouterTestCase(unittest.TestCase):
     def test_register_invalid_token(self):
         self.assertRaises(RouterException, self.router.register,
                           uaid="uaid", router_data={"token": "invalid"},
-                          router_token="invalid")
+                          senderid="invalid")
 
 
 class SimplePushRouterTestCase(unittest.TestCase):

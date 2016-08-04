@@ -618,13 +618,16 @@ class EndpointTestCase(unittest.TestCase):
         )
         self.sp_router_mock.route_notification.return_value = RouterResponse(
             status_code=500,
-            router_data={},
+            router_data=dict(token="new_connect"),
         )
 
         def handle_finish(result):
             self.assertTrue(result)
             self.endpoint.set_status.assert_called_with(500, None)
-            ok_(not self.router_mock.register_user.called)
+            ru = self.router_mock.register_user
+            ok_(ru.called)
+            eq_('simplepush', ru.call_args[0][0].get('router_type'))
+
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put(None, dummy_uaid)
@@ -638,13 +641,14 @@ class EndpointTestCase(unittest.TestCase):
         )
         self.sp_router_mock.route_notification.return_value = RouterResponse(
             status_code=503,
-            router_data=dict(token="new_connect"),
+            router_data=dict(),
         )
 
         def handle_finish(result):
             self.assertTrue(result)
             self.endpoint.set_status.assert_called_with(503, None)
-            assert(self.router_mock.register_user.called)
+            self.router_mock.drop_user.assert_called()
+
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.put(None, dummy_uaid)
