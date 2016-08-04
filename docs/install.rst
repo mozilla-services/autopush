@@ -40,14 +40,15 @@ Or a Debian based system (like Ubuntu):
     $ sudo apt-get install build-essential libffi-dev \
     libssl-dev pypy-dev python-virtualenv git --assume-yes
 
-Autopush uses the `Boto python library <https://boto.readthedocs.io/en/latest/>`_. Be sure to `properly set up <https://boto.readthedocs.io/en/latest/boto_config_tut.html>`_ your boto configuration file.
+Autopush uses the `Boto python library`_. Be sure to `properly set up your boto
+config file`_.
 
 Python 2.7.7+ w/virtualenv
 ==========================
 
-You will need ``virtualenv`` installed per the above requirements. Set up
-your virtual environment by running the following (if using
-PyPy, you'll likely need to specify the ``-p <path to pypy>`` option):
+You will need ``virtualenv`` installed per the above requirements. Set up your
+virtual environment by running the following (if using PyPy, you'll likely need
+to specify the ``-p <path to pypy>`` option):
 
 .. code-block:: bash
 
@@ -58,11 +59,11 @@ Then run the Makefile with ``make`` to setup the application.
 Notes on OS X
 =============
 
-autopush depends on the Python `cryptography <https://cryptography.io/en/latest/installation>`_
-library, which requires OpenSSL. If you're installing autopush on OS X
-with a custom version of OpenSSL, you'll need to set the ``ARCHFLAGS``
-environment variable, and add your OpenSSL library path to ``LDFLAGS`` and
-``CFLAGS`` before running ``make``:
+autopush depends on the Python `cryptography`_ library, which requires
+OpenSSL. If you're installing autopush on OS X with a custom version of
+OpenSSL, you'll need to set the ``ARCHFLAGS`` environment variable, and add
+your OpenSSL library path to ``LDFLAGS`` and ``CFLAGS`` before running
+``make``:
 
 .. code-block:: bash
 
@@ -73,12 +74,31 @@ environment variable, and add your OpenSSL library path to ``LDFLAGS`` and
 
 Notes on GCM/FCM support
 ========================
-autopush is capable of routing messages over Google Cloud Messaging/Firebase Cloud Messaging for android
-devices. You will need to set up a valid `GCM <http://developer.android.com/google/gcm/index.html>`_ / `FCM <https://firebase.google.com/docs/cloud-messaging/>`_ account. Once you have an account open the Google Developer Console:
 
-* create a new project. Record the Project Number as "SENDER_ID". You will need this value for your android application.
-* create a new Auth Credential Key for your project. This is available under **APIs & Auth** >> **Credentials** of the Google Developer Console. Store this value as ``gcm_apikey`` or ``fcm_apikey`` (as appropriate) in ``.autopush_endpoint`` server configuration file.
-* add ``gcm_enabled`` to the ``.autopush_shared`` server configuration file to enable GCM routing.
-* add ``fcm_enabled`` to the ``.autopush_shared`` server configuration file to enable FCM routing.
+autopush is capable of routing messages over Google Cloud Messaging/Firebase
+Cloud Messaging for android devices. You will need to set up a valid `GCM`_ /
+`FCM`_ account. Once you have an account open the Google Developer Console:
 
-Additional notes on using the GCM/FCM bridge are available `on the wiki <https://github.com/mozilla-services/autopush/wiki/Bridging-Via-GCM>`_.
+* create a new project. Record the Project Number as "SENDER_ID". You will need
+  this value for your android application.
+
+* create a new Auth Credential Key for your project. This is available under
+  **APIs & Auth** >> **Credentials** of the Google Developer Console. Store
+  this value as ``gcm_apikey`` or ``fcm_apikey`` (as appropriate) in
+  ``.autopush_endpoint`` server configuration file.
+
+* add ``gcm_enabled`` to the ``.autopush_shared`` server configuration file to
+  enable GCM routing.
+
+* add ``fcm_enabled`` to the ``.autopush_shared`` server configuration file to
+  enable FCM routing.
+
+Additional notes on using the GCM/FCM bridge are available `on the wiki`_.
+
+.. _`Boto python library`: https://boto.readthedocs.io/en/latest/
+.. _`properly set up your boto config file`:
+     https://boto.readthedocs.io/en/latest/boto_config_tut.html
+.. _`cryptography`: https://cryptography.io/en/latest/installation
+.. _`GCM`: http://developer.android.com/google/gcm/index.html
+.. _`FCM`: https://firebase.google.com/docs/cloud-messaging/
+.. _`on the wiki`: https://github.com/mozilla-services/autopush/wiki/Bridging-Via-GCM
