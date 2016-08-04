@@ -251,7 +251,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
             self.write(response.response_body)
             self.finish()
         else:
-            return self._write_response(
+            self._write_response(
                 response.status_code,
                 errno=response.errno or 999,
                 message=response.response_body)
@@ -497,8 +497,8 @@ class EndpointHandler(AutoendpointHandler):
             self.log.debug(
                 format="Invalid router requested", status_code=400,
                 errno=108, **self._client_info)
-            return self._write_response(400, 108,
-                                        message="Invalid router")
+            self._write_response(400, 108, message="Invalid router")
+            return
 
         # Only simplepush uses version/data out of body/query, GCM/APNS will
         # use data out of the request body 'WebPush' style.
@@ -516,14 +516,16 @@ class EndpointHandler(AutoendpointHandler):
                                  for x in req_fields]):
                 self.log.debug(format="Client error", status_code=400,
                                errno=101, **self._client_info)
-                return self._write_response(
+                self._write_response(
                     400, errno=101, message="Missing necessary crypto keys.")
+                return
             if ("encryption-key" in self.request.headers and
                     "crypto-key" in self.request.headers):
                 self.log.debug(format="Client error", status_code=400,
                                errno=110, **self._client_info)
-                return self._write_response(
+                self._write_response(
                     400, 110, message="Invalid crypto headers")
+                return
             self._client_info["message_size"] = len(data) if data else 0
 
         if "ttl" not in self.request.headers:
@@ -535,13 +537,14 @@ class EndpointHandler(AutoendpointHandler):
         else:
             self.log.debug(format="Client error", status_code=400,
                            errno=112, **self._client_info)
-            return self._write_response(400, 112, message="Invalid TTL header")
+            self._write_response(400, 112, message="Invalid TTL header")
+            return
 
         if data and len(data) > self.ap_settings.max_data:
             self.log.debug(format="Client error", status_code=400, errno=104,
                            **self._client_info)
-            return self._write_response(
-                413, 104, message="Data payload too large")
+            self._write_response(413, 104, message="Data payload too large")
+            return
 
         if use_simplepush:
             self._route_notification(self.version, result, data)
@@ -663,14 +666,14 @@ class RegistrationHandler(AutoendpointHandler):
             self.log.debug(format="Invalid router requested",
                            status_code=400, errno=108,
                            **self._client_info)
-            return self._write_response(
-                400, 108, message="Invalid router")
+            self._write_response(400, 108, message="Invalid router")
+            return
         router = self.ap_settings.routers[router_type]
 
         if uaid:
             if not self._validate_auth(uaid):
-                return self._write_unauthorized_response(
-                    message="Unauthorized")
+                self._write_unauthorized_response(message="Unauthorized")
+                return
         else:
             # No UAID supplied, make our own
             uaid = uuid.uuid4().hex
@@ -703,8 +706,8 @@ class RegistrationHandler(AutoendpointHandler):
         self.start_time = time.time()
 
         if not self._validate_auth(uaid):
-            return self._write_unauthorized_response(
-                message="Invalid Authentication")
+            self._write_unauthorized_response(message="Invalid Authentication")
+            return
 
         params = self._load_params()
         self.uaid = uaid
@@ -712,8 +715,8 @@ class RegistrationHandler(AutoendpointHandler):
         if router_type not in self.ap_settings.routers or not router_data:
             self.log.debug(format="Invalid router requested", status_code=400,
                            errno=108, **self._client_info)
-            return self._write_response(
-                400, 108, message="Invalid router")
+            self._write_response(400, 108, message="Invalid router")
+            return
         router = self.ap_settings.routers[router_type]
 
         self.add_header("Content-Type", "application/json")
@@ -751,14 +754,14 @@ class RegistrationHandler(AutoendpointHandler):
 
         """
         if not self._validate_auth(uaid):
-            return self._write_unauthorized_response(
-                message="Invalid Authentication")
+            self._write_unauthorized_response(message="Invalid Authentication")
+            return
         if router_type not in self.ap_settings.routers:
             self.log.debug(format="Invalid router requested",
                            status_code=400, errno=108,
                            **self._client_info)
-            return self._write_response(
-                400, 108, message="Invalid router")
+            self._write_response(400, 108, message="Invalid router")
+            return
 
         if chid:
             # mark channel as dead

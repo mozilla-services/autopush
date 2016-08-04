@@ -1318,18 +1318,20 @@ class RouterHandler(cyclone.web.RequestHandler, ErrorLogger):
         if not client:
             self.set_status(404)
             settings.metrics.increment("updates.router.disconnected")
-            return self.write("Client not connected.")
+            self.write("Client not connected.")
+            return
 
         if client.paused:
             self.set_status(503)
 
             settings.metrics.increment("updates.router.busy")
-            return self.write("Client busy.")
+            self.write("Client busy.")
+            return
 
         update = json.loads(self.request.body)
         client.send_notifications(update)
         settings.metrics.increment("updates.router.received")
-        return self.write("Client accepted for delivery")
+        self.write("Client accepted for delivery")
 
 
 class NotificationHandler(cyclone.web.RequestHandler, ErrorLogger):
@@ -1346,14 +1348,16 @@ class NotificationHandler(cyclone.web.RequestHandler, ErrorLogger):
         if not client:
             self.set_status(404)
             settings.metrics.increment("updates.notification.disconnected")
-            return self.write("Client not connected.")
+            self.write("Client not connected.")
+            return
 
         if client.paused:
             # Client already busy waiting for stuff, flag for check
             client._check_notifications = True
             self.set_status(202)
             settings.metrics.increment("updates.notification.flagged")
-            return self.write("Flagged for Notification check")
+            self.write("Flagged for Notification check")
+            return
 
         # Client is online and idle, start a notification check
         client.process_notifications()
@@ -1369,7 +1373,7 @@ class NotificationHandler(cyclone.web.RequestHandler, ErrorLogger):
         client = self.ap_settings.clients.get(uaid)
         if client and client.ps.connected_at == int(connectionTime):
             client.sendClose()
-            return self.write("Terminated duplicate")
+            self.write("Terminated duplicate")
 
 
 class DefaultResource(Resource):

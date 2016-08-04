@@ -61,9 +61,10 @@ class ThreadedValidate(object):
     def _call_func(self, result, func, request_handler, *args, **kwargs):
         output, errors = result
         if errors:
-            return request_handler._write_validation_err(errors)
-        request_handler.valid_input = output
-        return func(request_handler, *args, **kwargs)
+            request_handler._write_validation_err(errors)
+        else:
+            request_handler.valid_input = output
+            return func(request_handler, *args, **kwargs)
 
     def _decorator(self, func):
         @wraps(func)
