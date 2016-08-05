@@ -65,6 +65,43 @@ You may also want to enable human readable logs in the shared config file:
     ; Uncomment to provide stdout logging in a more human readable format.
     #human_logs
 
+Configuring SSL/TLS
+-------------------
+
+The Push protocol mandates use of SSL/TLS connections to ensure the integrity
+of push subscription data. This rule can be ignored for testing purposes
+only. This requires a valid, trusted TLS certificate (for example, from `Let's
+Encrypt`_).
+
+The ``ssl_key`` and ``ssl_cert`` options configure a TLS certificate for
+endpoint's HTTPS and or connection node's WebSocket Secure (WSS) connections:
+
+.. code-block:: ini
+
+    ; TLS private key and certificate file paths, used for the main
+    ; connection and endpoint listeners. If omitted, TLS will not be
+    ; used.
+    ssl_key = /etc/letsencrypt/live/EXAMPLE.COM/privkey.pem
+    ssl_cert = /etc/letsencrypt/live/EXAMPLE.COM/cert.pem
+    ; Path to file containing any additional parameters for the Ephemeral
+    ; Diffie-Hellman
+    #ssl_dh_param =
+
+Certificate options can be easily shared by both node types in
+``autopush_shared.ini`` (e.g. if you have a wildcard certificate). Separate
+credentials can also be specified individually to each node types.
+
+The connection between the endpoint and connection nodes should not be
+accessible externally but can also have SSL/TLS enabled for added
+protection. This can be configured via the connection node's ``router_ssl_key``
+and ``router_ssl_key`` options:
+
+.. code-block:: ini
+
+    ; The TLS certificates if this node will be doing SSL termination.
+    router_ssl_key = /etc/letsencrypt/live/EXAMPLE.COM/privkey.pem
+    router_ssl_cert = /etc/letsencrypt/live/EXAMPLE.COM/cert.pem
+
 Running the nodes
 =================
 
@@ -78,3 +115,4 @@ By default they will create a router and storage DynamoDB table named
 
 .. _`Local DynamoDB Java server`: http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Tools.DynamoDBLocal.html
 .. _`boto config file`: https://boto.readthedocs.io/en/latest/boto_config_tut.html
+.. _`Let's Encrypt`: https://letsencrypt.org/

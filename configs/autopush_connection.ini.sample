@@ -18,7 +18,7 @@ port = 8080
 
 ; Settings for the internal routing listener, used to deliver routed
 ; notifications to clients connected to this node. The port should not
-; be exposed externally.
+; be accessible externally.
 ; router_hostname = push.services.mozilla.com | ec2-internal-name
 router_port = 8081
 ; The TLS certificates if this node will be doing SSL termination.
