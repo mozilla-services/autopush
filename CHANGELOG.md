@@ -1,3 +1,54 @@
+<a name="1.17.0"></a>
+## 1.17.0 (2016-08-05)
+
+
+#### Refactor
+
+*   clarify intent of write methods returning nothing ([94ab2134](https://github.com/mozilla-services/autopush/commit/94ab2134e24b12b216eff01a9a079d11d63b0ed1))
+*   utilize console_script's sys.exit return value to kill a mock ([1c7de067](https://github.com/mozilla-services/autopush/commit/1c7de0679e634771bcfe0f23bd565fab468db554))
+
+#### Doc
+
+*   add release process ([a5da4491](https://github.com/mozilla-services/autopush/commit/a5da4491cf7239db438f4e6521d1c726ccdf784a))
+*   formatting/externalize the links ([966ada81](https://github.com/mozilla-services/autopush/commit/966ada816ea0cd85fb1455c5a448845f00029664))
+*   updates to installation ([aa6729bb](https://github.com/mozilla-services/autopush/commit/aa6729bb0be270717ca35ed95e955bdd137a974c))
+*   updates to intros ([efe0c652](https://github.com/mozilla-services/autopush/commit/efe0c652c01101ff41359a53818ecd613f9d7da8))
+
+#### Test
+
+*   don't hide wait_for_times test failures ([fe98d4c6](https://github.com/mozilla-services/autopush/commit/fe98d4c69b7f5c32adb4ba43a1a47fa95b1c1dfb))
+
+#### Bug Fixes
+
+*   remove readline from the nix pkg also ([e7c8d385](https://github.com/mozilla-services/autopush/commit/e7c8d38595a641420b747cb27255cb9e4a57c48c))
+*   Allow old GCM senderID ([fe0d19c8](https://github.com/mozilla-services/autopush/commit/fe0d19c857d6beaf540fb7ca828b6defcbfe872b))
+*   fix _base_tags class var usage and make other class vars immutable ([97a133a4](https://github.com/mozilla-services/autopush/commit/97a133a4829057d85869f83c83b7428578054302))
+*   readline isn't needed ([834a2c79](https://github.com/mozilla-services/autopush/commit/834a2c7958b7eb04de464b14d4ebd4ec901accd3))
+*   Do not remove router_type from UAID info ([d74c00c9](https://github.com/mozilla-services/autopush/commit/d74c00c94d593dc9b2fab8658e76b0f1bfea68f4))
+*   Fix up FCM library to reject enpdoints with invalid FCM senderids ([56633e4c](https://github.com/mozilla-services/autopush/commit/56633e4cd21b1f15897a094e4d0046676b4b01aa), closes [#556](https://github.com/mozilla-services/autopush/issues/556))
+*   Add ValueError trap for extract_jwt ([3f2af804](https://github.com/mozilla-services/autopush/commit/3f2af8044db8b04d05b4390ad495ac4b5d0a9100))
+*   Do not record the GCM data overflow error ([b4e8ed43](https://github.com/mozilla-services/autopush/commit/b4e8ed439f223cd00d1b524e0544ddd7a792e4f9), closes [#552](https://github.com/mozilla-services/autopush/issues/552))
+*   avoid uaid error in webpush preflight ([333d2fff](https://github.com/mozilla-services/autopush/commit/333d2fff0c0a1d833bd79676a4cf23cb2b682941))
+*   test_bad_senderidlist now requires --gcm_enabled. bandaid handling of make_settings failures for now ([949f8d3a](https://github.com/mozilla-services/autopush/commit/949f8d3a98996c278ba67e6aa0cc96c59a24bec2))
+*   Handle URL arguments to OPTIONS and HEAD requests ([471137f5](https://github.com/mozilla-services/autopush/commit/471137f5f7ecc8f87abed0ddd1fb4abf89d0b7c0))
+*   nocover the util function ([6230f77d](https://github.com/mozilla-services/autopush/commit/6230f77d8af38608677e92cda5487938eec26cac))
+*   kill now unused senderid_list cruft ([a2e1f8c8](https://github.com/mozilla-services/autopush/commit/a2e1f8c8faed5478048aa8aadd32af03acc82fa5))
+*   kill mutable default arguments ([b405cce6](https://github.com/mozilla-services/autopush/commit/b405cce663ad0e245ff020b142e4af6f37389034))
+
+#### Chore
+
+*   more gitignores ([d5585c6c](https://github.com/mozilla-services/autopush/commit/d5585c6c83a14d2543cb58a9a67c735bf59f97b7))
+* **Dockerfile:**  apt-get update before installing (#545) ([5c6cb3ce](https://github.com/mozilla-services/autopush/commit/5c6cb3ced6aef4ee205a4c28e8e8d51221099e4d))
+
+#### Features
+
+*   normalize user-agent for datadog and parse for raw logging ([8c4c6368](https://github.com/mozilla-services/autopush/commit/8c4c6368902b3f018e3093abee0813d1f46dbbba), closes [#487](https://github.com/mozilla-services/autopush/issues/487))
+*   Add URLs, text to error response messages ([da5eca84](https://github.com/mozilla-services/autopush/commit/da5eca84d9494c4cc6b36d17198e4113633c8c23))
+*   log all unregister/register calls. also adds assert_called_included for checking calls including kwargs ([cb87a82f](https://github.com/mozilla-services/autopush/commit/cb87a82f05b19e49599cbfc2c4fc0761dca03b7c))
+*   Add FCM router support ([b06c6a75](https://github.com/mozilla-services/autopush/commit/b06c6a7519b2b5142bee57954c7bf5c4367ddc71))
+
+
+
 <a name="1.16.1"></a>
 ## 1.16.1 (2016-07-19)
 
