@@ -1,7 +1,7 @@
 with import <nixpkgs> {}; {
   pyEnv = stdenv.mkDerivation {
     name = "autopush-env";
-    buildInputs = [ stdenv gcc python27Full python27Packages.virtualenv readline libffi openssl openjdk7 gnumake ];
+    buildInputs = [ stdenv gcc python27Full python27Packages.virtualenv libffi openssl openjdk7 gnumake ];
     shellHook = ''
       if [ ! -d pypy ]
       then
