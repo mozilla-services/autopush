@@ -56,6 +56,58 @@ to specify the ``-p <path to pypy>`` option):
 
 Then run the Makefile with ``make`` to setup the application.
 
+Configuration files
+===================
+
+Autopush can be configured in three ways; by option flags, by environment variables,
+and by configuration files. autopush uses three configuration files. These files use
+standard `ini` formatting similar to the following:
+
+.. code-block:: cfg
+
+   # A comment description
+   ;a_disabled_option
+   ;another_disabled_option=default_value
+   option=value
+
+Options can either have values or act as boolean flags. If the option is a flag
+it is either True if enabled, or False if disabled. The configuration files are
+usually richly commented, and you're encouraged to read them to learn how to
+set up your installation of autopush.
+
+Please note: any line that does not begin with a `#` or `;` is considered an option
+line. if an unexpected option is present in a configuration file, the application
+will fail to start.
+
+Configuration files can be located in:
+
+* in the /etc/ directory
+
+* in the configs subdirectory
+
+* in the $HOME or current directory (prefixed by a period '.')
+
+The three configuration files are:
+
+* *autopush_connection.ini* - contains options for use by the websocket handler.
+  This file's path can be specifed by the ``--config-connection`` option.
+
+* *autopush_shared.ini* - contains options shared between the connection and
+  endpoint handler. This file's path can be specified by the ``--config-shared``
+  option.
+
+* *autopush_endpoint.ini* - contains options for the HTTP handlers This file's
+  path can be specifed by the ``--config-endpoint`` option.
+
+For instance, if you wished to copy the sample `configs/autopush_connection.ini.sample`
+file to `/usr/share/autopush/autopush_connection.ini`, you could then run
+
+.. code-block:: bash
+
+    $ autopush --config-connection=/usr/share/autopush/autopush_connection.ini
+
+to have autopush load configuration information from that file.
+
 Notes on OS X
 =============
 
