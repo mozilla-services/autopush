@@ -1,6 +1,5 @@
 """FCM Router"""
-import gcmclient
-import json
+import pyfcm
 
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
@@ -21,6 +20,80 @@ class FCMRouter(object):
     gcm = None
     dryRun = 0
     collapseKey = "simplepush"
+    reasonTable = {
+        "MissingRegistration": {
+            "msg": ("'to' or 'registration_id' is blank or"
+                    " invalid: {regid}"),
+            "err": 500,
+            "errno": 1,
+        },
+        "InvalidRegistration": {
+            "msg": "registration_id is invalid: {regid}",
+            "err": 410,
+            "errno": 105,
+        },
+        "NotRegistered": {
+            "msg": "device has unregistered with FCM: {regid}",
+            "err": 410,
+            "errno": 103,
+        },
+        "InvalidPackageName": {
+            "msg": "Invalid Package Name specified",
+            "err": 500,
+            "errno": 2,
+            "crit": True,
+        },
+        "MismatchSenderid": {
+            "msg": "Invalid SenderID used: {senderid}",
+            "err": 410,
+            "errno": 105,
+            "crit": True,
+        },
+        "MessageTooBig": {
+            "msg": "Message length was too big: {nlen}",
+            "err": 413,
+            "errno": 104,
+        },
+        "InvalidDataKey": {
+            "msg": ("Payload contains an invalid or restricted "
+                    "key value"),
+            "err": 500,
+            "errno": 3,
+            "crit": True,
+        },
+        "InvalidTtl": {
+            "msg": "Invalid TimeToLive {ttl}",
+            "err": 400,
+            "errno": 111,
+        },
+        "Unavailable": {
+            "msg": "Message has timed out or device is unavailable",
+            "err": 200,
+            "errno": 0,
+        },
+        "InternalServerError": {
+            "msg": "FCM internal server error",
+            "err": 500,
+            "errno": 999,
+        },
+        "DeviceMessageRateExceeded": {
+            "msg": "Too many messages for this device",
+            "err": 503,
+            "errno": 4,
+        },
+        "TopicsMessageRateExceeded": {
+            "msg": "Too many subscribers for this topic",
+            "err": 503,
+            "errno": 5,
+            "crit": True,
+        },
+        "Unreported": {
+            "msg": "Error has no reported reason.",
+            "err": 500,
+            "errno": 999,
+            "crit": True,
+        }
+    }
 
     def __init__(self, ap_settings, router_conf):
         """Create a new FCM router and connect to FCM"""
@@ -33,7 +106,7 @@ class FCMRouter(object):
         self.metrics = ap_settings.metrics
         self._base_tags = []
         try:
-            self.fcm = gcmclient.GCM(self.auth)
+            self.fcm = pyfcm.FCMNotification(api_key=self.auth)
         except Exception as e:
             self.log.error("Could not instantiate FCM {ex}",
                            ex=e)
@@ -60,7 +133,8 @@ class FCMRouter(object):
         if not (senderid == self.senderID):
             raise self._error("Invalid SenderID", status=410, errno=105)
         # Assign a senderid
-        router_data["creds"] = {"senderID": self.senderID, "auth": self.auth}
+        router_data["creds"] = {"senderID": self.senderID,
+                                "auth": self.auth}
         return router_data
 
     def route_notification(self, notification, uaid_data):
@@ -72,6 +146,11 @@ class FCMRouter(object):
     def _route(self, notification, router_data):
         """Blocking FCM call to route the notification"""
         data = {"chid": notification.channel_id}
+        if not router_data.get("token"):
+            raise self._error("No registration token found. "
+                              "Rejecting message.",
+                              410, errno=106, log_exception=False)
+        regid = router_data.get("token")
         # Payload data is optional. The endpoint handler validates that the
         # correct encryption headers are included with the data.
         if notification.data:
@@ -95,29 +174,23 @@ class FCMRouter(object):
 
         # registration_ids are the FCM instance tokens (specified during
         # registration.
-        router_ttl = notification.ttl or 0
-        payload = gcmclient.JSONMessage(
-            registration_ids=[router_data.get("token")],
-            collapse_key=self.collapseKey,
-            time_to_live=max(self.min_ttl, router_ttl),
-            dry_run=self.dryRun or ("dryrun" in router_data),
-            data=data,
-        )
-        creds = router_data.get("creds", {"senderID": "missing id"})
+        router_ttl = max(self.min_ttl, notification.ttl or 0)
         try:
-            self.fcm.api_key = creds["auth"]
-            result = self.fcm.send(payload)
-        except KeyError:
-            raise self._error("Server error, missing bridge credentials " +
-                              "for %s" % creds.get("senderID"), 500)
-        except gcmclient.GCMAuthenticationError as e:
+            result = self.fcm.notify_single_device(
+                collapse_key=self.collapseKey,
+                data_message=data,
+                dry_run=self.dryRun or ('dryrun' in router_data),
+                registration_id=regid,
+                time_to_live=router_ttl,
+            )
+        except pyfcm.errors.AuthenticationError as e:
             raise self._error("Authentication Error: %s" % e, 500)
         except Exception as e:
             raise self._error("Unhandled exception in FCM Routing: %s" % e,
                               500)
-        self.metrics.increment("updates.client.bridge.gcm.attempted",
+        self.metrics.increment("updates.client.bridge.fcm.attempted",
                                self._base_tags)
-        return self._process_reply(result)
+        return self._process_reply(result, notification, router_data)
 
     def _error(self, err, status, **kwargs):
         """Error handler that raises the RouterException"""
@@ -125,50 +198,50 @@ class FCMRouter(object):
         return RouterException(err, status_code=status, response_body=err,
                                **kwargs)
 
-    def _process_reply(self, reply):
+    def _process_reply(self, reply, notification, router_data):
         """Process FCM send reply"""
         # acks:
         #  for reg_id, msg_id in reply.success.items():
         # updates
-        for old_id, new_id in reply.canonical.items():
+        result = reply.get('results', [])[0]
+        if reply.get('canonical_ids'):
+            old_id = router_data['token']
+            new_id = result.get('registration_id')
             self.log.info("FCM id changed : {old} => {new}",
                           old=old_id, new=new_id)
-            self.metrics.increment("updates.client.bridge.gcm.failed.rereg",
+            self.metrics.increment("updates.client.bridge.fcm.failed.rereg",
                                    self._base_tags)
             return RouterResponse(status_code=503,
                                   response_body="Please try request again.",
                                   router_data=dict(token=new_id))
-        # naks:
-        # uninstall:
-        for reg_id in reply.not_registered:
-            self.metrics.increment("updates.client.bridge.gcm.failed.unreg",
+        if reply.get('failure'):
+            self.metrics.increment("updates.client.bridge.fcm.failed",
                                    self._base_tags)
-            self.log.info("FCM no longer registered: %s" % reg_id)
+            reason = result.get('error', "Unreported")
+            err = self.reasonTable.get(reason)
+            if err.get("crit", False):
+                self.log.critical(
+                    err['msg'],
+                    nlen=len(notification.data),
+                    regid=router_data["token"],
+                    senderid=self.senderID,
+                    ttl=notification.ttl,
+                )
+                raise RouterException("FCM failure to deliver",
+                                      status_code=err['err'],
+                                      response_body="Please try request "
+                                                    "later.")
+            creds = router_data["creds"]
+            self.log.info("{msg} : {info}",
+                          msg=err['msg'],
+                          info={"senderid": creds.get('registration_id'),
+                                "reason": reason})
             return RouterResponse(
-                status_code=410,
-                response_body="Endpoint requires client update",
+                status_code=err['err'],
+                errno=err['errno'],
+                response_body=err['msg'],
                 router_data={},
             )
-
-        #  for reg_id, err_code in reply.failed.items():
-        if len(reply.failed.items()) > 0:
-            self.metrics.increment("updates.client.bridge.gcm.failed.failure",
-                                   self._base_tags)
-            self.log.critical("FCM failures: {failed()}",
-                              failed=lambda: json.dumps(reply.failed.items()))
-            raise RouterException("FCM failure to deliver", status_code=503,
-                                  response_body="Please try request later.")
-
-        # retries:
-        if reply.needs_retry():
-            self.log.warn("FCM retry requested: {failed()}",
-                          failed=lambda: json.dumps(reply.failed.items()))
-            self.metrics.increment("updates.client.bridge.gcm.failed.retry",
-                                   self._base_tags)
-            raise RouterException("FCM failure to deliver, retry",
-                                  status_code=503,
-                                  response_body="Please try request later.")
-
-        self.metrics.increment("updates.client.bridge.gcm.succeeded",
+        self.metrics.increment("updates.client.bridge.fcm.succeeded",
                                self._base_tags)
         return RouterResponse(status_code=200, response_body="Message Sent")
