@@ -11,6 +11,7 @@ from twisted.internet.error import ConnectError, ConnectionRefusedError
 
 import apns
 import gcmclient
+import pyfcm
 
 from autopush.db import (
     Router,
@@ -436,7 +437,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
 class FCMRouterTestCase(unittest.TestCase):
 
-    @patch("gcmclient.GCM", spec=gcmclient.gcm.GCM)
+    @patch("pyfcm.FCMNotification", spec=pyfcm.FCMNotification)
     def setUp(self, ffcm):
         settings = AutopushSettings(
             hostname="localhost",
@@ -449,7 +450,7 @@ class FCMRouterTestCase(unittest.TestCase):
                            "auth": "12345678abcdefg"}
         self.fcm = ffcm
         self.router = FCMRouter(settings, self.fcm_config)
-        self.headers = {"content-encoding": "aesfcm",
+        self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
         # Payloads are Base64-encoded.
@@ -459,30 +460,33 @@ class FCMRouterTestCase(unittest.TestCase):
             router_data=dict(
                 token="connect_data",
                 creds=dict(senderID="test123", auth="12345678abcdefg")))
-        mock_result = Mock(spec=gcmclient.gcm.Result)
-        mock_result.canonical = dict()
-        mock_result.failed = dict()
-        mock_result.not_registered = dict()
-        mock_result.needs_retry.return_value = False
+        mock_result = dict(
+            multicast_id="",
+            success=0,
+            failure=0,
+            canonical_ids=0,
+            results=[dict()],
+        )
         self.mock_result = mock_result
-        ffcm.send.return_value = mock_result
+        ffcm.notify_single_device.return_value = mock_result
 
     def _check_error_call(self, exc, code):
         ok_(isinstance(exc, RouterException))
         eq_(exc.status_code, code)
-        assert(self.router.fcm.send.called)
+        assert(self.router.fcm.notify_single_device.called)
         self.flushLoggedErrors()
 
-    @patch("gcmclient.GCM", spec=gcmclient.gcm.GCM)
-    def test_init(self, fgcm):
+    @patch("pyfcm.FCMNotification", spec=pyfcm.FCMNotification)
+    def test_init(self, ffcm):
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
 
-        def throw_auth(arg):
-            raise gcmclient.GCMAuthenticationError()
-        fgcm.side_effect = throw_auth
+        def throw_auth(*args, **kwargs):
+            raise Exception("oopsy")
+
+        ffcm.side_effect = throw_auth
         self.assertRaises(IOError, FCMRouter, settings, {})
 
     def test_register(self):
@@ -503,13 +507,14 @@ class FCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            assert(self.router.fcm.send.called)
+            assert(self.router.fcm.notify_single_device.called)
             # Make sure the data was encoded as base64
-            data = self.router.fcm.send.call_args[0][0].data
+            args = self.router.fcm.notify_single_device.call_args[1]
+            data = args['data_message']
             eq_(data['body'], 'q60d6g')
             eq_(data['enc'], 'test')
             eq_(data['enckey'], 'test')
-            eq_(data['con'], 'aesfcm')
+            eq_(data['con'], 'aesgcm')
         d.addCallback(check_results)
         return d
 
@@ -524,16 +529,16 @@ class FCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            assert(self.router.fcm.send.called)
+            assert(self.router.fcm.notify_single_device.called)
             # Make sure the data was encoded as base64
-            data = self.router.fcm.send.call_args[0][0].data
-            options = self.router.fcm.send.call_args[0][0].options
+            args = self.router.fcm.notify_single_device.call_args[1]
+            data = args['data_message']
             eq_(data['body'], 'q60d6g')
             eq_(data['enc'], 'test')
             eq_(data['enckey'], 'test')
-            eq_(data['con'], 'aesfcm')
+            eq_(data['con'], 'aesgcm')
             # use the defined min TTL
-            eq_(options['time_to_live'], 60)
+            eq_(args['time_to_live'], 60)
         d.addCallback(check_results)
         return d
 
@@ -560,14 +565,14 @@ class FCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            assert(self.router.fcm.send.called)
+            assert(self.router.fcm.notify_single_device.called)
         d.addCallback(check_results)
         return d
 
     def test_router_notification_fcm_auth_error(self):
-        def throw_auth(arg):
-            raise gcmclient.GCMAuthenticationError()
-        self.fcm.send.side_effect = throw_auth
+        def throw_auth(*args, **kwargs):
+            raise pyfcm.errors.AuthenticationError()
+        self.fcm.notify_single_device.side_effect = throw_auth
         self.router.fcm = self.fcm
         d = self.router.route_notification(self.notif, self.router_data)
 
@@ -577,9 +582,9 @@ class FCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_router_notification_fcm_other_error(self):
-        def throw_other(arg):
+        def throw_other(*args, **kwargs):
             raise Exception("oh my!")
-        self.fcm.send.side_effect = throw_other
+        self.fcm.notify_single_device.side_effect = throw_other
         self.router.fcm = self.fcm
         d = self.router.route_notification(self.notif, self.router_data)
 
@@ -589,41 +594,35 @@ class FCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_router_notification_fcm_id_change(self):
-        self.mock_result.canonical["old"] = "new"
+        self.mock_result['canonical_ids'] = 1
+        self.mock_result['results'][0] = {'registration_id': "new"}
         self.router.fcm = self.fcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict(token="new"))
-            assert(self.router.fcm.send.called)
+            assert(self.router.fcm.notify_single_device.called)
         d.addCallback(check_results)
         return d
 
     def test_router_notification_fcm_not_regged(self):
-        self.mock_result.not_registered = {"connect_data": True}
+        self.mock_result['failure'] = 1
+        self.mock_result['results'][0] = {'error': 'NotRegistered'}
         self.router.fcm = self.fcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict())
-            assert(self.router.fcm.send.called)
+            assert(self.router.fcm.notify_single_device.called)
         d.addCallback(check_results)
         return d
 
     def test_router_notification_fcm_failed_items(self):
-        self.mock_result.failed = dict(connect_data=True)
-        self.router.fcm = self.fcm
-        d = self.router.route_notification(self.notif, self.router_data)
-
-        def check_results(fail):
-            self._check_error_call(fail.value, 503)
-        d.addBoth(check_results)
-        return d
-
-    def test_router_notification_fcm_needs_retry(self):
-        self.mock_result.needs_retry.return_value = True
+        self.mock_result['failure'] = 1
+        self.mock_result['results'][0] = {'error':
+                                          'TopicsMessageRateExceeded'}
         self.router.fcm = self.fcm
         d = self.router.route_notification(self.notif, self.router_data)
 
@@ -634,10 +633,10 @@ class FCMRouterTestCase(unittest.TestCase):
 
     def test_router_notification_fcm_no_auth(self):
         d = self.router.route_notification(self.notif,
-                                           {"router_data": {"token": "abc"}})
+                                           {"router_data": {"token": ""}})
 
         def check_results(fail):
-            eq_(fail.value.status_code, 500)
+            eq_(fail.value.status_code, 410)
         d.addBoth(check_results)
         return d
 
