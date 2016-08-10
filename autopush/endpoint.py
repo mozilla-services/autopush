@@ -59,7 +59,9 @@ from autopush.websocket import ms_time
 # Our max TTL is 60 days realistically with table rotation, so we hard-code it
 MAX_TTL = 60 * 60 * 24 * 60
 VALID_TTL = re.compile(r'^\d+$')
-AUTH_SCHEME = "bearer"
+AUTH_SCHEMES = ["bearer", "webpush"]
+PREF_SCHEME = "webpush"
+
 status_codes = {
     200: "OK",
     201: "Created",
@@ -217,7 +219,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
 
     def _write_unauthorized_response(self, message="Invalid authentication",
                                      **kwargs):
-        headers = {"www-authenticate": AUTH_SCHEME}
+        headers = {"www-authenticate": PREF_SCHEME}
         self._write_response(401, errno=109, message=message, headers=headers,
                              **kwargs)
 
@@ -352,7 +354,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         """Process the optional VAPID auth token.
 
         VAPID requires two headers to be present;
-        `Authorization: Bearer ...` and `Crypto-Key: p256ecdsa=..`.
+        `Authorization: WebPush ...` and `Crypto-Key: p256ecdsa=..`.
         The problem is that VAPID is optional and Crypto-Key can carry
         content for other functions.
 
@@ -368,7 +370,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         except ValueError:
             raise VapidAuthException("Invalid Authorization header")
         # if it's a bearer token containing what may be a JWT
-        if auth_type.lower() == AUTH_SCHEME and '.' in token:
+        if auth_type.lower() in AUTH_SCHEMES and '.' in token:
             d = deferToThread(extract_jwt, token, public_key)
             d.addCallback(self._store_auth, public_key, token, result)
             d.addErrback(self._invalid_auth)
@@ -852,7 +854,7 @@ class RegistrationHandler(AutoendpointHandler):
                                         header.strip()).split(" ", 2)
         except ValueError:
             return False
-        if AUTH_SCHEME != token_type.lower():
+        if token_type.lower() not in AUTH_SCHEMES:
             return False
         if self.ap_settings.bear_hash_key:
             for key in self.ap_settings.bear_hash_key:

@@ -29,7 +29,9 @@ from autopush.utils import (
 )
 
 MAX_TTL = 60 * 60 * 24 * 60
-AUTH_SCHEME = "bearer"
+# Older versions used "bearer", newer specification requires "webpush"
+AUTH_SCHEMES = ["bearer", "webpush"]
+PREF_SCHEME = "webpush"
 
 
 class ThreadedValidate(object):
@@ -297,10 +299,10 @@ class WebPushRequestSchema(Schema):
         except ValueError:
             raise InvalidRequest("Invalid Authorization Header",
                                  status_code=401, errno=109,
-                                 headers={"www-authenticate": AUTH_SCHEME})
+                                 headers={"www-authenticate": PREF_SCHEME})
 
         # If its not a bearer token containing what may be JWT, stop
-        if auth_type.lower() != AUTH_SCHEME or '.' not in token:
+        if auth_type.lower() not in AUTH_SCHEMES or '.' not in token:
             return
 
         try:
@@ -308,11 +310,11 @@ class WebPushRequestSchema(Schema):
         except ValueError:
             raise InvalidRequest("Invalid Authorization Header",
                                  status_code=401, errno=109,
-                                 headers={"www-authenticate": AUTH_SCHEME})
+                                 headers={"www-authenticate": PREF_SCHEME})
         if jwt.get('exp', 0) < time.time():
             raise InvalidRequest("Invalid bearer token: Auth expired",
                                  status_code=401, errno=109,
-                                 headers={"www-authenticate": AUTH_SCHEME})
+                                 headers={"www-authenticate": PREF_SCHEME})
         jwt_crypto_key = base64url_encode(public_key)
         d["jwt"] = dict(jwt_crypto_key=jwt_crypto_key, jwt_data=jwt)
 

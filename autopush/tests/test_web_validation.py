@@ -574,6 +574,36 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         eq_(errors, {})
         ok_("jwt" in result)
 
+    def test_valid_vapid_crypto_header_webpush(self):
+        schema = self._makeFUT()
+        self.fernet_mock.decrypt.return_value = dummy_token
+
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+
+        token, crypto_key = self._gen_jwt(header, payload)
+        auth = "WebPush %s" % token
+        ckey = 'keyid="a1"; key="foo";p256ecdsa="%s"' % crypto_key
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            path_kwargs=dict(
+                api_ver="v0",
+                token="asdfasdf",
+            ),
+            headers={
+                "content-encoding": "aes128",
+                "encryption": "stuff",
+                "authorization": auth,
+                "crypto-key": ckey
+            }
+        )
+
+        result, errors = schema.load(info)
+        eq_(errors, {})
+        ok_("jwt" in result)
+
     @patch("autopush.web.validation.extract_jwt")
     def test_invalid_vapid_crypto_header(self, mock_jwt):
         schema = self._makeFUT()
@@ -587,7 +617,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
                    "sub": "mailto:admin@example.com"}
 
         token, crypto_key = self._gen_jwt(header, payload)
-        auth = "Bearer %s" % token
+        auth = "WebPush %s" % token
         ckey = 'keyid="a1"; key="foo";p256ecdsa="%s"' % crypto_key
         info = self._make_test_data(
             body="asdfasdfasdfasdf",
@@ -619,7 +649,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
                    "sub": "mailto:admin@example.com"}
 
         token, crypto_key = self._gen_jwt(header, payload)
-        auth = "Bearer %s" % token
+        auth = "WebPush %s" % token
         ckey = 'keyid="a1"; key="foo";p256ecdsa="%s"' % crypto_key
         info = self._make_test_data(
             body="asdfasdfasdfasdf",

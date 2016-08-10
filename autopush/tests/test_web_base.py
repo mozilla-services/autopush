@@ -169,8 +169,10 @@ class TestBase(unittest.TestCase):
         eq_(d["message_ttl"], "0")
         eq_(d["authorization"], "bearer token fred")
         self.request_mock.headers["x-forwarded-for"] = "local2"
+        self.request_mock.headers["authorization"] = "webpush token barney"
         d = self.base._init_info()
         eq_(d["remote_ip"], "local2")
+        eq_(d["authorization"], "webpush token barney")
 
     def test_properties(self):
         eq_(self.base.uaid, "")
