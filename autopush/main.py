@@ -36,6 +36,7 @@ from autopush.web.webpush import WebPushHandler
 
 shared_config_files = [
     '/etc/autopush_shared.ini',
+    'configs/autopush_shared.ini',
     '~/.autopush_shared.ini',
     '.autopush_shared.ini',
 ]
@@ -217,6 +218,7 @@ def _parse_connection(sysargs, use_files=True):
     if use_files:  # pragma: nocover
         config_files = shared_config_files + [  # pragma: nocover
             '/etc/autopush_connection.ini',
+            'configs/autopush_connection.ini',
             '~/.autopush_connection.ini',
             '.autopush_connection.ini'
         ]
@@ -224,7 +226,8 @@ def _parse_connection(sysargs, use_files=True):
         config_files = []  # pragma: nocover
     parser = configargparse.ArgumentParser(
         description='Runs a Connection Node.',
-        default_config_files=config_files)
+        default_config_files=config_files,
+        )
     parser.add_argument('--config-connection',
                         help="Connection node configuration file path",
                         dest='config_file', is_config_file=True)
@@ -271,6 +274,7 @@ def _parse_endpoint(sysargs, use_files=True):
     if use_files:  # pragma: nocover
         config_files = shared_config_files + [
             '/etc/autopush_endpoint.ini',
+            'configs/autopush_endpoint.ini',
             '~/.autopush_endpoint.ini',
             '.autopush_endpoint.ini'
         ]
@@ -278,7 +282,8 @@ def _parse_endpoint(sysargs, use_files=True):
         config_files = []  # pragma: nocover
     parser = configargparse.ArgumentParser(
         description='Runs an Endpoint Node.',
-        default_config_files=config_files)
+        default_config_files=config_files,
+        )
     parser.add_argument('--config-endpoint',
                         help="Endpoint node configuration file path",
                         dest='config_file', is_config_file=True)

@@ -50,7 +50,7 @@ To generate and configure a key:
 
     $ bin/autokey
     Key = <crypto key here>
-    $ cp configs/autopush_shared.ini .
+    $ cp configs/autopush_shared.ini.sample ./autopush_shared.ini
 
 Then edit your ``autopush_shared.ini`` to include it:
 
