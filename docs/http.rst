@@ -272,13 +272,13 @@ agent.
 
 Most calls to the HTTP interface require a Authorization header. The
 Authorization header is a bearer token, which has been provided by the
-**Registration** call and is preceded by the token type word "Bearer".
+**Registration** call and is preceded by the token type word "WebPush".
 
 An example of the Authorization header would be:
 
 ::
 
-    Authorization: Bearer 0123abcdef
+    Authorization: WebPush 0123abcdef
 
 Calls
 -----
@@ -347,7 +347,7 @@ Update the current bridge token value
 
 ::
 
-    Authorization: Bearer {auth_token}
+    Authorization: WebPush {auth_token}
 
 **Parameters:**
 
@@ -372,7 +372,7 @@ example:
 .. code-block:: http
 
     > PUT /v1/fcm/a1b2c3/registration/abcdef012345
-    > Authorization: Bearer 0123abcdef
+    > Authorization: WebPush 0123abcdef
     >
     > {"token": "5e6g7h8i"}
 
@@ -397,7 +397,7 @@ Acquire a new ChannelID for a given UAID.
 
 ::
 
-    Authorization: Bearer {auth_token}
+    Authorization: WebPush {auth_token}
 
 **Parameters:**
 
@@ -416,7 +416,7 @@ example:
 .. code-block:: http
 
     > POST /v1/fcm/a1b2c3/registration/abcdef012345/subscription
-    > Authorization: Bearer 0123abcdef
+    > Authorization: WebPush 0123abcdef
     >
     > {}
 
@@ -443,7 +443,7 @@ is no longer valid.
 
 ::
 
-    Authorization: Bearer {auth_token}
+    Authorization: WebPush {auth_token}
 
 **Parameters:**
 
@@ -471,7 +471,7 @@ Remove a given ChannelID subscription from a UAID.
 
 ::
 
-    Authorization: Bearer {auth_token}
+    Authorization: WebPush {auth_token}
 
 **Parameters:**
 

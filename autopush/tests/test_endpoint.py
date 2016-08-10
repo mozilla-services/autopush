@@ -793,7 +793,7 @@ class EndpointTestCase(unittest.TestCase):
                    "sub": "mailto:admin@example.com"}
 
         (token, crypto_key) = self._gen_jwt(header, payload)
-        auth = "Bearer %s" % token
+        auth = "WebPush %s" % token
         """ # to verify that the object is encoded correctly
 
             kd2 = utils.base64url_decode(crypto_key)
@@ -857,7 +857,7 @@ class EndpointTestCase(unittest.TestCase):
                    "sub": "mailto:admin@example.com"}
 
         (token, crypto_key) = self._gen_jwt(header, payload)
-        auth = "Bearer other_token"
+        auth = "WebPush other_token"
         self.request_mock.headers["crypto-key"] = "p256ecdsa=%s" % crypto_key
         self.request_mock.headers["authorization"] = auth
         self.router_mock.get_uaid.return_value = dict(
@@ -969,7 +969,7 @@ class EndpointTestCase(unittest.TestCase):
 
         (sig, crypto_key) = self._gen_jwt(header, payload)
         sigs = sig.split('.')
-        auth = "Bearer %s.%s.%s" % (sigs[0], sigs[1], "invalid")
+        auth = "WebPush %s.%s.%s" % (sigs[0], sigs[1], "invalid")
         self.request_mock.headers["crypto-key"] = "p256ecdsa=%s" % crypto_key
         self.request_mock.headers["authorization"] = auth
         self.router_mock.get_uaid.return_value = dict(
@@ -1003,7 +1003,7 @@ class EndpointTestCase(unittest.TestCase):
 
         (token, crypto_key) = self._gen_jwt(header, payload)
         self.request_mock.headers["crypto-key"] = "p256ecdsa=%s" % crypto_key
-        self.request_mock.headers["authorization"] = "Bearer %s" % token
+        self.request_mock.headers["authorization"] = "WebPush %s" % token
         self.router_mock.get_uaid.return_value = dict(
             router_type="webpush",
             router_data=dict(),
@@ -1391,7 +1391,7 @@ class RegistrationTestCase(unittest.TestCase):
 
         self.status_mock = self.reg.set_status = Mock()
         self.write_mock = self.reg.write = Mock()
-        self.auth = ("Bearer %s" %
+        self.auth = ("WebPush %s" %
                      generate_hash(self.reg.ap_settings.bear_hash_key[0],
                                    dummy_uaid))
 
@@ -1636,7 +1636,7 @@ class RegistrationTestCase(unittest.TestCase):
             self._check_error(401, 109, 'Unauthorized')
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.request.headers["Authorization"] = "Bearer Invalid"
+        self.reg.request.headers["Authorization"] = "WebPush Invalid"
         self.reg.post(router_type="simplepush",
                       uaid=dummy_uaid, chid=dummy_chid)
         return self.finish_deferred
