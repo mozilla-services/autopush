@@ -46,8 +46,8 @@ class VapidAuthException(Exception):
 class BaseHandler(cyclone.web.RequestHandler):
     """Common overrides for Push web API's"""
     cors_methods = ""
-    cors_request_headers = []
-    cors_response_headers = []
+    cors_request_headers = ()
+    cors_response_headers = ()
 
     log = Logger()
 
