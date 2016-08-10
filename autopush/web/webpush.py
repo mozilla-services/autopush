@@ -16,11 +16,11 @@ from autopush.websocket import ms_time
 
 class WebPushHandler(BaseHandler):
     cors_methods = "POST"
-    cors_request_headers = ["content-encoding", "encryption",
+    cors_request_headers = ("content-encoding", "encryption",
                             "crypto-key", "ttl",
                             "encryption-key", "content-type",
-                            "authorization"]
-    cors_response_headers = ["location", "www-authenticate"]
+                            "authorization")
+    cors_response_headers = ("location", "www-authenticate")
 
     @threaded_validate(WebPushRequestSchema)
     def post(self, api_ver="v1", token=None):
