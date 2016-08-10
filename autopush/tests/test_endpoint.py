@@ -13,7 +13,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from cyclone.web import Application
 from jose import jws
 from mock import Mock, patch
-from moto import mock_dynamodb2, mock_s3
+from moto import mock_dynamodb2
 from nose.tools import eq_, ok_, assert_raises
 from twisted.internet.defer import Deferred
 from twisted.trial import unittest
@@ -46,13 +46,11 @@ dummy_token = dummy_uaid + ":" + dummy_chid
 
 def setUp():
     mock_dynamodb2.start()
-    mock_s3().start()
     create_rotating_message_table()
 
 
 def tearDown():
     mock_dynamodb2.stop()
-    mock_s3().stop()
 
 
 class FileConsumer(object):  # pragma: no cover

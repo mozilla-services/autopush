@@ -97,9 +97,6 @@ endpoint_port = 8082
 ; Uncomment to enable the Google Cloud Messaging bridge support.
 #gcm_enabled
 
-; Seconds before servers will check S3 for GCM senderID changes.
-#senderid_expry = 60*15
-
 ; Default hash of senderids and associated authorization keys.
 ; THIS WILL OVERWRITE ANY VALUES STORED IN S3!
 ; The list is specified as a JSON object formatted as:

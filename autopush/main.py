@@ -140,8 +140,7 @@ def obsolete_args(parser):
     These are included to prevent startup errors with old config files.
 
     """
-    parser.add_argument('--external_router', action="store_true",
-                        help='OBSOLETE')
+    parser.add_argument('--external_router', help='OBSOLETE')
     parser.add_argument('--max_message_size', type=int, help="OBSOLETE")
     parser.add_argument('--s3_bucket', help='OBSOLETE')
     parser.add_argument('--senderid_expry', help='OBSOLETE')

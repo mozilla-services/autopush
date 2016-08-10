@@ -4,7 +4,7 @@ import uuid
 import time
 
 from mock import Mock, PropertyMock, patch
-from moto import mock_dynamodb2, mock_s3
+from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
 from twisted.internet.error import ConnectError, ConnectionRefusedError
@@ -34,13 +34,11 @@ mock_dynamodb2 = mock_dynamodb2()
 
 
 def setUp():
-    mock_s3().start()
     mock_dynamodb2.start()
     create_rotating_message_table()
 
 
 def tearDown():
-    mock_s3().stop()
     mock_dynamodb2.stop()
 
 
