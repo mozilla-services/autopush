@@ -83,7 +83,7 @@ i.e. If a new minor version is being released after ``1.21.0``, the
 #. ``git merge release/{major}.{minor}`` to merge the new version/changelog
    back into the ``master`` branch.
 #. ``git push`` to push the merged version/changelog updates.
-#. Go to the `autopush releases page`, you should see the new tag with no
+#. Go to the `autopush releases page`_, you should see the new tag with no
    release information under it.
 #. Click the ``Draft a new release`` button.
 #. Enter the tag for ``Tag version``.
