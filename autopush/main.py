@@ -543,8 +543,6 @@ def endpoint_main(sysargs=None, use_files=True):
         (r"/wpush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
          WebPushHandler, dict(ap_settings=settings)),
         (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
-        # PUT /register/ => connect info
-        # GET /register/uaid => chid + endpoint
         (r"/v1/([^\/]+)/([^\/]+)/registration(?:/([^\/]+))"
             "?(?:/subscription)?(?:/([^\/]+))?",
          RegistrationHandler,
