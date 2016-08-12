@@ -529,6 +529,17 @@ class EndpointHandler(AutoendpointHandler):
                     400, 110, message="Invalid crypto headers")
                 return
             self._client_info["message_size"] = len(data) if data else 0
+            if ("crypto-key" in self.request.headers and
+                    "dh=" not in self.request.headers['crypto-key']):
+                self._write_response(
+                    401, 110, message="Crypto-Key header missing public-key "
+                    "'dh' value")
+                return
+            if ("encryption" in self.request.headers and
+                    "salt=" not in self.request.headers['encryption']):
+                self._write_response(
+                    401, 110, message="Encryption header missing 'salt' value")
+                return
 
         if "ttl" not in self.request.headers:
             ttl = None

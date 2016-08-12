@@ -278,6 +278,18 @@ class WebPushRequestSchema(Schema):
         req_fields = ["content-encoding", "encryption"]
         if d["body"] and not all([x in d["headers"] for x in req_fields]):
             raise InvalidRequest("Client error", errno=110)
+        if (d["headers"].get("crypto-key") and
+                "dh=" not in d["headers"]["crypto-key"]):
+                raise InvalidRequest(
+                    "Crypto-Key header missing public-key 'dh' value",
+                    status_code=401,
+                    errno=110)
+        if (d["headers"].get("encryption") and
+                "salt=" not in d["headers"]["encryption"]):
+                raise InvalidRequest(
+                    "Encryption header missing 'salt' value",
+                    status_code=401,
+                    errno=110)
 
     @pre_load
     def token_prep(self, d):

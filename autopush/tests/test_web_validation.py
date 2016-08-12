@@ -475,13 +475,13 @@ class TestWebPushRequestSchema(unittest.TestCase):
             headers={
                 "authorization": "not vapid",
                 "content-encoding": "aesgcm128",
-                "encryption": padded_value
+                "encryption": "salt=" + padded_value
             }
         )
 
         result, errors = schema.load(info)
         eq_(errors, {})
-        eq_(result["headers"]["encryption"], "asdfjiasljdf")
+        eq_(result["headers"]["encryption"], "salt=asdfjiasljdf")
 
     def test_invalid_vapid_crypto_header(self):
         schema = self._makeFUT()
@@ -498,9 +498,9 @@ class TestWebPushRequestSchema(unittest.TestCase):
             body="asdfasdfasdfasdf",
             headers={
                 "content-encoding": "text",
-                "encryption": "ignored",
+                "encryption": "salt=ignored",
                 "authorization": "invalid",
-                "crypto-key": "crypt=crap",
+                "crypto-key": "dh=crap",
             }
         )
 
@@ -555,7 +555,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
         token, crypto_key = self._gen_jwt(header, payload)
         auth = "Bearer %s" % token
-        ckey = 'keyid="a1"; key="foo";p256ecdsa="%s"' % crypto_key
+        ckey = 'keyid="a1"; dh="foo";p256ecdsa="%s"' % crypto_key
         info = self._make_test_data(
             body="asdfasdfasdfasdf",
             path_kwargs=dict(
@@ -564,7 +564,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             ),
             headers={
                 "content-encoding": "aes128",
-                "encryption": "stuff",
+                "encryption": "salt=stuff",
                 "authorization": auth,
                 "crypto-key": ckey
             }
@@ -585,7 +585,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
         token, crypto_key = self._gen_jwt(header, payload)
         auth = "WebPush %s" % token
-        ckey = 'keyid="a1"; key="foo";p256ecdsa="%s"' % crypto_key
+        ckey = 'keyid="a1"; dh="foo";p256ecdsa="%s"' % crypto_key
         info = self._make_test_data(
             body="asdfasdfasdfasdf",
             path_kwargs=dict(
@@ -594,7 +594,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             ),
             headers={
                 "content-encoding": "aes128",
-                "encryption": "stuff",
+                "encryption": "salt=stuff",
                 "authorization": auth,
                 "crypto-key": ckey
             }
@@ -618,7 +618,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
         token, crypto_key = self._gen_jwt(header, payload)
         auth = "WebPush %s" % token
-        ckey = 'keyid="a1"; key="foo";p256ecdsa="%s"' % crypto_key
+        ckey = 'keyid="a1"; dh="foo";p256ecdsa="%s"' % crypto_key
         info = self._make_test_data(
             body="asdfasdfasdfasdf",
             path_kwargs=dict(
@@ -627,7 +627,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             ),
             headers={
                 "content-encoding": "aes128",
-                "encryption": "stuff",
+                "encryption": "salt=stuff",
                 "authorization": auth,
                 "crypto-key": ckey
             }
@@ -638,6 +638,76 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
         eq_(cm.exception.status_code, 401)
         eq_(cm.exception.errno, 109)
+
+    @patch("autopush.web.validation.extract_jwt")
+    def test_invalid_encryption_header(self, mock_jwt):
+        schema = self._makeFUT()
+        self.fernet_mock.decrypt.return_value = dummy_token
+        mock_jwt.side_effect = ValueError("Unknown public key "
+                                          "format specified")
+
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+
+        token, crypto_key = self._gen_jwt(header, payload)
+        auth = "Bearer %s" % token
+        ckey = 'keyid="a1"; dh="foo";p256ecdsa="%s"' % crypto_key
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            path_kwargs=dict(
+                api_ver="v0",
+                token="asdfasdf",
+            ),
+            headers={
+                "content-encoding": "aes128",
+                "encryption": "foo=stuff",
+                "authorization": auth,
+                "crypto-key": ckey
+            }
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 401)
+        eq_(cm.exception.errno, 110)
+
+    @patch("autopush.web.validation.extract_jwt")
+    def test_invalid_crypto_key_header_content(self, mock_jwt):
+        schema = self._makeFUT()
+        self.fernet_mock.decrypt.return_value = dummy_token
+        mock_jwt.side_effect = ValueError("Unknown public key "
+                                          "format specified")
+
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+
+        token, crypto_key = self._gen_jwt(header, payload)
+        auth = "Bearer %s" % token
+        ckey = 'keyid="a1";invalid="foo";p256ecdsa="%s"' % crypto_key
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            path_kwargs=dict(
+                api_ver="v0",
+                token="asdfasdf",
+            ),
+            headers={
+                "content-encoding": "aes128",
+                "encryption": "salt=stuff",
+                "authorization": auth,
+                "crypto-key": ckey
+            }
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 401)
+        eq_(cm.exception.errno, 110)
 
     def test_expired_vapid_header(self):
         schema = self._makeFUT()
@@ -650,7 +720,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
         token, crypto_key = self._gen_jwt(header, payload)
         auth = "WebPush %s" % token
-        ckey = 'keyid="a1"; key="foo";p256ecdsa="%s"' % crypto_key
+        ckey = 'keyid="a1"; dh="foo";p256ecdsa="%s"' % crypto_key
         info = self._make_test_data(
             body="asdfasdfasdfasdf",
             path_kwargs=dict(
@@ -659,7 +729,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             ),
             headers={
                 "content-encoding": "aes128",
-                "encryption": "stuff",
+                "encryption": "salt=stuff",
                 "authorization": auth,
                 "crypto-key": ckey
             }
