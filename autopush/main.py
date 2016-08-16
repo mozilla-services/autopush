@@ -32,6 +32,7 @@ from autopush.websocket import (
 )
 from autopush.web.simplepush import SimplePushHandler
 from autopush.web.webpush import WebPushHandler
+from autopush.web.limitedhttpconnection import LimitedHTTPConnection
 
 
 shared_config_files = [
@@ -553,6 +554,8 @@ def endpoint_main(sysargs=None, use_files=True):
         default_host=settings.hostname, debug=args.debug,
         log_function=skip_request_logging
     )
+    site.protocol = LimitedHTTPConnection
+    site.protocol.maxData = settings.max_data
     mount_health_handlers(site, settings)
 
     settings.metrics.start()
