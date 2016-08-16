@@ -35,6 +35,7 @@ from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
 from cryptography.fernet import InvalidToken
+from cryptography.hazmat.primitives import constant_time
 from twisted.internet.defer import Deferred
 from twisted.internet.threads import deferToThread
 
@@ -868,11 +869,11 @@ class RegistrationHandler(AutoendpointHandler):
         if token_type.lower() not in AUTH_SCHEMES:
             return False
         if self.ap_settings.bear_hash_key:
+            is_valid = False
             for key in self.ap_settings.bear_hash_key:
                 token = generate_hash(key, uaid)
-                if rtoken == token:
-                    return True
-            return False
+                is_valid |= constant_time.bytes_eq(rtoken, token)
+            return is_valid
         else:
             return True
 
