@@ -315,6 +315,21 @@ class TestWebPushRequestSchema(unittest.TestCase):
         ok_("message_id" in result)
         eq_(str(result["subscription"]["uaid"]), dummy_uaid)
 
+    def test_no_headers(self):
+        schema = self._makeFUT()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="webpush",
+        )
+        data = self._make_test_data(body="asdfasdf",
+                                    headers={"ttl": "invalid"})
+        result, errors = schema.load(data)
+        eq_(errors, {'headers': {'ttl': [u'Not a valid integer.']}})
+
     def test_invalid_simplepush_user(self):
         schema = self._makeFUT()
         schema.context["settings"].parse_endpoint.return_value = dict(
