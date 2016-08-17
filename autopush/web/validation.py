@@ -202,7 +202,7 @@ class WebPushSubscriptionSchema(Schema):
             raise InvalidRequest("invalid token", errno=102)
         return result
 
-    @validates_schema
+    @validates_schema(skip_on_field_errors=True)
     def validate_uaid(self, d):
         try:
             result = self.context["settings"].router.get_uaid(d["uaid"].hex)
@@ -271,25 +271,26 @@ class WebPushRequestSchema(Schema):
                 errno=104,
             )
 
-    @validates_schema
+    @validates_schema(skip_on_field_errors=True)
     def ensure_encoding_with_data(self, d):
         # This runs before nested schemas, so we use the - separated
         # field name
         req_fields = ["content-encoding", "encryption"]
-        if d["body"] and not all([x in d["headers"] for x in req_fields]):
-            raise InvalidRequest("Client error", errno=110)
-        if (d["headers"].get("crypto-key") and
-                "dh=" not in d["headers"]["crypto-key"]):
-                raise InvalidRequest(
-                    "Crypto-Key header missing public-key 'dh' value",
-                    status_code=401,
-                    errno=110)
-        if (d["headers"].get("encryption") and
-                "salt=" not in d["headers"]["encryption"]):
-                raise InvalidRequest(
-                    "Encryption header missing 'salt' value",
-                    status_code=401,
-                    errno=110)
+        if d.get("body"):
+            if not all([x in d["headers"] for x in req_fields]):
+                raise InvalidRequest("Client error", errno=110)
+            if (d["headers"].get("crypto-key") and
+                    "dh=" not in d["headers"]["crypto-key"]):
+                    raise InvalidRequest(
+                        "Crypto-Key header missing public-key 'dh' value",
+                        status_code=401,
+                        errno=110)
+            if (d["headers"].get("encryption") and
+                    "salt=" not in d["headers"]["encryption"]):
+                    raise InvalidRequest(
+                        "Encryption header missing 'salt' value",
+                        status_code=401,
+                        errno=110)
 
     @pre_load
     def token_prep(self, d):
