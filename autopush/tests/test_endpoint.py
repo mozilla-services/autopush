@@ -9,6 +9,7 @@ from hashlib import sha256
 
 import ecdsa
 import twisted.internet.base
+from boto.exception import BotoServerError
 from cryptography.fernet import Fernet, InvalidToken
 from cyclone.web import Application
 from jose import jws
@@ -593,6 +594,9 @@ class EndpointTestCase(unittest.TestCase):
 
     def _throw_provisioned_error(self, *args):
         raise ProvisionedThroughputExceededException(None, None)
+
+    def _throw_boto_err(self, *args):
+        raise BotoServerError(None, None)
 
     def test_process_token_client_unknown(self):
         self.router_mock.configure_mock(**{
@@ -1200,6 +1204,18 @@ class EndpointTestCase(unittest.TestCase):
     def test_put_db_error(self):
         self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.side_effect = self._throw_provisioned_error
+
+        def handle_finish(result):
+            self.assertTrue(result)
+            self.endpoint.set_status.assert_called_with(503, None)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.endpoint.put(None, dummy_uaid)
+        return self.finish_deferred
+
+    def test_put_boto_error(self):
+        self.fernet_mock.decrypt.return_value = dummy_token
+        self.router_mock.get_uaid.side_effect = self._throw_boto_err
 
         def handle_finish(result):
             self.assertTrue(result)

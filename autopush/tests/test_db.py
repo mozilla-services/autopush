@@ -9,6 +9,7 @@ from boto.dynamodb2.exceptions import (
 )
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.items import Item
+from boto.exception import BotoServerError
 from mock import Mock
 from nose.tools import eq_, assert_raises, ok_
 
@@ -152,6 +153,18 @@ class StorageTestCase(unittest.TestCase):
         storage.table.connection.put_item.side_effect = raise_error
         result = storage.save_notification(dummy_uaid, dummy_chid, 8)
         eq_(result, False)
+
+    def test_fetch_boto_err(self):
+        s = get_storage_table()
+        storage = Storage(s, SinkMetrics())
+        storage.table.connection = Mock()
+
+        def raise_error(*args, **kwargs):
+            raise BotoServerError(None, None)
+
+        storage.table.connection.put_item.side_effect = raise_error
+        with assert_raises(BotoServerError):
+            storage.save_notification(dummy_uaid, dummy_chid, 12)
 
     def test_fetch_over_provisioned(self):
         s = get_storage_table()

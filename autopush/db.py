@@ -7,7 +7,7 @@ import time
 import uuid
 from functools import wraps
 
-from boto.exception import JSONResponseError
+from boto.exception import JSONResponseError, BotoServerError
 from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
     ItemNotFound,
@@ -214,6 +214,9 @@ def track_provisioned(func):
             return func(self, *args, **kwargs)
         except ProvisionedThroughputExceededException:
             self.metrics.increment("error.provisioned.%s" % func.__name__)
+            raise
+        except BotoServerError:
+            self.metrics.increment("error.botoserver.%s" % func.__name__)
             raise
     return wrapper
 
