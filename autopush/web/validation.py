@@ -199,7 +199,7 @@ class WebPushSubscriptionSchema(Schema):
                 ckey_header=d["ckey_header"],
             )
         except (InvalidTokenException, InvalidToken):
-            raise InvalidRequest("invalid token", errno=102)
+            raise InvalidRequest("invalid token", status_code=404, errno=102)
         return result
 
     @validates_schema(skip_on_field_errors=True)

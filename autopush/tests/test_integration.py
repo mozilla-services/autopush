@@ -1318,7 +1318,7 @@ class TestWebPush(IntegrationBase):
 
         yield client.send_notification(
             vapid=vapid,
-            status=400)
+            status=404)
 
         yield self.shut_down(client)
 
