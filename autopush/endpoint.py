@@ -250,7 +250,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     def _jws_err(self, fail):
         """errBack for JWS/JWT exceptions"""
         fail.trap(JOSEError)
-        self.log.info(format="Authorization Failure: %s" % fail.value,
+        self.log.info(format="Authorization Failure",
                       status_code=401, errno=109, **self._client_info)
         self._write_response(401, errno=109,
                              message="Invalid Authorization")
