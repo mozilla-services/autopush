@@ -8,6 +8,7 @@ from boto.dynamodb2.exceptions import (
     ItemNotFound,
 )
 from cryptography.fernet import InvalidToken
+from jose import JOSEError
 from marshmallow import (
     Schema,
     fields,
@@ -321,7 +322,7 @@ class WebPushRequestSchema(Schema):
 
         try:
             jwt = extract_jwt(token, public_key)
-        except ValueError:
+        except (ValueError, JOSEError):
             raise InvalidRequest("Invalid Authorization Header",
                                  status_code=401, errno=109,
                                  headers={"www-authenticate": PREF_SCHEME})

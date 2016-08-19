@@ -37,6 +37,7 @@ from boto.dynamodb2.exceptions import (
 from boto.exception import BotoServerError
 from cryptography.fernet import InvalidToken
 from cryptography.hazmat.primitives import constant_time
+from jose import JOSEError
 from twisted.internet.defer import Deferred
 from twisted.internet.threads import deferToThread
 
@@ -246,6 +247,14 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         self._write_response(503, errno=201,
                              message="Please slow message send rate")
 
+    def _jws_err(self, fail):
+        """errBack for JWS/JWT exceptions"""
+        fail.trap(JOSEError)
+        self.log.info(format="Authorization Failure",
+                      status_code=401, errno=109, **self._client_info)
+        self._write_response(401, errno=109,
+                             message="Invalid Authorization")
+
     def _boto_err(self, fail):
         """errBack for random boto exceptions"""
         fail.trap(BotoServerError)
@@ -384,6 +393,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         if auth_type.lower() in AUTH_SCHEMES and '.' in token:
             d = deferToThread(extract_jwt, token, public_key)
             d.addCallback(self._store_auth, public_key, token, result)
+            d.addErrback(self._jws_err)
             d.addErrback(self._invalid_auth)
             return d
         # otherwise, it's not, so ignore the VAPID data.
@@ -481,6 +491,7 @@ class EndpointHandler(AutoendpointHandler):
                           crypto_key_header)
         d.addCallback(self._process_auth)
         d.addCallback(self._token_valid)
+        d.addErrback(self._jws_err)
         d.addErrback(self._auth_err)
         d.addErrback(self._token_err)
         d.addErrback(self._response_err)
