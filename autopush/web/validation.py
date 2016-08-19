@@ -78,6 +78,7 @@ class ThreadedValidate(object):
             d.addCallback(self._call_func, func, request_handler, *args,
                           **kwargs)
             d.addErrback(request_handler._overload_err)
+            d.addErrback(request_handler._boto_err)
             d.addErrback(request_handler._validation_err)
             d.addErrback(request_handler._response_err)
         return wrapper

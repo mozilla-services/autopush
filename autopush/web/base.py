@@ -7,6 +7,7 @@ import cyclone.web
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
+from boto.exception import BotoServerError
 from twisted.logger import Logger
 from twisted.python import failure
 
@@ -195,6 +196,14 @@ class BaseHandler(cyclone.web.RequestHandler):
                       errno=201, **self._client_info)
         self._write_response(503, 201,
                              message="Please slow message send rate")
+
+    def _boto_err(self, fail):
+        """errBack for random boto exceptions"""
+        fail.trap(BotoServerError)
+        self.log.info(format="BOTO Error: %s" % str(fail.value),
+                      status_code=503, errno=202, **self._client_info)
+        self._write_response(503, errno=202,
+                             message="Communication error, please retry")
 
     def _router_response(self, response):
         for name, val in response.headers.items():

@@ -133,6 +133,7 @@ class TestThreadedValidate(unittest.TestCase):
         vr.finish = lambda: d.callback(True)
         vr.write = Mock()
         vr._overload_err = Mock()
+        vr._boto_err = Mock()
         vr._validation_err = Mock()
         vr._response_err = Mock()
         vr.ap_settings = Mock()

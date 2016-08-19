@@ -34,6 +34,7 @@ from boto.dynamodb2.exceptions import (
     ItemNotFound,
     ProvisionedThroughputExceededException,
 )
+from boto.exception import BotoServerError
 from cryptography.fernet import InvalidToken
 from cryptography.hazmat.primitives import constant_time
 from twisted.internet.defer import Deferred
@@ -245,6 +246,14 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         self._write_response(503, errno=201,
                              message="Please slow message send rate")
 
+    def _boto_err(self, fail):
+        """errBack for random boto exceptions"""
+        fail.trap(BotoServerError)
+        self.log.info(format="BOTO Error: %s" % str(fail.value),
+                      status_code=503, errno=202, **self._client_info)
+        self._write_response(503, errno=202,
+                             message="Communication error, please retry")
+
     def _router_response(self, response):
         for name, val in response.headers.items():
             self.set_header(name, val)
@@ -328,6 +337,7 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         """Tack on the common error handling for a dynamodb request and
         uncaught exceptions"""
         d.addErrback(self._overload_err)
+        d.addErrback(self._boto_err)
         d.addErrback(self._response_err)
         return d
 
