@@ -8,6 +8,7 @@ import base64
 from hashlib import sha256
 
 import ecdsa
+import jose
 import twisted.internet.base
 from cryptography.fernet import Fernet, InvalidToken
 from cyclone.web import Application
@@ -1674,6 +1675,22 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = "WebPush Invalid"
         self.reg.post(router_type="simplepush",
+                      uaid=dummy_uaid, chid=dummy_chid)
+        return self.finish_deferred
+
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
+    @patch('jose.jws.verify', side_effect=jose.exceptions.JWTError)
+    def test_post_bad_jwt(self, *args):
+        self.reg.request.body = json.dumps(dict(
+            channelID=dummy_chid,
+        ))
+
+        def handle_finish(value):
+            self._check_error(401, 109, 'Unauthorized')
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = "WebPush Dummy"
+        self.reg.post(router_type="webpush",
                       uaid=dummy_uaid, chid=dummy_chid)
         return self.finish_deferred
 

@@ -7,6 +7,7 @@ from boto.dynamodb2.exceptions import (
 )
 from cryptography.fernet import InvalidToken
 from jose import jws
+from jose.exceptions import JWTClaimsError
 from marshmallow import Schema, fields
 from mock import Mock, patch
 from moto import mock_dynamodb2
@@ -688,6 +689,41 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
         eq_(cm.exception.status_code, 401)
         eq_(cm.exception.errno, 110)
+
+    @patch("autopush.web.validation.extract_jwt")
+    def test_invalid_encryption_jwt(self, mock_jwt):
+        schema = self._makeFUT()
+        self.fernet_mock.decrypt.return_value = dummy_token
+        # use a deeply superclassed error to make sure that it gets picked up.
+        mock_jwt.side_effect = JWTClaimsError("invalid claim")
+
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://push.example.com",
+                   "exp": int(time.time()) + 86400,
+                   "sub": "mailto:admin@example.com"}
+
+        token, crypto_key = self._gen_jwt(header, payload)
+        auth = "Bearer %s" % token
+        ckey = 'keyid="a1"; dh="foo";p256ecdsa="%s"' % crypto_key
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            path_kwargs=dict(
+                api_ver="v0",
+                token="asdfasdf",
+            ),
+            headers={
+                "content-encoding": "aes128",
+                "encryption": "salt=stuff",
+                "authorization": auth,
+                "crypto-key": ckey
+            }
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 401)
+        eq_(cm.exception.errno, 109)
 
     @patch("autopush.web.validation.extract_jwt")
     def test_invalid_crypto_key_header_content(self, mock_jwt):
