@@ -89,7 +89,6 @@ Unless otherwise specified, all calls return the following error codes:
 -  400 - Bad Parameters
 
    - errno 101 - Missing neccessary crypto keys
-   - errno 102 - Invalid URL endpoint
    - errno 108 - Router type is invalid
    - errno 110 - Invalid crypto keys specified
    - errno 111 - Missing Required Header
@@ -102,6 +101,10 @@ Unless otherwise specified, all calls return the following error codes:
 -  401 - Bad Authorization
 
    - errno 109 - Invalid authentication
+
+- 404 - Not Found
+
+   - errno 102 - Invalid URL endpoint
 
 -  410 - `{UAID}` or `{CHID}` not found
 

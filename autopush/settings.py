@@ -100,17 +100,6 @@ class AutopushSettings(object):
         pool = HTTPConnectionPool(reactor)
         self.agent = Agent(reactor, connectTimeout=5, pool=pool)
 
-        # Metrics setup
-        if datadog_api_key:
-            self.metrics = DatadogMetrics(
-                api_key=datadog_api_key,
-                app_key=datadog_app_key,
-                flush_interval=datadog_flush_interval
-            )
-        elif statsd_host:
-            self.metrics = TwistedMetrics(statsd_host, statsd_port)
-        else:
-            self.metrics = SinkMetrics()
         if not crypto_key:
             crypto_key = [Fernet.generate_key()]
         if not isinstance(crypto_key, list):
@@ -132,6 +121,19 @@ class AutopushSettings(object):
         self.hostname = hostname or default_hostname
         if resolve_hostname:
             self.hostname = resolve_ip(self.hostname)
+
+        # Metrics setup
+        if datadog_api_key:
+            self.metrics = DatadogMetrics(
+                hostname=self.hostname,
+                api_key=datadog_api_key,
+                app_key=datadog_app_key,
+                flush_interval=datadog_flush_interval,
+            )
+        elif statsd_host:
+            self.metrics = TwistedMetrics(statsd_host, statsd_port)
+        else:
+            self.metrics = SinkMetrics()
 
         self.port = port
         self.endpoint_hostname = endpoint_hostname or self.hostname

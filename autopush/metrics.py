@@ -5,7 +5,6 @@ from txstatsd.metrics.metrics import Metrics
 
 import datadog
 from datadog import ThreadStats
-from datadog.util.hostname import get_hostname
 
 
 class IMetrics(object):
@@ -70,13 +69,14 @@ class TwistedMetrics(object):
 
 class DatadogMetrics(object):
     """DataDog Metric backend"""
-    def __init__(self, api_key, app_key, flush_interval=10,
+    def __init__(self, api_key, app_key, hostname, flush_interval=10,
                  namespace="autopush"):
 
-        datadog.initialize(api_key=api_key, app_key=app_key)
+        datadog.initialize(api_key=api_key, app_key=app_key,
+                           host_name=hostname)
         self._client = ThreadStats()
         self._flush_interval = flush_interval
-        self._host = get_hostname()
+        self._host = hostname
         self._namespace = namespace
 
     def _prefix_name(self, name):

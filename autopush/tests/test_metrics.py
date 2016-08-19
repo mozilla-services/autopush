@@ -5,8 +5,6 @@ import twisted.internet.base
 from nose.tools import ok_, eq_
 from mock import Mock, patch
 
-from datadog.util.hostname import get_hostname
-
 from autopush.metrics import (
     IMetrics,
     DatadogMetrics,
@@ -52,9 +50,10 @@ class TwistedMetricsTestCase(unittest.TestCase):
 class DatadogMetricsTestCase(unittest.TestCase):
     @patch("autopush.metrics.datadog")
     def test_basic(self, mock_dog):
-        hostname = get_hostname()
+        hostname = "localhost"
 
-        m = DatadogMetrics("someapikey", "someappkey", namespace="testpush")
+        m = DatadogMetrics("someapikey", "someappkey", namespace="testpush",
+                           hostname="localhost")
         ok_(len(mock_dog.mock_calls) > 0)
         m._client = Mock()
         m.start()
