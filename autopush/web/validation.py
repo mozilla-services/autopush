@@ -79,6 +79,7 @@ class ThreadedValidate(object):
             d.addCallback(self._call_func, func, request_handler, *args,
                           **kwargs)
             d.addErrback(request_handler._overload_err)
+            d.addErrback(request_handler._boto_err)
             d.addErrback(request_handler._validation_err)
             d.addErrback(request_handler._response_err)
         return wrapper
@@ -321,8 +322,8 @@ class WebPushRequestSchema(Schema):
 
         try:
             jwt = extract_jwt(token, public_key)
-        except (ValueError, JOSEError) as ex:
-            raise InvalidRequest("Invalid Authorization Header: %s" % str(ex),
+        except (ValueError, JOSEError):
+            raise InvalidRequest("Invalid Authorization Header",
                                  status_code=401, errno=109,
                                  headers={"www-authenticate": PREF_SCHEME})
         if jwt.get('exp', 0) < time.time():

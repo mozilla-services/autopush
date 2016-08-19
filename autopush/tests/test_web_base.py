@@ -1,6 +1,7 @@
 import sys
 import uuid
 
+from boto.exception import BotoServerError
 from cyclone.web import Application
 from mock import Mock, patch
 from moto import mock_dynamodb2
@@ -209,6 +210,14 @@ class TestBase(unittest.TestCase):
         except:
             fail = Failure()
         self.base._overload_err(fail)
+        self.status_mock.assert_called_with(503)
+
+    def test_boto_err(self):
+        try:
+            raise BotoServerError(503, "derp")
+        except:
+            fail = Failure()
+        self.base._boto_err(fail)
         self.status_mock.assert_called_with(503)
 
     def test_router_response(self):
