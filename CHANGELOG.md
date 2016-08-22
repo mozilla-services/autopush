@@ -1,3 +1,40 @@
+<a name="1.17.1"></a>
+## 1.17.1 (2016-08-22)
+
+
+#### Refactor
+
+*   prefer immutable class vars (follow up to 97a133a4) ([7ec831e7](https://github.com/mozilla-services/autopush/commit/7ec831e753495d1bddfc515a37653ff296fbd1d6))
+
+#### Features
+
+*   send sentry the current stack when lacking a Failure tb ([29a9dce8](https://github.com/mozilla-services/autopush/commit/29a9dce8d801dfedb09ecc7fcd3980549078633b))
+*   Limit the size of allowed HTTP bodies & headers ([54c4526a](https://github.com/mozilla-services/autopush/commit/54c4526a63ee899fb69a5f37967a2dc39edf4208), closes [#501](https://github.com/mozilla-services/autopush/issues/501))
+*   Validate Encryption/C-Key headers in preflight ([0c27efc2](https://github.com/mozilla-services/autopush/commit/0c27efc2f513037a1bc40bd268655626b2e0c775), closes [#456](https://github.com/mozilla-services/autopush/issues/456))
+*   Allow both "Bearer" and "WebPush" as Auth tokens ([1891f913](https://github.com/mozilla-services/autopush/commit/1891f9137506d2eb67475fb2df0ee43278120e24), closes [#592](https://github.com/mozilla-services/autopush/issues/592))
+*   better documentation for config files & locations ([71869826](https://github.com/mozilla-services/autopush/commit/71869826fa7d8e1e1bbc01fd7aaf167bd02cfed9), closes [#572](https://github.com/mozilla-services/autopush/issues/572))
+
+#### Bug Fixes
+
+*   limit max TTL for GCM/FCM ([7c14249a](https://github.com/mozilla-services/autopush/commit/7c14249afe667ce8ec3ea2b2dc8e2f8a17cbcf10))
+*   Trap BOTO Server exception as 503's ([75a8889d](https://github.com/mozilla-services/autopush/commit/75a8889d64c095db74db6cda458413181822d4e5), closes [#605](https://github.com/mozilla-services/autopush/issues/605))
+*   trap JWS/JWT errors from being reported as Sentry Errors ([3e0dd71c](https://github.com/mozilla-services/autopush/commit/3e0dd71ca3626ad106deeea662fec13cd0845cd5), closes [#610](https://github.com/mozilla-services/autopush/issues/610))
+*   Trap BOTO Server exception as 503's ([95bc09c2](https://github.com/mozilla-services/autopush/commit/95bc09c2f8ce1a4c61ee0ab0170ce9923ff5b69a), closes [#605](https://github.com/mozilla-services/autopush/issues/605))
+*   return 404 for invalid URL's for consistency ([f4c47af7](https://github.com/mozilla-services/autopush/commit/f4c47af7351aebc45f3781651fa24d0f1e939f98), closes [#578](https://github.com/mozilla-services/autopush/issues/578))
+*   Prevent invalid header values from causing key errors in validation ([55e08bfc](https://github.com/mozilla-services/autopush/commit/55e08bfc331218a29aa790a8f0dcc6aba9b76a5b), closes [#604](https://github.com/mozilla-services/autopush/issues/604))
+*   Check tokens in constant time ([ed7ce2b4](https://github.com/mozilla-services/autopush/commit/ed7ce2b40b2f09ce40902a4adfaec9b900f627d0), closes [#571](https://github.com/mozilla-services/autopush/issues/571))
+*   fixes reference to releasing page ([8510397b](https://github.com/mozilla-services/autopush/commit/8510397b3bb24d3471e1d667ce7d0bc821874111))
+*   kill duplicate ssl_key/cert options ([2d2e716c](https://github.com/mozilla-services/autopush/commit/2d2e716c1a5e263a0dc548516dbd9702c92d344e))
+*   remove obsoleted options from sample config files, and mock_s3 which is no longer necessary ([aa4b4de4](https://github.com/mozilla-services/autopush/commit/aa4b4de42e78e2660746c42a576da589898115ad))
+*   Update FCM handler to more accurately reflect API ([5f9c3223](https://github.com/mozilla-services/autopush/commit/5f9c32237d764ec33d7ba42e7df62989f90c8c8c))
+
+#### Doc
+
+*   describe configuration of SSL/TLS ([55f4dadb](https://github.com/mozilla-services/autopush/commit/55f4dadbc0d778145bdd3344b98923a27da6f1bf))
+*   kill outdated comment ([82bf79b8](https://github.com/mozilla-services/autopush/commit/82bf79b8d8f949c2de725be2166c314962691959))
+
+
+
 <a name="1.17.0"></a>
 ## 1.17.0 (2016-08-05)
 
