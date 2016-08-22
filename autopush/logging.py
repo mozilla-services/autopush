@@ -12,6 +12,7 @@ import threading
 import boto3
 import raven
 from raven.transport.twisted import TwistedHTTPTransport
+from raven.utils.stacks import iter_stack_frames
 from twisted.internet import reactor
 from twisted.logger import (
     formatEvent,
@@ -90,11 +91,7 @@ class PushLogger(object):
 
     def __call__(self, event):
         if self.raven_client and 'log_failure' in event:
-            f = event["log_failure"]
-            reactor.callFromThread(
-                self.raven_client.captureException,
-                exc_info=(f.type, f.value, f.getTracebackObject())
-            )
+            self.raven_log(event)
 
         if event["log_level"] < self.log_level:
             return
@@ -107,6 +104,23 @@ class PushLogger(object):
         if self._output:
             self._output.write(unicode(text))
             self._output.flush()
+
+    def raven_log(self, event):
+        f = event["log_failure"]
+        stack = extra = None
+        tb = f.getTracebackObject()
+        if not tb:
+            # include the current stack for at least some context
+            stack = list(iter_stack_frames())[4:]  # approx.
+            extra = dict(no_failure_tb=True)
+        reactor.callFromThread(
+            self.raven_client.captureException,
+            exc_info=(f.type, f.value, tb),
+            stack=stack,
+            extra=extra,
+        )
+        # just incase
+        del tb
 
     def json_format(self, event):
         error = bool(event.get("isError")) or "log_failure" in event

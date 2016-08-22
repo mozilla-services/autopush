@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 
 import cyclone.web
 import twisted.internet
@@ -37,13 +38,13 @@ class SentryLogTestCase(twisted.trial.unittest.TestCase):
         self.sentry = sentry
         self._site = site
         self._port = reactor.listenTCP(9999, site)
+        os.environ["SENTRY_DSN"] = "http://PUBKEY:SECKEY@localhost:9999/1"
 
     def tearDown(self):
+        os.environ.pop("SENTRY_DSN", None)
         reactor.removeAll()
 
     def test_sentry_logging(self):
-        dsn = "http://PUBKEY:SECKEY@localhost:9999/1"
-        os.environ["SENTRY_DSN"] = dsn
         pl = PushLogger.setup_logging("Autopush", sentry_dsn=True)
 
         log.failure("error", failure.Failure(Exception("eek")))
@@ -51,14 +52,43 @@ class SentryLogTestCase(twisted.trial.unittest.TestCase):
         d = Deferred()
 
         def check():
-            if len(self.sentry.logged):
-                eq_(len(self.sentry.logged), 1)
-                self._port.stopListening()
-                pl.stop()
-                d.callback(True)
-            else:  # pragma: nocover
+            logged = self.sentry.logged
+            if not logged:   # pragma: nocover
                 reactor.callLater(0, check)
-        del os.environ["SENTRY_DSN"]
+                return
+            eq_(len(logged), 1)
+            self._port.stopListening()
+            pl.stop()
+            d.callback(True)
+        reactor.callLater(0, check)
+        return d
+
+    def test_include_stacktrace_when_no_tb(self):
+        pl = PushLogger.setup_logging("Autopush", sentry_dsn=True)
+
+        log.failure("foo", failure.Failure(ZeroDivisionError(), exc_tb=None))
+        self.flushLoggedErrors()
+        d = Deferred()
+        co = sys._getframe().f_code
+        filename = co.co_filename
+        testname = co.co_name
+
+        def check():
+            logged = self.sentry.logged
+            if not logged:  # pragma: nocover
+                reactor.callLater(0, check)
+                return
+
+            eq_(len(logged), 1)
+            # Ensure a top level stacktrace was included
+            stacktrace = logged[0]['stacktrace']
+            assert any(
+                filename == f['abs_path'] and testname == f['function']
+                for f in stacktrace['frames'])
+
+            self._port.stopListening()
+            pl.stop()
+            d.callback(True)
         reactor.callLater(0, check)
         return d
 
