@@ -20,6 +20,7 @@ class FCMRouter(object):
     gcm = None
     dryRun = 0
     collapseKey = "simplepush"
+    MAX_TTL = 2419200
     reasonTable = {
         "MissingRegistration": {
             "msg": ("'to' or 'registration_id' is blank or"
@@ -174,7 +175,8 @@ class FCMRouter(object):
 
         # registration_ids are the FCM instance tokens (specified during
         # registration.
-        router_ttl = max(self.min_ttl, notification.ttl or 0)
+        router_ttl = min(self.MAX_TTL,
+                         max(self.min_ttl, notification.ttl or 0))
         try:
             result = self.fcm.notify_single_device(
                 collapse_key=self.collapseKey,

@@ -261,7 +261,7 @@ class GCMRouterTestCase(unittest.TestCase):
                           self.router.register,
                           "uaid",
                           {"token": "abcd1234"},
-                          "test123")
+                          "invalid123")
 
     @patch("gcmclient.GCM")
     def test_gcmclient_fail(self, fgcm):
@@ -310,6 +310,30 @@ class GCMRouterTestCase(unittest.TestCase):
             eq_(data['con'], 'aesgcm')
             # use the defined min TTL
             eq_(options['time_to_live'], 60)
+        d.addCallback(check_results)
+        return d
+
+    def test_ttl_high(self):
+        self.router.gcm['test123'] = self.gcm
+        self.notif = Notification(version=10,
+                                  data="q60d6g",
+                                  channel_id=dummy_chid,
+                                  headers=self.headers,
+                                  ttl=5184000)
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(result):
+            ok_(isinstance(result, RouterResponse))
+            assert(self.router.gcm['test123'].send.called)
+            # Make sure the data was encoded as base64
+            data = self.router.gcm['test123'].send.call_args[0][0].data
+            options = self.router.gcm['test123'].send.call_args[0][0].options
+            eq_(data['body'], 'q60d6g')
+            eq_(data['enc'], 'test')
+            eq_(data['enckey'], 'test')
+            eq_(data['con'], 'aesgcm')
+            # use the defined min TTL
+            eq_(options['time_to_live'], 2419200)
         d.addCallback(check_results)
         return d
 
@@ -537,6 +561,30 @@ class FCMRouterTestCase(unittest.TestCase):
             eq_(data['con'], 'aesgcm')
             # use the defined min TTL
             eq_(args['time_to_live'], 60)
+        d.addCallback(check_results)
+        return d
+
+    def test_ttl_high(self):
+        self.router.fcm = self.fcm
+        self.notif = Notification(version=10,
+                                  data="q60d6g",
+                                  channel_id=dummy_chid,
+                                  headers=self.headers,
+                                  ttl=5184000)
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(result):
+            ok_(isinstance(result, RouterResponse))
+            assert(self.router.fcm.notify_single_device.called)
+            # Make sure the data was encoded as base64
+            args = self.router.fcm.notify_single_device.call_args[1]
+            data = args['data_message']
+            eq_(data['body'], 'q60d6g')
+            eq_(data['enc'], 'test')
+            eq_(data['enckey'], 'test')
+            eq_(data['con'], 'aesgcm')
+            # use the defined min TTL
+            eq_(args['time_to_live'], 2419200)
         d.addCallback(check_results)
         return d
 
