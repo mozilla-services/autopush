@@ -10,7 +10,7 @@ from boto.dynamodb2.exceptions import (
 )
 from cyclone.web import Application
 from mock import Mock, patch
-from nose.tools import eq_, ok_
+from nose.tools import assert_raises, eq_, ok_
 from txstatsd.metrics.metrics import Metrics
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
@@ -64,6 +64,7 @@ class WebsocketTestCase(unittest.TestCase):
         from twisted.logger import Logger
         twisted.internet.base.DelayedCall.debug = True
         self.proto = PushServerProtocol()
+        self.proto._log_exc = False
         self.proto.log = Mock(spec=Logger)
 
         settings = AutopushSettings(
@@ -128,6 +129,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_exc_catcher(self):
         req = Mock()
+        self.proto._log_exc = True
 
         def raise_error(*args, **kwargs):
             raise Exception("Oops")
@@ -258,6 +260,23 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.failHandshake.assert_called_with(
             "Error reading handshake data"
         )
+
+    def test_log_exc_disable(self):
+        self.proto.log_failure = Mock()
+        self.proto.factory = Mock(externalPort=80)
+
+        def check_subbed(s):
+            raise ValueError()
+
+        self.proto.parent_class = Mock(**{"processHandshake.side_effect":
+                                          check_subbed})
+
+        with assert_raises(ValueError):
+            self.proto.processHandshake()
+
+        self.proto._log_exc = True
+        self.proto.processHandshake()
+        self.proto.log_failure.assert_called()
 
     def test_binary_msg(self):
         self.proto.onMessage(b"asdfasdf", True)

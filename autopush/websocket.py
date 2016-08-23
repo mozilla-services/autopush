@@ -116,7 +116,10 @@ def log_exception(func):
         try:
             return func(self, *args, **kwargs)
         except Exception:
-            self.log_failure(failure.Failure())
+            if self._log_exc:
+                self.log_failure(failure.Failure())
+            else:
+                raise
     return wrapper
 
 
@@ -248,6 +251,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     # Testing purposes
     parent_class = WebSocketServerProtocol
     randrange = randrange
+    _log_exc = True
 
     # Defer helpers
     def deferToThread(self, func, *args, **kwargs):
