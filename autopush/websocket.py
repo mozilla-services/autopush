@@ -384,15 +384,16 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         track_object(self, msg="processHandshake")
         port = self.ap_settings.port
         hide = port != 80 and port != 443
-        if not hide:
-            return self.parent_class.processHandshake(self)
-
         old_port = self.factory.externalPort
         try:
-            self.factory.externalPort = None
+            if hide:
+                self.factory.externalPort = None
             return self.parent_class.processHandshake(self)
+        except UnicodeEncodeError:
+            self.failHandshake("Error reading handshake data")
         finally:
-            self.factory.externalPort = old_port
+            if hide:
+                self.factory.externalPort = old_port
 
     @log_exception
     def onMessage(self, payload, isBinary):

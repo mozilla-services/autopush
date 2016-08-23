@@ -245,6 +245,20 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.processHandshake()
         eq_(self.proto.factory.externalPort, 80)
 
+    def test_handshake_decode_error(self):
+        self.proto.factory = Mock(externalPort=80)
+
+        def check_subbed(s):
+            u'\xfe'.encode('ascii')
+
+        self.proto.failHandshake = Mock()
+        self.proto.parent_class = Mock(**{"processHandshake.side_effect":
+                                          check_subbed})
+        self.proto.processHandshake()
+        self.proto.failHandshake.assert_called_with(
+            "Error reading handshake data"
+        )
+
     def test_binary_msg(self):
         self.proto.onMessage(b"asdfasdf", True)
         d = Deferred()
