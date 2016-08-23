@@ -3,7 +3,12 @@ APPNAME = autopush
 DEPS =
 HERE = $(shell pwd)
 PTYPE=pypy
-BIN = $(HERE)/pypy/bin
+ifneq ($(PTYPE), python)
+    REQS=$(PTYPE)-requirements.txt
+else
+    REQS=requirements.txt
+endif
+BIN = $(HERE)/$(PTYPE)/bin
 VIRTUALENV = virtualenv
 TESTS = $(APPNAME)/tests
 PYTHON = $(BIN)/$(PTYPE)
@@ -37,8 +42,11 @@ $(BIN)/flake8: $(BIN)/pip
 	$(INSTALL) flake8
 
 $(BIN)/paster: lib $(BIN)/pip
-	$(INSTALL) -r requirements.txt
+	$(INSTALL) -r $(REQS)
 	$(PYTHON) setup.py develop
+
+$(PYTHON):
+	$(VIRTUALENV) $(PTYPE) -p $(PTYPE)
 
 clean-env:
 	rm -rf *.egg-info
@@ -47,7 +55,7 @@ clean-env:
 clean:	clean-env
 
 build: $(BIN)/pip
-	$(INSTALL) -r requirements.txt
+	$(INSTALL) -r $(REQS)
 	$(PYTHON) setup.py develop
 
 test: $(BIN)/tox $(HERE)/ddb
