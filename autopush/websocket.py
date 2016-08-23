@@ -48,16 +48,16 @@ from twisted.internet.defer import (
     DeferredList,
     CancelledError
 )
-from twisted.web._newclient import ResponseNeverReceived
 from twisted.internet.error import (
-    ConnectError, ConnectionRefusedError, UserError,
-    ConnectionLost, ConnectionDone
+    ConnectError,
+    ConnectionClosed
 )
 from twisted.internet.interfaces import IProducer
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 from twisted.protocols import policies
 from twisted.python import failure
+from twisted.web._newclient import ResponseFailed
 from twisted.web.resource import Resource
 from zope.interface import implements
 
@@ -292,6 +292,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def trap_cancel(self, fail):
         fail.trap(CancelledError)
+
+    def trap_connection_err(self, fail):
+        fail.trap(ConnectError, ConnectionClosed, ResponseFailed)
 
     def force_retry(self, func, *args, **kwargs):
         """Forcefully retry a function in a thread until it doesn't error
@@ -568,6 +571,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             "PUT",
             url.encode("utf8"),
         ).addCallback(IgnoreBody.ignore)
+        d.addErrback(self.trap_connection_err)
         d.addErrback(self.log_failure, extra="Failed to notify node")
 
     def returnError(self, messageType, reason, statusCode, close=True,
@@ -776,12 +780,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                     "DELETE",
                     url.encode("utf8"),
                 )
-                d.addErrback(lambda f: f.trap(ConnectError,
-                                              ConnectionRefusedError,
-                                              UserError,
-                                              ResponseNeverReceived,
-                                              ConnectionLost,
-                                              ConnectionDone))
+                d.addErrback(self.trap_connection_err)
                 d.addErrback(self.log_failure,
                              extra="Failed to delete old node")
 

@@ -23,10 +23,11 @@ from twisted.internet.defer import (
 )
 from twisted.internet.error import (
     ConnectError,
+    ConnectionClosed,
     ConnectionRefusedError,
-    UserError
 )
 from twisted.logger import Logger
+from twisted.web._newclient import ResponseFailed
 from twisted.web.client import FileBodyProducer
 
 from autopush.protocol import IgnoreBody
@@ -100,7 +101,7 @@ class SimpleRouter(object):
             try:
                 result = yield self._send_notification(uaid, node_id,
                                                        notification)
-            except (ConnectError, UserError, ConnectionRefusedError) as exc:
+            except (ConnectError, ConnectionClosed, ResponseFailed) as exc:
                 self.metrics.increment("updates.client.host_gone")
                 dead_cache.put(node_key(node_id), True)
                 yield deferToThread(router.clear_node,
@@ -157,7 +158,7 @@ class SimpleRouter(object):
             returnValue(self.stored_response(notification))
         try:
             result = yield self._send_notification_check(uaid, node_id)
-        except (ConnectError, UserError, ConnectionRefusedError) as exc:
+        except (ConnectError, ConnectionClosed, ResponseFailed) as exc:
             self.metrics.increment("updates.client.host_gone")
             dead_cache.put(node_key(node_id), True)
             if isinstance(exc, ConnectionRefusedError):
