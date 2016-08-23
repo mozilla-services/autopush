@@ -25,7 +25,6 @@ from autopush.endpoint import Notification
 from autopush.router import (APNSRouter, GCMRouter,
                              SimpleRouter, WebPushRouter,
                              FCMRouter)
-from autopush.router.simple import dead_cache
 from autopush.router.interface import RouterException, RouterResponse, IRouter
 from autopush.settings import AutopushSettings
 
@@ -724,9 +723,6 @@ class SimplePushRouterTestCase(unittest.TestCase):
         settings.agent = self.agent_mock
         self.router.metrics = Mock()
 
-    def tearDown(self):
-        dead_cache.clear()
-
     def _raise_connect_error(self):
         raise ConnectError()
 
@@ -861,7 +857,6 @@ class SimplePushRouterTestCase(unittest.TestCase):
         return d
 
     def test_route_to_busy_node_saves_looks_up_and_send_check_fails(self):
-        import autopush.router.simple as simple
         response_mock = Mock()
         self.agent_mock.request.side_effect = MockAssist(
             [response_mock, self._raise_connection_refused_error])
@@ -876,13 +871,10 @@ class SimplePushRouterTestCase(unittest.TestCase):
             ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
             assert(self.router_mock.clear_node.called)
-            nk = simple.node_key(router_data["node_id"])
-            eq_(simple.dead_cache.get(nk), True)
         d.addBoth(verify_deliver)
         return d
 
     def test_route_busy_node_saves_looks_up_and_send_check_fails_and_db(self):
-        import autopush.router.simple as simple
         response_mock = Mock()
         self.agent_mock.request.side_effect = MockAssist(
             [response_mock, self._raise_connect_error])
@@ -900,8 +892,6 @@ class SimplePushRouterTestCase(unittest.TestCase):
             ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
             assert(self.router_mock.clear_node.called)
-            nk = simple.node_key(router_data["node_id"])
-            eq_(simple.dead_cache.get(nk), True)
         d.addBoth(verify_deliver)
         return d
 

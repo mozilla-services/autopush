@@ -7,7 +7,6 @@ based channel ID's (only newest version is stored, no data stored).
 """
 import json
 import requests
-import time
 from urllib import urlencode
 from StringIO import StringIO
 
@@ -15,7 +14,6 @@ from boto.dynamodb2.exceptions import (
     ItemNotFound,
     ProvisionedThroughputExceededException,
 )
-from repoze.lru import LRUCache
 from twisted.internet.threads import deferToThread
 from twisted.internet.defer import (
     inlineCallbacks,
@@ -34,14 +32,6 @@ from autopush.router.interface import (
     RouterException,
     RouterResponse,
 )
-
-
-dead_cache = LRUCache(150)
-
-
-def node_key(node_id):
-    """Generate a node key for the dead node cache"""
-    return node_id + "-%s" % int(time.time() / 3600)
 
 
 class SimpleRouter(object):
@@ -102,7 +92,6 @@ class SimpleRouter(object):
                                                        notification)
             except (ConnectError, UserError, ConnectionRefusedError) as exc:
                 self.metrics.increment("updates.client.host_gone")
-                dead_cache.put(node_key(node_id), True)
                 yield deferToThread(router.clear_node,
                                     uaid_data).addErrback(self._eat_db_err)
                 if isinstance(exc, ConnectionRefusedError):
@@ -159,7 +148,6 @@ class SimpleRouter(object):
             result = yield self._send_notification_check(uaid, node_id)
         except (ConnectError, UserError, ConnectionRefusedError) as exc:
             self.metrics.increment("updates.client.host_gone")
-            dead_cache.put(node_key(node_id), True)
             if isinstance(exc, ConnectionRefusedError):
                 self.log.debug("Could not route message: {exc}", exc=exc)
             yield deferToThread(
