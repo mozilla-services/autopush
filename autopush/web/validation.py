@@ -170,7 +170,6 @@ class SimplePushRequestSchema(Schema):
     @pre_load
     def extract_fields(self, d):
         body_string = d["body"]
-        version = data = None
         if len(body_string) > 0:
             body_args = urlparse.parse_qs(body_string, keep_blank_values=True)
             version = body_args.get("version")

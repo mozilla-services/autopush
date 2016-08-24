@@ -163,7 +163,9 @@ class AutopushSettings(object):
             storage_read_throughput,
             storage_write_throughput)
         self.message_table = get_rotating_message_table(
-            message_tablename)
+            message_tablename,
+            message_read_throughput=message_read_throughput,
+            message_write_throughput=message_write_throughput)
         self._message_prefix = message_tablename
         self.storage = Storage(self.storage_table, self.metrics)
         self.router = Router(self.router_table, self.metrics)
@@ -188,7 +190,7 @@ class AutopushSettings(object):
         self.wake_timeout = wake_timeout
 
         # Setup the routers
-        self.routers = {}
+        self.routers = dict()
         self.routers["simplepush"] = SimpleRouter(
             self,
             router_conf.get("simplepush")
@@ -345,7 +347,7 @@ class AutopushSettings(object):
             label = crypto_key.get_label('p256ecdsa')
             try:
                 public_key = base64url_decode(label)
-            except:
+            except TypeError:
                 # Ignore missing and malformed app server keys.
                 pass
 

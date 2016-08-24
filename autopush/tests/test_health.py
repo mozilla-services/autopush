@@ -27,7 +27,7 @@ class HealthTestCase(unittest.TestCase):
         self.mock_dynamodb2 = mock_dynamodb2()
         self.mock_dynamodb2.start()
 
-        HealthHandler.ap_settings = self.settings = AutopushSettings(
+        ap_settings = self.settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
@@ -35,7 +35,9 @@ class HealthTestCase(unittest.TestCase):
         self.storage_table = self.settings.storage.table
 
         self.request_mock = Mock()
-        self.health = HealthHandler(Application(), self.request_mock)
+        self.health = HealthHandler(Application(),
+                                    self.request_mock,
+                                    ap_settings=ap_settings)
         self.health.log = self.log_mock = Mock(spec=Logger)
         self.status_mock = self.health.set_status = Mock()
         self.write_mock = self.health.write = Mock()

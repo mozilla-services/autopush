@@ -179,7 +179,7 @@ class ConnectionMainTestCase(unittest.TestCase):
 
 
 class EndpointMainTestCase(unittest.TestCase):
-    class test_arg:
+    class TestArg:
         # important stuff
         apns_enabled = True
         apns_cert_file = "cert.file"
@@ -257,33 +257,33 @@ class EndpointMainTestCase(unittest.TestCase):
         ], False)
 
     def test_ping_settings(self):
-        ap = make_settings(self.test_arg)
+        ap = make_settings(self.TestArg)
         # verify that the hostname is what we said.
-        eq_(ap.hostname, self.test_arg.hostname)
+        eq_(ap.hostname, self.TestArg.hostname)
         # gcm isn't created until later since we may have to pull
         # config info from s3
-        eq_(ap.routers["apns"].apns.cert_file, self.test_arg.apns_cert_file)
-        eq_(ap.routers["apns"].apns.key_file, self.test_arg.apns_key_file)
+        eq_(ap.routers["apns"].apns.cert_file, self.TestArg.apns_cert_file)
+        eq_(ap.routers["apns"].apns.key_file, self.TestArg.apns_key_file)
         eq_(ap.wake_timeout, 10)
 
     def test_bad_senders(self):
-        oldList = self.test_arg.senderid_list
-        self.test_arg.senderid_list = "{}"
-        ap = make_settings(self.test_arg)
+        old_list = self.TestArg.senderid_list
+        self.TestArg.senderid_list = "{}"
+        ap = make_settings(self.TestArg)
         eq_(ap, None)
-        self.test_arg.senderid_list = oldList
+        self.TestArg.senderid_list = old_list
 
     def test_bad_fcm_senders(self):
-        old_auth = self.test_arg.fcm_auth
-        old_senderid = self.test_arg.fcm_senderid
-        self.test_arg.fcm_auth = ""
-        ap = make_settings(self.test_arg)
+        old_auth = self.TestArg.fcm_auth
+        old_senderid = self.TestArg.fcm_senderid
+        self.TestArg.fcm_auth = ""
+        ap = make_settings(self.TestArg)
         eq_(ap, None)
-        self.test_arg.fcm_auth = old_auth
-        self.test_arg.fcm_senderid = ""
-        ap = make_settings(self.test_arg)
+        self.TestArg.fcm_auth = old_auth
+        self.TestArg.fcm_senderid = ""
+        ap = make_settings(self.TestArg)
         eq_(ap, None)
-        self.test_arg.fcm_senderid = old_senderid
+        self.TestArg.fcm_senderid = old_senderid
 
     def test_gcm_start(self):
         endpoint_main([
@@ -294,10 +294,10 @@ class EndpointMainTestCase(unittest.TestCase):
 
     @patch("requests.get")
     def test_aws_ami_id(self, request_mock):
-        class m_reply:
+        class MockReply:
             content = "ami_123"
 
-        request_mock.return_value = m_reply
-        self.test_arg.no_aws = False
-        ap = make_settings(self.test_arg)
+        request_mock.return_value = MockReply
+        self.TestArg.no_aws = False
+        ap = make_settings(self.TestArg)
         eq_(ap.ami_id, "ami_123")

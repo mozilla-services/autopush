@@ -162,7 +162,7 @@ class SimpleRouter(object):
             returnValue(self.delivered_response(notification))
         else:
             self.metrics.increment("router.broadcast.miss")
-            retVal = self.stored_response(notification)
+            ret_val = self.stored_response(notification)
             if self.udp is not None and "server" in self.conf:
                 # Attempt to send off the UDP wake request.
                 try:
@@ -175,7 +175,7 @@ class SimpleRouter(object):
                 except Exception as exc:
                     self.log.debug("Could not send UDP wake request: {exc}",
                                    exc=exc)
-            returnValue(retVal)
+            returnValue(ret_val)
 
     #############################################################
     #                    Blocking Helper Functions

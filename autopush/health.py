@@ -1,5 +1,6 @@
 """Health Check HTTP Handler"""
 import cyclone.web
+from autopush.endpoint import AutoendpointHandler
 
 from boto.dynamodb2.exceptions import (
     InternalServerError,
@@ -16,9 +17,12 @@ class MissingTableException(Exception):
     pass
 
 
-class HealthHandler(cyclone.web.RequestHandler):
+class HealthHandler(AutoendpointHandler):
     """HTTP Health Handler"""
     log = Logger()
+
+    def initialize(self, ap_settings):
+        self.ap_settings = ap_settings
 
     @cyclone.web.asynchronous
     def get(self):

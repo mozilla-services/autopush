@@ -31,14 +31,14 @@ http://tools.ietf.org/html/draft-ietf-httpbis-encryption-encoding-00#section-4
         chunks = header.split(",")
         for chunk in chunks:
             bits = chunk.split(";")
-            hash = {}
+            ck_hash = {}
             for bit in bits:
                 try:
                     (key, value) = bit.split("=", 1)
                 except ValueError:
                     raise CryptoKeyException("Invalid Crypto Key value")
-                hash[key.strip()] = value.strip(' "')
-            self._values.append(hash)
+                ck_hash[key.strip()] = value.strip(' "')
+            self._values.append(ck_hash)
 
     def get_keyid(self, keyid):
         """Return the Crypto-Key hash referred to by a given keyid.

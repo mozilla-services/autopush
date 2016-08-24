@@ -13,7 +13,7 @@ from autopush.main import (
 from autopush.settings import AutopushSettings
 
 
-PUSH_RE = re.compile(r"push/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)")
+PUSH_RE = re.compile(r"push/(?:(?P<api_ver>v\d+)/)?(?P<token>[^/]+)")
 
 
 class EndpointDiagnosticCLI(object):

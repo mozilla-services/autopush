@@ -45,24 +45,24 @@ class InvalidSchema(Schema):
 
 
 class TestThreadedValidate(unittest.TestCase):
-    def _makeFUT(self, schema):
+    def _make_fut(self, schema):
         from autopush.web.validation import ThreadedValidate
         return ThreadedValidate(schema)
 
-    def _makeBasicSchema(self):
+    def _make_basic_schema(self):
 
         class Basic(Schema):
             pass
 
         return Basic
 
-    def _makeDummyRequest(self, method="GET", uri="/", **kwargs):
+    def _make_dummy_request(self, method="GET", uri="/", **kwargs):
         from cyclone.httpserver import HTTPRequest
         req = HTTPRequest(method, uri, **kwargs)
         req.connection = Mock()
         return req
 
-    def _makeReqHandler(self, request):
+    def _make_req_handler(self, request):
         self._mock_errors = Mock()
         from cyclone.web import RequestHandler
 
@@ -78,37 +78,37 @@ class TestThreadedValidate(unittest.TestCase):
         vr.ap_settings = Mock()
         return vr
 
-    def _makeFull(self, schema=None):
-        req = self._makeDummyRequest()
+    def _make_full(self, schema=None):
+        req = self._make_dummy_request()
         if not schema:
-            schema = self._makeBasicSchema()
-        tv = self._makeFUT(schema)
-        rh = self._makeReqHandler(req)
+            schema = self._make_basic_schema()
+        tv = self._make_fut(schema)
+        rh = self._make_req_handler(req)
 
         return tv, rh
 
     def test_validate_load(self):
-        tv, rh = self._makeFull()
+        tv, rh = self._make_full()
         d, errors = tv._validate_request(rh)
         eq_(errors, {})
         eq_(d, {})
 
     def test_validate_invalid_schema(self):
-        tv, rh = self._makeFull(schema=InvalidSchema)
+        tv, rh = self._make_full(schema=InvalidSchema)
         d, errors = tv._validate_request(rh)
         ok_("afield" in errors)
         eq_(d, {})
 
     def test_call_func_no_error(self):
         mock_func = Mock()
-        tv, rh = self._makeFull()
+        tv, rh = self._make_full()
         result = tv._validate_request(rh)
         tv._call_func(result, mock_func, rh)
         mock_func.assert_called()
 
     def test_call_func_error(self):
         mock_func = Mock()
-        tv, rh = self._makeFull(schema=InvalidSchema)
+        tv, rh = self._make_full(schema=InvalidSchema)
         result = tv._validate_request(rh)
         tv._call_func(result, mock_func, rh)
         self._mock_errors.assert_called()
@@ -117,7 +117,7 @@ class TestThreadedValidate(unittest.TestCase):
     def test_decorator(self):
         from cyclone.web import RequestHandler
         from autopush.web.validation import threaded_validate
-        schema = self._makeBasicSchema()
+        schema = self._make_basic_schema()
 
         class AHandler(RequestHandler):
             @threaded_validate(schema)
@@ -125,7 +125,7 @@ class TestThreadedValidate(unittest.TestCase):
                 self.write("done")
                 self.finish()
 
-        req = self._makeDummyRequest()
+        req = self._make_dummy_request()
         app = Mock()
         app.ui_modules = dict()
         app.ui_methods = dict()
@@ -152,7 +152,7 @@ class TestThreadedValidate(unittest.TestCase):
 
 
 class TestSimplePushRequestSchema(unittest.TestCase):
-    def _makeFUT(self):
+    def _make_fut(self):
         from autopush.web.validation import SimplePushRequestSchema
         schema = SimplePushRequestSchema()
         schema.context["settings"] = Mock()
@@ -170,7 +170,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
         )
 
     def test_valid_data(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -185,7 +185,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
         eq_(str(result["subscription"]["uaid"]), dummy_uaid)
 
     def test_valid_data_in_body(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -202,7 +202,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
         eq_(str(result["subscription"]["uaid"]), dummy_uaid)
 
     def test_valid_version(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -220,7 +220,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
         eq_(str(result["subscription"]["uaid"]), dummy_uaid)
 
     def test_invalid_router_type(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -236,7 +236,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
         eq_(cm.exception.errno, 108)
 
     def test_invalid_uaid_not_found(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -254,7 +254,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
         eq_(cm.exception.errno, 103)
 
     def test_invalid_token(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
 
         def throw_item(*args, **kwargs):
             raise InvalidTokenException("Not found")
@@ -267,7 +267,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
         eq_(cm.exception.errno, 102)
 
     def test_invalid_data_size(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -285,7 +285,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
 
 
 class TestWebPushRequestSchema(unittest.TestCase):
-    def _makeFUT(self):
+    def _make_fut(self):
         from autopush.web.validation import WebPushRequestSchema
         schema = WebPushRequestSchema()
         schema.context["settings"] = Mock()
@@ -303,7 +303,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
 
     def test_valid_data(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -318,7 +318,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         eq_(str(result["subscription"]["uaid"]), dummy_uaid)
 
     def test_no_headers(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -333,7 +333,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         eq_(errors, {'headers': {'ttl': [u'Not a valid integer.']}})
 
     def test_invalid_simplepush_user(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -349,7 +349,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         eq_(cm.exception.errno, 108)
 
     def test_invalid_token(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
 
         def throw_item(*args, **kwargs):
             raise InvalidTokenException("Not found")
@@ -362,7 +362,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         eq_(cm.exception.errno, 102)
 
     def test_invalid_fernet_token(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
 
         def throw_item(*args, **kwargs):
             raise InvalidToken
@@ -375,7 +375,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         eq_(cm.exception.errno, 102)
 
     def test_invalid_uaid_not_found(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -393,7 +393,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         eq_(cm.exception.errno, 103)
 
     def test_critical_failure(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -410,7 +410,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         eq_(cm.exception.errno, 105)
 
     def test_invalid_header_combo(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -442,7 +442,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         eq_(cm.exception.errno, 110)
 
     def test_invalid_data_size(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -459,7 +459,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         eq_(cm.exception.errno, 104)
 
     def test_invalid_data_must_have_crypto_headers(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -475,7 +475,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         eq_(cm.exception.errno, 110)
 
     def test_valid_data_crypto_padding_stripped(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -501,7 +501,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         eq_(result["headers"]["encryption"], "salt=asdfjiasljdf")
 
     def test_invalid_vapid_crypto_header(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
@@ -528,7 +528,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
 
 class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
-    def _makeFUT(self):
+    def _make_fut(self):
         from autopush.web.validation import WebPushRequestSchema
         from autopush.settings import AutopushSettings
         schema = WebPushRequestSchema()
@@ -562,7 +562,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         return sig, crypto_key
 
     def test_valid_vapid_crypto_header(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         self.fernet_mock.decrypt.return_value = dummy_token
 
         header = {"typ": "JWT", "alg": "ES256"}
@@ -592,7 +592,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         ok_("jwt" in result)
 
     def test_valid_vapid_crypto_header_webpush(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         self.fernet_mock.decrypt.return_value = dummy_token
 
         header = {"typ": "JWT", "alg": "ES256"}
@@ -623,7 +623,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
     @patch("autopush.web.validation.extract_jwt")
     def test_invalid_vapid_crypto_header(self, mock_jwt):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         self.fernet_mock.decrypt.return_value = dummy_token
         mock_jwt.side_effect = ValueError("Unknown public key "
                                           "format specified")
@@ -658,7 +658,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
     @patch("autopush.web.validation.extract_jwt")
     def test_invalid_encryption_header(self, mock_jwt):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         self.fernet_mock.decrypt.return_value = dummy_token
         mock_jwt.side_effect = ValueError("Unknown public key "
                                           "format specified")
@@ -693,7 +693,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
     @patch("autopush.web.validation.extract_jwt")
     def test_invalid_encryption_jwt(self, mock_jwt):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         self.fernet_mock.decrypt.return_value = dummy_token
         # use a deeply superclassed error to make sure that it gets picked up.
         mock_jwt.side_effect = JWTClaimsError("invalid claim")
@@ -728,7 +728,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
     @patch("autopush.web.validation.extract_jwt")
     def test_invalid_crypto_key_header_content(self, mock_jwt):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         self.fernet_mock.decrypt.return_value = dummy_token
         mock_jwt.side_effect = ValueError("Unknown public key "
                                           "format specified")
@@ -762,7 +762,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         eq_(cm.exception.errno, 110)
 
     def test_expired_vapid_header(self):
-        schema = self._makeFUT()
+        schema = self._make_fut()
         self.fernet_mock.decrypt.return_value = dummy_token
 
         header = {"typ": "JWT", "alg": "ES256"}

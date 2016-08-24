@@ -194,7 +194,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_headers_locate(self):
         from autobahn.websocket.protocol import ConnectionRequest
         req = ConnectionRequest("localhost", {"user-agent": "Me"},
-                                "localhost", "/", {}, "1", "localhost",
+                                "localhost", "/", {}, 1, "localhost",
                                 [], [])
         self.proto.onConnect(req)
         eq_(self.proto.ps._user_agent, "Me")
@@ -818,9 +818,9 @@ class WebsocketTestCase(unittest.TestCase):
 
         def check_result(msg):
             eq_(msg["status"], 200)
-            routeData = self.proto.ap_settings.router.get_uaid(
+            route_data = self.proto.ap_settings.router.get_uaid(
                 msg["uaid"]).get('wake_data')
-            eq_(routeData, {
+            eq_(route_data, {
                 'data': {"ip": "127.0.0.1", "port": 9999, "mcc": "hammer",
                          "mnc": "banana", "netid": "gorp"}})
         return self._check_response(check_result)
@@ -905,14 +905,14 @@ class WebsocketTestCase(unittest.TestCase):
         ok_(self.proto.ps.ping_time_out, True)
         ok_(self.proto.dropConnection.called)
 
-    def test_deferToLater(self):
+    def test_defer_to_later(self):
         self._connect()
 
         def fail():
             raise twisted.internet.defer.CancelledError
 
-        def fail2(fail):
-            self.assertTrue(fail)
+        def fail2(failure):
+            self.assertTrue(failure)
 
         def check_result(result):  # pragma: nocover
             pass
@@ -922,7 +922,7 @@ class WebsocketTestCase(unittest.TestCase):
         d.addErrback(fail2)
         ok_(d is not None)
 
-    def test_deferToLater_cancel(self):
+    def test_defer_to_later_cancel(self):
         self._connect()
 
         f = Deferred()
@@ -1022,15 +1022,15 @@ class WebsocketTestCase(unittest.TestCase):
                          test_sha)
         self.proto.sendJSON = Mock()
 
-        def echo(str):
-            return str.encode('hex')
+        def echo(string):
+            return string.encode('hex')
 
         self.proto.ap_settings.fernet.encrypt = echo
 
         d = Deferred()
 
-        def check_register_result(msg, test_endpoint):
-            eq_(test_endpoint,
+        def check_register_result(msg, endpoint):
+            eq_(endpoint,
                 self.proto.sendJSON.call_args[0][0]['pushEndpoint'])
             assert self.proto.ap_settings.message.register_channel.called
             assert_called_included(self.proto.log.info, format="Register")
@@ -1158,26 +1158,26 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         mock_agent = Mock()
         self.proto.ap_settings.agent = mock_agent
-        nodeId = "http://otherhost"
+        node_id = "http://otherhost"
         uaid = "deadbeef000000000000000000000000"
         self.proto.ps.uaid = uaid
         connected = int(time.time())
-        res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
+        res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res, None))
         mock_agent.request.assert_called_with(
             "DELETE",
-            "%s/notif/%s/%s" % (nodeId, uaid, connected))
+            "%s/notif/%s/%s" % (node_id, uaid, connected))
 
     def test_register_kill_others_fail(self):
         self._connect()
 
         d = Deferred()
         self.proto.ap_settings.agent.request.return_value = d
-        nodeId = "http://otherhost"
+        node_id = "http://otherhost"
         uaid = "deadbeef000000000000000000000000"
         self.proto.ps.uaid = uaid
         connected = int(time.time())
-        res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
+        res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res, None))
         d.errback(ConnectError())
         return d
@@ -1186,7 +1186,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         mock_agent = Mock()
         self.proto.ap_settings.agent = mock_agent
-        nodeId = "http://localhost"
+        node_id = "http://localhost"
         uaid = "deadbeef000000000000000000000000"
         # Test that the 'existing' connection is newer than the current one.
         connected = int(time.time() * 1000)
@@ -1197,7 +1197,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.sendClose = Mock()
         self.proto.sendClose = Mock()
         self.proto.ps.uaid = uaid
-        res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
+        res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res, None))
         # the current one should be dropped.
         eq_(ff.sendClose.call_count, 0)
@@ -1207,7 +1207,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         mock_agent = Mock()
         self.proto.ap_settings.agent = mock_agent
-        nodeId = "http://localhost"
+        node_id = "http://localhost"
         uaid = "deadbeef000000000000000000000000"
         # Test that the 'existing' connection is older than the current one.
         connected = int(time.time() * 1000)
@@ -1217,7 +1217,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ap_settings.clients = {uaid: ff}
         self.proto.sendClose = Mock()
         self.proto.ps.uaid = uaid
-        res = dict(node_id=nodeId, connected_at=connected, uaid=uaid)
+        res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res, None))
         # the existing one should be dropped.
         eq_(ff.sendClose.call_count, 1)

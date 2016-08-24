@@ -119,7 +119,7 @@ class PushLoggerTestCase(twisted.trial.unittest.TestCase):
     def test_file_output(self):
         try:
             os.unlink("testfile.txt")
-        except:  # pragma: nocover
+        except OSError:  # pragma: nocover
             pass
         obj = PushLogger.setup_logging("Autoput", log_output="testfile.txt")
         obj.start()

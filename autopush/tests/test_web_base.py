@@ -135,11 +135,11 @@ class TestBase(unittest.TestCase):
         This is not code that is triggered within normal flow, but
         by the cyclone wrapper.
         """
-        class testX(Exception):
+        class TestX(Exception):
             pass
 
         try:
-            raise testX()
+            raise TestX()
         except:
             exc_info = sys.exc_info()
 
@@ -191,7 +191,7 @@ class TestBase(unittest.TestCase):
     def test_validation_error(self):
         try:
             raise InvalidRequest("oops", errno=110)
-        except:
+        except InvalidRequest:
             fail = Failure()
         self.base._validation_err(fail)
         self.status_mock.assert_called_with(400)
@@ -199,7 +199,7 @@ class TestBase(unittest.TestCase):
     def test_response_err(self):
         try:
             raise Exception("oops")
-        except:
+        except Exception:
             fail = Failure()
         self.base._response_err(fail)
         self.status_mock.assert_called_with(500)
@@ -207,7 +207,7 @@ class TestBase(unittest.TestCase):
     def test_overload_err(self):
         try:
             raise ProvisionedThroughputExceededException("error", None, None)
-        except:
+        except ProvisionedThroughputExceededException:
             fail = Failure()
         self.base._overload_err(fail)
         self.status_mock.assert_called_with(503)
@@ -215,7 +215,7 @@ class TestBase(unittest.TestCase):
     def test_boto_err(self):
         try:
             raise BotoServerError(503, "derp")
-        except:
+        except BotoServerError:
             fail = Failure()
         self.base._boto_err(fail)
         self.status_mock.assert_called_with(503)
@@ -238,7 +238,7 @@ class TestBase(unittest.TestCase):
 
         try:
             raise RouterException("error")
-        except:
+        except RouterException:
             fail = Failure()
         self.base._router_fail_err(fail)
         self.status_mock.assert_called_with(500)
@@ -248,7 +248,7 @@ class TestBase(unittest.TestCase):
 
         try:
             raise RouterException("Abort Ok", status_code=200)
-        except:
+        except RouterException:
             fail = Failure()
         self.base._router_fail_err(fail)
         self.status_mock.assert_called_with(200)
@@ -258,7 +258,7 @@ class TestBase(unittest.TestCase):
 
         try:
             raise RouterException("Abort Ok", status_code=400)
-        except:
+        except RouterException:
             fail = Failure()
         self.base._router_fail_err(fail)
         self.status_mock.assert_called_with(400)

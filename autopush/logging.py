@@ -70,7 +70,7 @@ class PushLogger(object):
             self._output = None
         else:
             self._filename = log_output
-            self._output = "file"
+            self._output = None
         if log_format == "json":
             self.format_event = self.json_format
         else:
