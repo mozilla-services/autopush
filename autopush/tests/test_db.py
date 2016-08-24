@@ -2,6 +2,7 @@ import unittest
 import uuid
 import time
 
+from autopush.exceptions import AutopushException
 from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
     ProvisionedThroughputExceededException,
@@ -369,15 +370,14 @@ class MessageTestCase(unittest.TestCase):
         eq_(len(all_messages), 0)
 
     def test_message_delete_pagination(self):
-        def make_messages(channel_id, count):
-            m = []
+        def make_messages(channel_id, count, rtable):
             t = self._nstime()
             ttl = int(time.time())+200
             for i in range(count):
-                m.append(
+                rtable.append(
                     (self.uaid, channel_id, str(uuid.uuid4()), ttl, {}, t+i)
                 )
-            return m
+            return rtable
 
         chid = str(uuid.uuid4())
         m = get_rotating_message_table()
@@ -385,7 +385,8 @@ class MessageTestCase(unittest.TestCase):
         message.register_channel(self.uaid, chid)
 
         # Shove 80 messages in
-        for message_args in make_messages(chid, 80):
+        m = []
+        for message_args in make_messages(chid, 80, m):
             message.store_message(*message_args)
 
         # Verify we can see them all
@@ -530,7 +531,7 @@ class RouterTestCase(unittest.TestCase):
         router.table.get_item.return_value = {"uaid": uuid.uuid4().hex}
         try:
             router.register_user(dict(uaid=uaid))
-        except:
+        except AutopushException:
             pass
         self.assertRaises(ItemNotFound, router.get_uaid, uaid)
         ok_(router.drop_user.called)

@@ -80,7 +80,7 @@ def repad(string):
     """Adds padding to strings for base64 decoding"""
 
     if len(string) % 4:
-        string = string + '===='[len(string) % 4:]
+        string += '===='[len(string) % 4:]
     return string
 
 
@@ -103,7 +103,7 @@ def get_amid():
             "http://169.254.169.254/latest/meta-data/ami-id",
             timeout=1)
         return resp.content
-    except:
+    except (requests.HTTPError, requests.ConnectionError):
         return "Unknown"
 
 

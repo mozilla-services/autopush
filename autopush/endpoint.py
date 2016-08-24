@@ -96,7 +96,6 @@ def parse_request_params(request):
 
     """
     # If there's a request body, parse it out
-    version = data = None
     if len(request.body) > 0:
         body_args = urlparse.parse_qs(request.body, keep_blank_values=True)
         version = body_args.get("version")
@@ -532,8 +531,6 @@ class EndpointHandler(AutoendpointHandler):
             self._client_info['message_id'] = self.version
         else:
             data = self.request.body
-            if "ttl" not in self.request.headers:
-                ttl = None
             # We need crypto headers for messages with payloads.
             req_fields = ["content-encoding", "encryption"]
             if data and not all([x in self.request.headers
@@ -563,10 +560,8 @@ class EndpointHandler(AutoendpointHandler):
                     401, 110, message="Encryption header missing 'salt' value")
                 return
 
-        if "ttl" not in self.request.headers:
-            ttl = None
-        elif VALID_TTL.match(self.request.headers["ttl"]):
-            ttl = int(self.request.headers["ttl"])
+        if VALID_TTL.match(self.request.headers.get("ttl", "0")):
+            ttl = int(self.request.headers.get("ttl", "0"))
             # Cap the TTL to our MAX_TTL
             ttl = min(ttl, MAX_TTL)
         else:
@@ -841,6 +836,7 @@ class RegistrationHandler(AutoendpointHandler):
     def _return_endpoint(self, endpoint_data, new_uaid, router=None):
         """Called after the endpoint was made and should be returned to the
         requestor"""
+        hashed = None
         if new_uaid:
             if self.ap_settings.bear_hash_key:
                 hashed = generate_hash(self.ap_settings.bear_hash_key[0],

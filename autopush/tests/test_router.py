@@ -338,10 +338,10 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_long_data(self):
         self.router.gcm['test123'] = self.gcm
-        badNotif = Notification(
+        bad_notif = Notification(
             10, "\x01abcdefghijklmnopqrstuvwxyz0123456789", dummy_chid,
             self.headers, 200)
-        d = self.router.route_notification(badNotif, self.router_data)
+        d = self.router.route_notification(bad_notif, self.router_data)
 
         def check_results(result):
             ok_(isinstance(result.value, RouterException))
@@ -589,10 +589,10 @@ class FCMRouterTestCase(unittest.TestCase):
 
     def test_long_data(self):
         self.router.fcm = self.fcm
-        badNotif = Notification(
+        bad_notif = Notification(
             10, "\x01abcdefghijklmnopqrstuvwxyz0123456789", dummy_chid,
             self.headers, 200)
-        d = self.router.route_notification(badNotif, self.router_data)
+        d = self.router.route_notification(bad_notif, self.router_data)
 
         def check_results(result):
             ok_(isinstance(result.value, RouterException))

@@ -56,8 +56,8 @@ def tearDown():
 
 
 class FileConsumer(object):  # pragma: no cover
-    def __init__(self, file):
-        self.file = file
+    def __init__(self, fileObj):
+        self.file = fileObj
 
     def write(self, data):
         self.file.write(data)
@@ -1283,11 +1283,11 @@ class EndpointTestCase(unittest.TestCase):
         This is not code that is triggered within normal flow, but
         by the cyclone wrapper.
         """
-        class testX(Exception):
+        class TestX(Exception):
             pass
 
         try:
-            raise testX()
+            raise TestX()
         except:
             exc_info = sys.exc_info()
 

@@ -49,11 +49,11 @@ def hasher(uaid):
     return uaid
 
 
-def normalize_id(id):
-    if (len(id) == 36 and
-            id[8] == id[13] == id[18] == id[23] == '-'):
-        return id.lower()
-    raw = filter(lambda x: x in '0123456789abcdef', id.lower())
+def normalize_id(ident):
+    if (len(ident) == 36 and
+            ident[8] == ident[13] == ident[18] == ident[23] == '-'):
+        return ident.lower()
+    raw = filter(lambda x: x in '0123456789abcdef', ident.lower())
     if len(raw) != 32:
         raise ValueError("Invalid UUID")
     return '-'.join((raw[:8], raw[8:12], raw[12:16], raw[16:20], raw[20:]))
@@ -79,13 +79,18 @@ def create_rotating_message_table(prefix="message", read_throughput=5,
                         )
 
 
-def get_rotating_message_table(prefix="message", delta=0, date=None):
+def get_rotating_message_table(prefix="message", delta=0, date=None,
+                               message_read_throughput=5,
+                               message_write_throughput=5):
     """Gets the message table for the current month."""
     db = DynamoDBConnection()
     dblist = db.list_tables()["TableNames"]
     tablename = make_rotating_tablename(prefix, delta, date)
     if tablename not in dblist:
-        return create_rotating_message_table(prefix=prefix, delta=delta)
+        return create_rotating_message_table(
+            prefix=prefix, delta=delta,
+            read_throughput=message_read_throughput,
+            write_throughput=message_write_throughput)
     else:
         return Table(tablename)
 
@@ -576,7 +581,7 @@ class Router(object):
         not be registered.
 
         :returns: Whether the user was registered or not.
-        :rtype: bool
+        :rtype: tuple
         :raises:
             :exc:`ProvisionedThroughputExceededException` if dynamodb table
             exceeds throughput.

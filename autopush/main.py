@@ -321,7 +321,7 @@ def make_settings(args, **kwargs):
     if args.gcm_enabled:
         # Create a common gcmclient
         try:
-            senderIDs = json.loads(args.senderid_list)
+            sender_ids = json.loads(args.senderid_list)
         except (ValueError, TypeError):
             log.critical(format="Invalid JSON specified for senderid_list")
             return
@@ -329,7 +329,7 @@ def make_settings(args, **kwargs):
             # This is an init check to verify that things are configured
             # correctly. Otherwise errors may creep in later that go
             # unaccounted.
-            senderIDs[senderIDs.keys()[0]]
+            sender_ids[sender_ids.keys()[0]]
         except (IndexError, TypeError):
             log.critical(format="No GCM SenderIDs specified or found.")
             return
@@ -337,7 +337,7 @@ def make_settings(args, **kwargs):
                               "dryrun": args.gcm_dryrun,
                               "max_data": args.max_data,
                               "collapsekey": args.gcm_collapsekey,
-                              "senderIDs": senderIDs}
+                              "senderIDs": sender_ids}
     if args.fcm_enabled:
         # Create a common gcmclient
         if not args.fcm_auth:
@@ -471,26 +471,26 @@ def connection_main(sysargs=None, use_files=True):
     # other requests.
     resource = DefaultResource(WebSocketResource(factory))
     resource.putChild("status", StatusResource())
-    siteFactory = Site(resource)
+    site_factory = Site(resource)
 
     # Start the WebSocket listener.
     if args.ssl_key:
-        contextFactory = AutopushSSLContextFactory(args.ssl_key,
-                                                   args.ssl_cert)
+        context_factory = AutopushSSLContextFactory(args.ssl_key,
+                                                    args.ssl_cert)
         if args.ssl_dh_param:
-            contextFactory.getContext().load_tmp_dh(args.ssl_dh_param)
+            context_factory.getContext().load_tmp_dh(args.ssl_dh_param)
 
-        reactor.listenSSL(args.port, siteFactory, contextFactory)
+        reactor.listenSSL(args.port, site_factory, context_factory)
     else:
-        reactor.listenTCP(args.port, siteFactory)
+        reactor.listenTCP(args.port, site_factory)
 
     # Start the internal routing listener.
     if args.router_ssl_key:
-        contextFactory = AutopushSSLContextFactory(args.router_ssl_key,
-                                                   args.router_ssl_cert)
+        context_factory = AutopushSSLContextFactory(args.router_ssl_key,
+                                                    args.router_ssl_cert)
         if args.ssl_dh_param:
-            contextFactory.getContext().load_tmp_dh(args.ssl_dh_param)
-        reactor.listenSSL(args.router_port, site, contextFactory)
+            context_factory.getContext().load_tmp_dh(args.ssl_dh_param)
+        reactor.listenSSL(args.router_port, site, context_factory)
     else:
         reactor.listenTCP(args.router_port, site)
 
@@ -562,11 +562,11 @@ def endpoint_main(sysargs=None, use_files=True):
 
     # start the senderIDs refresh timer
     if args.ssl_key:
-        contextFactory = AutopushSSLContextFactory(args.ssl_key,
-                                                   args.ssl_cert)
+        context_factory = AutopushSSLContextFactory(args.ssl_key,
+                                                    args.ssl_cert)
         if args.ssl_dh_param:
-            contextFactory.getContext().load_tmp_dh(args.ssl_dh_param)
-        reactor.listenSSL(args.port, site, contextFactory)
+            context_factory.getContext().load_tmp_dh(args.ssl_dh_param)
+        reactor.listenSSL(args.port, site, context_factory)
     else:
         reactor.listenTCP(args.port, site)
 
