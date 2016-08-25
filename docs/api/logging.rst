@@ -5,12 +5,14 @@
 
 .. automodule:: autopush.logging
 
-.. autoclass:: EliotObserver
+.. autoclass:: PushLogger
     :members:
     :special-members: __init__, __call__
     :private-members:
     :member-order: bysource
 
-.. autofunction:: stdout
-
-.. autofunction:: setup_logging
+.. autoclass:: FirehoseProcessor
+    :members:
+    :special-members: __init__, __call__
+    :private-members:
+    :member-order: bysource

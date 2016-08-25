@@ -55,6 +55,12 @@ IGNORED_KEYS = frozenset([
 
 @implementer(ILogObserver)
 class PushLogger(object):
+    """Twisted LogObserver implementation
+
+    Supports firehose delivery, Raven exception reporting, and json/test
+    console debugging output.
+
+    """
     def __init__(self, logger_name, log_level="debug", log_format="json",
                  log_output="stdout", sentry_dsn=None,
                  firehose_delivery_stream=None):
@@ -175,6 +181,7 @@ class PushLogger(object):
 
 
 class FirehoseProcessor(object):
+    """Batches log events for sending to AWS FireHose"""
     RECORD_SEPARATOR = u"\x1e"
     MAX_RECORD_SIZE = 1024 * 1024
     MAX_REQUEST_SIZE = 4 * 1024 * 1024

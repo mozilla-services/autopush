@@ -43,73 +43,8 @@ Or a Debian based system (like Ubuntu):
 Autopush uses the `Boto python library`_. Be sure to `properly set up your boto
 config file`_.
 
-Python 2.7.7+ w/virtualenv
-==========================
-
-You will need ``virtualenv`` installed per the above requirements. Set up your
-virtual environment by running the following (if using PyPy, you'll likely need
-to specify the ``-p <path to pypy>`` option):
-
-.. code-block:: bash
-
-    $ virtualenv -p `which pypy` .
-
-Then run the Makefile with ``make`` to setup the application.
-
-Configuration files
-===================
-
-Autopush can be configured in three ways; by option flags, by environment variables,
-and by configuration files. autopush uses three configuration files. These files use
-standard `ini` formatting similar to the following:
-
-.. code-block:: cfg
-
-   # A comment description
-   ;a_disabled_option
-   ;another_disabled_option=default_value
-   option=value
-
-Options can either have values or act as boolean flags. If the option is a flag
-it is either True if enabled, or False if disabled. The configuration files are
-usually richly commented, and you're encouraged to read them to learn how to
-set up your installation of autopush.
-
-Please note: any line that does not begin with a `#` or `;` is considered an option
-line. if an unexpected option is present in a configuration file, the application
-will fail to start.
-
-Configuration files can be located in:
-
-* in the /etc/ directory
-
-* in the configs subdirectory
-
-* in the $HOME or current directory (prefixed by a period '.')
-
-The three configuration files are:
-
-* *autopush_connection.ini* - contains options for use by the websocket handler.
-  This file's path can be specifed by the ``--config-connection`` option.
-
-* *autopush_shared.ini* - contains options shared between the connection and
-  endpoint handler. This file's path can be specified by the ``--config-shared``
-  option.
-
-* *autopush_endpoint.ini* - contains options for the HTTP handlers This file's
-  path can be specifed by the ``--config-endpoint`` option.
-
-For instance, if you wished to copy the sample `configs/autopush_connection.ini.sample`
-file to `/usr/share/autopush/autopush_connection.ini`, you could then run
-
-.. code-block:: bash
-
-    $ autopush --config-connection=/usr/share/autopush/autopush_connection.ini
-
-to have autopush load configuration information from that file.
-
 Notes on OS X
-=============
+-------------
 
 autopush depends on the Python `cryptography`_ library, which requires
 OpenSSL. If you're installing autopush on OS X with a custom version of
@@ -124,33 +59,88 @@ your OpenSSL library path to ``LDFLAGS`` and ``CFLAGS`` before running
     # `/usr/local`.
     export LDFLAGS="-L/usr/local/lib" CFLAGS="-I/usr/local/include"
 
-Notes on GCM/FCM support
-========================
+Check-out the Autopush Repository
+=================================
 
-autopush is capable of routing messages over Google Cloud Messaging/Firebase
-Cloud Messaging for android devices. You will need to set up a valid `GCM`_ /
-`FCM`_ account. Once you have an account open the Google Developer Console:
+You should now be able to check-out the autopush repository.
 
-* create a new project. Record the Project Number as "SENDER_ID". You will need
-  this value for your android application.
+.. code-block:: bash
 
-* create a new Auth Credential Key for your project. This is available under
-  **APIs & Auth** >> **Credentials** of the Google Developer Console. Store
-  this value as ``gcm_apikey`` or ``fcm_apikey`` (as appropriate) in
-  ``.autopush_endpoint`` server configuration file.
+    $ git clone https://github.com/mozilla-services/autopush.git
 
-* add ``gcm_enabled`` to the ``.autopush_shared`` server configuration file to
-  enable GCM routing.
+Alternatively, if you're planning on submitting a patch/pull-request to
+autopush then fork the repo and follow the *Github Workflow* documented in
+`Mozilla Push Service - Code Development`_.
 
-* add ``fcm_enabled`` to the ``.autopush_shared`` server configuration file to
-  enable FCM routing.
+Python 2.7.7+ w/virtualenv
+==========================
 
-Additional notes on using the GCM/FCM bridge are available `on the wiki`_.
+You will need ``virtualenv`` installed per the above requirements. Set up your
+virtual environment by running the following (if using PyPy, you'll likely need
+to specify the ``-p <path to pypy>`` option):
 
+.. code-block:: bash
+
+    $ virtualenv -p `which pypy` .
+
+Then run the Makefile with ``make`` to setup the application.
+
+Scripts
+=======
+
+After installation of autopush the following command line utilities are
+available in the virtualenv ``bin/`` directory:
+
+=======================    ===========
+``autopush``               Runs a Connection Node
+``autoendpoint``           Runs an Endpoint Node
+``endpoint_diagnostic``    Runs Endpoint diagnostics
+``autokey``                Endpoint encryption key generator
+=======================    ===========
+
+You will need to have a `boto config file`_ file or ``AWS`` environment keys
+setup before the first 3 utilities will run properly.
+
+Building Documentation
+======================
+
+To build the documentation, you will need additional packages installed:
+
+.. code-block:: bash
+
+    $ pip install -r doc-requirements.txt
+
+You can then build the documentation:
+
+.. code-block:: bash
+
+    $ cd docs
+    $ make html
+
+Using a Local DynamoDB Server
+=============================
+
+Amazon supplies a `Local DynamoDB Java server`_ to use for local testing that
+implements the complete DynamoDB API. This is used for automated unit testing
+on Travis and can be used to run autopush locally for testing.
+
+You will need the Java JDK 6.x or newer.
+
+To setup the server locally:
+
+.. code-block:: bash
+
+    $ mkdir ddb
+    $ curl -sSL http://dynamodb-local.s3-website-us-west-2.amazonaws.com/dynamodb_local_latest.tar.gz | tar xzvC ddb/
+    $ java -Djava.library.path=./ddb/DynamoDBLocal_lib -jar ./ddb/DynamoDBLocal.jar -sharedDb -inMemory
+
+An example `boto config file`_ is provided in ``automock/boto.cfg`` that
+directs autopush to your local DynamoDB instance.
+
+.. _Mozilla Push Service - Code Development: http://mozilla-push-service.readthedocs.io/en/latest/development/#code-development
+.. _`boto config file`: https://boto.readthedocs.io/en/latest/boto_config_tut.html
+.. _`Local DynamoDB Java server`: http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Tools.DynamoDBLocal.html
 .. _`Boto python library`: https://boto.readthedocs.io/en/latest/
 .. _`properly set up your boto config file`:
      https://boto.readthedocs.io/en/latest/boto_config_tut.html
 .. _`cryptography`: https://cryptography.io/en/latest/installation
-.. _`GCM`: http://developer.android.com/google/gcm/index.html
-.. _`FCM`: https://firebase.google.com/docs/cloud-messaging/
-.. _`on the wiki`: https://github.com/mozilla-services/autopush/wiki/Bridging-Via-GCM

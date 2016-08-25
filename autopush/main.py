@@ -127,7 +127,8 @@ def add_shared_args(parser):
     parser.add_argument('-e', '--endpoint_port', help="HTTP Endpoint Port",
                         type=int, default=8082, env_var="ENDPOINT_PORT")
     parser.add_argument('--human_logs', help="Enable human readable logs",
-                        action="store_true", default=False)
+                        action="store_true", default=False,
+                        env_var="HUMAN_LOGS")
     parser.add_argument('--no_aws', help="Skip AWS meta information checks",
                         action="store_true", default=False)
     # No ENV because this is for humans

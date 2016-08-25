@@ -1,0 +1,34 @@
+version: '2'
+services:
+  autopush:
+    image: bbangert/autopush
+    hostname: autopush
+    environment:
+      - LOCAL_HOSTNAME=localhost
+      - ROUTER_HOSTNAME=autopush
+      - HUMAN_LOGS=true
+      - CRYPTO_KEY=${CRYPTO_KEY}
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    links:
+      - dynamodb
+    volumes:
+      - ./boto-compose.cfg:/etc/boto.cfg:ro
+  autoendpoint:
+    image: bbangert/autopush
+    hostname: autoendpoint
+    command: autoendpoint
+    environment:
+      - HUMAN_LOGS=true
+      - CRYPTO_KEY=${CRYPTO_KEY}
+    ports:
+      - "8082:8082"
+    links:
+      - dynamodb
+    volumes:
+      - ./boto-compose.cfg:/etc/boto.cfg:ro
+  dynamodb:
+    image: peopleperhour/dynamodb
+    expose:
+      - "8000"

@@ -14,20 +14,51 @@ This is the third generation of Push server built in Mozilla Services, first
 to handle Push for FirefoxOS clients, then extended for push notifications for
 Firefox (via the `W3C Push spec <http://w3c.github.io/push-api/index.html>`_.)
 
-Reference Docs
+For an overview of the Mozilla Push Service and where autopush fits in, see
+the `Mozilla Push Service architecture diagram`_. This push service uses
+websockets to talk to Firefox, with a Push endpoint that implements the
+:term:`WebPush` standard for its :ref:`http` API.
+
+Autopush API's
 ==============
 
+For developers writing mobile applications in Mozilla, or web developers using
+Push on the web with Firefox.
+
 .. toctree::
-   :maxdepth: 1
+    :maxdepth: 2
+
+    http
+
+.. _running-autopush:
+
+Running Autopush
+================
+
+If you just want to run autopush, for testing Push locally with
+Firefox, or to deploy autopush to a production environment for Firefox.
+
+.. toctree::
+   :maxdepth: 2
+
+   architecture
+   running
+
+.. _developing:
+
+Developing Autopush
+===================
+
+For developers wishing to work with the latest autopush source code, it's
+recommended that you first familiarize yourself with
+:ref:`running Autopush <running-autopush>` before proceeding.
+
+.. toctree::
+   :maxdepth: 2
 
    install
    testing
-   running
    releasing
-   architecture
-   api
-   Changelog <https://github.com/mozilla-services/autopush/blob/master/CHANGELOG.md>
-   http
    style
 
 Source Code
@@ -35,6 +66,15 @@ Source Code
 
 All source code is available on `github under autopush
 <https://github.com/mozilla-services/autopush>`_.
+
+Changelog
+=========
+
+.. toctree::
+   :maxdepth: 2
+
+   Changelog <https://github.com/mozilla-services/autopush/blob/master/CHANGELOG.md>
+
 
 Bugs/Support
 ============
@@ -70,8 +110,8 @@ production
 * Websocket: wss://push.services.mozilla.com/
 * Endpoint: https://updates.push.services.mozilla.com/
 
-Indices and tables
-==================
+Reference
+=========
 
 * :ref:`genindex`
 * :ref:`modindex`
@@ -88,3 +128,4 @@ License
 ``autopush`` is offered under the Apache License 2.0.
 
 .. _\#push: irc://irc.mozilla.org/push
+.. _Mozilla Push Service architecture diagram: http://mozilla-push-service.readthedocs.io/en/latest/#architecture
