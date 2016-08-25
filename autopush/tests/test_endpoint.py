@@ -1441,7 +1441,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg = endpoint.RegistrationHandler(Application(),
                                                 self.request_mock,
                                                 ap_settings=settings)
-
+        self.reg.request.uri = '/v1/xxx/yyy/register'
         self.status_mock = self.reg.set_status = Mock()
         self.write_mock = self.reg.write = Mock()
         self.auth = ("WebPush %s" %
@@ -1558,6 +1558,7 @@ class RegistrationTestCase(unittest.TestCase):
             channelID=dummy_chid,
             data={},
         ))
+        self.reg.request.uri = "/v1/xxx/yyy/register"
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
@@ -1808,7 +1809,9 @@ class RegistrationTestCase(unittest.TestCase):
 
         def handle_finish(value):
             self.reg.write.assert_called_with({})
-            self.router_mock.register.assert_called_with(dummy_uaid, data)
+            self.router_mock.register.assert_called_with(
+                dummy_uaid, data, uri=self.reg.request.uri
+            )
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
