@@ -9,7 +9,7 @@ class RouterException(AutopushException):
     """
     def __init__(self, message, status_code=500, response_body="",
                  router_data=None, headers=None, log_exception=True,
-                 errno=None, logged_status=None):
+                 errno=None, logged_status=None, **kwargs):
         """Create a new RouterException"""
         super(AutopushException, self).__init__(message)
         self.status_code = status_code
@@ -18,6 +18,7 @@ class RouterException(AutopushException):
         self.response_body = response_body or message
         self.errno = errno
         self.logged_status = logged_status
+        self.extra = kwargs
 
 
 class RouterResponse(object):
@@ -45,7 +46,7 @@ class IRouter(object):
         the given settings and router conf."""
         raise NotImplementedError("__init__ must be implemented")
 
-    def register(self, uaid, routing_data, *kwargs):
+    def register(self, uaid, routing_data, *args, **kwargs):
         """Register the uaid with the connect dict however is preferred and
         return a dict that will be stored as routing_data for this user in the
         future.
