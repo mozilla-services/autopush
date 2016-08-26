@@ -85,6 +85,10 @@ class HealthHandler(AutoendpointHandler):
 
 class StatusHandler(cyclone.web.RequestHandler):
     """HTTP Status Handler"""
+
+    def initialize(self, ap_settings):
+        self.ap_settings = ap_settings
+
     def get(self):
         """HTTP Get
 

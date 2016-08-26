@@ -1311,6 +1311,9 @@ class RouterHandler(cyclone.web.RequestHandler, ErrorLogger):
 
     """
 
+    def initialize(self, ap_settings):
+        self.ap_settings = ap_settings
+
     def put(self, uaid):
         """HTTP Put
 
@@ -1339,6 +1342,9 @@ class RouterHandler(cyclone.web.RequestHandler, ErrorLogger):
 
 
 class NotificationHandler(cyclone.web.RequestHandler, ErrorLogger):
+
+    def initialize(self, ap_settings):
+        self.ap_settings = ap_settings
 
     def put(self, uaid, *args):
         """HTTP Put

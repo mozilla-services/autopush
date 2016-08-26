@@ -358,13 +358,10 @@ class IntegrationBase(unittest.TestCase):
 
         # Websocket HTTP router
         # Internal HTTP notification router
-        r = RouterHandler
-        r.ap_settings = settings
-        n = NotificationHandler
-        n.ap_settings = settings
+        h_kwargs = dict(ap_settings=settings)
         ws_site = cyclone.web.Application([
-            (r"/push/([^\/]+)", r),
-            (r"/notif/([^\/]+)(/([^\/]+))?", n),
+            (r"/push/([^\/]+)", RouterHandler, h_kwargs),
+            (r"/notif/([^\/]+)(/([^\/]+))?", NotificationHandler, h_kwargs),
         ],
             default_host=settings.router_hostname,
             log_function=skip_request_logging,
@@ -374,18 +371,16 @@ class IntegrationBase(unittest.TestCase):
 
         # Endpoint HTTP router
         site = cyclone.web.Application([
-            (r"/push/(v\d+)?/?([^\/]+)", EndpointHandler,
-             dict(ap_settings=settings)),
+            (r"/push/(v\d+)?/?([^\/]+)", EndpointHandler, h_kwargs),
             (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
-             SimplePushHandler, dict(ap_settings=settings)),
-            (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
+             SimplePushHandler, h_kwargs),
+            (r"/m/([^\/]+)", MessageHandler, h_kwargs),
             (r"/wpush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
-             WebPushHandler, dict(ap_settings=settings)),
+             WebPushHandler, h_kwargs),
 
             # PUT /register/ => connect info
             # GET /register/uaid => chid + endpoint
-            (r"/register(?:/(.+))?", RegistrationHandler,
-             dict(ap_settings=settings)),
+            (r"/register(?:/(.+))?", RegistrationHandler, h_kwargs),
         ],
             default_host=settings.hostname,
             log_function=skip_request_logging,

@@ -1937,15 +1937,14 @@ class RouterHandlerTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
 
-        self.ap_settings = AutopushSettings(
+        self.ap_settings = settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
-        self.ap_settings.metrics = Mock(spec=Metrics)
-        h = RouterHandler
-        h.ap_settings = self.ap_settings
+        settings.metrics = Mock(spec=Metrics)
         self.mock_request = Mock()
-        self.handler = h(Application(), self.mock_request)
+        self.handler = RouterHandler(Application(), self.mock_request,
+                                     ap_settings=settings)
         self.handler.set_status = self.status_mock = Mock()
         self.handler.write = self.write_mock = Mock()
 
@@ -1981,15 +1980,14 @@ class NotificationHandlerTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
 
-        self.ap_settings = AutopushSettings(
+        self.ap_settings = settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
-        self.ap_settings.metrics = Mock(spec=Metrics)
-        h = NotificationHandler
-        h.ap_settings = self.ap_settings
+        settings.metrics = Mock(spec=Metrics)
         self.mock_request = Mock()
-        self.handler = h(Application(), self.mock_request)
+        self.handler = NotificationHandler(Application(), self.mock_request,
+                                           ap_settings=settings)
         self.handler.set_status = self.status_mock = Mock()
         self.handler.write = self.write_mock = Mock()
 

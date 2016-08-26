@@ -66,12 +66,11 @@ class FileConsumer(object):  # pragma: no cover
 class MessageTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
-        settings = self.ap_settings = endpoint.MessageHandler.ap_settings =\
-            AutopushSettings(
-                hostname="localhost",
-                statsd_host=None,
-                crypto_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-            )
+        settings = AutopushSettings(
+            hostname="localhost",
+            statsd_host=None,
+            crypto_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+        )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
         self.metrics_mock = settings.metrics = Mock(spec=Metrics)
         self.router_mock = settings.router = Mock(spec=Router)
@@ -1423,12 +1422,11 @@ class RegistrationTestCase(unittest.TestCase):
 
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
-        settings = endpoint.RegistrationHandler.ap_settings =\
-            AutopushSettings(
-                hostname="localhost",
-                statsd_host=None,
-                bear_hash_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
-            )
+        settings = AutopushSettings(
+            hostname="localhost",
+            statsd_host=None,
+            bear_hash_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
+        )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
         self.metrics_mock = settings.metrics = Mock(spec=Metrics)
         self.router_mock = settings.router = Mock(spec=Router)
