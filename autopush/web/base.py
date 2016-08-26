@@ -1,16 +1,13 @@
 import json
 import time
-import uuid
 from collections import namedtuple
 
-import cyclone.web
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
 from boto.exception import BotoServerError
-from twisted.logger import Logger
-from twisted.python import failure
 
+from autopush.base import BaseHandler
 from autopush.db import (
     hasher,
     normalize_id,
@@ -41,30 +38,23 @@ class Notification(namedtuple("Notification",
 
 class VapidAuthException(Exception):
     """Exception if the VAPID Auth token fails"""
-    pass
 
 
-class BaseHandler(cyclone.web.RequestHandler):
+class BaseWebHandler(BaseHandler):
     """Common overrides for Push web API's"""
     cors_methods = ""
     cors_request_headers = ()
     cors_response_headers = ()
-
-    log = Logger()
 
     #############################################################
     #                    Cyclone API Methods
     #############################################################
     def initialize(self, ap_settings):
         """Setup basic aliases and attributes"""
-        self.uaid_hash = ""
-        self._uaid = ""
-        self._chid = ""
+        super(BaseWebHandler, self).initialize(ap_settings)
+        self.uaid_hash = self._uaid = self._chid = ""
         self.start_time = time.time()
-        self.ap_settings = ap_settings
         self.metrics = ap_settings.metrics
-        self.request_id = str(uuid.uuid4())
-        self._client_info = self._init_info()
 
     def prepare(self):
         """Common request preparation"""
@@ -76,25 +66,6 @@ class BaseHandler(cyclone.web.RequestHandler):
                             ",".join(self.cors_request_headers))
             self.set_header("Access-Control-Expose-Headers",
                             ",".join(self.cors_response_headers))
-
-    def write_error(self, code, **kwargs):
-        """Write the error (otherwise unhandled exception when dealing with
-        unknown method specifications.)
-
-        This is a Cyclone API Override.
-
-        """
-        self.set_status(code)
-        if "exc_info" in kwargs:
-            fmt = kwargs.get("format", "Exception")
-            self.log.failure(
-                format=fmt,
-                failure=failure.Failure(*kwargs["exc_info"]),
-                **self._client_info)
-        else:
-            self.log.failure("Error in handler: %s" % code,
-                             **self._client_info)
-        self.finish()
 
     #############################################################
     #                    Cyclone HTTP Methods
@@ -130,17 +101,6 @@ class BaseHandler(cyclone.web.RequestHandler):
         """Set the ChannelID and record to _client_info"""
         self._chid = normalize_id(value)
         self._client_info["channelID"] = self._chid
-
-    def _init_info(self):
-        """Returns a dict of additional client data"""
-        return {
-            "request_id": self.request_id,
-            "user_agent": self.request.headers.get("user-agent", ""),
-            "remote_ip": self.request.headers.get("x-forwarded-for",
-                                                  self.request.remote_ip),
-            "authorization": self.request.headers.get("authorization", ""),
-            "message_ttl": self.request.headers.get("ttl", ""),
-        }
 
     #############################################################
     #                    Error Callbacks

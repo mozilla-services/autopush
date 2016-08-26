@@ -1,5 +1,3 @@
-import uuid
-
 import cyclone.web
 
 from autopush.endpoint import AutoendpointHandler
@@ -13,7 +11,6 @@ class LogCheckHandler(AutoendpointHandler):
 
     def initialize(self, ap_settings):
         self.ap_settings = ap_settings
-        self.request_id = str(uuid.uuid4())
         self._client_info = self._init_info()
 
     @cyclone.web.asynchronous

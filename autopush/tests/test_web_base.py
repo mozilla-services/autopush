@@ -46,9 +46,8 @@ class TestBase(unittest.TestCase):
         ["location", "www-authenticate"]
     )
 
-    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
-    def setUp(self, t):
-        from autopush.web.base import BaseHandler
+    def setUp(self):
+        from autopush.web.base import BaseWebHandler
 
         settings = AutopushSettings(
             hostname="localhost",
@@ -59,9 +58,9 @@ class TestBase(unittest.TestCase):
                                  headers={"ttl": "0"},
                                  host='example.com:8080')
 
-        self.base = BaseHandler(Application(),
-                                self.request_mock,
-                                ap_settings=settings)
+        self.base = BaseWebHandler(Application(),
+                                   self.request_mock,
+                                   ap_settings=settings)
         self.status_mock = self.base.set_status = Mock()
         self.write_mock = self.base.write = Mock()
         self.base.log = Mock(spec=Logger)
@@ -157,7 +156,8 @@ class TestBase(unittest.TestCase):
         self.status_mock.assert_called_with(999)
         eq_(self.base.log.failure.called, True)
 
-    def test_init_info(self):
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
+    def test_init_info(self, t):
         h = self.request_mock.headers
         h["user-agent"] = "myself"
         self.request_mock.remote_ip = "local1"

@@ -1,13 +1,12 @@
 """Health Check HTTP Handler"""
 import cyclone.web
-from autopush.endpoint import AutoendpointHandler
+from autopush.base import BaseHandler
 
 from boto.dynamodb2.exceptions import (
     InternalServerError,
 )
 from twisted.internet.defer import DeferredList
 from twisted.internet.threads import deferToThread
-from twisted.logger import Logger
 
 from autopush import __version__
 
@@ -17,12 +16,8 @@ class MissingTableException(Exception):
     pass
 
 
-class HealthHandler(AutoendpointHandler):
+class HealthHandler(BaseHandler):
     """HTTP Health Handler"""
-    log = Logger()
-
-    def initialize(self, ap_settings):
-        self.ap_settings = ap_settings
 
     @cyclone.web.asynchronous
     def get(self):
@@ -83,11 +78,8 @@ class HealthHandler(AutoendpointHandler):
         self.finish()
 
 
-class StatusHandler(cyclone.web.RequestHandler):
+class StatusHandler(BaseHandler):
     """HTTP Status Handler"""
-
-    def initialize(self, ap_settings):
-        self.ap_settings = ap_settings
 
     def get(self):
         """HTTP Get

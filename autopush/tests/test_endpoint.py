@@ -162,8 +162,7 @@ class EndpointTestCase(unittest.TestCase):
         ["location", "www-authenticate"]
     )
 
-    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
-    def setUp(self, t):
+    def setUp(self):
         from twisted.logger import Logger
         # this timeout *should* be set to 0.5, however Travis runs
         # so slow, that many of these tests will time out leading
@@ -454,7 +453,8 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
 
-    def test_init_info(self):
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
+    def test_init_info(self, t):
         d = self.endpoint._init_info()
         eq_(d["request_id"], dummy_request_id)
         h = self.request_mock.headers
