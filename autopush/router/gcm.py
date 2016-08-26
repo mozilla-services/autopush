@@ -1,6 +1,5 @@
 """GCM Router"""
 import gcmclient
-import json
 
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
@@ -158,7 +157,7 @@ class GCMRouter(object):
             self.metrics.increment("updates.client.bridge.gcm.failed.failure",
                                    self._base_tags)
             self.log.info("GCM failures: {failed()}",
-                          failed=lambda: json.dumps(reply.failed.items()))
+                          failed=lambda: repr(reply.failed.items()))
             self.router_table.register_user(
                 {"uaid": uaid_data.get('uaid'),
                  "router_type": uaid_data.get("router_type", "gcm"),
@@ -173,7 +172,7 @@ class GCMRouter(object):
         # retries:
         if reply.needs_retry():
             self.log.warn("GCM retry requested: {failed()}",
-                          failed=lambda: json.dumps(reply.failed.items()))
+                          failed=lambda: repr(reply.failed.items()))
             self.metrics.increment("updates.client.bridge.gcm.failed.retry",
                                    self._base_tags)
             raise RouterException("GCM failure to deliver, retry",
