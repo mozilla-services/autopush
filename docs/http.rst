@@ -34,10 +34,6 @@ Push Service HTTP API
 The following section describes how remote servers can send Push
 Notifications to apps running on remote User Agents.
 
-API methods requiring Authorization must provide the Authorization
-header containing the authrorization token. The Authorization token is returned
-as "secret" in the registration response.
-
 Lexicon
 -------
 
@@ -85,7 +81,7 @@ Error Codes
 Unless otherwise specified, all calls return the following error codes:
 
 -  20x - Success
--  301 - Moved + `Location:` if `{token}` is invalid (Bridge API Only)
+-  301 - Moved + `Location:` if `{client_token}` is invalid (Bridge API Only)
 -  400 - Bad Parameters
 
    - errno 101 - Missing neccessary crypto keys
@@ -133,11 +129,14 @@ Calls
 Send Notification
 ~~~~~~~~~~~~~~~~~
 
-Send a notification to the given endpoint identified by it's `token`.
+Send a notification to the given endpoint identified by its `push_endpoint`.
+Please note, the Push endpoint URL (which is what is used to send notifications)
+should be considered "opaque". We reserve the right to change any portion
+of the Push URL in future provisioned URLs.
 
 **Call:**
 
-.. http:put:: /push/{token}
+.. http:put:: {push_endpoint}
 
     If the client is using webpush style data delivery, then the body in its
     entirety will be regarded as the data payload for the message per
@@ -165,7 +164,7 @@ Send a notification to the given endpoint identified by it's `token`.
 
 **Return Codes:**
 
-    :statuscode 404: `token` is invalid.
+    :statuscode 404: Push subscription is invalid.
     :statuscode 202: Message stored for delivery to client at a later
                      time.
     :statuscode 200: Message delivered to node client is connected to.
@@ -248,6 +247,10 @@ external protocol like
 `GCM <https://developers.google.com/cloud-messaging/>`__/`FCM <https://firebase.google.com/docs/cloud-messaging/>`__ or
 `APNs <https://developer.apple.com/library/ios/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Introduction.html#//apple_ref/doc/uid/TP40008196-CH1-SW1>`__. All message bodies must be UTF-8 encoded.
 
+API methods requiring Authorization must provide the Authorization
+header containing the registration secret. The registration secret is
+returned as "secret" in the registration response.
+
 Lexicon
 -------
 
@@ -258,30 +261,38 @@ For the following call definitions:
 Allowed bridges are `gcm` (Google Cloud Messaging), `fcm` (Firebase Cloud
 Messaging), and `apns` (Apple Push Notification system)
 
-   :{token}: The bridge specific public exchange token
+   :{app_id}: The bridge specific application identifier
 
-Each protocol requires a unique token that addresses the remote application.
-For GCM/FCM, this is the `SenderID` and is pre-negotiated outside of the push
-service.
+Each bridge may require a unique token that addresses the remote application
+For GCM/FCM, this is the `SenderID` (or 'project number') and is pre-negotiated outside of the push
+service. You can find this number using the
+`Google developer console <https://console.developers.google.com/iam-admin/settings/project>`__.
+For APNS, there is no client token, so this value is arbitrary.
+Feel free to use "a" or "0" or any other valid URL path token. For our examples, we will use a client token of
+"33clienttoken33".
 
-   :{instanceid}: The bridge specific private identifier token
+   :{instance_id}: The bridge specific private identifier token
 
-Each protocol requires a unique token that addresses the
-application on a given user's device. This is usually the product of the
-application registering the {instanceid} with the native bridge protocol
-agent.
+Each bridge requires a unique token that addresses the
+application on a given user's device. This is the
+"`Registration Token <https://firebase.google.com/docs/cloud-messaging/android/client#sample-register>`__" for
+GCM/FCM or "`Device Token <https://developer.apple.com/library/ios/documentation/NetworkingInternet/Conceptual/RemoteNotificationsPG/Chapters/IPhoneOSClientImp.html#//apple_ref/doc/uid/TP40008194-CH103-SW2>`__"
+for APNS. This is usually the product of the
+application registering the {instance_id} with the native bridge via the user
+agent. For our examples, we will use an instance ID of "11-instance-id-11".
 
-   :{auth_token}: The Authorization token
+   :{secret}: The registration secret from the Registration call.
 
 Most calls to the HTTP interface require a Authorization header. The
-Authorization header is a bearer token, which has been provided by the
-**Registration** call and is preceded by the token type word "WebPush".
+Authorization header is a simple bearer token, which has been provided by the
+**Registration** call and is preceded by the scheme name "Bearer". For
+our examples, we will use a registration secret of "00secret00".
 
 An example of the Authorization header would be:
 
 ::
 
-    Authorization: WebPush 0123abcdef
+    Authorization: Bearer 00secret00
 
 Calls
 -----
@@ -290,19 +301,19 @@ Registration
 ~~~~~~~~~~~~
 
 Request a new UAID registration, Channel ID, and optionally set a bridge
-type and token for this connection.
+type and 3rd party bridge instance ID token for this connection.
 
 **Call:**
 
 
-.. http:post:: /v1/{type}/{token}/registration
+.. http:post:: /v1/{type}/{app_id}/registration
 
-This call requires no Authorization for first time use.
+This call requires no Authorization header for first time use.
 
 **Parameters:**
 
 
-    {"token":{instanceid}}
+    {"token":{instance_id}}
 
     .. note::
 
@@ -315,21 +326,21 @@ This call requires no Authorization for first time use.
 
 .. code-block:: json
 
-    `{"uaid": {UAID}, "secret": {auth_token},
+    `{"uaid": {UAID}, "secret": {secret},
     "endpoint": "https://updates-push...", "channelID": {CHID}}`
 
 example:
 
 .. code-block:: http
 
-    > POST /v1/fcm/a1b2c3/registration
+    > POST /v1/fcm/33clienttoken33/registration
     >
-    > {"token": "1ab2c3"}
+    > {"token": "11-instance-id-11"}
 
 .. code-block:: json
 
     < {"uaid": "01234567-0000-1111-2222-0123456789ab",
-    < "secret": "0123abcdef",
+    < "secret": "00secret00",
     < "endpoint": "https://updates-push.services.mozaws.net/push/...",
     < "channelID": "00000000-0000-1111-2222-0123456789ab"}
 
@@ -341,21 +352,22 @@ See :ref:`errors`.
 Token updates
 ~~~~~~~~~~~~~
 
-Update the current bridge token value
+Update the current bridge token value. Note, this is a ***PUT*** call, since
+we are updating existing information.
 
 **Call:**
 
 
-.. http:put:: /v1/{type}/{token}/registration/{uaid}
+.. http:put:: /v1/{type}/{app_id}/registration/{uaid}
 
 ::
 
-    Authorization: WebPush {auth_token}
+    Authorization: Bearer {secret}
 
 **Parameters:**
 
 
-    {"token": {instanceid}}
+    {"token": {instance_id}}
 
     .. note::
 
@@ -374,10 +386,10 @@ example:
 
 .. code-block:: http
 
-    > PUT /v1/fcm/a1b2c3/registration/abcdef012345
-    > Authorization: WebPush 0123abcdef
+    > PUT /v1/fcm/33clienttoken33/registration/abcdef012345
+    > Authorization: Bearer 00secret00
     >
-    > {"token": "5e6g7h8i"}
+    > {"token": "22-instance-id-22"}
 
 .. code-block:: json
 
@@ -396,11 +408,11 @@ Acquire a new ChannelID for a given UAID.
 **Call:**
 
 
-.. http:post:: /v1/{type}/{token}/registration/{uaid}/subscription
+.. http:post:: /v1/{type}/{app_id}/registration/{uaid}/subscription
 
 ::
 
-    Authorization: WebPush {auth_token}
+    Authorization: Bearer {secret}
 
 **Parameters:**
 
@@ -418,8 +430,8 @@ example:
 
 .. code-block:: http
 
-    > POST /v1/fcm/a1b2c3/registration/abcdef012345/subscription
-    > Authorization: WebPush 0123abcdef
+    > POST /v1/fcm/33clienttoken33/registration/abcdef012345/subscription
+    > Authorization: Bearer 00secret00
     >
     > {}
 
@@ -442,11 +454,11 @@ is no longer valid.
 **Call:**
 
 
-.. http:delete:: /v1/{type}/{token}/registration/{uaid}
+.. http:delete:: /v1/{type}/{app_id}/registration/{uaid}
 
 ::
 
-    Authorization: WebPush {auth_token}
+    Authorization: Bearer {secret}
 
 **Parameters:**
 
@@ -470,11 +482,11 @@ Remove a given ChannelID subscription from a UAID.
 
 **Call:**
 
-.. http:delete:: /v1/{type}/{token}/registration/{UAID}/subscription/{CHID}
+.. http:delete:: /v1/{type}/{app_id}/registration/{UAID}/subscription/{CHID}
 
 ::
 
-    Authorization: WebPush {auth_token}
+    Authorization: Bearer {secret}
 
 **Parameters:**
 
