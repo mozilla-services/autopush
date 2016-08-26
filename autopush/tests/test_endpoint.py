@@ -217,7 +217,7 @@ class EndpointTestCase(unittest.TestCase):
 
     def test_uaid_lookup_results(self):
         fresult = dict(router_type="test")
-        frouter = Mock(spec=Router)
+        frouter = Mock(spec=IRouter)
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
         self.endpoint.chid = dummy_chid
@@ -234,7 +234,7 @@ class EndpointTestCase(unittest.TestCase):
 
     def test_uaid_lookup_results_bad_ttl(self):
         fresult = dict(router_type="test")
-        frouter = Mock(spec=Router)
+        frouter = Mock(spec=IRouter)
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
         self.endpoint.chid = dummy_chid
@@ -253,7 +253,7 @@ class EndpointTestCase(unittest.TestCase):
     def test_webpush_ttl_too_large(self):
         from autopush.endpoint import MAX_TTL
         fresult = dict(router_type="test")
-        frouter = Mock(spec=Router)
+        frouter = Mock(spec=IRouter)
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
         self.endpoint.chid = dummy_chid
@@ -274,7 +274,7 @@ class EndpointTestCase(unittest.TestCase):
 
     def test_webpush_missing_ttl(self):
         del(self.request_mock.headers['ttl'])
-        frouter = Mock(spec=Router)
+        frouter = Mock(spec=IRouter)
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
         self.endpoint.ap_settings.routers["webpush"] = frouter
@@ -372,7 +372,7 @@ class EndpointTestCase(unittest.TestCase):
     # ...And for other router types.
     def test_other_uaid_lookup_no_crypto_headers(self):
         fresult = dict(router_type="test")
-        frouter = Mock(spec=Router)
+        frouter = Mock(spec=IRouter)
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
         self.endpoint.chid = dummy_chid
@@ -1435,7 +1435,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.storage_mock = settings.storage = Mock(spec=Storage)
         self.router_mock.register_user = Mock()
         self.router_mock.register_user.return_value = (True, {}, {})
-        settings.routers["test"] = self.router_mock
+        settings.routers["test"] = Mock(spec=IRouter)
 
         self.request_mock = Mock(body=b'', arguments={}, headers={})
         self.reg = endpoint.RegistrationHandler(Application(),
@@ -1552,7 +1552,6 @@ class RegistrationTestCase(unittest.TestCase):
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_uaid))
     def test_post(self, *args):
-        self.reg.ap_settings.routers["test"] = self.router_mock
         self.reg.request.body = json.dumps(dict(
             type="simplepush",
             channelID=dummy_chid,
@@ -1803,13 +1802,14 @@ class RegistrationTestCase(unittest.TestCase):
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_chid))
     def test_put(self, *args):
         data = dict(token="some_token")
-        self.router_mock.register = Mock()
-        self.router_mock.register.return_value = data
+        frouter = self.reg.ap_settings.routers["test"]
+        frouter.register = Mock()
+        frouter.register.return_value = data
         self.reg.request.body = json.dumps(data)
 
         def handle_finish(value):
             self.reg.write.assert_called_with({})
-            self.router_mock.register.assert_called_with(
+            frouter.register.assert_called_with(
                 dummy_uaid, data, uri=self.reg.request.uri
             )
 
