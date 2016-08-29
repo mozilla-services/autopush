@@ -36,7 +36,6 @@ from collections import defaultdict, namedtuple
 from functools import wraps
 from random import randrange
 
-import cyclone.web
 from autobahn.twisted.websocket import WebSocketServerProtocol
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
@@ -62,6 +61,7 @@ from twisted.web.resource import Resource
 from zope.interface import implements
 
 from autopush import __version__
+from autopush.base import BaseHandler
 from autopush.db import (
     has_connected_this_month,
     hasher,
@@ -69,7 +69,6 @@ from autopush.db import (
 )
 from autopush.protocol import IgnoreBody
 from autopush.utils import (
-    ErrorLogger,
     parse_user_agent,
     validate_uaid,
 )
@@ -1304,7 +1303,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.sendJSON(msg)
 
 
-class RouterHandler(cyclone.web.RequestHandler, ErrorLogger):
+class RouterHandler(BaseHandler):
     """Router Handler
 
     Handles routing a notification to a connected client from an endpoint.
@@ -1338,7 +1337,7 @@ class RouterHandler(cyclone.web.RequestHandler, ErrorLogger):
         self.write("Client accepted for delivery")
 
 
-class NotificationHandler(cyclone.web.RequestHandler, ErrorLogger):
+class NotificationHandler(BaseHandler):
 
     def put(self, uaid, *args):
         """HTTP Put

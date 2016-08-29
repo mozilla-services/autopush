@@ -27,17 +27,17 @@ class HealthTestCase(unittest.TestCase):
         self.mock_dynamodb2 = mock_dynamodb2()
         self.mock_dynamodb2.start()
 
-        ap_settings = self.settings = AutopushSettings(
+        settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
-        self.router_table = self.settings.router.table
-        self.storage_table = self.settings.storage.table
+        self.router_table = settings.router.table
+        self.storage_table = settings.storage.table
 
         self.request_mock = Mock()
         self.health = HealthHandler(Application(),
                                     self.request_mock,
-                                    ap_settings=ap_settings)
+                                    ap_settings=settings)
         self.health.log = self.log_mock = Mock(spec=Logger)
         self.status_mock = self.health.set_status = Mock()
         self.write_mock = self.health.write = Mock()
@@ -134,12 +134,13 @@ class StatusTestCase(unittest.TestCase):
         self.mock_dynamodb2 = mock_dynamodb2()
         self.mock_dynamodb2.start()
 
-        self.settings = StatusHandler.ap_settings = AutopushSettings(
+        settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
         self.request_mock = Mock()
-        self.status = StatusHandler(Application(), self.request_mock)
+        self.status = StatusHandler(Application(), self.request_mock,
+                                    ap_settings=settings)
         self.write_mock = self.status.write = Mock()
 
     def tearDown(self):

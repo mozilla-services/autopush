@@ -41,6 +41,7 @@ from jose import JOSEError
 from twisted.internet.defer import Deferred
 from twisted.internet.threads import deferToThread
 
+from autopush.base import BaseHandler
 from autopush.db import (
     generate_last_connect,
     hasher,
@@ -51,7 +52,6 @@ from autopush.router.interface import RouterException
 from autopush.utils import (
     generate_hash,
     validate_uaid,
-    ErrorLogger,
     extract_jwt,
     base64url_encode,
 )
@@ -119,7 +119,7 @@ def parse_request_params(request):
     return version, data
 
 
-class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
+class AutoendpointHandler(BaseHandler):
     """Common overrides for Autoendpoint handlers"""
     cors_methods = ""
     cors_request_headers = ()
@@ -130,13 +130,9 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
     #############################################################
     def initialize(self, ap_settings):
         """Setup basic aliases and attributes"""
-        self.uaid_hash = ""
-        self._uaid = ""
-        self._chid = ""
-        self.ap_settings = ap_settings
+        super(AutoendpointHandler, self).initialize(ap_settings)
+        self.uaid_hash = self._uaid = self._chid = ""
         self.metrics = ap_settings.metrics
-        self.request_id = str(uuid.uuid4())
-        self._client_info = self._init_info()
 
     def prepare(self):
         """Common request preparation"""
@@ -183,18 +179,6 @@ class AutoendpointHandler(ErrorLogger, cyclone.web.RequestHandler):
         """Set the ChannelID and record to _client_info"""
         self._chid = normalize_id(value)
         self._client_info["channelID"] = self._chid
-
-    def _init_info(self):
-        """Returns a dict of additional client data"""
-        return {
-            "ami_id": self.ap_settings.ami_id,
-            "request_id": self.request_id,
-            "user_agent": self.request.headers.get("user-agent", ""),
-            "remote_ip": self.request.headers.get("x-forwarded-for",
-                                                  self.request.remote_ip),
-            "authorization": self.request.headers.get("authorization", ""),
-            "message_ttl": self.request.headers.get("ttl", ""),
-        }
 
     #############################################################
     #                    Error Callbacks

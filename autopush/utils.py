@@ -9,8 +9,6 @@ import uuid
 import ecdsa
 import requests
 from jose import jws
-from twisted.logger import Logger
-from twisted.python import failure
 from ua_parser import user_agent_parser
 
 
@@ -196,26 +194,3 @@ def parse_user_agent(agent_string):
     raw_info["ua_browser_ver"] = ".".join(filter(None, browser_bits))
 
     return dd_info, raw_info
-
-
-class ErrorLogger(object):
-    log = Logger()
-
-    def write_error(self, code, **kwargs):
-        """Write the error (otherwise unhandled exception when dealing with
-        unknown method specifications.)
-
-        This is a Cyclone API Override method used by endpoint and websocket.
-
-        """
-        self.set_status(code)
-        if "exc_info" in kwargs:
-            fmt = kwargs.get("format", "Exception")
-            self.log.failure(
-                format=fmt,
-                failure=failure.Failure(*kwargs["exc_info"]),
-                **self._client_info)
-        else:
-            self.log.failure("Error in handler: %s" % code,
-                             **self._client_info)
-        self.finish()

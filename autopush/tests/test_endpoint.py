@@ -66,12 +66,11 @@ class FileConsumer(object):  # pragma: no cover
 class MessageTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
-        settings = self.ap_settings = endpoint.MessageHandler.ap_settings =\
-            AutopushSettings(
-                hostname="localhost",
-                statsd_host=None,
-                crypto_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-            )
+        settings = AutopushSettings(
+            hostname="localhost",
+            statsd_host=None,
+            crypto_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+        )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
         self.metrics_mock = settings.metrics = Mock(spec=Metrics)
         self.router_mock = settings.router = Mock(spec=Router)
@@ -163,8 +162,7 @@ class EndpointTestCase(unittest.TestCase):
         ["location", "www-authenticate"]
     )
 
-    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
-    def setUp(self, t):
+    def setUp(self):
         from twisted.logger import Logger
         # this timeout *should* be set to 0.5, however Travis runs
         # so slow, that many of these tests will time out leading
@@ -455,7 +453,8 @@ class EndpointTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
 
-    def test_init_info(self):
+    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
+    def test_init_info(self, t):
         d = self.endpoint._init_info()
         eq_(d["request_id"], dummy_request_id)
         h = self.request_mock.headers
@@ -1423,12 +1422,11 @@ class RegistrationTestCase(unittest.TestCase):
 
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
-        settings = endpoint.RegistrationHandler.ap_settings =\
-            AutopushSettings(
-                hostname="localhost",
-                statsd_host=None,
-                bear_hash_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
-            )
+        settings = AutopushSettings(
+            hostname="localhost",
+            statsd_host=None,
+            bear_hash_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
+        )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
         self.metrics_mock = settings.metrics = Mock(spec=Metrics)
         self.router_mock = settings.router = Mock(spec=Router)

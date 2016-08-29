@@ -2,7 +2,7 @@ import uuid
 
 from cryptography.fernet import Fernet
 from cyclone.web import Application
-from mock import Mock, patch
+from mock import Mock
 from moto import mock_dynamodb2
 from nose.tools import eq_
 from twisted.internet.defer import Deferred
@@ -16,7 +16,6 @@ from autopush.db import (
 from autopush.router.interface import IRouter, RouterResponse
 from autopush.settings import AutopushSettings
 
-dummy_request_id = "11111111123412341234567812345678"
 dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
 dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
 dummy_token = dummy_uaid + ":" + dummy_chid
@@ -33,8 +32,7 @@ def tearDown():
 
 
 class TestWebpushHandler(unittest.TestCase):
-    @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
-    def setUp(self, t):
+    def setUp(self):
         from autopush.web.webpush import WebPushHandler
 
         settings = AutopushSettings(

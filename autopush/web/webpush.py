@@ -4,7 +4,7 @@ from twisted.internet.defer import Deferred
 from twisted.internet.threads import deferToThread
 
 from autopush.web.base import (
-    BaseHandler,
+    BaseWebHandler,
     Notification,
 )
 from autopush.web.validation import (
@@ -14,7 +14,7 @@ from autopush.web.validation import (
 from autopush.websocket import ms_time
 
 
-class WebPushHandler(BaseHandler):
+class WebPushHandler(BaseWebHandler):
     cors_methods = "POST"
     cors_request_headers = ("content-encoding", "encryption",
                             "crypto-key", "ttl",

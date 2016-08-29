@@ -390,13 +390,10 @@ def skip_request_logging(handler):
 
 def mount_health_handlers(site, settings):
     """Create a health check HTTP handler on a cyclone site object"""
-    status = StatusHandler
-    status.ap_settings = settings
-    health = HealthHandler
-    health.ap_settings = settings
+    h_kwargs = dict(ap_settings=settings)
     site.add_handlers(".*$", [
-        (r"^/status", status),
-        (r"^/health", health),
+        (r"^/status", StatusHandler, h_kwargs),
+        (r"^/health", HealthHandler, h_kwargs),
     ])
 
 
@@ -432,15 +429,11 @@ def connection_main(sysargs=None, use_files=True):
     if not settings:
         return 1  # pragma: nocover
 
-    r = RouterHandler
-    r.ap_settings = settings
-    n = NotificationHandler
-    n.ap_settings = settings
-
     # Internal HTTP notification router
+    h_kwargs = dict(ap_settings=settings)
     site = cyclone.web.Application([
-        (r"/push/([^\/]+)", r),
-        (r"/notif/([^\/]+)(/([^\/]+))?", n),
+        (r"/push/([^\/]+)", RouterHandler, h_kwargs),
+        (r"/notif/([^\/]+)(/([^\/]+))?", NotificationHandler, h_kwargs),
     ],
         default_host=settings.router_hostname, debug=args.debug,
         log_function=skip_request_logging
@@ -536,20 +529,19 @@ def endpoint_main(sysargs=None, use_files=True):
         return 1
 
     # Endpoint HTTP router
+    h_kwargs = dict(ap_settings=settings)
     site = cyclone.web.Application([
-        (r"/push/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)", EndpointHandler,
-         dict(ap_settings=settings)),
+        (r"/push/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
+         EndpointHandler, h_kwargs),
         (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
-         SimplePushHandler, dict(ap_settings=settings)),
+         SimplePushHandler, h_kwargs),
         (r"/wpush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
-         WebPushHandler, dict(ap_settings=settings)),
-        (r"/m/([^\/]+)", MessageHandler, dict(ap_settings=settings)),
+         WebPushHandler, h_kwargs),
+        (r"/m/([^\/]+)", MessageHandler, h_kwargs),
         (r"/v1/([^\/]+)/([^\/]+)/registration(?:/([^\/]+))"
             "?(?:/subscription)?(?:/([^\/]+))?",
-         RegistrationHandler,
-         dict(ap_settings=settings)),
-        (r"/v1/err(?:/([^\/]+))?", LogCheckHandler,
-            dict(ap_settings=settings)),
+         RegistrationHandler, h_kwargs),
+        (r"/v1/err(?:/([^\/]+))?", LogCheckHandler, h_kwargs),
     ],
         default_host=settings.hostname, debug=args.debug,
         log_function=skip_request_logging

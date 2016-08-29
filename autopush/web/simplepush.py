@@ -3,7 +3,7 @@ import time
 from twisted.internet.defer import Deferred
 
 from autopush.web.base import (
-    BaseHandler,
+    BaseWebHandler,
     Notification,
 )
 from autopush.web.validation import (
@@ -12,7 +12,7 @@ from autopush.web.validation import (
 )
 
 
-class SimplePushHandler(BaseHandler):
+class SimplePushHandler(BaseWebHandler):
     cors_methods = "PUT"
 
     @threaded_validate(SimplePushRequestSchema)
