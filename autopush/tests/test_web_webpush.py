@@ -96,7 +96,7 @@ class TestWebpushHandler(unittest.TestCase):
         self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.return_value = dict(
             router_type="webpush",
-            router_data=dict(),
+            router_data=dict(uaid="uaid"),
         )
         self.wp_router_mock.route_notification.return_value = RouterResponse(
             status_code=503,

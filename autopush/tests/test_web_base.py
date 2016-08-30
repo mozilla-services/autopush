@@ -13,7 +13,6 @@ from twisted.trial import unittest
 
 from autopush.db import (
     create_rotating_message_table,
-    hasher,
     ProvisionedThroughputExceededException,
 )
 from autopush.exceptions import InvalidRequest
@@ -174,14 +173,6 @@ class TestBase(unittest.TestCase):
         d = self.base._init_info()
         eq_(d["remote_ip"], "local2")
         eq_(d["authorization"], "webpush token barney")
-
-    def test_properties(self):
-        eq_(self.base.uaid, "")
-        eq_(self.base.chid, "")
-        self.base.uaid = dummy_uaid
-        eq_(self.base._client_info["uaid_hash"], hasher(dummy_uaid))
-        self.base.chid = dummy_chid
-        eq_(self.base._client_info['channelID'], dummy_chid)
 
     def test_write_response(self):
         self.base._write_response(400, 103, message="Fail",

@@ -8,10 +8,6 @@ from boto.dynamodb2.exceptions import (
 from boto.exception import BotoServerError
 
 from autopush.base import BaseHandler
-from autopush.db import (
-    hasher,
-    normalize_id,
-)
 from autopush.exceptions import InvalidRequest
 from autopush.router.interface import RouterException
 
@@ -52,7 +48,6 @@ class BaseWebHandler(BaseHandler):
     def initialize(self, ap_settings):
         """Setup basic aliases and attributes"""
         super(BaseWebHandler, self).initialize(ap_settings)
-        self.uaid_hash = self._uaid = self._chid = ""
         self.start_time = time.time()
         self.metrics = ap_settings.metrics
 
@@ -75,32 +70,6 @@ class BaseWebHandler(BaseHandler):
 
     def head(self, *args, **kwargs):
         """HTTP HEAD Handler"""
-
-    #############################################################
-    #                    Utility Methods
-    #############################################################
-    @property
-    def uaid(self):
-        """Return the UAID that was set"""
-        return self._uaid
-
-    @uaid.setter
-    def uaid(self, value):
-        """Set the UAID and update the uaid hash"""
-        self._uaid = value
-        self.uaid_hash = hasher(value)
-        self._client_info["uaid_hash"] = self.uaid_hash
-
-    @property
-    def chid(self):
-        """Return the ChannelID"""
-        return self._chid
-
-    @chid.setter
-    def chid(self, value):
-        """Set the ChannelID and record to _client_info"""
-        self._chid = normalize_id(value)
-        self._client_info["channelID"] = self._chid
 
     #############################################################
     #                    Error Callbacks
@@ -145,7 +114,8 @@ class BaseWebHandler(BaseHandler):
         """
         fmt = fail.value.message or 'Exception'
         self.log.failure(format=fmt, failure=fail,
-                         status_code=500, errno=999, **self._client_info)
+                         status_code=500, errno=999,
+                         client_info=self._client_info)
         self._write_response(500, 999, message="An unexpected server error"
                                                " occurred.")
 
@@ -153,7 +123,7 @@ class BaseWebHandler(BaseHandler):
         """errBack for throughput provisioned exceptions"""
         fail.trap(ProvisionedThroughputExceededException)
         self.log.info(format="Throughput Exceeded", status_code=503,
-                      errno=201, **self._client_info)
+                      errno=201, client_info=self._client_info)
         self._write_response(503, 201,
                              message="Please slow message send rate")
 
@@ -161,7 +131,8 @@ class BaseWebHandler(BaseHandler):
         """errBack for random boto exceptions"""
         fail.trap(BotoServerError)
         self.log.info(format="BOTO Error: %s" % str(fail.value),
-                      status_code=503, errno=202, **self._client_info)
+                      status_code=503, errno=202,
+                      client_info=self._client_info)
         self._write_response(503, errno=202,
                              message="Communication error, please retry")
 
@@ -188,17 +159,17 @@ class BaseWebHandler(BaseHandler):
             self.log.failure(format=fmt,
                              failure=fail, status_code=exc.status_code,
                              errno=exc.errno or "",
-                             **self._client_info)  # pragma nocover
+                             client_info=self._client_info)  # pragma nocover
         if 200 <= exc.status_code < 300:
             self.log.info(format="Success", status_code=exc.status_code,
                           logged_status=exc.logged_status or "",
-                          **self._client_info)
+                          client_info=self._client_info)
         elif 400 <= exc.status_code < 500:
             self.log.info(format="Client error",
                           status_code=exc.status_code,
                           logged_status=exc.logged_status or "",
                           errno=exc.errno or "",
-                          **self._client_info)
+                          client_info=self._client_info)
         self._router_response(exc)
 
     def _write_validation_err(self, errors):

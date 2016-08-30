@@ -74,7 +74,6 @@ class ThreadedValidate(object):
         def wrapper(request_handler, *args, **kwargs):
             # Wrap the handler in @cyclone.web.synchronous
             request_handler._auto_finish = False
-
             d = deferToThread(self._validate_request, request_handler)
             d.addCallback(self._call_func, func, request_handler, *args,
                           **kwargs)
@@ -279,7 +278,8 @@ class WebPushRequestSchema(Schema):
         req_fields = ["content-encoding", "encryption"]
         if d.get("body"):
             if not all([x in d["headers"] for x in req_fields]):
-                raise InvalidRequest("Client error", errno=110)
+                raise InvalidRequest("Client error", status_code=400,
+                                     errno=110)
             if (d["headers"].get("crypto-key") and
                     "dh=" not in d["headers"]["crypto-key"]):
                     raise InvalidRequest(

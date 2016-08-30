@@ -24,6 +24,7 @@ class BaseHandler(cyclone.web.RequestHandler):
                                                self.request.remote_ip),
             authorization=self.request.headers.get('authorization', ""),
             message_ttl=self.request.headers.get('ttl', ""),
+            uri=self.request.uri,
         )
 
     def write_error(self, code, **kwargs):
@@ -39,8 +40,8 @@ class BaseHandler(cyclone.web.RequestHandler):
             self.log.failure(
                 format=kwargs.get('format', "Exception"),
                 failure=failure.Failure(*kwargs['exc_info']),
-                **self._client_info)
+                client_info=self._client_info)
         else:
             self.log.failure("Error in handler: %s" % code,
-                             **self._client_info)
+                             client_info=self._client_info)
         self.finish()

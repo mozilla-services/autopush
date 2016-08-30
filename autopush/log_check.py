@@ -27,7 +27,7 @@ class LogCheckHandler(AutoendpointHandler):
         if 'error' in err_type:
             self.log.error(format="Test Error Message",
                            status_code=418, errno=0,
-                           **self._client_info)
+                           client_info=self._client_info)
             self._write_response(418, 999, message="ERROR:Success",
                                  reason="Test Error")
         if 'crit' in err_type:
@@ -36,6 +36,6 @@ class LogCheckHandler(AutoendpointHandler):
             except LogCheckError:
                 self.log.failure(format="Test Critical Message",
                                  status_code=418, errno=0,
-                                 **self._client_info)
+                                 client_info=self._client_info)
                 self._write_response(418, 999, message="FAILURE:Success",
                                      reason="Test Failure")

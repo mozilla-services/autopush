@@ -226,7 +226,7 @@ class AutoendpointHandler(BaseHandler):
         """errBack for throughput provisioned exceptions"""
         fail.trap(ProvisionedThroughputExceededException)
         self.log.info(format="Throughput Exceeded", status_code=503,
-                      errno=201, **self._client_info)
+                      errno=201, client_info=self._client_info)
         self._write_response(503, errno=201,
                              message="Please slow message send rate")
 
@@ -234,7 +234,8 @@ class AutoendpointHandler(BaseHandler):
         """errBack for JWS/JWT exceptions"""
         fail.trap(JOSEError)
         self.log.info(format="Authorization Failure",
-                      status_code=401, errno=109, **self._client_info)
+                      status_code=401, errno=109,
+                      client_info=self._client_info)
         self._write_response(401, errno=109,
                              message="Invalid Authorization")
 
@@ -242,7 +243,8 @@ class AutoendpointHandler(BaseHandler):
         """errBack for random boto exceptions"""
         fail.trap(BotoServerError)
         self.log.info(format="BOTO Error: %s" % str(fail.value),
-                      status_code=503, errno=202, **self._client_info)
+                      status_code=503, errno=202,
+                      client_info=self._client_info)
         self._write_response(503, errno=202,
                              message="Communication error, please retry")
 
@@ -267,20 +269,20 @@ class AutoendpointHandler(BaseHandler):
         if isinstance(exc, RouterException):
             if exc.log_exception or exc.status_code >= 500:
                 fmt = fail.value.message or 'Exception'
-                self.log.failure(format=fmt,
+                self.log.failure(format=fmt,  # pragma nocover
                                  failure=fail, status_code=exc.status_code,
                                  errno=exc.errno or "",
-                                 **self._client_info)  # pragma nocover
+                                 client_info=self._client_info)
             if 200 <= exc.status_code < 300:
                 self.log.info(format="Success", status_code=exc.status_code,
                               logged_status=exc.logged_status or "",
-                              **self._client_info)
+                              client_info=self._client_info)
             elif 400 <= exc.status_code < 500:
                 self.log.info(format="Client error",
                               status_code=exc.status_code,
                               logged_status=exc.logged_status or "",
                               errno=exc.errno or "",
-                              **self._client_info)
+                              client_info=self._client_info)
             self._router_response(exc)
 
     def _uaid_not_found_err(self, fail):
@@ -288,7 +290,7 @@ class AutoendpointHandler(BaseHandler):
         fail.trap(ItemNotFound)
         self.log.info(format="UAID not found in AWS.",
                       status_code=410, errno=103,
-                      **self._client_info)
+                      client_info=self._client_info)
         self._write_response(410, errno=103,
                              message="Endpoint has expired. "
                                      "Do not send messages to this endpoint.")
@@ -298,7 +300,7 @@ class AutoendpointHandler(BaseHandler):
         fail.trap(InvalidToken, InvalidTokenException)
         self.log.info(format="Invalid token",
                       status_code=400, errno=102,
-                      **self._client_info)
+                      client_info=self._client_info)
         self._write_response(400, 102,
                              message="Invalid endpoint.")
 
@@ -308,7 +310,7 @@ class AutoendpointHandler(BaseHandler):
         self.log.info(format="Invalid Auth token",
                       status_code=401,
                       errno=109,
-                      **self._client_info)
+                      client_info=self._client_info)
         self._write_unauthorized_response(
             message=fail.value.message,
             url="https://datatracker.ietf.org/doc/"
@@ -503,7 +505,7 @@ class EndpointHandler(AutoendpointHandler):
         except KeyError:
             self.log.debug(
                 format="Invalid router requested", status_code=400,
-                errno=108, **self._client_info)
+                errno=108, client_info=self._client_info)
             self._write_response(400, 108, message="Invalid router")
             return
 
@@ -520,14 +522,14 @@ class EndpointHandler(AutoendpointHandler):
             if data and not all([x in self.request.headers
                                  for x in req_fields]):
                 self.log.debug(format="Client error", status_code=400,
-                               errno=101, **self._client_info)
+                               errno=101, client_info=self._client_info)
                 self._write_response(
                     400, errno=101, message="Missing necessary crypto keys.")
                 return
             if ("encryption-key" in self.request.headers and
                     "crypto-key" in self.request.headers):
                 self.log.debug(format="Client error", status_code=400,
-                               errno=110, **self._client_info)
+                               errno=110, client_info=self._client_info)
                 self._write_response(
                     400, 110, message="Invalid crypto headers")
                 return
@@ -550,13 +552,13 @@ class EndpointHandler(AutoendpointHandler):
             ttl = min(ttl, MAX_TTL)
         else:
             self.log.debug(format="Client error", status_code=400,
-                           errno=112, **self._client_info)
+                           errno=112, client_info=self._client_info)
             self._write_response(400, 112, message="Invalid TTL header")
             return
 
         if data and len(data) > self.ap_settings.max_data:
             self.log.debug(format="Client error", status_code=400, errno=104,
-                           **self._client_info)
+                           client_info=self._client_info)
             self._write_response(413, 104, message="Data payload too large")
             return
 
@@ -629,10 +631,10 @@ class EndpointHandler(AutoendpointHandler):
             # No changes are requested by the bridge system, proceed as normal
             if response.status_code == 200 or response.logged_status == 200:
                 self.log.info(format="Successful delivery",
-                              **self._client_info)
+                              client_info=self._client_info)
             elif response.status_code == 202 or response.logged_status == 202:
                 self.log.info(format="Router miss, message stored.",
-                              **self._client_info)
+                              client_info=self._client_info)
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
             response.response_body = (
@@ -679,7 +681,7 @@ class RegistrationHandler(AutoendpointHandler):
         if router_type not in self.ap_settings.routers:
             self.log.debug(format="Invalid router requested",
                            status_code=400, errno=108,
-                           **self._client_info)
+                           client_info=self._client_info)
             self._write_response(400, 108, message="Invalid router")
             return
         router = self.ap_settings.routers[router_type]
@@ -729,7 +731,7 @@ class RegistrationHandler(AutoendpointHandler):
         router_data = params
         if router_type not in self.ap_settings.routers or not router_data:
             self.log.debug(format="Invalid router requested", status_code=400,
-                           errno=108, **self._client_info)
+                           errno=108, client_info=self._client_info)
             self._write_response(400, 108, message="Invalid router")
             return
         router = self.ap_settings.routers[router_type]
@@ -774,7 +776,7 @@ class RegistrationHandler(AutoendpointHandler):
         if router_type not in self.ap_settings.routers:
             self.log.debug(format="Invalid router requested",
                            status_code=400, errno=108,
-                           **self._client_info)
+                           client_info=self._client_info)
             self._write_response(400, 108, message="Invalid router")
             return
 
@@ -840,7 +842,7 @@ class RegistrationHandler(AutoendpointHandler):
             msg = dict(channelID=self.chid, endpoint=endpoint_data[0])
         self.write(json.dumps(msg))
         self.log.debug(format="Endpoint registered via HTTP",
-                       **self._client_info)
+                       client_info=self._client_info)
         self.finish()
 
     def _success(self, result):
