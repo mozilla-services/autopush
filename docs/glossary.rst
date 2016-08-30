@@ -25,7 +25,19 @@ Glossary
 
     Message-ID
        A unique message ID. Each message for a given subscription is given a
-       unique identifier.
+       unique identifier that is returned to the :term:`AppServer` in the
+       ``Location`` header.
+
+    Notification
+       A message sent to an endpoint node intended for delivery to a HTTP
+       endpoint. Autopush stores these in the message tables.
+
+    Router Type
+       Every :term:`UAID` that connects has a router type. This indicates the
+       type of routing to use when dispatching notifications. For most clients, this
+       value will be ``webpush``. Older Firefox OS clients use ``simplepush``
+       and clients using :term:`Bridging` it will be one of ``gcm``, ``fcm``,
+       or ``apns``.
 
     Subscription
        A unique route between an :term:`AppServer` and the Application. May
@@ -33,4 +45,11 @@ Glossary
 
     UAID
        The Push User Agent Regisration ID. Push assigns each remote recipient
-       a unique indentifier.
+       (Firefox client) a unique identifier. These may occasionally be reset
+       by the Push Service or the client.
+
+    WebPush
+       An IETF standard for communication between Push Services, the clients,
+       and application servers.
+
+       See: https://datatracker.ietf.org/doc/draft-ietf-webpush-protocol/
