@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import StringIO
 
 import cyclone.web
 import twisted.internet
@@ -45,9 +46,14 @@ class SentryLogTestCase(twisted.trial.unittest.TestCase):
         reactor.removeAll()
 
     def test_sentry_logging(self):
+        out = StringIO.StringIO()
         pl = PushLogger.setup_logging("Autopush", sentry_dsn=True)
+        pl._output = out
+        _client_info = dict(key='value')
 
-        log.failure("error", failure.Failure(Exception("eek")))
+        log.failure(format="error",
+                    failure=failure.Failure(Exception("eek")),
+                    client_info=_client_info)
         self.flushLoggedErrors()
         d = Deferred()
 
@@ -57,6 +63,14 @@ class SentryLogTestCase(twisted.trial.unittest.TestCase):
                 reactor.callLater(0, check)
                 return
             eq_(len(logged), 1)
+            # Check that the sentry data has the client info as a sub dict
+            # Note: these are double quoted, single quote strings.
+            eq_(logged[0].get('extra').get('client_info'),
+                {u"'key'": u"'value'"})
+            # Check that the json written actually contains the client info
+            # collapsed up into 'Fields'.
+            out.seek(0)
+            eq_(json.loads(out.readline())['Fields']['key'], 'value')
             self._port.stopListening()
             pl.stop()
             d.callback(True)

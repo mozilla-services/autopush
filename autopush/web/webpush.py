@@ -12,6 +12,7 @@ from autopush.web.validation import (
     WebPushRequestSchema,
 )
 from autopush.websocket import ms_time
+from autopush.db import hasher
 
 
 class WebPushHandler(BaseWebHandler):
@@ -43,7 +44,8 @@ class WebPushHandler(BaseWebHandler):
             headers=self.valid_input["headers"],
             ttl=self.valid_input["headers"]["ttl"]
         )
-
+        self._client_info["uaid"] = hasher(user_data.get("uaid"))
+        self._client_info["channel_id"] = user_data.get("chid")
         d = Deferred()
         d.addCallback(router.route_notification, user_data)
         d.addCallback(self._router_completed, user_data, "")
@@ -62,7 +64,7 @@ class WebPushHandler(BaseWebHandler):
                 # be deleted. There is no longer valid route information for
                 # this record.
                 d = deferToThread(self.ap_settings.router.drop_user,
-                                  self.uaid)
+                                  uaid_data["router_data"]["uaid"])
                 d.addCallback(lambda x: self._router_response(response))
                 return d
             # The router data needs to be updated to include any changes
@@ -81,10 +83,10 @@ class WebPushHandler(BaseWebHandler):
             # No changes are requested by the bridge system, proceed as normal
             if response.status_code == 200 or response.logged_status == 200:
                 self.log.info(format="Successful delivery",
-                              **self._client_info)
+                              client_info=self._client_info)
             elif response.status_code == 202 or response.logged_status == 202:
                 self.log.info(format="Router miss, message stored.",
-                              **self._client_info)
+                              client_info=self._client_info)
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
             response.response_body = (

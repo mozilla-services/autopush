@@ -113,19 +113,25 @@ class PushLogger(object):
 
     def raven_log(self, event):
         f = event["log_failure"]
-        stack = extra = None
+        stack = None
+        extra = dict()
         tb = f.getTracebackObject()
         if not tb:
             # include the current stack for at least some context
             stack = list(iter_stack_frames())[4:]  # approx.
             extra = dict(no_failure_tb=True)
+        extra.update(
+            log_format=event.get('log_format'),
+            log_namespace=event.get('log_namespace'),
+            client_info=event.get('client_info'),
+            )
         reactor.callFromThread(
             self.raven_client.captureException,
             exc_info=(f.type, f.value, tb),
             stack=stack,
             extra=extra,
         )
-        # just incase
+        # just in case
         del tb
 
     def json_format(self, event):
@@ -137,17 +143,28 @@ class PushLogger(object):
         else:
             severity = 5
 
+        def to_fields(kv):
+            reply = dict()
+            for k, v in kv:
+                if (k not in IGNORED_KEYS and
+                        type(v) in (str, unicode, list, int, float)):
+                    reply[k] = v
+            return reply
+
         msg = {
             "Hostname": HOSTNAME,
             "Timestamp": ts * 1000 * 1000 * 1000,
             "Type": "twisted:log",
             "Severity": event.get("severity") or severity,
             "EnvVersion": "2.0",
-            "Fields": {k: v for k, v in event.iteritems()
-                       if k not in IGNORED_KEYS and
-                       type(v) in (str, unicode, list, int, float)},
+            "Fields": to_fields(event.iteritems()),
             "Logger": self.logger_name,
         }
+        # flatten the client_info into Fields
+        ci = event.get('client_info')
+        if ci and isinstance(ci, dict):
+            msg['Fields'].update(
+                to_fields(ci.iteritems()))
         # Add the nicely formatted message
 
         msg["Fields"]["message"] = formatEvent(event)
