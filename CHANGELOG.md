@@ -1,3 +1,41 @@
+<a name="1.17.2"></a>
+## 1.17.2 (2016-08-31)
+
+
+#### Test
+
+*   clarify where we mean IRouter vs db.Router ([33244055](https://github.com/mozilla-services/autopush/commit/332440558bef35668873307cebe390b714b6e467))
+
+#### Chore
+
+*   break out base deps into their own req file ([001e0da4](https://github.com/mozilla-services/autopush/commit/001e0da4d2cc87b578b01261db09f3925f0a8503))
+*   git mv a break out of the base deps ([abc63330](https://github.com/mozilla-services/autopush/commit/abc633307466e9731b2a2f2ee7d49b50ee6de8e0))
+
+#### Bug Fixes
+
+*   provide better logging and fix UAID misreference ([704fd814](https://github.com/mozilla-services/autopush/commit/704fd81469e41ef5da522fff27fa1aae235c0bd4))
+*   do not try to JSON serialize log output ([9861edb6](https://github.com/mozilla-services/autopush/commit/9861edb6f8ec506130591b4b5a13dbb16a1b2a52))
+*   clarify token references in HTTP endpoint docs ([8a751472](https://github.com/mozilla-services/autopush/commit/8a7514721abc8d16bd487c1ef4560c5c5dfe9ba3))
+*   add URI to error messages to aid in bad senderIDs ([05e5d00f](https://github.com/mozilla-services/autopush/commit/05e5d00f8b3974139a54310255ce4ef0a2cf6c7b))
+*   kill dead_cache, it's no longer used ([2135dd8b](https://github.com/mozilla-services/autopush/commit/2135dd8b99b07798f7bb41ed15b6daf582feda32))
+*   update Makefile to use correct requirements ([ec6418b3](https://github.com/mozilla-services/autopush/commit/ec6418b3183faf1ff94bfea537fcb981e4cb4494))
+*   handle more errors to connection nodes ([3cc24fe8](https://github.com/mozilla-services/autopush/commit/3cc24fe876e47115cbe2993216d6e80a585f4a8e))
+*   disable log_exception capturing in tests ([62074f74](https://github.com/mozilla-services/autopush/commit/62074f74f45b36afd8fa20f549a41ca6285fa398))
+*   trap UnicodeEncodeError ([a116def7](https://github.com/mozilla-services/autopush/commit/a116def7bfbeb087bc80845dd2eda438515b3ccb), closes [#606](https://github.com/mozilla-services/autopush/issues/606))
+
+#### Features
+
+*   dependency update ([03ba5b56](https://github.com/mozilla-services/autopush/commit/03ba5b56c39d3d99ff317c0f08ade929b23652f9), closes [#639](https://github.com/mozilla-services/autopush/issues/639))
+*   add docker-compose and revamp docs ([b4fb7c67](https://github.com/mozilla-services/autopush/commit/b4fb7c6771940f5c2067ba03895bd86186dd2c1b), closes [#559](https://github.com/mozilla-services/autopush/issues/559))
+*   reduce warnings in code base ([a2308b99](https://github.com/mozilla-services/autopush/commit/a2308b99edbab0117bb7074f2b32b8eaf8f9beda))
+
+#### Refactor
+
+*   extract a simple BaseHandler ([a794e20f](https://github.com/mozilla-services/autopush/commit/a794e20fa82075d72644d0f358951cb5d0fed17b))
+*   cleanup of Handler initialize/ap_settings ([031e1446](https://github.com/mozilla-services/autopush/commit/031e1446df485aab834a7664e67612d4d1920f8e))
+
+
+
 <a name="1.17.1"></a>
 ## 1.17.1 (2016-08-22)
 
