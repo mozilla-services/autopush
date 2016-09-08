@@ -179,6 +179,9 @@ class APNSRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
+            eq_(result.status_code, 201)
+            eq_(result.logged_status, 200)
+            ok_("TTL" in result.headers)
             assert(self.mock_apns.gateway_server.send_notification.called)
             eq_(len(self.router.messages), 1)
 
@@ -299,6 +302,9 @@ class GCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
+            eq_(result.status_code, 201)
+            eq_(result.logged_status, 200)
+            ok_("TTL" in result.headers)
             assert(self.router.gcm['test123'].send.called)
             # Make sure the data was encoded as base64
             data = self.router.gcm['test123'].send.call_args[0][0].data
@@ -528,6 +534,9 @@ class FCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
+            eq_(result.status_code, 201)
+            eq_(result.logged_status, 200)
+            ok_("TTL" in result.headers)
             assert(self.router.fcm.notify_single_device.called)
             # Make sure the data was encoded as base64
             args = self.router.fcm.notify_single_device.call_args[1]

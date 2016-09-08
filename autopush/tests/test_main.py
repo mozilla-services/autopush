@@ -3,10 +3,11 @@ import datetime
 
 from mock import Mock, patch
 from moto import mock_dynamodb2
-from nose.tools import eq_
+from nose.tools import eq_, ok_
 from twisted.internet.defer import Deferred
 from twisted.trial import unittest as trialtest
 
+from autopush.db import get_rotating_message_table
 from autopush.main import (
     connection_main,
     endpoint_main,
@@ -89,6 +90,22 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         return e
 
     def test_update_rotating_tables_month_end(self):
+        """Test that rotating adds next months table
+
+        This test is intended to ensure that if the next day is a new
+        month, then update_rotating_tables realizes this and add's
+        the new table to the message_tables.
+
+        A pre-requisite is that today cannot be the last day of
+        the current month. Therefore, we first sub in _tomorrow to
+        ensure it always appears as next month, and then remove
+        the new table create_initial_tables made so we can observe
+        update_rotating_tables add the new one.
+
+        Note that sorting message table keys to find the last month
+        does *not work* since the month digit is not zero-padded.
+
+        """
         today = datetime.date.today()
         next_month = today.month + 1
         next_year = today.year
@@ -100,19 +117,24 @@ class SettingsAsyncTestCase(trialtest.TestCase):
                                      day=1)
         AutopushSettings._tomorrow = Mock()
         AutopushSettings._tomorrow.return_value = tomorrow
+
         settings = AutopushSettings(
             hostname="example.com", resolve_hostname=True)
-        # shift off tomorrow's table.
 
-        tomorrow_table = sorted(settings.message_tables.keys())[-1]
-        settings.message_tables.pop(tomorrow_table)
+        # We should have 3 tables, one for next/this/last month
+        eq_(len(settings.message_tables), 3)
+
+        # Grab next month's table name and remove it
+        next_month = get_rotating_message_table(settings._message_prefix,
+                                                delta=1)
+        settings.message_tables.pop(next_month.table_name)
 
         # Get the deferred back
         d = settings.update_rotating_tables()
 
         def check_tables(result):
             eq_(len(settings.message_tables), 3)
-            eq_(sorted(settings.message_tables.keys())[-1], tomorrow_table)
+            ok_(next_month.table_name in settings.message_tables)
 
         d.addCallback(check_tables)
         return d

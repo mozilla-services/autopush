@@ -37,6 +37,7 @@ class GCMRouter(object):
         self._base_tags = []
         self.router_table = ap_settings.router
         self.log.debug("Starting GCM router...")
+        self.ap_settings = ap_settings
 
     def amend_msg(self, msg, data=None):
         if data is not None:
@@ -119,7 +120,8 @@ class GCMRouter(object):
                               500)
         self.metrics.increment("updates.client.bridge.gcm.attempted",
                                self._base_tags)
-        return self._process_reply(result, uaid_data)
+        return self._process_reply(result, uaid_data, ttl=router_ttl,
+                                   notification=notification)
 
     def _error(self, err, status, **kwargs):
         """Error handler that raises the RouterException"""
@@ -127,7 +129,7 @@ class GCMRouter(object):
         return RouterException(err, status_code=status, response_body=err,
                                **kwargs)
 
-    def _process_reply(self, reply, uaid_data):
+    def _process_reply(self, reply, uaid_data, ttl, notification):
         """Process GCM send reply"""
         # acks:
         #  for reg_id, msg_id in reply.success.items():
@@ -181,4 +183,9 @@ class GCMRouter(object):
 
         self.metrics.increment("updates.client.bridge.gcm.succeeded",
                                self._base_tags)
-        return RouterResponse(status_code=200, response_body="Message Sent")
+        location = "%s/m/%s" % (self.ap_settings.endpoint_url,
+                                notification.version)
+        return RouterResponse(status_code=201, response_body="",
+                              headers={"TTL": ttl,
+                                       "Location": location},
+                              logged_status=200)

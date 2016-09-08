@@ -113,6 +113,7 @@ class FCMRouter(object):
                            ex=e)
             raise IOError("FCM Bridge not initiated in main")
         self.log.debug("Starting FCM router...")
+        self.ap_settings = ap_settings
 
     def amend_msg(self, msg, data=None):
         if data is not None:
@@ -194,7 +195,8 @@ class FCMRouter(object):
                               500)
         self.metrics.increment("updates.client.bridge.fcm.attempted",
                                self._base_tags)
-        return self._process_reply(result, notification, router_data)
+        return self._process_reply(result, notification, router_data,
+                                   ttl=router_ttl)
 
     def _error(self, err, status, **kwargs):
         """Error handler that raises the RouterException"""
@@ -202,7 +204,7 @@ class FCMRouter(object):
         return RouterException(err, status_code=status, response_body=err,
                                **kwargs)
 
-    def _process_reply(self, reply, notification, router_data):
+    def _process_reply(self, reply, notification, router_data, ttl):
         """Process FCM send reply"""
         # acks:
         #  for reg_id, msg_id in reply.success.items():
@@ -248,4 +250,9 @@ class FCMRouter(object):
             )
         self.metrics.increment("updates.client.bridge.fcm.succeeded",
                                self._base_tags)
-        return RouterResponse(status_code=200, response_body="Message Sent")
+        location = "%s/m/%s" % (self.ap_settings.endpoint_url,
+                                notification.version)
+        return RouterResponse(status_code=201, response_body="",
+                              headers={"TTL": ttl,
+                                       "Location": location},
+                              logged_status=200)
