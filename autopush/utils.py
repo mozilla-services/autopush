@@ -42,6 +42,13 @@ default_ports = {
     "https": 443,
 }
 
+CLIENT_SHA256_RE = re.compile("""\
+^
+([0-9A-F]{2}:){31}
+ [0-9A-F]{2}
+$
+""", re.VERBOSE)
+
 
 def normalize_id(ident):
     if (len(ident) == 36 and

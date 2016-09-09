@@ -97,7 +97,7 @@ def _get_vapid(key=None, payload=None):
 
 class Client(object):
     """Test Client"""
-    def __init__(self, url, use_webpush=False):
+    def __init__(self, url, use_webpush=False, sslcontext=None):
         self.url = url
         self.uaid = None
         self.ws = None
@@ -107,6 +107,7 @@ class Client(object):
         self._crypto_key = """\
 keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 """
+        self.sslcontext = sslcontext
 
     def __getattribute__(self, name):
         # Python fun to turn all functions into deferToThread functions
@@ -176,7 +177,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         url = urlparse.urlparse(message)
         http = None
         if url.scheme == "https":  # pragma: nocover
-            http = httplib.HTTPSConnection(url.netloc)
+            http = httplib.HTTPSConnection(url.netloc, context=self.sslcontext)
         else:
             http = httplib.HTTPConnection(url.netloc)
 
@@ -196,7 +197,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         url = urlparse.urlparse(endpoint)
         http = None
         if url.scheme == "https":  # pragma: nocover
-            http = httplib.HTTPSConnection(url.netloc)
+            http = httplib.HTTPSConnection(url.netloc, context=self.sslcontext)
         else:
             http = httplib.HTTPConnection(url.netloc)
 
@@ -313,7 +314,8 @@ class IntegrationBase(unittest.TestCase):
         import cyclone.web
         from autobahn.twisted.websocket import WebSocketServerFactory
         from autobahn.twisted.resource import WebSocketResource
-        from autopush.main import skip_request_logging
+        from autopush.log_check import LogCheckHandler
+        from autopush.main import mount_health_handlers, skip_request_logging
         from autopush.endpoint import (
             EndpointHandler,
             MessageHandler,
@@ -335,14 +337,21 @@ class IntegrationBase(unittest.TestCase):
         storage_table = os.environ.get("STORAGE_TABLE", "storage_int_test")
         message_table = os.environ.get("MESSAGE_TABLE", "message_int_test")
 
+        client_certs = self.make_client_certs()
+        is_https = client_certs is not None
+
+        endpoint_port = 9020
+        router_port = 9030
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
-            endpoint_port="9020",
-            router_port="9030",
+            endpoint_port=str(endpoint_port),
+            router_port=str(router_port),
             router_tablename=router_table,
             storage_tablename=storage_table,
             message_tablename=message_table,
+            client_certs=client_certs,
+            endpoint_scheme='https' if is_https else 'http',
         )
 
         # Websocket server
@@ -370,7 +379,7 @@ class IntegrationBase(unittest.TestCase):
             log_function=skip_request_logging,
             debug=False,
         )
-        self.ws_website = reactor.listenTCP(9030, ws_site)
+        self.ws_website = reactor.listenTCP(router_port, ws_site)
 
         # Endpoint HTTP router
         site = cyclone.web.Application([
@@ -384,18 +393,32 @@ class IntegrationBase(unittest.TestCase):
             # PUT /register/ => connect info
             # GET /register/uaid => chid + endpoint
             (r"/register(?:/(.+))?", RegistrationHandler, h_kwargs),
+            (r"/v1/err(?:/([^\/]+))?", LogCheckHandler, h_kwargs),
         ],
             default_host=settings.hostname,
             log_function=skip_request_logging,
             debug=False,
+            client_certs=settings.client_certs,
         )
-        self.website = reactor.listenTCP(9020, site)
+        mount_health_handlers(site, settings)
         self._settings = settings
+        if is_https:
+            endpoint = reactor.listenSSL(endpoint_port, site,
+                                         self.endpoint_SSLCF())
+        else:
+            endpoint = reactor.listenTCP(endpoint_port, site)
+        self.website = endpoint
 
     def _make_v0_endpoint(self, uaid, chid):
         return self._settings.endpoint_url + '/push/' + \
             self._settings.fernet.encrypt(
                 (uaid + ":" + chid).encode('utf-8'))
+
+    def make_client_certs(self):
+        return None
+
+    def endpoint_SSLCF(self):
+        raise NotImplementedError  # pragma: nocover
 
     @inlineCallbacks
     def tearDown(self):
@@ -408,8 +431,10 @@ class IntegrationBase(unittest.TestCase):
         yield self._settings.agent._pool.closeCachedConnections()
 
     @inlineCallbacks
-    def quick_register(self, use_webpush=False):
-        client = Client("ws://localhost:9010/", use_webpush=use_webpush)
+    def quick_register(self, use_webpush=False, sslcontext=None):
+        client = Client("ws://localhost:9010/",
+                        use_webpush=use_webpush,
+                        sslcontext=sslcontext)
         yield client.connect()
         yield client.hello()
         yield client.register()
@@ -1351,19 +1376,159 @@ class TestWebPush(IntegrationBase):
         yield self.shut_down(client)
 
 
+class TestClientCerts(IntegrationBase):
+
+    def setUp(self):
+        self.certs = certs = os.path.join(os.path.dirname(__file__), "certs")
+        self.servercert = os.path.join(certs, "server.pem")
+        self.auth_client = os.path.join(certs, "client1.pem")
+        self.unauth_client = os.path.join(certs, "client2.pem")
+        IntegrationBase.setUp(self)
+
+    def make_client_certs(self):
+        with open(os.path.join(self.certs, "client1_sha256.txt")) as fp:
+            client1_sha256 = fp.read().strip()
+        return {client1_sha256: 'partner1'}
+
+    def endpoint_SSLCF(self):
+        """Return an SSLContextFactory for the endpoint.
+
+        Configured with the self-signed test server.pem. server.pem is
+        additionally the signer of the client certs.
+
+        """
+        from autopush.ssl import AutopushSSLContextFactory
+        return AutopushSSLContextFactory(
+            self.servercert,
+            self.servercert,
+            require_peer_certs=self._settings.enable_tls_auth)
+
+    def _create_unauth_SSLCF(self):
+        """Return an IPolicyForHTTPS for the unauthorized client"""
+        from twisted.internet.ssl import (
+            Certificate, PrivateCertificate, optionsForClientTLS)
+        from twisted.web.iweb import IPolicyForHTTPS
+        from zope.interface import implementer
+
+        with open(self.servercert) as fp:
+            servercert = Certificate.loadPEM(fp.read())
+        with open(self.unauth_client) as fp:
+            unauth_client = PrivateCertificate.loadPEM(fp.read())
+
+        @implementer(IPolicyForHTTPS)
+        class UnauthClientPolicyForHTTPS(object):
+            def creatorForNetloc(self, hostname, port):
+                return optionsForClientTLS(hostname.decode('ascii'),
+                                           trustRoot=servercert,
+                                           clientCertificate=unauth_client)
+        return UnauthClientPolicyForHTTPS()
+
+    def _create_context(self, certfile):
+        """Return a client SSLContext"""
+        import ssl
+        context = ssl.create_default_context()
+        context.load_cert_chain(certfile)
+        context.load_verify_locations(self.servercert)
+        return context
+
+    @inlineCallbacks
+    def test_client_cert_simple(self):
+        client = yield self.quick_register(
+            sslcontext=self._create_context(self.auth_client))
+        yield client.disconnect()
+        ok_(client.channels)
+        chan = client.channels.keys()[0]
+        yield client.send_notification(status=202)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result != {})
+        eq_(len(result["updates"]), 1)
+        eq_(result["updates"][0]["channelID"], chan)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_client_cert_webpush(self):
+        client = yield self.quick_register(
+            use_webpush=True,
+            sslcontext=self._create_context(self.auth_client))
+        yield client.disconnect()
+        ok_(client.channels)
+        chan = client.channels.keys()[0]
+
+        yield client.send_notification()
+        yield client.delete_notification(chan)
+        result = yield client.get_notification()
+        eq_(result, None)
+
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_client_cert_unauth(self):
+        client = yield self.quick_register(
+            sslcontext=self._create_context(self.unauth_client))
+        yield client.disconnect()
+        yield client.send_notification(status=401)
+
+        response, body = yield _agent(
+            'DELETE',
+            "https://localhost:9020/m/foo",
+            contextFactory=self._create_unauth_SSLCF())
+        eq_(response.code, 401)
+        wwwauth = response.headers.getRawHeaders('www-authenticate')
+        eq_(wwwauth, ['Transport mode="tls-client-certificate"'])
+
+    @inlineCallbacks
+    def test_log_check_skips_auth(self):
+        response, body = yield _agent(
+            'GET',
+            "https://localhost:9020/v1/err",
+            contextFactory=self._create_unauth_SSLCF())
+        eq_(response.code, 418)
+        payload = json.loads(body)
+        eq_(payload['error'], "Test Error")
+
+    @inlineCallbacks
+    def test_status_skips_auth(self):
+        response, body = yield _agent(
+            'GET',
+            "https://localhost:9020/status",
+            contextFactory=self._create_unauth_SSLCF())
+        eq_(response.code, 200)
+        payload = json.loads(body)
+        eq_(payload, dict(status="OK", version=__version__))
+
+    @inlineCallbacks
+    def test_health_skips_auth(self):
+        response, body = yield _agent(
+            'GET',
+            "https://localhost:9020/health",
+            contextFactory=self._create_unauth_SSLCF())
+        eq_(response.code, 200)
+        payload = json.loads(body)
+        eq_(payload['version'], __version__)
+
+
 class TestHealth(IntegrationBase):
     @inlineCallbacks
     def test_status(self):
-        agent = Agent(reactor)
-        response = yield agent.request(
-            "GET",
-            b"http://localhost:9010/status"
-        )
+        response, body = yield _agent('GET', "http://localhost:9010/status")
+        eq_(response.code, 200)
+        payload = json.loads(body)
+        eq_(payload, dict(status="OK", version=__version__))
 
-        proto = AccumulatingProtocol()
-        proto.closedDeferred = Deferred()
-        response.deliverBody(proto)
-        yield proto.closedDeferred
 
-        payload = json.loads(proto.data)
-        eq_(payload, {"status": "OK", "version": __version__})
+@inlineCallbacks
+def _agent(method, url, contextFactory=None):
+    kwargs = {}
+    if contextFactory:
+        kwargs['contextFactory'] = contextFactory
+    agent = Agent(reactor, **kwargs)
+    response = yield agent.request(method, url)
+
+    proto = AccumulatingProtocol()
+    proto.closedDeferred = Deferred()
+    response.deliverBody(proto)
+    yield proto.closedDeferred
+
+    returnValue((response, proto.data))

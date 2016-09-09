@@ -88,6 +88,7 @@ class AutopushSettings(object):
                  bear_hash_key=None,
                  preflight_uaid="deadbeef00000000deadbeef000000000",
                  ami_id=None,
+                 client_certs=None,
                  ):
         """Initialize the Settings object
 
@@ -153,6 +154,8 @@ class AutopushSettings(object):
             self.endpoint_hostname,
             endpoint_port
         )
+        self.enable_tls_auth = client_certs is not None
+        self.client_certs = client_certs
 
         # Database objects
         self.router_table = get_router_table(router_tablename,
