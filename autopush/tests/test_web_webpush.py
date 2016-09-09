@@ -95,6 +95,7 @@ class TestWebpushHandler(unittest.TestCase):
         ))
         self.fernet_mock.decrypt.return_value = dummy_token
         self.router_mock.get_uaid.return_value = dict(
+            uaid=dummy_uaid,
             router_type="webpush",
             router_data=dict(uaid="uaid"),
         )

@@ -15,7 +15,7 @@ from boto.dynamodb2.exceptions import (
 )
 from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
-from boto.dynamodb2.table import Table
+from boto.dynamodb2.table import Table, Item
 from boto.dynamodb2.types import NUMBER
 
 from autopush.exceptions import AutopushException
@@ -47,6 +47,20 @@ def hasher(uaid):
     if key_hash:
         return generate_hash(key_hash, uaid)
     return uaid
+
+
+def dump_uaid(uaid_data):
+    """Return a dict for a uaid.
+
+    This is utilized instead of repr since some db methods return a
+    DynamoDB Item which does not actually show its dict key/values
+    when dumped via repr.
+
+    """
+    if isinstance(uaid_data, Item):
+        return repr(uaid_data.items())
+    else:
+        return repr(uaid_data)
 
 
 def normalize_id(ident):

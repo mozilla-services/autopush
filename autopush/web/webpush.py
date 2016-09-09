@@ -12,7 +12,10 @@ from autopush.web.validation import (
     WebPushRequestSchema,
 )
 from autopush.websocket import ms_time
-from autopush.db import hasher
+from autopush.db import (
+    dump_uaid,
+    hasher,
+)
 
 
 class WebPushHandler(BaseWebHandler):
@@ -63,8 +66,11 @@ class WebPushHandler(BaseWebHandler):
                 # An empty router_data object indicates that the record should
                 # be deleted. There is no longer valid route information for
                 # this record.
+                self.log.info(format="Dropping User", code=100,
+                              uaid_hash=hasher(uaid_data["uaid"]),
+                              uaid_record=dump_uaid(uaid_data))
                 d = deferToThread(self.ap_settings.router.drop_user,
-                                  uaid_data["router_data"]["uaid"])
+                                  uaid_data["uaid"])
                 d.addCallback(lambda x: self._router_response(response))
                 return d
             # The router data needs to be updated to include any changes

@@ -19,7 +19,11 @@ from twisted.web.client import FileBodyProducer
 from autopush.protocol import IgnoreBody
 from autopush.router.interface import RouterException, RouterResponse
 from autopush.router.simple import SimpleRouter
-from autopush.db import normalize_id
+from autopush.db import (
+    dump_uaid,
+    hasher,
+    normalize_id,
+)
 
 TTL_URL = "https://webpush-wg.github.io/webpush-protocol/#rfc.section.6.2"
 
@@ -64,16 +68,18 @@ class WebPushRouter(SimpleRouter):
         """Verifies this routing call can be done successfully"""
         uaid = uaid_data["uaid"]
         if 'current_month' not in uaid_data:
-            self.log.info("Record missing 'current_month' {record}",
-                          record=repr(uaid_data))
+            self.log.info(format="Dropping User", code=102,
+                          uaid_hash=hasher(uaid),
+                          uaid_record=dump_uaid(uaid_data))
             yield deferToThread(self.ap_settings.router.drop_user, uaid)
             raise RouterException("No such subscription", status_code=410,
                                   log_exception=False, errno=106)
 
         month_table = uaid_data["current_month"]
         if month_table not in self.ap_settings.message_tables:
-            self.log.info("'current_month' out of scope: {record}",
-                          record=repr(uaid_data))
+            self.log.info(format="Dropping User", code=103,
+                          uaid_hash=hasher(uaid),
+                          uaid_record=dump_uaid(uaid_data))
             yield deferToThread(self.ap_settings.router.drop_user, uaid)
             raise RouterException("No such subscription", status_code=410,
                                   log_exception=False, errno=106)
