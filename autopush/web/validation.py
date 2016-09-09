@@ -23,6 +23,7 @@ from twisted.logger import Logger
 from autopush.exceptions import (
     InvalidRequest,
     InvalidTokenException,
+    VapidAuthException,
 )
 from autopush.utils import (
     base64url_encode,
@@ -197,7 +198,11 @@ class WebPushSubscriptionSchema(Schema):
                 token=d["token"],
                 version=d["api_ver"],
                 ckey_header=d["ckey_header"],
+                auth_header=d["auth_header"],
             )
+        except (VapidAuthException):
+            raise InvalidRequest("missing authorization header",
+                                 status_code=401, errno=109)
         except (InvalidTokenException, InvalidToken):
             raise InvalidRequest("invalid token", status_code=404, errno=102)
         return result
@@ -229,6 +234,7 @@ class WebPushHeaderSchema(Schema):
     encryption = fields.String()
     encryption_key = fields.String(load_from="encryption-key")
     ttl = fields.Integer(required=False, missing=None)
+    api_ver = fields.String()
 
     @validates_schema
     def validate_cypto_headers(self, d):
@@ -261,6 +267,7 @@ class WebPushRequestSchema(Schema):
                                  load_from="token_info")
     headers = fields.Nested(WebPushHeaderSchema)
     body = fields.Raw()
+    token_info = fields.Raw()
 
     @validates('body')
     def validate_data(self, value):
@@ -299,12 +306,14 @@ class WebPushRequestSchema(Schema):
             api_ver=d["path_kwargs"].get("api_ver"),
             token=d["path_kwargs"].get("token"),
             ckey_header=d["headers"].get("crypto-key", ""),
+            auth_header=d["headers"].get("authorization", ""),
         )
         return d
 
     def validate_auth(self, d):
         auth = d["headers"].get("authorization")
-        if not auth:
+        needs_auth = d["token_info"]["api_ver"] == "v2"
+        if not auth and not needs_auth:
             return
 
         public_key = d["subscription"].get("public_key")
@@ -317,6 +326,9 @@ class WebPushRequestSchema(Schema):
 
         # If its not a bearer token containing what may be JWT, stop
         if auth_type.lower() not in AUTH_SCHEMES or '.' not in token:
+            if needs_auth:
+                raise InvalidRequest("Missing Authorization Header",
+                                     status_code=401, errno=109)
             return
 
         try:

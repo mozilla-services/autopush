@@ -32,10 +32,6 @@ class Notification(namedtuple("Notification",
     """Parsed notification from the request"""
 
 
-class VapidAuthException(Exception):
-    """Exception if the VAPID Auth token fails"""
-
-
 class BaseWebHandler(BaseHandler):
     """Common overrides for Push web API's"""
     cors_methods = ""
