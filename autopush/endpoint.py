@@ -43,6 +43,7 @@ from twisted.internet.threads import deferToThread
 
 from autopush.base import BaseHandler
 from autopush.db import (
+    dump_uaid,
     generate_last_connect,
     hasher,
     normalize_id,
@@ -609,6 +610,9 @@ class EndpointHandler(AutoendpointHandler):
                 # An empty router_data object indicates that the record should
                 # be deleted. There is no longer valid route information for
                 # this record.
+                self.log.info(format="Dropping User", code=100,
+                              uaid_hash=hasher(self.uaid),
+                              uaid_record=dump_uaid(uaid_data))
                 d = deferToThread(self.ap_settings.router.drop_user,
                                   self.uaid)
                 d.addCallback(lambda x: self._router_response(response))
@@ -754,6 +758,8 @@ class RegistrationHandler(AutoendpointHandler):
     def _delete_uaid(self, uaid, router):
         message = self.ap_settings.message
         message.delete_user(uaid)
+        self.log.info(format="Dropping User", code=101,
+                      uaid_hash=hasher(uaid))
         if not router.drop_user(uaid):
             raise ItemNotFound("UAID not found")
 

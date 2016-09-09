@@ -65,8 +65,8 @@ from autopush.base import BaseHandler
 from autopush.db import (
     has_connected_this_month,
     hasher,
-    generate_last_connect
-)
+    generate_last_connect,
+    dump_uaid)
 from autopush.protocol import IgnoreBody
 from autopush.utils import (
     parse_user_agent,
@@ -711,6 +711,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # All records must have a router_type and connected_at, in some odd
         # cases a record exists for some users that doesn't
         if "router_type" not in record or "connected_at" not in record:
+            self.log.info(format="Dropping User", code=104,
+                          uaid_hash=hasher(self.ps.uaid),
+                          uaid_record=dump_uaid(record))
             self.force_retry(self.ap_settings.router.drop_user, self.ps.uaid)
             return None
 
@@ -719,6 +722,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # Current month must exist and be a valid prior month
             if ("current_month" not in record) or record["current_month"] \
                     not in self.ps.settings.message_tables:
+                self.log.info(format="Dropping User", code=105,
+                              uaid_hash=hasher(self.ps.uaid),
+                              uaid_record=dump_uaid(record))
                 self.force_retry(self.ap_settings.router.drop_user,
                                  self.ps.uaid)
                 return None
