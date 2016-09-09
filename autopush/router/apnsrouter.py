@@ -43,6 +43,7 @@ class APNSRouter(object):
         self.default_body = router_conf.get("default_body", "New Alert")
         self._connect()
         self.log.debug("Starting APNS router...")
+        self.ap_settings = ap_settings
 
     def register(self, uaid, router_data, *args, **kwargs):
         """Validate that an APNs instance token is in the ``router_data``"""
@@ -99,7 +100,12 @@ class APNSRouter(object):
         self.ap_settings.metrics.increment(
             "updates.client.bridge.apns.succeed",
             self._base_tags)
-        return RouterResponse(status_code=200, response_body="Message sent")
+        location = "%s/m/%s" % (self.ap_settings.endpoint_url,
+                                notification.version)
+        return RouterResponse(status_code=201, response_body="",
+                              headers={"TTL": notification.ttl,
+                                       "Location": location},
+                              logged_status=200)
 
     def _error(self, err):
         """Error handler"""

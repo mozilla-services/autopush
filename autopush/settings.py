@@ -238,7 +238,8 @@ class AutopushSettings(object):
             this_month.table_name: Message(this_month, self.metrics)
         }
         if self._tomorrow().month != today.month:
-            next_month = get_rotating_message_table(delta=1)
+            next_month = get_rotating_message_table(self._message_prefix,
+                                                    delta=1)
             self.message_tables[next_month.table_name] = Message(
                 next_month, self.metrics)
 
