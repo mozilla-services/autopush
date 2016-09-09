@@ -37,3 +37,12 @@ port = 8082
 ; e.g.
 ; {"12345": {"auth": "abcd_efg"}, "01357": {"auth": "ZYX=abc"}}
 #senderid_list =
+
+; XXX: even necessary?
+#client_cert_auth_enabled
+
+#client_certs {
+#"facebook_1": {"file": "/etc/file.pem"}, XXX: files even necessary?
+#"facebook_2":
+#{"sha256": "E2:19:B1:85:06:B1:D2:F6:63:13:BE:D7:8E:31:6F:1D:81:BB:A2:51:8E:D9:83:14:A6:E6:28:C8:6C:C7:8B:C6"},
+#             }

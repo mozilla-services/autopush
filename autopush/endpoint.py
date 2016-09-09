@@ -137,6 +137,8 @@ class AutoendpointHandler(BaseHandler):
 
     def prepare(self):
         """Common request preparation"""
+        if self.ap_settings.enable_tls_auth:
+            self.authenticate_peer_cert()
         if self.ap_settings.cors:
             self.set_header("Access-Control-Allow-Origin", "*")
             self.set_header("Access-Control-Allow-Methods",

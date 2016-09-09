@@ -296,6 +296,13 @@ def _parse_endpoint(sysargs, use_files=True):
     parser.add_argument('--auth_key', help='Bearer Token source key',
                         type=str, default=[], env_var='AUTH_KEY',
                         action="append")
+    # XXX: "client" or "peer" cert naming?
+    parser.add_argument('--client_cert_auth_enabled',
+                        help="XXX:",
+                        action="store_true", default=False,
+                        env_var='CLIENT_CERT_AUTH_ENABLED')
+    parser.add_argument('--client_certs', help="XXX",
+                        type=str, default="{}")
 
     add_shared_args(parser)
 

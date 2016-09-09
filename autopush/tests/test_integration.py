@@ -4,6 +4,7 @@ import logging
 import os
 import random
 import signal
+import ssl
 import subprocess
 import time
 import urlparse
@@ -97,7 +98,7 @@ def _get_vapid(key=None, payload=None):
 
 class Client(object):
     """Test Client"""
-    def __init__(self, url, use_webpush=False):
+    def __init__(self, url, use_webpush=False, sslcontext=None):
         self.url = url
         self.uaid = None
         self.ws = None
@@ -107,6 +108,7 @@ class Client(object):
         self._crypto_key = """\
 keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 """
+        self.sslcontext = sslcontext
 
     def __getattribute__(self, name):
         # Python fun to turn all functions into deferToThread functions
@@ -176,7 +178,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         url = urlparse.urlparse(message)
         http = None
         if url.scheme == "https":  # pragma: nocover
-            http = httplib.HTTPSConnection(url.netloc)
+            http = httplib.HTTPSConnection(url.netloc, context=self.sslcontext)
         else:
             http = httplib.HTTPConnection(url.netloc)
 
@@ -195,7 +197,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         url = urlparse.urlparse(endpoint)
         http = None
         if url.scheme == "https":  # pragma: nocover
-            http = httplib.HTTPSConnection(url.netloc)
+            http = httplib.HTTPSConnection(url.netloc, context=self.sslcontext)
         else:
             http = httplib.HTTPConnection(url.netloc)
 
@@ -332,6 +334,9 @@ class IntegrationBase(unittest.TestCase):
         storage_table = os.environ.get("STORAGE_TABLE", "storage_int_test")
         message_table = os.environ.get("MESSAGE_TABLE", "message_int_test")
 
+        client_certs = self.make_client_certs()
+        is_https = client_certs is not None
+
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
@@ -340,10 +345,13 @@ class IntegrationBase(unittest.TestCase):
             router_tablename=router_table,
             storage_tablename=storage_table,
             message_tablename=message_table,
+            client_certs=client_certs,
+            endpoint_scheme='https' if is_https else 'http',
         )
 
         # Websocket server
-        self._ws_url = "ws://localhost:9010/"
+        ws_proto = 'wss' if is_https else 'ws'
+        self._ws_url = "%s://localhost:9010/" % ws_proto
         factory = WebSocketServerFactory(self._ws_url)
         factory.protocol = PushServerProtocol
         factory.protocol.ap_settings = settings
@@ -385,14 +393,22 @@ class IntegrationBase(unittest.TestCase):
             default_host=settings.hostname,
             log_function=skip_request_logging,
             debug=False,
+            client_certs=settings.client_certs,
         )
-        self.website = reactor.listenTCP(9020, site)
         self._settings = settings
+        self.website = self.create_endpoint(site)
+
 
     def _make_v0_endpoint(self, uaid, chid):
         return self._settings.endpoint_url + '/push/' + \
             self._settings.fernet.encrypt(
                 (uaid + ":" + chid).encode('utf-8'))
+
+    def create_endpoint(self, site):
+        return reactor.listenTCP(9020, site)
+
+    def make_client_certs(self):
+        return None
 
     @inlineCallbacks
     def tearDown(self):
@@ -405,8 +421,10 @@ class IntegrationBase(unittest.TestCase):
         yield self._settings.agent._pool.closeCachedConnections()
 
     @inlineCallbacks
-    def quick_register(self, use_webpush=False):
-        client = Client("ws://localhost:9010/", use_webpush=use_webpush)
+    def quick_register(self, use_webpush=False, sslcontext=None):
+        client = Client("ws://localhost:9010/",
+                        use_webpush=use_webpush,
+                        sslcontext=sslcontext)
         yield client.connect()
         yield client.hello()
         yield client.register()
@@ -1316,6 +1334,98 @@ class TestWebPush(IntegrationBase):
             status=404)
 
         yield self.shut_down(client)
+
+
+class TestClientCert(IntegrationBase):
+
+    def create_endpoint(self, site):
+        from autopush.ssl import AutopushSSLContextFactory
+        from OpenSSL import SSL # XXX:
+
+        self.servercert = servercert = os.path.join(
+            os.path.dirname(__file__), "certs", "server.pem")
+        self.client1cert = os.path.join(
+            os.path.dirname(__file__), "certs", "client1.pem")
+        self.client2cert = os.path.join(
+            os.path.dirname(__file__), "certs", "client2.pem")
+
+        cf = AutopushSSLContextFactory(servercert, servercert)
+        cf.cacheContext()
+        # servercert is self signed
+        cf._context.load_verify_locations(servercert)
+
+        def _verify(connection, x509, errorNumber, errorDepth, returnCode):
+            return returnCode
+        cf._context.set_verify(
+            SSL.VERIFY_PEER | SSL.VERIFY_FAIL_IF_NO_PEER_CERT,
+            _verify)
+
+        return reactor.listenSSL(9020, site, cf)
+
+    def make_client_certs(self):
+        from autopush.tests.certs.makecerts import CLIENT1_SHA256
+        return dict(spacebook=CLIENT1_SHA256)
+
+    def _get_sslcontext(self, certfile):
+        context = ssl.create_default_context()
+        context.load_cert_chain(certfile)
+        context.load_verify_locations(self.servercert)
+        return context
+
+    @inlineCallbacks
+    def test_client_cert_simple(self):
+        # XXX: assert spacebook?
+        client = yield self.quick_register(
+            sslcontext=self._get_sslcontext(self.client1cert))
+        yield client.disconnect()
+        self.assertTrue(client.channels)
+        chan = client.channels.keys()[0]
+        yield client.send_notification(status=202)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        self.assertTrue(result != {})
+        self.assertTrue(len(result["updates"]) == 1)
+        eq_(result["updates"][0]["channelID"], chan)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_client_cert_webpush(self):
+        # this tests (*):
+        # EndpointHandler (really required? dunno)
+        # *SimplePushHandler
+        # *WebPushHandler
+        # *MessageHandler (probably required?)
+        # RegistrationHandler (really required? dunno)
+        # -LogCheckHandler (XXX: shouldn't need this..)
+
+        client = yield self.quick_register(
+            use_webpush=True,
+            sslcontext=self._get_sslcontext(self.client1cert))
+        yield client.disconnect()
+        self.assertTrue(client.channels)
+        chan = client.channels.keys()[0]
+
+        yield client.send_notification()
+        yield client.delete_notification(chan)
+        result = yield client.get_notification()
+        eq_(result, None)
+
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_client_cert_unauth(self):
+        client = yield self.quick_register(
+            sslcontext=self._get_sslcontext(self.client2cert))
+        yield client.disconnect()
+        # 401 not authorized
+        # XXX: could check the headers for Transport mode
+        # tls-client-certificate
+        yield client.send_notification(status=401)
+
+    def test_log_check_doesnt_require_auth(self):
+        # XXX?
+        pass
 
 
 class TestHealth(IntegrationBase):
