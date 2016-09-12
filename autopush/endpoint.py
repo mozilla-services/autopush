@@ -48,7 +48,7 @@ from autopush.db import (
     hasher,
     normalize_id,
 )
-from autopush.exceptions import InvalidTokenException
+from autopush.exceptions import InvalidTokenException, VapidAuthException
 from autopush.router.interface import RouterException
 from autopush.utils import (
     generate_hash,
@@ -77,11 +77,6 @@ status_codes = {
     500: "Internal Server Error",
     503: "Service Unavailable",
 }
-
-
-class VapidAuthException(Exception):
-    """Exception if the VAPID Auth token fails"""
-    pass
 
 
 class Notification(namedtuple("Notification",
@@ -339,8 +334,7 @@ class AutoendpointHandler(BaseHandler):
     def _store_auth(self, jwt, crypto_key, token, result):
         if jwt.get('exp', 0) < time.time():
             raise VapidAuthException("Invalid bearer token: Auth expired")
-        jwt_crypto_key = base64url_encode(crypto_key)
-        self._client_info["jwt_crypto_key"] = jwt_crypto_key
+        self._client_info["jwt_crypto_key"] = crypto_key
         for i in jwt:
             self._client_info["jwt_" + i] = jwt[i]
         return result
