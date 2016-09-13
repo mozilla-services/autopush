@@ -333,6 +333,7 @@ class AutopushSettings(object):
         :param version: This is the API version of the token.
         :param ckey_header: the Crypto-Key header bearing the public key
         (from Crypto-Key: p256ecdsa=)
+        :param auth_header: The Authorization header bearing the VAPID info
 
         :raises ValueError: In the case of a malformed endpoint.
 
