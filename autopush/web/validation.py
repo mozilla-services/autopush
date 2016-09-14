@@ -318,7 +318,7 @@ class WebPushRequestSchema(Schema):
 
         public_key = d["subscription"].get("public_key")
         try:
-            (auth_type, token) = auth.split(' ', 1)
+            auth_type, token = auth.split(' ', 1)
         except ValueError:
             raise InvalidRequest("Invalid Authorization Header",
                                  status_code=401, errno=109,
