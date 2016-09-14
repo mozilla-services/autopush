@@ -2,13 +2,12 @@
 import base64
 import hashlib
 import hmac
-import json
 import socket
 import uuid
 
 import ecdsa
 import requests
-from jose import jws
+from jose import jwt
 from ua_parser import user_agent_parser
 
 
@@ -118,6 +117,7 @@ def decipher_public_key(key_data):
 
     """
     # key data is actually a raw coordinate pair
+    key_data = base64url_decode(key_data)
     key_len = len(key_data)
     if key_len == 64:
         return key_data
@@ -142,7 +142,11 @@ def extract_jwt(token, crypto_key):
     # on the JWT object. Vapid is a bit more creative in how it
     # stores data into a JWT and breaks expectations. We would have to
     # turn off most of the validation in order for it to be useful.
-    return json.loads(jws.verify(token, vk, algorithms=["ES256"]))
+    return jwt.decode(token, dict(keys=[vk]), options=dict(
+        verify_aud=False,
+        verify_sub=False,
+        verify_exp=False,
+    ))
 
 
 def parse_user_agent(agent_string):

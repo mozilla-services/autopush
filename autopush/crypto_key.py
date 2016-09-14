@@ -34,7 +34,7 @@ http://tools.ietf.org/html/draft-ietf-httpbis-encryption-encoding-00#section-4
             ck_hash = {}
             for bit in bits:
                 try:
-                    (key, value) = bit.split("=", 1)
+                    key, value = bit.split("=", 1)
                 except ValueError:
                     raise CryptoKeyException("Invalid Crypto Key value")
                 ck_hash[key.strip()] = value.strip(' "')

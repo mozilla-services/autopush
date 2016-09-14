@@ -48,7 +48,7 @@ from autopush.db import (
     hasher,
     normalize_id,
 )
-from autopush.exceptions import InvalidTokenException
+from autopush.exceptions import InvalidTokenException, VapidAuthException
 from autopush.router.interface import RouterException
 from autopush.utils import (
     generate_hash,
@@ -77,11 +77,6 @@ status_codes = {
     500: "Internal Server Error",
     503: "Service Unavailable",
 }
-
-
-class VapidAuthException(Exception):
-    """Exception if the VAPID Auth token fails"""
-    pass
 
 
 class Notification(namedtuple("Notification",
@@ -339,8 +334,7 @@ class AutoendpointHandler(BaseHandler):
     def _store_auth(self, jwt, crypto_key, token, result):
         if jwt.get('exp', 0) < time.time():
             raise VapidAuthException("Invalid bearer token: Auth expired")
-        jwt_crypto_key = base64url_encode(crypto_key)
-        self._client_info["jwt_crypto_key"] = jwt_crypto_key
+        self._client_info["jwt_crypto_key"] = crypto_key
         for i in jwt:
             self._client_info["jwt_" + i] = jwt[i]
         return result
@@ -356,7 +350,7 @@ class AutoendpointHandler(BaseHandler):
                        **self._client_info)
         raise VapidAuthException("Invalid bearer token: " + repr(message))
 
-    def _process_auth(self, result):
+    def _process_auth(self, result, require_auth=False):
         """Process the optional VAPID auth token.
 
         VAPID requires two headers to be present;
@@ -367,12 +361,12 @@ class AutoendpointHandler(BaseHandler):
         """
         authorization = self.request.headers.get('authorization')
         # No auth present, so it's not a VAPID call.
-        if not authorization:
+        if not authorization and not require_auth:
             return result
 
         public_key = result.get("public_key")
         try:
-            (auth_type, token) = authorization.split(' ', 1)
+            auth_type, token = authorization.split(' ', 1)
         except ValueError:
             raise VapidAuthException("Invalid Authorization header")
         # if it's a bearer token containing what may be a JWT
@@ -382,7 +376,10 @@ class AutoendpointHandler(BaseHandler):
             d.addErrback(self._jws_err)
             d.addErrback(self._invalid_auth)
             return d
-        # otherwise, it's not, so ignore the VAPID data.
+        # otherwise, it's not, so ignore the VAPID data if we're supposed to
+        if require_auth:
+            raise VapidAuthException("Invalid Authorization header",
+                                     status_codes)
         return result
 
 
@@ -457,6 +454,7 @@ class EndpointHandler(AutoendpointHandler):
         api_ver = api_ver or "v0"
         self.start_time = time.time()
         crypto_key_header = self.request.headers.get('crypto-key')
+        auth_header = self.request.headers.get('authorization')
         content_encoding = self.request.headers.get('content-encoding', "")
         if content_encoding.lower() == 'aesgcm128' and crypto_key_header:
             self.log.debug(
@@ -472,10 +470,11 @@ class EndpointHandler(AutoendpointHandler):
             return
 
         d = deferToThread(self.ap_settings.parse_endpoint,
-                          token,
-                          api_ver,
-                          crypto_key_header)
-        d.addCallback(self._process_auth)
+                          token=token,
+                          version=api_ver,
+                          ckey_header=crypto_key_header,
+                          auth_header=auth_header)
+        d.addCallback(self._process_auth, require_auth=(api_ver == "v2"))
         d.addCallback(self._token_valid)
         d.addErrback(self._jws_err)
         d.addErrback(self._auth_err)

@@ -17,3 +17,8 @@ class InvalidRequest(AutopushException):
         self.status_code = status_code
         self.errno = errno
         self.headers = {} if headers is None else headers
+
+
+class VapidAuthException(Exception):
+    """Exception if the VAPID Auth token fails"""
+    pass
