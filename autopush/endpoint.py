@@ -494,10 +494,11 @@ class EndpointHandler(AutoendpointHandler):
         d.addErrback(self._uaid_not_found_err)
         self._db_error_handling(d)
 
-    def _uaid_lookup_results(self, result):
+    def _uaid_lookup_results(self, uaid_data):
         """Process the result of the AWS UAID lookup"""
         # Save the whole record
-        router_key = self.router_key = result.get("router_type", "simplepush")
+        router_key = self.router_key = uaid_data.get("router_type",
+                                                     "simplepush")
         self._client_info["router_key"] = router_key
 
         try:
@@ -563,7 +564,7 @@ class EndpointHandler(AutoendpointHandler):
             return
 
         if use_simplepush:
-            self._route_notification(self.version, result, data)
+            self._route_notification(self.version, uaid_data, data)
             return
 
         # Web Push and bridged messages are encrypted binary blobs. We store
@@ -573,10 +574,10 @@ class EndpointHandler(AutoendpointHandler):
         # Generate a message ID, then route the notification.
         d = deferToThread(self.ap_settings.fernet.encrypt, ':'.join([
             'm', self.uaid, self.chid]).encode('utf8'))
-        d.addCallback(self._route_notification, result, data, ttl)
+        d.addCallback(self._route_notification, uaid_data, data, ttl)
         return d
 
-    def _route_notification(self, version, result, data, ttl=None):
+    def _route_notification(self, version, uaid_data, data, ttl=None):
         self.version = self._client_info['message_id'] = version
         warning = ""
         # Clean up the header values (remove padding)
@@ -592,8 +593,8 @@ class EndpointHandler(AutoendpointHandler):
                                     ttl=ttl)
 
         d = Deferred()
-        d.addCallback(self.router.route_notification, result)
-        d.addCallback(self._router_completed, result, warning)
+        d.addCallback(self.router.route_notification, uaid_data)
+        d.addCallback(self._router_completed, uaid_data, warning)
         d.addErrback(self._router_fail_err)
         d.addErrback(self._response_err)
 
@@ -704,7 +705,7 @@ class RegistrationHandler(AutoendpointHandler):
         if new_uaid:
             d = Deferred()
             d.addCallback(router.register, router_data=params,
-                          reg_id=router_token, uri=self.request.uri)
+                          app_id=router_token, uri=self.request.uri)
             d.addCallback(self._save_router_data, router_type)
             d.addCallback(self._create_endpoint)
             d.addCallback(self._return_endpoint, new_uaid, router)
@@ -741,8 +742,8 @@ class RegistrationHandler(AutoendpointHandler):
 
         self.add_header("Content-Type", "application/json")
         d = Deferred()
-        d.addCallback(router.register, reg_id=router_token,
-                      router_data=router_data, uri=self.request.uri)
+        d.addCallback(router.register, router_data=router_data,
+                      app_id=router_token, uri=self.request.uri)
         d.addCallback(self._save_router_data, router_type)
         d.addCallback(self._success)
         d.addErrback(self._router_fail_err)

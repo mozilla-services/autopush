@@ -8,6 +8,7 @@ from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.trial import unittest
 from twisted.internet.error import ConnectError, ConnectionRefusedError
+from twisted.python.failure import Failure
 
 import apns
 import gcmclient
@@ -68,7 +69,7 @@ class RouterInterfaceTestCase(TestCase):
             pass
         IRouter.__init__ = init
         ir = IRouter(None, None)
-        self.assertRaises(NotImplementedError, ir.register, "uaid", {})
+        self.assertRaises(NotImplementedError, ir.register, "uaid", {}, "")
         self.assertRaises(NotImplementedError, ir.route_notification, "uaid",
                           {})
         self.assertRaises(NotImplementedError, ir.amend_msg, {})
@@ -79,32 +80,55 @@ dummy_uaid = str(uuid.uuid4())
 
 
 class APNSRouterTestCase(unittest.TestCase):
-    def setUp(self):
+
+    @patch("twisted.internet.reactor.callLater")
+    def setUp(self, cl):
         from twisted.logger import Logger
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
-        apns_config = {'cert_file': 'fake.cert', 'key_file': 'fake.key'}
+        apns_config = {'firefox': {'cert': 'fake.cert', 'key': 'fake.key'}}
         self.mock_apns = Mock(spec=apns.APNs)
         self.router = APNSRouter(settings, apns_config)
-        self.router.apns = self.mock_apns
+        self.router.apns['firefox'] = self.mock_apns
         self.router.log = Mock(spec=Logger)
         self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
         self.notif = Notification(10, "q60d6g", dummy_chid, self.headers,
                                   200)
-        self.router_data = dict(router_data=dict(token="connect_data"))
+        self.router_data = dict(router_data=dict(token="connect_data",
+                                                 rel_channel="firefox"))
+
+    @patch("twisted.internet.reactor.callLater")
+    def test_with_max(self, cl):
+        settings = AutopushSettings(
+            hostname="localhost",
+            statsd_host=None,
+        )
+        apns_config = {'max_messages': 2,
+                       'firefox': {'cert': 'fake.cert', 'key': 'fake.key'}}
+        self.mock_apns = Mock(spec=apns.APNs)
+        self.router = APNSRouter(settings, apns_config)
+        eq_(self.router._max_messages, 2)
+        ok_('max_messages' not in self.router._config)
 
     def test_register(self):
         result = self.router.register("uaid",
-                                      router_data={"token": "connect_data"})
-        eq_(result, {"token": "connect_data"}),
+                                      router_data={"token": "connect_data"},
+                                      app_id="firefox")
+        eq_(result, {"rel_channel": "firefox", "token": "connect_data"})
 
     def test_register_bad(self):
-        self.assertRaises(RouterException, self.router.register, "uaid",
-                          router_data={})
+        self.assertRaises(RouterException, self.router.register,
+                          "uaid", router_data={}, app_id="firefox")
+
+    def test_register_bad_channel(self):
+        self.assertRaises(RouterException, self.router.register,
+                          "uaid",
+                          router_data={"token": "connect_data"},
+                          app_id="unknown")
 
     def test_route_notification(self):
         d = self.router.route_notification(self.notif, self.router_data)
@@ -116,56 +140,97 @@ class APNSRouterTestCase(unittest.TestCase):
         d.addCallback(check_results)
         return d
 
+    def test_too_many_messages(self):
+        now = time.time()
+        self.router.messages = {
+            '123': {
+                'time_sent': now,
+                'rel_channel': 'firefox',
+                'token': 'dump',
+                'payload': {}},
+        }
+
+        self.router._max_messages = 1
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(result):
+            ok_(isinstance(result, Failure))
+            eq_(len(self.router.messages), 1)
+            eq_(result.value.status_code, 503)
+
+        d.addBoth(check_results)
+        return d
+
     def test_message_pruning(self):
-        now = int(time.time())
-        self.router.messages = {now: {'token': 'dump', 'payload': {}},
-                                now-60: {'token': 'dump', 'payload': {}}}
+        now = time.time()
+        self.router.messages = {'123': {
+            'time_sent': now-60,
+            'rel_channel': 'firefox',
+            'token': 'dump',
+            'payload': {}}
+        }
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
+            # presume that the timer clicked.
+            self.router._cleanup()
             assert(self.mock_apns.gateway_server.send_notification.called)
             eq_(len(self.router.messages), 1)
 
-            payload = self.router.messages[now]['payload']
-            eq_(payload.alert, 'SimplePush')
+            messages = self.router.messages
+
+            payload = messages[messages.keys()[-1]]['payload']
+            eq_(payload.alert, 'Mozilla Push')
 
             custom = payload.custom
-            eq_(custom['Msg'], self.notif.data)
-            eq_(custom['Ver'], self.notif.version)
-            eq_(custom['Con'], 'aesgcm')
-            eq_(custom['Enc'], 'test')
-            eq_(custom['Enckey'], 'test')
-            eq_(custom['Chid'], self.notif.channel_id)
-            ok_('Cryptokey' not in custom)
+            eq_(custom['body'], self.notif.data)
+            eq_(custom['ver'], self.notif.version)
+            eq_(custom['con'], 'aesgcm')
+            eq_(custom['enc'], 'test')
+            eq_(custom['enckey'], 'test')
+            eq_(custom['chid'], self.notif.channel_id)
+            ok_('cryptokey' not in custom)
 
         d.addCallback(check_results)
         return d
 
     def test_response_listener_with_success(self):
-        self.router.messages = {1: {'token': 'dump', 'payload': {}}}
+        self.router.messages = {1: {'time_sent': 1,
+                                    'rel_channel': 'firefox',
+                                    'token': 'dump',
+                                    'payload': {}}}
         self.router._error(dict(status=0, identifier=1))
         eq_(len(self.router.messages), 0)
 
     def test_response_listener_with_nonretryable_error(self):
-        self.router.messages = {1: {'token': 'dump', 'payload': {}}}
+        self.router.messages = {1: {'time_sent': 1,
+                                    'rel_channel': 'firefox',
+                                    'token': 'dump',
+                                    'payload': {}}}
         self.router._error(dict(status=2, identifier=1))
         eq_(len(self.router.messages), 1)
 
     def test_response_listener_with_retryable_existing_message(self):
-        self.router.messages = {1: {'token': 'dump', 'payload': {}}}
+        self.router.messages = {'1': {'time_sent': 1,
+                                      'rel_channel': 'firefox',
+                                      'token': 'dump',
+                                      'payload': {}}}
         # Mock out the _connect call to be harmless
-        self.router._connect = Mock()
-        self.router._error(dict(status=1, identifier=1))
+        self.router._error(dict(status=1, identifier='1'))
         eq_(len(self.router.messages), 1)
-        assert(self.router.apns.gateway_server.send_notification.called)
+        router = self.router.apns['firefox']
+        assert(router.gateway_server.send_notification.called)
 
     def test_response_listener_with_retryable_non_existing_message(self):
-        self.router.messages = {1: {'token': 'dump', 'payload': {}}}
+        self.router.messages = {'1': {'time_sent': 1,
+                                      'rel_channel': 'firefox',
+                                      'token': 'dump',
+                                      'payload': {}}}
         self.router._error(dict(status=1, identifier=10))
         eq_(len(self.router.messages), 1)
 
-    def test_ammend(self):
+    def test_amend(self):
         resp = {"key": "value"}
         eq_(resp, self.router.amend_msg(resp))
 
@@ -175,8 +240,10 @@ class APNSRouterTestCase(unittest.TestCase):
                    "crypto-key": "test"}
         self.notif = Notification(10, "q60d6g", dummy_chid, headers, 200)
         now = int(time.time())
-        self.router.messages = {now: {'token': 'dump', 'payload': {}},
-                                now-60: {'token': 'dump', 'payload': {}}}
+        self.router.messages = {'0': {'time_sent': now-60,
+                                      'rel_channel': 'firefox',
+                                      'token': 'dump',
+                                      'payload': {}}}
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -185,19 +252,21 @@ class APNSRouterTestCase(unittest.TestCase):
             eq_(result.logged_status, 200)
             ok_("TTL" in result.headers)
             assert(self.mock_apns.gateway_server.send_notification.called)
+            self.router._cleanup()
             eq_(len(self.router.messages), 1)
 
-            payload = self.router.messages[now]['payload']
-            eq_(payload.alert, 'SimplePush')
+            messages = self.router.messages
+            payload = messages[messages.keys()[-1]]['payload']
+            eq_(payload.alert, 'Mozilla Push')
 
             custom = payload.custom
-            eq_(custom['Msg'], self.notif.data)
-            eq_(custom['Ver'], self.notif.version)
-            eq_(custom['Con'], 'aesgcm')
-            eq_(custom['Enc'], 'test')
-            eq_(custom['Cryptokey'], 'test')
-            eq_(custom['Chid'], self.notif.channel_id)
-            ok_('Enckey' not in custom)
+            eq_(custom['body'], self.notif.data)
+            eq_(custom['ver'], self.notif.version)
+            eq_(custom['con'], 'aesgcm')
+            eq_(custom['enc'], 'test')
+            eq_(custom['cryptokey'], 'test')
+            eq_(custom['chid'], self.notif.channel_id)
+            ok_('enckey' not in custom)
 
         d.addCallback(check_results)
         return d
@@ -253,7 +322,7 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_register(self):
         result = self.router.register("uaid",
                                       router_data={"token": "test123"},
-                                      reg_id="test123")
+                                      app_id="test123")
         # Check the information that will be recorded for this user
         eq_(result, {"token": "test123",
                      "creds": {"senderID": "test123",
@@ -261,12 +330,16 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_register_bad(self):
         self.assertRaises(RouterException, self.router.register,
+                          "uaid", router_data={}, app_id="")
+        self.assertRaises(RouterException,
+                          self.router.register,
                           "uaid",
-                          router_data={})
+                          router_data={},
+                          app_id='')
         self.assertRaises(RouterException,
                           self.router.register, "uaid",
                           router_data={"token": "abcd1234"},
-                          reg_id="invalid123")
+                          app_id="invalid123")
 
     @patch("gcmclient.GCM")
     def test_gcmclient_fail(self, fgcm):
@@ -452,7 +525,7 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_amend(self):
         self.router.register("uaid",
                              router_data={"token": "test123"},
-                             reg_id="test123")
+                             app_id="test123")
         resp = {"key": "value"}
         result = self.router.amend_msg(resp,
                                        self.router_data.get('router_data'))
@@ -461,9 +534,8 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_register_invalid_token(self):
         self.assertRaises(RouterException, self.router.register,
-                          "uaid",
-                          router_data={"token": "invalid"},
-                          reg_id="invalid")
+                          uaid="uaid", router_data={"token": "invalid"},
+                          app_id="invalid")
 
 
 class FCMRouterTestCase(unittest.TestCase):
@@ -523,7 +595,7 @@ class FCMRouterTestCase(unittest.TestCase):
     def test_register(self):
         result = self.router.register("uaid",
                                       router_data={"token": "test123"},
-                                      reg_id="test123")
+                                      app_id="test123")
         # Check the information that will be recorded for this user
         eq_(result, {"token": "test123",
                      "creds": {"senderID": "test123",
@@ -700,8 +772,9 @@ class FCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_amend(self):
-        self.router.register("uaid", router_data={"token": "test123"},
-                             reg_id="test123")
+        self.router.register(uaid="uaid",
+                             router_data={"token": "test123"},
+                             app_id="test123")
         resp = {"key": "value"}
         result = self.router.amend_msg(resp,
                                        self.router_data.get('router_data'))
@@ -709,9 +782,9 @@ class FCMRouterTestCase(unittest.TestCase):
             result)
 
     def test_register_invalid_token(self):
-        self.assertRaises(RouterException, self.router.register, "uaid",
-                          router_data={"token": "invalid"},
-                          reg_id="invalid")
+        self.assertRaises(RouterException, self.router.register,
+                          uaid="uaid", router_data={"token": "invalid"},
+                          app_id="invalid")
 
 
 class SimplePushRouterTestCase(unittest.TestCase):

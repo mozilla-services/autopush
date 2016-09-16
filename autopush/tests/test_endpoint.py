@@ -1880,8 +1880,8 @@ class RegistrationTestCase(unittest.TestCase):
             self.reg.write.assert_called_with({})
             frouter.register.assert_called_with(
                 dummy_uaid,
-                reg_id='',
                 router_data=data,
+                app_id='',
                 uri=self.reg.request.uri
             )
 

@@ -30,10 +30,3 @@ port = 8082
 ; autokey generator as the crypto_key argument, and sorted [newest, oldest]
 #auth_key = [HJVPy4ZwF4Yz_JdvXTL8hRcwIhv742vC60Tg5Ycrvw8=]
 
-; Default hash of senderids and associated authorization keys.
-; THIS WILL OVERWRITE ANY VALUES STORED IN S3!
-; The list is specified as a JSON object formatted as:
-; {<senderid> :{"auth": <auth_value>}}
-; e.g.
-; {"12345": {"auth": "abcd_efg"}, "01357": {"auth": "ZYX=abc"}}
-#senderid_list =

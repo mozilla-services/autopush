@@ -46,10 +46,17 @@ class IRouter(object):
         the given settings and router conf."""
         raise NotImplementedError("__init__ must be implemented")
 
-    def register(self, uaid, router_data, *args, **kwargs):
+    def register(self, uaid, routing_data, app_id, *args, **kwargs):
         """Register the uaid with the connect dict however is preferred and
         return a dict that will be stored as routing_data for this user in the
         future.
+
+        :param uaid: User Agent Identifier
+        :type uaid: str
+        :param routing_data: Route specific configuration info
+        :type routing_data: dict
+        :param app_id: Application identifier from URI
+        :type app_id: str
 
         :returns: A response object
         :rtype: :class:`RouterResponse`

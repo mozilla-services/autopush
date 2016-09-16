@@ -267,8 +267,9 @@ Each bridge may require a unique token that addresses the remote application
 For GCM/FCM, this is the `SenderID` (or 'project number') and is pre-negotiated outside of the push
 service. You can find this number using the
 `Google developer console <https://console.developers.google.com/iam-admin/settings/project>`__.
-For APNS, there is no client token, so this value is arbitrary.
-Feel free to use "a" or "0" or any other valid URL path token. For our examples, we will use a client token of
+For APNS, this value is the "platform" or "channel" of development (e.g.
+"firefox", "beta", "gecko", etc.)
+For our examples, we will use a client token of
 "33clienttoken33".
 
    :{instance_id}: The bridge specific private identifier token

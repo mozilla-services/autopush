@@ -10,8 +10,3 @@
     :special-members: __init__
     :private-members:
     :member-order: bysource
-
-Utility Functions
-+++++++++++++++++
-
-.. autofunction:: node_key

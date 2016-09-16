@@ -115,3 +115,17 @@ endpoint_port = 8082
 ; Uncomment to disable AWS meta checks.
 #no_aws
 
+; Apple Push Notification System uses a set of certificates tied to the
+; application. Since we support multiple iOS "applications" we need to support
+; multiple certificates.
+; apns_cert is a JSON formatted dict specifying the paths to the cert files,
+; as well as any other bits of information that may be necessary. The format
+; is {"platform":
+;       {"cert": "path_to_cert_file",
+;        "key": "path_to_key_file",
+;        "default_title": "(optional) default alert title 'Mozilla Push'",
+;        "sandbox": False},  // Use the APNs sandbox feature
+;     ... }
+; e.g {"firefox": {"cert": "certs/main.cert", "key": "certs/main.key"}, "beta": {"cert": "certs/beta.cert", "key": "certs/beta.key"}}
+#apns_creds =
+
