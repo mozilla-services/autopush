@@ -88,6 +88,7 @@ class AutopushSettings(object):
                  bear_hash_key=None,
                  preflight_uaid="deadbeef00000000deadbeef000000000",
                  ami_id=None,
+                 client_certs=None,
                  ):
         """Initialize the Settings object
 
@@ -153,6 +154,13 @@ class AutopushSettings(object):
             self.endpoint_hostname,
             endpoint_port
         )
+        self.enable_tls_auth = client_certs is not None
+        if self.enable_tls_auth:
+            self.client_certs = {v: k for k, v in client_certs.iteritems()}
+            # XXX: assert we're acutally https?
+            # XXX: assert all the values are valid (not empty strings)
+        else:
+            self.client_certs = None
 
         # Database objects
         self.router_table = get_router_table(router_tablename,
