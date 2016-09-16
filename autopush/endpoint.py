@@ -703,8 +703,8 @@ class RegistrationHandler(AutoendpointHandler):
         self.app_server_key = params.get("key")
         if new_uaid:
             d = Deferred()
-            d.addCallback(router.register, params, router_token,
-                          uri=self.request.uri)
+            d.addCallback(router.register, router_data=params,
+                          reg_id=router_token, uri=self.request.uri)
             d.addCallback(self._save_router_data, router_type)
             d.addCallback(self._create_endpoint)
             d.addCallback(self._return_endpoint, new_uaid, router)
@@ -741,7 +741,8 @@ class RegistrationHandler(AutoendpointHandler):
 
         self.add_header("Content-Type", "application/json")
         d = Deferred()
-        d.addCallback(router.register, router_data, uri=self.request.uri)
+        d.addCallback(router.register, reg_id=router_token,
+                      router_data=router_data, uri=self.request.uri)
         d.addCallback(self._save_router_data, router_type)
         d.addCallback(self._success)
         d.addErrback(self._router_fail_err)

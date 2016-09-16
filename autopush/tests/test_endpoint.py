@@ -1879,7 +1879,10 @@ class RegistrationTestCase(unittest.TestCase):
         def handle_finish(value):
             self.reg.write.assert_called_with({})
             frouter.register.assert_called_with(
-                dummy_uaid, data, uri=self.reg.request.uri
+                dummy_uaid,
+                reg_id='',
+                router_data=data,
+                uri=self.reg.request.uri
             )
 
         self.finish_deferred.addCallback(handle_finish)
