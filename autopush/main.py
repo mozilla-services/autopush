@@ -146,6 +146,11 @@ def obsolete_args(parser):
     parser.add_argument('--max_message_size', type=int, help="OBSOLETE")
     parser.add_argument('--s3_bucket', help='OBSOLETE')
     parser.add_argument('--senderid_expry', help='OBSOLETE')
+    # old APNs args
+    parser.add_argument('--apns_enabled', help="OBSOLETE")
+    parser.add_argument('--apns_sandbox', help="OBSOLETE")
+    parser.add_argument('--apns_cert_file', help="OBSOLETE")
+    parser.add_argument('--apns_key_file', help="OBSOLETE")
 
 
 def add_external_router_args(parser):
@@ -187,18 +192,14 @@ def add_external_router_args(parser):
     parser.add_argument('--fcm_senderid', help='SenderID for FCM',
                         type=str, default="")
     # Apple Push Notification system (APNs) for iOS
-    parser.add_argument('--apns_enabled', help="Enable APNS Bridge",
-                        action="store_true", default=False,
-                        env_var="APNS_ENABLED")
-    label = "APNS Router:"
-    parser.add_argument('--apns_sandbox', help="%s Use Dev Sandbox" % label,
-                        action="store_true", default=False,
-                        env_var="APNS_SANDBOX")
-    parser.add_argument('--apns_cert_file',
-                        help="%s Certificate PEM file" % label,
-                        type=str, env_var="APNS_CERT_FILE")
-    parser.add_argument('--apns_key_file', help="%s Key PEM file" % label,
-                        type=str, env_var="APNS_KEY_FILE")
+    # credentials consist of JSON struct containing a channel type
+    # followed by the settings,
+    # e.g. {'firefox':{'cert': 'path.cert', 'key': 'path.key',
+    #                  'sandbox': false}, ... }
+    parser.add_argument('--apns_creds', help="JSON dictionary of "
+                                             "APNS settings",
+                        type=str, default="",
+                        env_var="APNS_CREDS")
     # UDP
     parser.add_argument('--wake_timeout',
                         help="UDP: idle timeout before closing socket",
@@ -313,12 +314,14 @@ def make_settings(args, **kwargs):
         router_conf["simplepush"] = {"idle": args.wake_timeout,
                                      "server": args.wake_server,
                                      "cert": args.wake_pem}
-    if args.apns_enabled:
+    if args.apns_creds:
         # if you have the critical elements for each external router, create it
-        if args.apns_cert_file is not None and args.apns_key_file is not None:
-            router_conf["apns"] = {"sandbox": args.apns_sandbox,
-                                   "cert_file": args.apns_cert_file,
-                                   "key_file": args.apns_key_file}
+        try:
+            router_conf["apns"] = json.loads(args.apns_creds)
+        except (ValueError, TypeError):
+            log.critical(format="Invalid JSON specified for APNS config "
+                                "options")
+            return
     if args.gcm_enabled:
         # Create a common gcmclient
         try:
@@ -566,6 +569,9 @@ def endpoint_main(sysargs=None, use_files=True):
     # Start the table rotation checker/updater
     l = task.LoopingCall(settings.update_rotating_tables)
     l.start(60)
+    if settings.routers.get('apns'):
+        l = task.LoopingCall(settings.routers['apns']._cleanup)
+        l.start(10)
 
     reactor.suggestThreadPoolSize(50)
     reactor.run()

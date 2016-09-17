@@ -1,5 +1,6 @@
 import unittest
 import datetime
+import json
 
 from mock import Mock, patch
 from moto import mock_dynamodb2
@@ -203,12 +204,10 @@ class ConnectionMainTestCase(unittest.TestCase):
 class EndpointMainTestCase(unittest.TestCase):
     class TestArg:
         # important stuff
-        apns_enabled = True
-        apns_cert_file = "cert.file"
-        apns_key_file = "key.file"
+        apns_creds = json.dumps({"firefox": {"cert": "cert.file",
+                                             "key": "key.file"}})
         gcm_enabled = True
         # less important stuff
-        apns_sandbox = False
         gcm_ttl = 999
         gcm_dryrun = False
         gcm_collapsekey = "collapse"
@@ -278,14 +277,19 @@ class EndpointMainTestCase(unittest.TestCase):
             "--senderid_list='[Invalid'"
         ], False)
 
+    def test_bad_apnsconf(self):
+        assert endpoint_main([
+            "--apns_creds='[Invalid'"
+        ], False)
+
     def test_ping_settings(self):
         ap = make_settings(self.TestArg)
         # verify that the hostname is what we said.
         eq_(ap.hostname, self.TestArg.hostname)
         # gcm isn't created until later since we may have to pull
         # config info from s3
-        eq_(ap.routers["apns"].apns.cert_file, self.TestArg.apns_cert_file)
-        eq_(ap.routers["apns"].apns.key_file, self.TestArg.apns_key_file)
+        eq_(ap.routers["apns"].apns["firefox"].cert_file, "cert.file")
+        eq_(ap.routers["apns"].apns["firefox"].key_file, "key.file")
         eq_(ap.wake_timeout, 10)
 
     def test_bad_senders(self):
@@ -311,8 +315,14 @@ class EndpointMainTestCase(unittest.TestCase):
         endpoint_main([
             "--gcm_enabled",
             """--senderid_list={"123":{"auth":"abcd"}}""",
-            "--s3_bucket=none",
         ], False)
+
+    def test_apns_loop(self):
+        endpoint_main([
+            """--apns_creds={"firefox":{"cert":"foo.cert","key":"foo.key"}}"""
+            ], False)
+        ok_('APNSRouter._cleanup' in
+            repr(self.mocks.get('autopush.main.task').method_calls[1][1]))
 
     @patch("requests.get")
     def test_aws_ami_id(self, request_mock):
