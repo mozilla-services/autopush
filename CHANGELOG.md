@@ -1,3 +1,25 @@
+<a name="1.18.0"></a>
+## 1.18.0 (2016-09-20)
+
+
+#### Bug Fixes
+
+*   label arguments for router.register to prevent misassignment (#648) ([b1a7e2db](https://github.com/mozilla-services/autopush/commit/b1a7e2dbbaa13369e969b404ed76c474bc0a689b))
+*   Require auth header for endpoints with v2 (#659) ([ee633a50](https://github.com/mozilla-services/autopush/commit/ee633a50ad06c4d137f6b0cfb7bf7318115fbbf6))
+*   log all drop_user calls with record details when possible ([21c76f17](https://github.com/mozilla-services/autopush/commit/21c76f174fcec2fcc6d958791dc489ce1f8181de), closes [#650](https://github.com/mozilla-services/autopush/issues/650))
+*   return webpush style response for bridged users ([a0339bbe](https://github.com/mozilla-services/autopush/commit/a0339bbe5fcc196cdb93db7905ebb0a547c54b19), closes [#651](https://github.com/mozilla-services/autopush/issues/651))
+
+#### Features
+
+*   Add multiple cert handlers for APNs ([7eed1ffe](https://github.com/mozilla-services/autopush/commit/7eed1ffe3f779af44c088c9ae2792c189956ef96), closes [#655](https://github.com/mozilla-services/autopush/issues/655), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+*   update jwt library ([68fccf99](https://github.com/mozilla-services/autopush/commit/68fccf994b5d354bca4f3706aa5de685b5fc6900))
+
+#### Breaking Changes
+
+*   Add multiple cert handlers for APNs ([7eed1ffe](https://github.com/mozilla-services/autopush/commit/7eed1ffe3f779af44c088c9ae2792c189956ef96), closes [#655](https://github.com/mozilla-services/autopush/issues/655), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+
+
+
 <a name="1.17.2"></a>
 ## 1.17.2 (2016-08-31)
 
