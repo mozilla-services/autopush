@@ -4,9 +4,11 @@ dist: precise
 python:
 - '2.7'
 install:
+- pip install virtualenv
 - virtualenv pypy
 - cd pypy/bin && ln -s python pypy && cd ../..
 - source pypy/bin/activate
+- python --version
 - make travis
 script: tox -- --with-coverage --cover-xml --cover-package=autopush
 after_success:
