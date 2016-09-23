@@ -2,17 +2,20 @@
 from unittest import TestCase
 import uuid
 import time
+import json
 
 from mock import Mock, PropertyMock, patch
 from moto import mock_dynamodb2
-from nose.tools import eq_, ok_
+from nose.tools import eq_, ok_, assert_raises
 from twisted.trial import unittest
 from twisted.internet.error import ConnectError, ConnectionRefusedError
-from twisted.python.failure import Failure
+from twisted.internet.defer import inlineCallbacks
 
-import apns
+import hyper
+import hyper.tls
 import gcmclient
 import pyfcm
+from hyper.http20.exceptions import HTTP20Error
 
 from autopush.db import (
     Router,
@@ -81,18 +84,46 @@ dummy_uaid = str(uuid.uuid4())
 
 class APNSRouterTestCase(unittest.TestCase):
 
-    @patch("twisted.internet.reactor.callLater")
-    def setUp(self, cl):
+    def _waitfor(self, func):
+            times = 0
+            while not func():  # pragma: nocover
+                time.sleep(1)
+                times += 1
+                if times > 9:
+                    break
+
+    @patch('autopush.router.apns2.HTTP20Connection',
+           spec=hyper.HTTP20Connection)
+    @patch('hyper.tls', spec=hyper.tls)
+    def setUp(self, mt, mc):
         from twisted.logger import Logger
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
-        apns_config = {'firefox': {'cert': 'fake.cert', 'key': 'fake.key'}}
-        self.mock_apns = Mock(spec=apns.APNs)
+        apns_config = {
+            'firefox':
+                {'cert': 'fake.cert',
+                 'key': 'fake.key',
+                 'topic': 'com.example.SomeApp',
+                 'max_connections': 2,
+                 }
+        }
+        self.mock_connection = mc
+        mc.return_value = mc
         self.router = APNSRouter(settings, apns_config)
-        self.router.apns['firefox'] = self.mock_apns
-        self.router.log = Mock(spec=Logger)
+        self.mock_response = Mock()
+        self.mock_response.status = 200
+        mc.get_response.return_value = self.mock_response
+        # toss the existing connection
+        try:
+            self.router.apns['firefox'].connections.pop()
+        except IndexError:  # pragma nocover
+            pass
+        self.router.apns['firefox'].connections.append(
+            self.mock_connection
+        )
+        self.router.apns['firefox'].log = Mock(spec=Logger)
         self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
@@ -100,19 +131,6 @@ class APNSRouterTestCase(unittest.TestCase):
                                   200)
         self.router_data = dict(router_data=dict(token="connect_data",
                                                  rel_channel="firefox"))
-
-    @patch("twisted.internet.reactor.callLater")
-    def test_with_max(self, cl):
-        settings = AutopushSettings(
-            hostname="localhost",
-            statsd_host=None,
-        )
-        apns_config = {'max_messages': 2,
-                       'firefox': {'cert': 'fake.cert', 'key': 'fake.key'}}
-        self.mock_apns = Mock(spec=apns.APNs)
-        self.router = APNSRouter(settings, apns_config)
-        eq_(self.router._max_messages, 2)
-        ok_('max_messages' not in self.router._config)
 
     def test_register(self):
         result = self.router.register("uaid",
@@ -130,105 +148,87 @@ class APNSRouterTestCase(unittest.TestCase):
                           router_data={"token": "connect_data"},
                           app_id="unknown")
 
+    @inlineCallbacks
     def test_route_notification(self):
-        d = self.router.route_notification(self.notif, self.router_data)
+        result = yield self.router.route_notification(self.notif,
+                                                      self.router_data)
+        yield self._waitfor(lambda:
+                            self.mock_connection.request.called is True)
 
-        def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            assert(self.mock_apns.gateway_server.send_notification.called)
+        ok_(isinstance(result, RouterResponse))
+        ok_(self.mock_connection.request.called)
+        body = self.mock_connection.request.call_args[1]
+        body_json = json.loads(body['body'])
+        ok_('chid' in body_json)
+        # The ChannelID is a UUID4, and unpredictable.
+        del(body_json['chid'])
+        eq_(body_json, {
+            "body": "q60d6g",
+            "enc": "test",
+            "ver": 10,
+            "aps": {
+                "content_available": 1,
+                "alert": "Mozilla Push",
+            },
+            "enckey": "test",
+            "con": "aesgcm",
+        })
 
-        d.addCallback(check_results)
-        return d
+    @inlineCallbacks
+    def test_route_low_priority_notification(self):
+        """low priority and empty apns_ids are not yet used, but may feature
+        when priorty work is done."""
+        apns2 = self.router.apns['firefox']
+        exp = int(time.time()+300)
+        yield apns2.send("abcd0123", {}, 'apnsid', priority=False, exp=exp)
+        yield self._waitfor(lambda:
+                            self.mock_connection.request.called is True)
+        ok_(self.mock_connection.request.called)
+        body = self.mock_connection.request.call_args[1]
+        headers = body['headers']
+        eq_(headers, {'apns-expiration': exp,
+                      'apns-topic': 'com.example.SomeApp',
+                      'apns-priority': 5,
+                      'apns-id': 'apnsid'})
 
-    def test_too_many_messages(self):
-        now = time.time()
-        self.router.messages = {
-            '123': {
-                'time_sent': now,
-                'rel_channel': 'firefox',
-                'token': 'dump',
-                'payload': {}},
-        }
+    @inlineCallbacks
+    def test_bad_send(self):
+        self.mock_response.status = 400
+        self.mock_response.read.return_value = json.dumps({'reason': 'boo'})
+        with assert_raises(RouterException) as ex:
+            yield self.router.route_notification(self.notif, self.router_data)
+        ok_(isinstance(ex.exception, RouterException))
+        eq_(ex.exception.status_code, 500)
+        eq_(ex.exception.message, 'APNS Transmit Error 400:boo')
+        eq_(ex.exception.response_body, 'APNS could not process your '
+                                        'message boo')
 
-        self.router._max_messages = 1
-        d = self.router.route_notification(self.notif, self.router_data)
+    @inlineCallbacks
+    def test_fail_send(self):
+        def throw(*args, **kwargs):
+            raise HTTP20Error("oops")
 
-        def check_results(result):
-            ok_(isinstance(result, Failure))
-            eq_(len(self.router.messages), 1)
-            eq_(result.value.status_code, 503)
+        self.router.apns['firefox'].connections[0].request.side_effect = throw
+        with assert_raises(RouterException) as ex:
+            yield self.router.route_notification(self.notif, self.router_data)
+        ok_(isinstance(ex.exception, RouterException))
+        eq_(ex.exception.status_code, 503)
+        eq_(ex.exception.message, "APNS Processing error: "
+                                  "HTTP20Error('oops',)")
+        eq_(ex.exception.response_body, 'APNS returned an error processing '
+                                        'request')
 
-        d.addBoth(check_results)
-        return d
+    def test_too_many_connections(self):
+        rr = self.router.apns['firefox']
+        with assert_raises(RouterException) as ex:
+            while True:
+                rr._get_connection()
 
-    def test_message_pruning(self):
-        now = time.time()
-        self.router.messages = {'123': {
-            'time_sent': now-60,
-            'rel_channel': 'firefox',
-            'token': 'dump',
-            'payload': {}}
-        }
-        d = self.router.route_notification(self.notif, self.router_data)
-
-        def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            # presume that the timer clicked.
-            self.router._cleanup()
-            assert(self.mock_apns.gateway_server.send_notification.called)
-            eq_(len(self.router.messages), 1)
-
-            messages = self.router.messages
-
-            payload = messages[messages.keys()[-1]]['payload']
-            eq_(payload.alert, 'Mozilla Push')
-
-            custom = payload.custom
-            eq_(custom['body'], self.notif.data)
-            eq_(custom['ver'], self.notif.version)
-            eq_(custom['con'], 'aesgcm')
-            eq_(custom['enc'], 'test')
-            eq_(custom['enckey'], 'test')
-            eq_(custom['chid'], self.notif.channel_id)
-            ok_('cryptokey' not in custom)
-
-        d.addCallback(check_results)
-        return d
-
-    def test_response_listener_with_success(self):
-        self.router.messages = {1: {'time_sent': 1,
-                                    'rel_channel': 'firefox',
-                                    'token': 'dump',
-                                    'payload': {}}}
-        self.router._error(dict(status=0, identifier=1))
-        eq_(len(self.router.messages), 0)
-
-    def test_response_listener_with_nonretryable_error(self):
-        self.router.messages = {1: {'time_sent': 1,
-                                    'rel_channel': 'firefox',
-                                    'token': 'dump',
-                                    'payload': {}}}
-        self.router._error(dict(status=2, identifier=1))
-        eq_(len(self.router.messages), 1)
-
-    def test_response_listener_with_retryable_existing_message(self):
-        self.router.messages = {'1': {'time_sent': 1,
-                                      'rel_channel': 'firefox',
-                                      'token': 'dump',
-                                      'payload': {}}}
-        # Mock out the _connect call to be harmless
-        self.router._error(dict(status=1, identifier='1'))
-        eq_(len(self.router.messages), 1)
-        router = self.router.apns['firefox']
-        assert(router.gateway_server.send_notification.called)
-
-    def test_response_listener_with_retryable_non_existing_message(self):
-        self.router.messages = {'1': {'time_sent': 1,
-                                      'rel_channel': 'firefox',
-                                      'token': 'dump',
-                                      'payload': {}}}
-        self.router._error(dict(status=1, identifier=10))
-        eq_(len(self.router.messages), 1)
+        ok_(isinstance(ex.exception, RouterException))
+        eq_(ex.exception.status_code, 503)
+        eq_(ex.exception.message, "Too many APNS requests, "
+                                  "increase pool from 2")
+        eq_(ex.exception.response_body, "APNS busy, please retry")
 
     def test_amend(self):
         resp = {"key": "value"}
@@ -239,11 +239,6 @@ class APNSRouterTestCase(unittest.TestCase):
                    "encryption": "test",
                    "crypto-key": "test"}
         self.notif = Notification(10, "q60d6g", dummy_chid, headers, 200)
-        now = int(time.time())
-        self.router.messages = {'0': {'time_sent': now-60,
-                                      'rel_channel': 'firefox',
-                                      'token': 'dump',
-                                      'payload': {}}}
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -251,22 +246,7 @@ class APNSRouterTestCase(unittest.TestCase):
             eq_(result.status_code, 201)
             eq_(result.logged_status, 200)
             ok_("TTL" in result.headers)
-            assert(self.mock_apns.gateway_server.send_notification.called)
-            self.router._cleanup()
-            eq_(len(self.router.messages), 1)
-
-            messages = self.router.messages
-            payload = messages[messages.keys()[-1]]['payload']
-            eq_(payload.alert, 'Mozilla Push')
-
-            custom = payload.custom
-            eq_(custom['body'], self.notif.data)
-            eq_(custom['ver'], self.notif.version)
-            eq_(custom['con'], 'aesgcm')
-            eq_(custom['enc'], 'test')
-            eq_(custom['cryptokey'], 'test')
-            eq_(custom['chid'], self.notif.channel_id)
-            ok_('enckey' not in custom)
+            assert(self.mock_connection.called)
 
         d.addCallback(check_results)
         return d

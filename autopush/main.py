@@ -569,9 +569,5 @@ def endpoint_main(sysargs=None, use_files=True):
     # Start the table rotation checker/updater
     l = task.LoopingCall(settings.update_rotating_tables)
     l.start(60)
-    if settings.routers.get('apns'):
-        l = task.LoopingCall(settings.routers['apns']._cleanup)
-        l.start(10)
-
     reactor.suggestThreadPoolSize(50)
     reactor.run()

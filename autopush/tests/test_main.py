@@ -7,6 +7,8 @@ from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.internet.defer import Deferred
 from twisted.trial import unittest as trialtest
+import hyper
+import hyper.tls
 
 from autopush.db import get_rotating_message_table
 from autopush.main import (
@@ -282,14 +284,17 @@ class EndpointMainTestCase(unittest.TestCase):
             "--apns_creds='[Invalid'"
         ], False)
 
-    def test_ping_settings(self):
+    @patch('autopush.router.apns2.HTTP20Connection',
+           spec=hyper.HTTP20Connection)
+    @patch('hyper.tls', spec=hyper.tls)
+    def test_ping_settings(self, *args):
         ap = make_settings(self.TestArg)
         # verify that the hostname is what we said.
         eq_(ap.hostname, self.TestArg.hostname)
         # gcm isn't created until later since we may have to pull
         # config info from s3
-        eq_(ap.routers["apns"].apns["firefox"].cert_file, "cert.file")
-        eq_(ap.routers["apns"].apns["firefox"].key_file, "key.file")
+        eq_(ap.routers["apns"]._config['firefox']['cert'], "cert.file")
+        eq_(ap.routers["apns"]._config['firefox']['key'], "key.file")
         eq_(ap.wake_timeout, 10)
 
     def test_bad_senders(self):
@@ -317,15 +322,11 @@ class EndpointMainTestCase(unittest.TestCase):
             """--senderid_list={"123":{"auth":"abcd"}}""",
         ], False)
 
-    def test_apns_loop(self):
-        endpoint_main([
-            """--apns_creds={"firefox":{"cert":"foo.cert","key":"foo.key"}}"""
-            ], False)
-        ok_('APNSRouter._cleanup' in
-            repr(self.mocks.get('autopush.main.task').method_calls[1][1]))
-
+    @patch('autopush.router.apns2.HTTP20Connection',
+           spec=hyper.HTTP20Connection)
+    @patch('hyper.tls', spec=hyper.tls)
     @patch("requests.get")
-    def test_aws_ami_id(self, request_mock):
+    def test_aws_ami_id(self, request_mock, mt, mc):
         class MockReply:
             content = "ami_123"
 
