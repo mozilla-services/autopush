@@ -1,8 +1,10 @@
 """APNS Router"""
-import time
 import uuid
 
-import apns
+from autopush.router.apns2 import (
+    APNSClient,
+    APNS_MAX_CONNECTIONS,
+)
 from twisted.logger import Logger
 from twisted.internet.threads import deferToThread
 from autopush.router.interface import RouterException, RouterResponse
@@ -13,49 +15,37 @@ class APNSRouter(object):
     """APNS Router Implementation"""
     log = Logger()
     apns = None
-    messages = {}
-    errors = {0: 'No error',
-              1: 'Processing error',
-              2: 'Missing device token',
-              3: 'Missing topic',
-              4: 'Missing payload',
-              5: 'Invalid token size',
-              6: 'Invalid topic size',
-              7: 'Invalid payload size',
-              8: 'Invalid token',
-              10: 'Shutdown',
-              255: 'Unknown',
-              }
 
-    def _connect(self, cert_info):
+    def _connect(self, rel_channel):
         """Connect to APNS
 
-        :param cert_info: APNS certificate configuration info
-        :type cert_info: dict
+        :param rel_channel: Release channel name (e.g. Firefox. FirefoxBeta,..)
+        :type rel_channel: str
 
         :returns: APNs to be stored under the proper release channel name.
         :rtype: apns.APNs
 
         """
-        # Do I still need to call this in _error?
-        return apns.APNs(
-            use_sandbox=cert_info.get("sandbox", False),
+        default_topic = "com.mozilla.org." + rel_channel
+        cert_info = self._config[rel_channel]
+        return APNSClient(
             cert_file=cert_info.get("cert"),
             key_file=cert_info.get("key"),
-            enhanced=True)
+            use_sandbox=cert_info.get("sandbox", False),
+            max_connections=cert_info.get("max_connections",
+                                          APNS_MAX_CONNECTIONS),
+            topic=cert_info.get("topic", default_topic),
+            logger=self.log,
+            metrics=self.ap_settings.metrics)
 
     def __init__(self, ap_settings, router_conf):
         """Create a new APNS router and connect to APNS"""
         self.ap_settings = ap_settings
         self._base_tags = []
         self.apns = dict()
-        self.messages = dict()
         self._config = router_conf
-        self._max_messages = self._config.pop('max_messages', 100)
         for rel_channel in self._config:
-            self.apns[rel_channel] = self._connect(self._config[rel_channel])
-            self.apns[rel_channel].gateway_server.register_response_listener(
-                self._error)
+            self.apns[rel_channel] = self._connect(rel_channel)
         self.ap_settings = ap_settings
         self.log.debug("Starting APNS router...")
 
@@ -95,7 +85,7 @@ class APNSRouter(object):
         """Start the APNS notification routing, returns a deferred
 
         :param notification: Notification data to send
-        :type notification: dict
+        :type notification: autopush.endpoint.Notification
         :param uaid_data: User Agent specific data
         :type uaid_data: dict
 
@@ -116,43 +106,28 @@ class APNSRouter(object):
         router_token = router_data["token"]
         rel_channel = router_data["rel_channel"]
         config = self._config[rel_channel]
-        if len(self.messages) >= self._max_messages:
-            raise RouterException("Too many messages in pending queue",
-                                  status_code=503,
-                                  response_body="Pending buffer full",
-                                  )
         apns_client = self.apns[rel_channel]
-        custom = {
+        payload = {
             "chid": notification.channel_id,
             "ver": notification.version,
         }
         if notification.data:
-            custom["body"] = notification.data
-            custom["con"] = notification.headers["content-encoding"]
-            custom["enc"] = notification.headers["encryption"]
+            payload["body"] = notification.data
+            payload["con"] = notification.headers["content-encoding"]
+            payload["enc"] = notification.headers["encryption"]
 
             if "crypto-key" in notification.headers:
-                custom["cryptokey"] = notification.headers["crypto-key"]
+                payload["cryptokey"] = notification.headers["crypto-key"]
             elif "encryption-key" in notification.headers:
-                custom["enckey"] = notification.headers["encryption-key"]
+                payload["enckey"] = notification.headers["encryption-key"]
+            payload['aps'] = dict(
+                alert=router_data.get("title", config.get('default_title',
+                                                          'Mozilla Push')),
+                content_available=1)
+        apns_id = str(uuid.uuid4()).lower()
 
-        payload = apns.Payload(
-            alert=router_data.get("title", config.get('default_title',
-                                                      'Mozilla Push')),
-            content_available=1,
-            custom=custom)
-        now = time.time()
-
-        # "apns-id"
-        msg_id = str(uuid.uuid4())
-        self.messages[msg_id] = {
-            "time_sent": now,
-            "rel_channel": router_data["rel_channel"],
-            "router_token": router_token,
-            "payload": payload}
-
-        apns_client.gateway_server.send_notification(router_token, payload,
-                                                     msg_id)
+        apns_client.send(router_token=router_token, payload=payload,
+                         apns_id=apns_id)
         location = "%s/m/%s" % (self.ap_settings.endpoint_url,
                                 notification.version)
         self.ap_settings.metrics.increment(
@@ -163,38 +138,3 @@ class APNSRouter(object):
                               headers={"TTL": notification.ttl,
                                        "Location": location},
                               logged_status=200)
-
-    def _cleanup(self):
-        """clean up pending, but expired messages.
-
-        APNs may not always respond with a status code, this will clean out
-        pending retryable messages.
-
-        """
-        for msg_id in self.messages.keys():
-            message = self.messages[msg_id]
-            expry = self._config[message['rel_channel']].get("expry", 10)
-            if message["time_sent"] < time.time() - expry:
-                try:
-                    del self.messages[msg_id]
-                except KeyError:  # pragma nocover
-                    pass
-
-    def _error(self, err):
-        """Error handler"""
-        if err['status'] == 0:
-            self.log.debug("Success")
-            del self.messages[err['identifier']]
-            return
-        self.log.debug("APNs Error encountered: {status}",
-                       status=self.errors[err['status']])
-        if err['status'] in [1, 255]:
-            self.log.debug("Retrying...")
-            resend = self.messages.get(err.get('identifier'))
-            if resend is None:
-                return
-            apns_client = self.apns[resend["rel_channel"]]
-            apns_client.gateway_server.send_notification(resend['token'],
-                                                         resend['payload'],
-                                                         err['identifier'],
-                                                         )

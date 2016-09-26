@@ -124,8 +124,10 @@ endpoint_port = 8082
 ;       {"cert": "path_to_cert_file",
 ;        "key": "path_to_key_file",
 ;        "default_title": "(optional) default alert title 'Mozilla Push'",
+;        "topic": "com.mozilla.org.Firefox",  // Bundle ID for associated app
+;        "max_connections": 100, // Max number of connection pool entries.
 ;        "sandbox": False},  // Use the APNs sandbox feature
 ;     ... }
-; e.g {"firefox": {"cert": "certs/main.cert", "key": "certs/main.key"}, "beta": {"cert": "certs/beta.cert", "key": "certs/beta.key"}}
+; e.g {"firefox":{"cert":"certs/main.cert","key":"certs/main.key","topic":"com.mozilla.org.Firefox"},"beta":{"cert":"certs/beta.cert","key":"certs/beta.key","topic":"com.mozilla.org.FirefoxBeta"}}
 #apns_creds =
 
