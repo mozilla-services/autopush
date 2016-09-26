@@ -340,11 +340,12 @@ class AutoendpointHandler(BaseHandler):
         return result
 
     def _invalid_auth(self, fail):
-        if isinstance(fail.value, VapidAuthException):
+        if isinstance(fail.value, (JOSEError, VapidAuthException)):
             raise fail.value
         message = fail.value.message or repr(fail.value)
-        if (isinstance(fail.value, AssertionError) or
-                isinstance(fail.value, ValueError)):
+        if isinstance(fail.value,
+                      (AssertionError, ValueError,
+                       InvalidTokenException)):
             message = "A decryption error occurred"
         self.log.debug(format="Invalid bearer token: " + repr(message),
                        **self._client_info)
@@ -373,8 +374,8 @@ class AutoendpointHandler(BaseHandler):
         if auth_type.lower() in AUTH_SCHEMES and '.' in token:
             d = deferToThread(extract_jwt, token, public_key)
             d.addCallback(self._store_auth, public_key, token, result)
-            d.addErrback(self._jws_err)
             d.addErrback(self._invalid_auth)
+            # error handlers already in place from calling function .put()
             return d
         # otherwise, it's not, so ignore the VAPID data if we're supposed to
         if require_auth:
