@@ -4,6 +4,7 @@ import uuid
 import time
 import json
 
+from autopush.utils import WebPushNotification
 from mock import Mock, PropertyMock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_, ok_, assert_raises
@@ -127,8 +128,14 @@ class APNSRouterTestCase(unittest.TestCase):
         self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
-        self.notif = Notification(10, "q60d6g", dummy_chid, self.headers,
-                                  200)
+        self.notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="q60d6g",
+            headers=self.headers,
+            ttl=200,
+            message_id=10,
+        )
         self.router_data = dict(router_data=dict(token="connect_data",
                                                  rel_channel="firefox"))
 
@@ -238,7 +245,14 @@ class APNSRouterTestCase(unittest.TestCase):
         headers = {"content-encoding": "aesgcm",
                    "encryption": "test",
                    "crypto-key": "test"}
-        self.notif = Notification(10, "q60d6g", dummy_chid, headers, 200)
+        self.notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="q60d6g",
+            headers=headers,
+            ttl=200,
+            message_id=10,
+        )
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -271,8 +285,14 @@ class GCMRouterTestCase(unittest.TestCase):
                         "encryption": "test",
                         "encryption-key": "test"}
         # Payloads are Base64-encoded.
-        self.notif = Notification(10, "q60d6g", dummy_chid, self.headers,
-                                  200)
+        self.notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="q60d6g",
+            headers=self.headers,
+            ttl=200,
+            message_id=10,
+        )
         self.router_data = dict(
             router_data=dict(
                 token="connect_data",
@@ -349,11 +369,13 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_ttl_none(self):
         self.router.gcm['test123'] = self.gcm
-        self.notif = Notification(version=10,
-                                  data="q60d6g",
-                                  channel_id=dummy_chid,
-                                  headers=self.headers,
-                                  ttl=None)
+        self.notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="q60d6g",
+            headers=self.headers,
+            ttl=None
+        )
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -376,11 +398,13 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_ttl_high(self):
         self.router.gcm['test123'] = self.gcm
-        self.notif = Notification(version=10,
-                                  data="q60d6g",
-                                  channel_id=dummy_chid,
-                                  headers=self.headers,
-                                  ttl=5184000)
+        self.notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="q60d6g",
+            headers=self.headers,
+            ttl=5184000
+        )
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -400,9 +424,13 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_long_data(self):
         self.router.gcm['test123'] = self.gcm
-        bad_notif = Notification(
-            10, "\x01abcdefghijklmnopqrstuvwxyz0123456789", dummy_chid,
-            self.headers, 200)
+        bad_notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="\x01abcdefghijklmnopqrstuvwxyz0123456789",
+            headers=self.headers,
+            ttl=200
+        )
         d = self.router.route_notification(bad_notif, self.router_data)
 
         def check_results(result):
@@ -537,8 +565,13 @@ class FCMRouterTestCase(unittest.TestCase):
                         "encryption": "test",
                         "encryption-key": "test"}
         # Payloads are Base64-encoded.
-        self.notif = Notification(10, "q60d6g", dummy_chid, self.headers,
-                                  200)
+        self.notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="q60d6g",
+            headers=self.headers,
+            ttl=200
+        )
         self.router_data = dict(
             router_data=dict(
                 token="connect_data",
@@ -607,11 +640,13 @@ class FCMRouterTestCase(unittest.TestCase):
 
     def test_ttl_none(self):
         self.router.fcm = self.fcm
-        self.notif = Notification(version=10,
-                                  data="q60d6g",
-                                  channel_id=dummy_chid,
-                                  headers=self.headers,
-                                  ttl=None)
+        self.notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="q60d6g",
+            headers=self.headers,
+            ttl=None
+        )
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -631,11 +666,13 @@ class FCMRouterTestCase(unittest.TestCase):
 
     def test_ttl_high(self):
         self.router.fcm = self.fcm
-        self.notif = Notification(version=10,
-                                  data="q60d6g",
-                                  channel_id=dummy_chid,
-                                  headers=self.headers,
-                                  ttl=5184000)
+        self.notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="q60d6g",
+            headers=self.headers,
+            ttl=5184000
+        )
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -655,9 +692,14 @@ class FCMRouterTestCase(unittest.TestCase):
 
     def test_long_data(self):
         self.router.fcm = self.fcm
-        bad_notif = Notification(
-            10, "\x01abcdefghijklmnopqrstuvwxyz0123456789", dummy_chid,
-            self.headers, 200)
+        bad_notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="\x01abcdefghijklmnopqrstuvwxyz0123456789",
+            headers=self.headers,
+            ttl=200,
+            message_id=10,
+        )
         d = self.router.route_notification(bad_notif, self.router_data)
 
         def check_results(result):
@@ -777,7 +819,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
 
         self.router = SimpleRouter(settings, {})
         self.router.log = Mock(spec=Logger)
-        self.notif = Notification(10, "data", dummy_chid, None, 200)
+        self.notif = Notification(10, "data", dummy_chid)
         mock_result = Mock(spec=gcmclient.gcm.Result)
         mock_result.canonical = dict()
         mock_result.failed = dict()
@@ -1019,8 +1061,15 @@ class WebPushRouterTestCase(unittest.TestCase):
             "crypto-key": "niftykey"
         }
         self.router = WebPushRouter(settings, {})
-        self.notif = Notification("EncMessageId", "data",
-                                  dummy_chid, headers, 20)
+        self.notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="data",
+            headers=headers,
+            ttl=20,
+            message_id=uuid.uuid4().hex,
+        )
+        self.notif.cleanup_headers()
         mock_result = Mock(spec=gcmclient.gcm.Result)
         mock_result.canonical = dict()
         mock_result.failed = dict()
@@ -1050,7 +1099,8 @@ class WebPushRouterTestCase(unittest.TestCase):
         def verify_deliver(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 201)
-            t_h = self.message_mock.store_message.call_args[1].get('headers')
+            kwargs = self.message_mock.store_message.call_args[1]
+            t_h = kwargs["notification"].headers
             eq_(t_h.get('encryption'), self.headers.get('encryption'))
             eq_(t_h.get('crypto_key'), self.headers.get('crypto-key'))
             eq_(t_h.get('encoding'), self.headers.get('content-encoding'))
@@ -1063,8 +1113,14 @@ class WebPushRouterTestCase(unittest.TestCase):
         return d
 
     def test_route_to_busy_node_with_ttl_zero(self):
-        notif = Notification("EncMessageId", "data", dummy_chid,
-                             self.headers, 0)
+        notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="data",
+            headers=self.headers,
+            ttl=0,
+            message_id=uuid.uuid4().hex,
+        )
         self.agent_mock.request.return_value = response_mock = Mock()
         response_mock.addCallback.return_value = response_mock
         type(response_mock).code = PropertyMock(

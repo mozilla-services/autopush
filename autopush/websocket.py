@@ -41,6 +41,7 @@ from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
     ItemNotFound
 )
+from typing import List  # flake8: noqa
 from twisted.internet import reactor
 from twisted.internet.defer import (
     Deferred,
@@ -71,7 +72,7 @@ from autopush.protocol import IgnoreBody
 from autopush.utils import (
     parse_user_agent,
     validate_uaid,
-)
+    WebPushNotification)
 from autopush.noseplugin import track_object
 
 
@@ -139,6 +140,7 @@ class PushState(object):
         '_paused',
         'metrics',
         'uaid',
+        'uaid_obj',
         'uaid_hash',
         'raw_agent',
         'last_ping',
@@ -194,6 +196,7 @@ class PushState(object):
         self.metrics.increment("client.socket.connect",
                                tags=self._base_tags or None)
         self.uaid = None
+        self.uaid_obj = None
         self.uaid_hash = ""
         self.last_ping = 0
         self.check_storage = False
@@ -518,13 +521,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         """Save a direct_update webpush style notification"""
         return deferToThread(
             self.ps.message.store_message,
-            uaid=self.ps.uaid,
-            channel_id=notif.channel_id,
-            data=notif.data,
-            headers=notif.headers,
-            message_id=notif.version,
-            ttl=notif.ttl,
-            timestamp=notif.timestamp,
+            notif
         ).addErrback(self.log_failure)
 
     def _save_simple_notif(self, channel_id, version):
@@ -639,6 +636,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         existing_user, uaid = validate_uaid(uaid)
         self.ps.uaid = uaid
+        self.ps.uaid_obj = uuid.UUID(uaid)
         self.ps.uaid_hash = hasher(uaid)
         # Check for the special wakeup commands
         if "wakeup_host" in data and "mobilenetwork" in data:
@@ -841,7 +839,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         if self.ps.use_webpush:
             d = self.deferToThread(self.ps.message.fetch_messages,
-                                   self.ps.uaid)
+                                   self.ps.uaid_obj)
         else:
             d = self.deferToThread(
                 self.ap_settings.storage.fetch_notifications, self.ps.uaid)
@@ -897,7 +895,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             d.addErrback(self.trap_cancel)
 
     def finish_webpush_notifications(self, notifs):
-        """webpush notification processor"""
+        """webpush notification processor
+
+        :type notifs: List[autopush.utils.WebPushNotification]
+
+        """
         if not notifs:
             # No more notifications, we can stop.
             self.ps._more_notifications = False
@@ -918,30 +920,13 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # Send out all the notifications
         now = int(time.time())
         for notif in notifs:
-            # Split off the chid and message id
-            chid, version = notif["chidmessageid"].split(":")
-
             # If the TTL is too old, don't deliver and fire a delete off
-            if not notif["ttl"] or now >= (notif["ttl"]+notif["timestamp"]):
-                self.force_retry(
-                    self.ps.message.delete_message, self.ps.uaid,
-                    chid, version, updateid=notif["updateid"])
+            if notif.expired(at_time=now):
+                self.force_retry(self.ps.message.delete_message, notif)
                 continue
 
-            data = notif.get("data")
-            msg = dict(
-                messageType="notification",
-                channelID=chid,
-                version=version + ":" + notif["updateid"],
-            )
-            if data:
-                msg["data"] = data
-                msg["headers"] = notif["headers"]
-            self.ps.updates_sent[chid].append(
-                Notification(channel_id=chid, version=version,
-                             data=notif["data"], headers=notif.get("headers"),
-                             ttl=notif["ttl"], timestamp=notif["timestamp"])
-            )
+            self.ps.updates_sent[str(notif.channel_id)].append(notif)
+            msg = notif.websocket_format()
             self.sendJSON(msg)
 
     def _rotate_message_table(self):
@@ -1098,12 +1083,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.updates_sent.pop(chid, None)
 
         if self.ps.use_webpush:
-            # Unregister the channel, delete all messages stored
+            # Unregister the channel
             self.force_retry(self.ap_settings.message.unregister_channel,
                              self.ps.uaid, chid)
-            self.force_retry(
-                self.ap_settings.message.delete_messages_for_channel,
-                self.ps.uaid, chid)
         else:
             # Delete any record from storage, we don't wait for this
             self.force_retry(self.ap_settings.storage.delete_notification,
@@ -1136,11 +1118,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def _handle_webpush_ack(self, chid, version, code):
         """Handle clearing out a webpush ack"""
-        # Split off the updateid if its not a direct update
-        version, updateid = version.split(":")
-
-        def ver_filter(update):
-            return update.version == version
+        def ver_filter(notif):
+            return notif.version == version
 
         found = filter(ver_filter, self.ps.direct_updates[chid])
         if found:
@@ -1163,11 +1142,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                           message_size=size, uaid_hash=self.ps.uaid_hash,
                           user_agent=self.ps.user_agent, code=code,
                           **self.ps.raw_agent)
-            d = self.force_retry(self.ps.message.delete_message,
-                                 uaid=self.ps.uaid,
-                                 channel_id=chid,
-                                 message_id=version,
-                                 updateid=updateid)
+            d = self.force_retry(self.ps.message.delete_message, msg)
             # We don't remove the update until we know the delete ran
             # This is because we don't use range queries on dynamodb and we
             # need to make sure this notification is deleted from the db before
@@ -1288,21 +1263,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             return
 
         if self.ps.use_webpush:
-            response = dict(
-                messageType="notification",
-                channelID=chid,
-                version="%s:" % version,
-            )
-            data = update.get("data")
-            if data:
-                response["data"] = data
-                response["headers"] = update["headers"]
-            self.ps.direct_updates[chid].append(
-                Notification(channel_id=chid, version=version,
-                             data=data, headers=update.get("headers"),
-                             ttl=update["ttl"], timestamp=update["timestamp"])
-            )
-            self.sendJSON(response)
+            # Create the notification
+            notif = WebPushNotification.from_serialized(self.ps.uaid_obj,
+                                                        update)
+            self.ps.direct_updates[chid].append(notif)
+            self.sendJSON(notif.websocket_format())
         else:
             self.ps.direct_updates[chid] = version
             msg = {"messageType": "notification", "updates": [update]}

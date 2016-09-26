@@ -316,7 +316,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         result, errors = schema.load(self._make_test_data())
         eq_(errors, {})
-        ok_("message_id" in result)
+        ok_("notification" in result)
         eq_(str(result["subscription"]["uaid"]), dummy_uaid)
 
     def test_no_headers(self):
@@ -527,6 +527,45 @@ class TestWebPushRequestSchema(unittest.TestCase):
             schema.load(info)
 
         eq_(cm.exception.status_code, 401)
+
+    def test_invalid_topic(self):
+        schema = self._make_fut()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="webpush",
+        )
+
+        info = self._make_test_data(
+            headers={
+                "topic": "asdfasdfasdfasdfasdfasdfasdfasdfasdfasdf",
+            }
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 400)
+        eq_(cm.exception.errno, 113)
+        eq_(cm.exception.message,
+            "Topic must be no greater than 32 characters")
+
+        info = self._make_test_data(
+            headers={
+                "topic": "asdf??asdf::;f",
+            }
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 400)
+        eq_(cm.exception.errno, 113)
+        eq_(cm.exception.message,
+            "Topic must be URL and Filename safe Base64 alphabet")
 
 
 class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):

@@ -37,6 +37,7 @@ from autopush.db import (
 from autopush.exceptions import InvalidTokenException, VapidAuthException
 from autopush.settings import AutopushSettings
 from autopush.router.interface import IRouter, RouterResponse
+from autopush.tests.test_db import make_webpush_notification
 from autopush.utils import (
     generate_hash,
     decipher_public_key,
@@ -114,7 +115,8 @@ class MessageTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_delete_token_wrong_kind(self):
-        self.fernet_mock.decrypt.return_value = "r:123:456"
+        tok = ":".join(["r", dummy_uaid, dummy_chid])
+        self.fernet_mock.decrypt.return_value = tok
 
         def handle_finish(result):
             self.status_mock.assert_called_with(400, None)
@@ -124,21 +126,49 @@ class MessageTestCase(unittest.TestCase):
         return self.finish_deferred
 
     def test_delete_success(self):
-        self.fernet_mock.decrypt.return_value = "m:123:456"
+        tok = ":".join(["m", dummy_uaid, dummy_chid])
+        self.fernet_mock.decrypt.return_value = tok
         self.message_mock.configure_mock(**{
             "delete_message.return_value": True})
 
         def handle_finish(result):
-            self.message_mock.delete_message.assert_called_with(
-                "123", "456", "123-456")
+            self.message_mock.delete_message.assert_called()
             self.status_mock.assert_called_with(204)
         self.finish_deferred.addCallback(handle_finish)
 
         self.message.delete("123-456")
         return self.finish_deferred
 
+    def test_delete_topic_success(self):
+        tok = ":".join(["01", dummy_uaid, dummy_chid, "Inbox"])
+        self.fernet_mock.decrypt.return_value = tok
+        self.message_mock.configure_mock(**{
+            "delete_message.return_value": True})
+
+        def handle_finish(result):
+            self.message_mock.delete_message.assert_called()
+            self.status_mock.assert_called_with(204)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.message.delete("123-456")
+        return self.finish_deferred
+
+    def test_delete_topic_error_parts(self):
+        tok = ":".join(["01", dummy_uaid, dummy_chid])
+        self.fernet_mock.decrypt.return_value = tok
+        self.message_mock.configure_mock(**{
+            "delete_message.return_value": True})
+
+        def handle_finish(result):
+            self.status_mock.assert_called_with(400, None)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.message.delete("123-456")
+        return self.finish_deferred
+
     def test_delete_db_error(self):
-        self.fernet_mock.decrypt.return_value = "m:123:456"
+        tok = ":".join(["m", dummy_uaid, dummy_chid])
+        self.fernet_mock.decrypt.return_value = tok
         self.message_mock.configure_mock(**{
             "delete_message.side_effect":
             ProvisionedThroughputExceededException(None, None)})
@@ -203,6 +233,7 @@ class EndpointTestCase(unittest.TestCase):
         self.status_mock = self.endpoint.set_status = Mock()
         self.write_mock = self.endpoint.write = Mock()
         self.endpoint.log = Mock(spec=Logger)
+        self.endpoint.uaid = dummy_uaid
 
         d = self.finish_deferred = Deferred()
         self.endpoint.finish = lambda: d.callback(True)
@@ -279,6 +310,7 @@ class EndpointTestCase(unittest.TestCase):
         frouter = Mock(spec=IRouter)
         frouter.route_notification = Mock()
         frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = dummy_chid
         self.endpoint.ap_settings.routers["webpush"] = frouter
         self.endpoint._uaid_lookup_results(dict(router_type="webpush"))
 
@@ -406,13 +438,11 @@ class EndpointTestCase(unittest.TestCase):
             _, (notification, _), _ = calls[0]
             eq_(notification.headers.get('encryption'),
                 'keyid=p256;salt=stuff')
-            eq_(notification.headers.get('crypto-key'),
+            eq_(notification.headers.get('crypto_key'),
                 'keyid=spad;dh=AQ,p256ecdsa=Ag;foo=bar')
-            eq_(notification.channel_id, dummy_chid)
+            eq_(str(notification.channel_id), dummy_chid)
             eq_(notification.data, b"wyigoQ")
             self.endpoint.set_status.assert_called_with(200)
-            ok_('Padded content detected' in
-                self.endpoint.write.call_args[0][0])
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -453,6 +483,44 @@ class EndpointTestCase(unittest.TestCase):
             self._check_error(code=401, errno=110,
                               message="Encryption header missing "
                                       "'salt' value")
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    def test_webpush_bad_topic_len(self):
+        fresult = dict(router_type="webpush")
+        frouter = self.settings.routers["webpush"]
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = dummy_chid
+        self.request_mock.headers["topic"] = \
+            "asdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdfasdf"
+        self.request_mock.body = b""
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            self.endpoint.set_status.assert_called_with(400, None)
+            self._check_error(code=400, errno=113,
+                              message="Topic must be no greater than 32 "
+                                      "characters")
+
+        self.finish_deferred.addCallback(handle_finish)
+        return self.finish_deferred
+
+    def test_webpush_bad_topic_content(self):
+        fresult = dict(router_type="webpush")
+        frouter = self.settings.routers["webpush"]
+        frouter.route_notification.return_value = RouterResponse()
+        self.endpoint.chid = dummy_chid
+        self.request_mock.headers["topic"] = \
+            "asdf:442;23^@*#$(O!4232"
+        self.request_mock.body = b""
+        self.endpoint._uaid_lookup_results(fresult)
+
+        def handle_finish(value):
+            self.endpoint.set_status.assert_called_with(400, None)
+            self._check_error(code=400, errno=113,
+                              message="Topic must be URL and Filename "
+                                      "safe Base64 alphabet")
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -1917,74 +1985,56 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.put(uaid=dummy_uaid)
         return self.finish_deferred
 
-    def test_delete_chid(self):
+    def test_delete_bad_chid_value(self):
+        notif = make_webpush_notification(dummy_uaid, dummy_chid)
         messages = self.reg.ap_settings.message
         messages.register_channel(dummy_uaid, dummy_chid)
-        messages.store_message(
-            dummy_uaid,
-            dummy_chid,
-            "1",
-            10000)
-        chid2 = str(uuid.uuid4())
-        messages.register_channel(dummy_uaid, chid2)
-        messages.store_message(
-            dummy_uaid,
-            chid2,
-            "2",
-            10000)
-        self.reg.request.headers["Authorization"] = self.auth
-
-        def handle_finish(value, chid2):
-            ml = messages.fetch_messages(dummy_uaid)
-            cl = messages.all_channels(dummy_uaid)
-            eq_(len(ml), 1)
-            eq_((True, set([chid2])), cl)
-            messages.delete_user(dummy_uaid)
-
-        self.finish_deferred.addCallback(handle_finish, chid2)
-        self.reg.delete("simplepush", "test", dummy_uaid, dummy_chid)
-        return self.finish_deferred
-
-    def test_delete_bad_chid(self):
-        messages = self.reg.ap_settings.message
-        messages.register_channel(dummy_uaid, dummy_chid)
-        messages.store_message(
-            dummy_uaid,
-            dummy_chid,
-            "1",
-            10000)
+        messages.store_message(notif)
         self.reg.request.headers["Authorization"] = self.auth
 
         def handle_finish(value):
             self._check_error(410, 106, "")
-            messages.delete_user(dummy_uaid)
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.delete("test", "test", dummy_uaid, "invalid")
         return self.finish_deferred
 
+    def test_delete_no_such_chid(self):
+        notif = make_webpush_notification(dummy_uaid, dummy_chid)
+        messages = self.reg.ap_settings.message
+        messages.register_channel(dummy_uaid, dummy_chid)
+        messages.store_message(notif)
+
+        # Moto can't handle set operations of this nature so we have
+        # to mock the reply
+        unreg = messages.unregister_channel
+        messages.unregister_channel = Mock(return_value=False)
+        self.reg.request.headers["Authorization"] = self.auth
+
+        def handle_finish(value):
+            self._check_error(410, 106, "")
+
+        def fixup_messages(result):
+            messages.unregister_channel = unreg
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.finish_deferred.addBoth(fixup_messages)
+        self.reg.delete("test", "test", dummy_uaid, str(uuid.uuid4()))
+        return self.finish_deferred
+
     def test_delete_uaid(self):
+        notif = make_webpush_notification(dummy_uaid, dummy_chid)
+        notif2 = make_webpush_notification(dummy_uaid, dummy_chid)
         messages = self.reg.ap_settings.message
         chid2 = str(uuid.uuid4())
-        messages.store_message(
-            dummy_uaid,
-            dummy_chid,
-            "1",
-            10000)
-        messages.store_message(
-            dummy_uaid,
-            chid2,
-            "2",
-            10000)
+        messages.store_message(notif)
+        messages.store_message(notif2)
         self.reg.ap_settings.router.drop_user = Mock()
         self.reg.ap_settings.router.drop_user.return_value = True
 
         def handle_finish(value, chid2):
-            ml = messages.fetch_messages(dummy_uaid)
-            eq_(len(ml), 0)
             # Note: Router is mocked, so the UAID is never actually
-            # dropped. Normally, this should messages.all_channels
-            # would come back as empty
+            # dropped.
             ok_(self.reg.ap_settings.router.drop_user.called)
             eq_(self.reg.ap_settings.router.drop_user.call_args_list[0][0],
                 (dummy_uaid,))
