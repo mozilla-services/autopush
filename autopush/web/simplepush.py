@@ -29,8 +29,7 @@ class SimplePushHandler(BaseWebHandler):
             version=self.valid_input["version"],
             data=self.valid_input["data"],
             channel_id=str(sub["chid"]),
-            headers=self.request.headers,
-            ttl=None)
+        )
 
         d = Deferred()
         d.addCallback(router.route_notification, user_data)

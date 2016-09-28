@@ -33,7 +33,7 @@ class WebPushRouter(SimpleRouter):
 
     def delivered_response(self, notification):
         location = "%s/m/%s" % (self.ap_settings.endpoint_url,
-                                notification.version)
+                                notification.location)
         return RouterResponse(status_code=201, response_body="",
                               headers={"Location": location,
                                        "TTL": notification.ttl or 0},
@@ -41,31 +41,21 @@ class WebPushRouter(SimpleRouter):
 
     def stored_response(self, notification):
         location = "%s/m/%s" % (self.ap_settings.endpoint_url,
-                                notification.version)
+                                notification.location)
         return RouterResponse(status_code=201, response_body="",
                               headers={"Location": location,
                                        "TTL": notification.ttl},
                               logged_status=202)
 
-    def _crypto_headers(self, notification):
-        """Creates a dict of the crypto headers for this request."""
-        headers = notification.headers
-        data = dict(
-            encoding=headers["content-encoding"],
-            encryption=headers["encryption"],
-        )
-        # AWS cannot store empty strings, so we only add these keys if
-        # they're present to avoid empty strings.
-        for name in ["encryption-key", "crypto-key"]:
-            if name in headers:
-                # NOTE: The client code expects all header keys to be lower
-                # case and s/-/_/.
-                data[name.lower().replace("-", "_")] = headers[name]
-        return data
-
     @inlineCallbacks
     def preflight_check(self, uaid_data, channel_id):
-        """Verifies this routing call can be done successfully"""
+        """Verifies this routing call can be done successfully
+
+        :type uaid_data: dict
+        :type channel_id: uuid.UUID
+
+        """
+        channel_id = normalize_id(channel_id.hex)
         uaid = uaid_data["uaid"]
         if 'current_month' not in uaid_data:
             self.log.info(format="Dropping User", code=102,
@@ -101,16 +91,11 @@ class WebPushRouter(SimpleRouter):
         This version of the overriden method includes the necessary crypto
         headers for the notification.
 
+        :type notification: autopush.utils.WebPushNotification
+
         """
-        # Firefox currently requires channelIDs to be '-' formatted.
-        payload = {"channelID": normalize_id(notification.channel_id),
-                   "version": notification.version,
-                   "ttl": notification.ttl or 0,
-                   "timestamp": int(time.time()),
-                   }
-        if notification.data:
-            payload["headers"] = self._crypto_headers(notification)
-            payload["data"] = notification.data
+        payload = notification.serialize()
+        payload["timestamp"] = int(time.time())
         url = node_id + "/push/" + uaid
         d = self.ap_settings.agent.request(
             "PUT",
@@ -146,18 +131,9 @@ class WebPushRouter(SimpleRouter):
                                   headers={"TTL": str(notification.ttl),
                                            "Location": location},
                                   logged_status=204)
-        headers = None
-        if notification.data:
-            headers = self._crypto_headers(notification)
         return deferToThread(
             self.ap_settings.message_tables[month_table].store_message,
-            uaid=uaid,
-            channel_id=notification.channel_id,
-            data=notification.data,
-            headers=headers,
-            message_id=notification.version,
-            ttl=notification.ttl,
-            timestamp=int(time.time()),
+            notification=notification,
         )
 
     def amend_msg(self, msg, router_data=None):

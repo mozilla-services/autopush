@@ -93,6 +93,7 @@ Unless otherwise specified, all calls return the following error codes:
        - Missing Crypto Headers - Include the appropriate encryption headers (`WebPush Encryption §3.2 <https://webpush-wg.github.io/webpush-encryption/#rfc.section.3.2>`_ and `WebPush VAPID §4 <https://martinthomson.github.io/webpush-vapid/#rfc.section.4>`_)
 
    - errno 112 - Invalid TTL header value
+   - errno 113 - Invalid Topic header value
 
 -  401 - Bad Authorization
 

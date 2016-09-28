@@ -1,7 +1,7 @@
 import json
 import time
-from collections import namedtuple
 
+from attr import attrs, attrib
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
 )
@@ -27,9 +27,12 @@ DEFAULT_ERR_URL = ("http://autopush.readthedocs.io/en/latest/http.html"
                    "#error-codes")
 
 
-class Notification(namedtuple("Notification",
-                   "version data channel_id headers ttl")):
+@attrs
+class Notification(object):
     """Parsed notification from the request"""
+    version = attrib()
+    data = attrib()
+    channel_id = attrib()
 
 
 class BaseWebHandler(BaseHandler):

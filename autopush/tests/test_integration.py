@@ -187,7 +187,8 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 
     def send_notification(self, channel=None, version=None, data=None,
                           use_header=True, status=None, ttl=200,
-                          timeout=0.2, vapid=None, endpoint=None):
+                          timeout=0.2, vapid=None, endpoint=None,
+                          topic=None):
         if not channel:
             channel = random.choice(self.channels.keys())
 
@@ -218,6 +219,8 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                 headers.update({
                     'Crypto-Key': headers.get('Crypto-Key') + ';' + ckey
                 })
+            if topic:
+                headers["Topic"] = topic
             body = data or ""
             method = "POST"
             status = status or 201
@@ -717,6 +720,57 @@ class TestWebPush(IntegrationBase):
         yield self.shut_down(client)
 
     @inlineCallbacks
+    def test_topic_basic_delivery(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        result = yield client.send_notification(data=data, topic="Inbox")
+        eq_(result["headers"]["encryption"], client._crypto_key)
+        eq_(result["data"], base64url_encode(data))
+        eq_(result["messageType"], "notification")
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_topic_replacement_delivery(self):
+        data = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        yield client.send_notification(data=data, topic="Inbox")
+        yield client.send_notification(data=data2, topic="Inbox")
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        eq_(result["headers"]["encryption"], client._crypto_key)
+        eq_(result["data"], base64url_encode(data2))
+        eq_(result["messageType"], "notification")
+        result = yield client.get_notification()
+        eq_(result, None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_topic_no_delivery_on_reconnect(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        yield client.send_notification(data=data, topic="Inbox")
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification(timeout=10)
+        eq_(result["headers"]["encryption"], client._crypto_key)
+        eq_(result["data"], base64url_encode(data))
+        eq_(result["messageType"], "notification")
+        yield client.ack(result["channelID"], result["version"])
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        eq_(result, None)
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        yield self.shut_down(client)
+
+    @inlineCallbacks
     def test_basic_delivery_v0_endpoint(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
@@ -860,29 +914,6 @@ class TestWebPush(IntegrationBase):
 
         yield client.unregister(chan)
         result = yield client.send_notification(data=data, status=410)
-        eq_(result, None)
-        yield self.shut_down(client)
-
-    @inlineCallbacks
-    def test_no_delivery_to_unregistered_on_reconnect(self):
-        data = str(uuid.uuid4())
-        client = yield self.quick_register(use_webpush=True)
-        yield client.disconnect()
-        ok_(client.channels)
-        chan = client.channels.keys()[0]
-        yield client.send_notification(data=data)
-        yield client.connect()
-        yield client.hello()
-        result = yield client.get_notification()
-        eq_(result["channelID"], chan)
-        eq_(result["data"], base64url_encode(data))
-
-        yield client.unregister(chan)
-        yield client.disconnect()
-        time.sleep(1)
-        yield client.connect()
-        yield client.hello()
-        result = yield client.get_notification()
         eq_(result, None)
         yield self.shut_down(client)
 
@@ -1096,7 +1127,8 @@ class TestWebPush(IntegrationBase):
         # table
         data = uuid.uuid4().hex
         yield client.send_notification(data=data)
-        notifs = yield deferToThread(lm_message.fetch_messages, client.uaid)
+        notifs = yield deferToThread(lm_message.fetch_messages,
+                                     uuid.UUID(client.uaid))
         eq_(len(notifs), 1)
 
         # Connect the client, verify the migration
@@ -1188,7 +1220,8 @@ class TestWebPush(IntegrationBase):
         # table
         data = uuid.uuid4().hex
         yield client.send_notification(data=data)
-        notifs = yield deferToThread(lm_message.fetch_messages, client.uaid)
+        notifs = yield deferToThread(lm_message.fetch_messages,
+                                     uuid.UUID(client.uaid))
         eq_(len(notifs), 1)
 
         # Connect the client, verify the migration

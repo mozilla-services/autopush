@@ -27,9 +27,8 @@ import urlparse
 import uuid
 import re
 
-from collections import namedtuple
-
 import cyclone.web
+from attr import attrs, attrib
 from boto.dynamodb2.exceptions import (
     ItemNotFound,
     ProvisionedThroughputExceededException,
@@ -55,6 +54,7 @@ from autopush.utils import (
     validate_uaid,
     extract_jwt,
     base64url_encode,
+    WebPushNotification,
 )
 from autopush.web.base import DEFAULT_ERR_URL
 from autopush.websocket import ms_time
@@ -62,6 +62,7 @@ from autopush.websocket import ms_time
 
 # Our max TTL is 60 days realistically with table rotation, so we hard-code it
 MAX_TTL = 60 * 60 * 24 * 60
+VALID_BASE64_URL = re.compile(r'^[0-9A-Za-z\-_]+=*$')
 VALID_TTL = re.compile(r'^\d+$')
 AUTH_SCHEMES = ["bearer", "webpush"]
 PREF_SCHEME = "webpush"
@@ -79,9 +80,12 @@ status_codes = {
 }
 
 
-class Notification(namedtuple("Notification",
-                   "version data channel_id headers ttl")):
+@attrs
+class Notification(object):
     """Parsed notification from the request"""
+    version = attrib()
+    data = attrib()
+    channel_id = attrib()
 
 
 def parse_request_params(request):
@@ -388,18 +392,6 @@ class MessageHandler(AutoendpointHandler):
     cors_methods = "DELETE"
     cors_response_headers = ("location",)
 
-    def _token_valid(self, result, func):
-        """Handles valid token processing, then dispatches to supplied
-        function"""
-        info = result.split(":")
-        if len(info) != 3:
-            raise InvalidTokenException("Wrong message token components")
-
-        kind, uaid, chid = info
-        if kind != 'm':
-            raise InvalidTokenException("Wrong message token kind")
-        return func(kind, uaid, chid)
-
     @cyclone.web.asynchronous
     def delete(self, token):
         """Drops a pending message.
@@ -409,20 +401,21 @@ class MessageHandler(AutoendpointHandler):
         yet, will not be dropped.
 
         """
-        self.version = self._client_info['version'] = token
-        d = deferToThread(self.ap_settings.fernet.decrypt,
-                          self.version.encode('utf8'))
-        d.addCallback(self._token_valid, self._delete_message)
+        message_id = token.encode('utf8')
+        self.version = self._client_info['version'] = message_id
+        d = deferToThread(self._delete_message, message_id)
+        d.addCallback(self._delete_completed)
         d.addErrback(self._token_err)
+        self._db_error_handling(d)
         d.addErrback(self._response_err)
         return d
 
-    def _delete_message(self, kind, uaid, chid):
-        d = deferToThread(self.ap_settings.message.delete_message, uaid,
-                          chid, self.version)
-        d.addCallback(self._delete_completed)
-        self._db_error_handling(d)
-        return d
+    def _delete_message(self, message_id):
+        notif = WebPushNotification.from_message_id(
+            message_id,
+            fernet=self.ap_settings.fernet,
+        )
+        return self.ap_settings.message.delete_message(notif)
 
     def _delete_completed(self, response):
         self.log.info(format="Message Deleted", status_code=204,
@@ -438,9 +431,6 @@ class EndpointHandler(AutoendpointHandler):
                             "encryption-key", "content-type",
                             "authorization")
     cors_response_headers = ("location", "www-authenticate")
-    # Remove trailing padding characters from complex header items like
-    # Crypto-Key and Encryption
-    strip_padding = re.compile('=+(?=[,;]|$)')
 
     #############################################################
     #                    Cyclone HTTP Methods
@@ -514,6 +504,7 @@ class EndpointHandler(AutoendpointHandler):
         # Only simplepush uses version/data out of body/query, GCM/APNS will
         # use data out of the request body 'WebPush' style.
         use_simplepush = router_key == "simplepush"
+        topic = self.request.headers.get("topic")
         if use_simplepush:
             self.version, data = parse_request_params(self.request)
             self._client_info['message_id'] = self.version
@@ -548,6 +539,21 @@ class EndpointHandler(AutoendpointHandler):
                     401, 110, message="Encryption header missing 'salt' value")
                 return
 
+            if topic:
+                if len(topic) > 32:
+                    self._write_response(
+                        400, 113, message="Topic must be no greater than 32 "
+                        "characters"
+                    )
+                    return
+
+                if not VALID_BASE64_URL.match(topic):
+                    self._write_response(
+                        400, 113, message="Topic must be URL and Filename "
+                        "safe Base64 alphabet"
+                    )
+                    return
+
         if VALID_TTL.match(self.request.headers.get("ttl", "0")):
             ttl = int(self.request.headers.get("ttl", "0"))
             # Cap the TTL to our MAX_TTL
@@ -565,44 +571,47 @@ class EndpointHandler(AutoendpointHandler):
             return
 
         if use_simplepush:
-            self._route_notification(self.version, uaid_data, data)
+            notification = Notification(version=self.version, data=data,
+                                        channel_id=self.chid)
+            self._route_notification(False, uaid_data, notification)
             return
 
         # Web Push and bridged messages are encrypted binary blobs. We store
         # and deliver these messages as Base64-encoded strings.
         data = base64url_encode(self.request.body)
 
+        notification = WebPushNotification(uaid=uuid.UUID(self.uaid),
+                                           channel_id=uuid.UUID(self.chid),
+                                           data=data,
+                                           headers=self.request.headers,
+                                           ttl=ttl, topic=topic)
+        if notification.data:
+            notification.cleanup_headers()
+        else:
+            notification.headers = None
+
         # Generate a message ID, then route the notification.
-        d = deferToThread(self.ap_settings.fernet.encrypt, ':'.join([
-            'm', self.uaid, self.chid]).encode('utf8'))
-        d.addCallback(self._route_notification, uaid_data, data, ttl)
+        d = deferToThread(notification.generate_message_id,
+                          self.ap_settings.fernet)
+        d.addCallback(self._route_notification, uaid_data, notification)
         return d
 
-    def _route_notification(self, version, uaid_data, data, ttl=None):
-        self.version = self._client_info['message_id'] = version
-        warning = ""
-        # Clean up the header values (remove padding)
-        for hdr in ['crypto-key', 'encryption']:
-            if self.strip_padding.search(self.request.headers.get(hdr, "")):
-                warning = ("Padded content detected. Please strip"
-                           " base64 encoding padding.")
-                head = self.request.headers[hdr].replace('"', '')
-                self.request.headers[hdr] = self.strip_padding.sub("", head)
-        notification = Notification(version=version, data=data,
-                                    channel_id=self.chid,
-                                    headers=self.request.headers,
-                                    ttl=ttl)
-
+    def _route_notification(self, webpush_message_id, uaid_data, notification):
+        if webpush_message_id:
+            self.version = self._client_info['message_id'] = webpush_message_id
+        else:
+            self.version = self._client_info['message_id'] = \
+                notification.version
         d = Deferred()
         d.addCallback(self.router.route_notification, uaid_data)
-        d.addCallback(self._router_completed, uaid_data, warning)
+        d.addCallback(self._router_completed, uaid_data)
         d.addErrback(self._router_fail_err)
         d.addErrback(self._response_err)
 
         # Call the prepared router
         d.callback(notification)
 
-    def _router_completed(self, response, uaid_data, warning=""):
+    def _router_completed(self, response, uaid_data):
         """Called after router has completed successfully"""
         # TODO: Add some custom wake logic here
         # Were we told to update the router data?
@@ -629,8 +638,7 @@ class EndpointHandler(AutoendpointHandler):
                               uaid_data)
             response.router_data = None
             d.addCallback(lambda x: self._router_completed(response,
-                                                           uaid_data,
-                                                           warning))
+                                                           uaid_data))
             return d
         else:
             # No changes are requested by the bridge system, proceed as normal
@@ -642,8 +650,7 @@ class EndpointHandler(AutoendpointHandler):
                               client_info=self._client_info)
             time_diff = time.time() - self.start_time
             self.metrics.timing("updates.handled", duration=time_diff)
-            response.response_body = (
-                response.response_body + " " + warning).strip()
+            response.response_body = (response.response_body).strip()
             self._router_response(response)
 
 
@@ -753,13 +760,10 @@ class RegistrationHandler(AutoendpointHandler):
 
     def _delete_channel(self, uaid, chid):
         message = self.ap_settings.message
-        message.delete_messages_for_channel(uaid, chid)
         if not message.unregister_channel(uaid, chid):
             raise ItemNotFound("ChannelID not found")
 
     def _delete_uaid(self, uaid, router):
-        message = self.ap_settings.message
-        message.delete_user(uaid)
         self.log.info(format="Dropping User", code=101,
                       uaid_hash=hasher(uaid))
         if not router.drop_user(uaid):

@@ -108,7 +108,7 @@ class APNSRouter(object):
         config = self._config[rel_channel]
         apns_client = self.apns[rel_channel]
         payload = {
-            "chid": notification.channel_id,
+            "chid": str(notification.channel_id),
             "ver": notification.version,
         }
         if notification.data:

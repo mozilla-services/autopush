@@ -1,6 +1,5 @@
 import unittest
 import uuid
-import time
 
 from autopush.exceptions import AutopushException
 from boto.dynamodb2.exceptions import (
@@ -26,6 +25,7 @@ from autopush.db import (
     Router,
 )
 from autopush.metrics import SinkMetrics
+from autopush.utils import WebPushNotification
 
 
 dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
@@ -40,6 +40,17 @@ def setUp():
 def tearDown():
     from .test_integration import tearDown
     tearDown()
+
+
+def make_webpush_notification(uaid, chid, ttl=100):
+    message_id = str(uuid.uuid4())
+    return WebPushNotification(
+        uaid=uuid.UUID(uaid),
+        channel_id=uuid.UUID(chid),
+        update_id=message_id,
+        message_id=message_id,
+        ttl=ttl,
+    )
 
 
 class DbCheckTestCase(unittest.TestCase):
@@ -214,9 +225,6 @@ class MessageTestCase(unittest.TestCase):
     def tearDown(self):
         self.real_table.connection = self.real_connection
 
-    def _nstime(self):
-        return int(time.time() * 1000 * 1000)
-
     def test_register(self):
         chid = str(uuid.uuid4())
         m = get_rotating_message_table()
@@ -301,106 +309,37 @@ class MessageTestCase(unittest.TestCase):
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
 
-        data1 = str(uuid.uuid4())
-        data2 = str(uuid.uuid4())
-        ttl = int(time.time())+100
-        time1, time2, time3 = self._nstime(), self._nstime(), self._nstime()+1
-        message.store_message(self.uaid, chid, time1, ttl, data1, {})
-        message.store_message(self.uaid, chid2, time2, ttl, data2, {})
-        message.store_message(self.uaid, chid2, time3, ttl, data1, {})
+        message.store_message(make_webpush_notification(self.uaid, chid))
+        message.store_message(make_webpush_notification(self.uaid, chid))
+        message.store_message(make_webpush_notification(self.uaid, chid))
 
-        all_messages = list(message.fetch_messages(self.uaid))
+        all_messages = list(message.fetch_messages(uuid.UUID(self.uaid)))
         eq_(len(all_messages), 3)
-
-        message.delete_messages_for_channel(self.uaid, chid2)
-        all_messages = list(message.fetch_messages(self.uaid))
-        eq_(len(all_messages), 1)
-
-        message.delete_message(self.uaid, chid, time1)
-        all_messages = list(message.fetch_messages(self.uaid))
-        eq_(len(all_messages), 0)
 
     def test_message_storage_overwrite(self):
         """Test that store_message can overwrite existing messages which
         can occur in some reconnect cases but shouldn't error"""
         chid = str(uuid.uuid4())
         chid2 = str(uuid.uuid4())
+        notif1 = make_webpush_notification(self.uaid, chid)
+        notif2 = make_webpush_notification(self.uaid, chid)
+        notif3 = make_webpush_notification(self.uaid, chid2)
+        notif2.message_id = notif1.message_id
         m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
 
-        data1 = str(uuid.uuid4())
-        data2 = str(uuid.uuid4())
-        ttl = int(time.time())+100
-        time1, time2 = self._nstime(), self._nstime()+1
-        message.store_message(self.uaid, chid, time1, ttl, data1, {})
-        message.store_message(self.uaid, chid, time1, ttl, data2, {})
-        message.store_message(self.uaid, chid2, time2, ttl, data1, {})
+        message.store_message(notif1)
+        message.store_message(notif2)
+        message.store_message(notif3)
 
-        all_messages = list(message.fetch_messages(self.uaid))
+        all_messages = list(message.fetch_messages(uuid.UUID(self.uaid)))
         eq_(len(all_messages), 2)
 
-        message.delete_messages_for_channel(self.uaid, chid2)
-        all_messages = list(message.fetch_messages(self.uaid))
-        eq_(len(all_messages), 1)
-
-        message.delete_message(self.uaid, chid, time1)
-        all_messages = list(message.fetch_messages(self.uaid))
-        eq_(len(all_messages), 0)
-
-    def test_delete_user(self):
-        chid = str(uuid.uuid4())
-        chid2 = str(uuid.uuid4())
-        m = get_rotating_message_table()
-        message = Message(m, SinkMetrics())
-        message.register_channel(self.uaid, chid)
-        message.register_channel(self.uaid, chid2)
-
-        data1 = str(uuid.uuid4())
-        data2 = str(uuid.uuid4())
-        ttl = int(time.time())+100
-        time1, time2, time3 = self._nstime(), self._nstime(), self._nstime()+1
-        message.store_message(self.uaid, chid, time1, ttl, data1, {})
-        message.store_message(self.uaid, chid2, time2, ttl, data2, {})
-        message.store_message(self.uaid, chid2, time3, ttl, data1, {})
-
-        message.delete_user(self.uaid)
-        all_messages = list(message.fetch_messages(self.uaid))
-        eq_(len(all_messages), 0)
-
-    def test_message_delete_pagination(self):
-        def make_messages(channel_id, count, rtable):
-            t = self._nstime()
-            ttl = int(time.time())+200
-            for i in range(count):
-                rtable.append(
-                    (self.uaid, channel_id, str(uuid.uuid4()), ttl, {}, t+i)
-                )
-            return rtable
-
-        chid = str(uuid.uuid4())
-        m = get_rotating_message_table()
-        message = Message(m, SinkMetrics())
-        message.register_channel(self.uaid, chid)
-
-        # Shove 80 messages in
-        m = []
-        for message_args in make_messages(chid, 80, m):
-            message.store_message(*message_args)
-
-        # Verify we can see them all
-        all_messages = list(message.fetch_messages(self.uaid, limit=100))
-        eq_(len(all_messages), 80)
-
-        # Delete them all
-        message.delete_messages_for_channel(self.uaid, chid)
-
-        # Verify they're gone
-        all_messages = list(message.fetch_messages(self.uaid, limit=100))
-        eq_(len(all_messages), 0)
-
     def test_message_delete_fail_condition(self):
+        notif = make_webpush_notification(dummy_uaid, dummy_chid)
+        notif.message_id = notif.update_id = dummy_uaid
         m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
 
@@ -409,42 +348,8 @@ class MessageTestCase(unittest.TestCase):
 
         message.table = Mock()
         message.table.delete_item.side_effect = raise_condition
-        result = message.delete_message(uaid=dummy_uaid, channel_id=dummy_chid,
-                                        message_id="asdf", updateid="asdf")
+        result = message.delete_message(notif)
         eq_(result, False)
-
-    def test_update_message(self):
-        chid = uuid.uuid4().hex
-        m = get_rotating_message_table()
-        message = Message(m, SinkMetrics())
-        data1 = str(uuid.uuid4())
-        data2 = str(uuid.uuid4())
-        time1 = self._nstime()
-        ttl = self._nstime()+1000
-        message.store_message(self.uaid, chid, time1, ttl, data1, {})
-        message.update_message(self.uaid, chid, time1, ttl, data2, {})
-        messages = list(message.fetch_messages(self.uaid))
-        eq_(data2, messages[0]['data'])
-
-    def test_update_message_fail(self):
-        message = Message(get_rotating_message_table(), SinkMetrics)
-        message.store_message(self.uaid,
-                              uuid.uuid4().hex,
-                              self._nstime(),
-                              str(uuid.uuid4()),
-                              {})
-        u = message.table.connection.update_item = Mock()
-
-        def raise_condition(*args, **kwargs):
-            raise ConditionalCheckFailedException(None, None)
-
-        u.side_effect = raise_condition
-        b = message.update_message(self.uaid,
-                                   uuid.uuid4().hex,
-                                   self._nstime(),
-                                   str(uuid.uuid4()),
-                                   {})
-        eq_(b, False)
 
 
 class RouterTestCase(unittest.TestCase):

@@ -28,12 +28,15 @@ from autopush.exceptions import (
 from autopush.utils import (
     base64url_encode,
     extract_jwt,
-)
+    WebPushNotification)
 
 MAX_TTL = 60 * 60 * 24 * 60
 # Older versions used "bearer", newer specification requires "webpush"
 AUTH_SCHEMES = ["bearer", "webpush"]
 PREF_SCHEME = "webpush"
+
+# Base64 URL validation
+VALID_BASE64_URL = re.compile(r'^[0-9A-Za-z\-_]+=*$')
 
 
 class ThreadedValidate(object):
@@ -108,11 +111,6 @@ class ThreadedValidate(object):
 
 # Alias to the validation classmethod decorator
 threaded_validate = ThreadedValidate.validate
-
-
-# Remove trailing padding characters from complex header items like
-# Crypto-Key and Encryption
-strip_padding = re.compile('=+(?=[,;]|$)')
 
 
 class SimplePushSubscriptionSchema(Schema):
@@ -234,7 +232,21 @@ class WebPushHeaderSchema(Schema):
     encryption = fields.String()
     encryption_key = fields.String(load_from="encryption-key")
     ttl = fields.Integer(required=False, missing=None)
+    topic = fields.String(required=False, missing=None)
     api_ver = fields.String()
+
+    @validates('topic')
+    def validate_topic(self, value):
+        if value is None:
+            return True
+
+        if len(value) > 32:
+            raise InvalidRequest("Topic must be no greater than 32 "
+                                 "characters", errno=113)
+
+        if not VALID_BASE64_URL.match(value):
+            raise InvalidRequest("Topic must be URL and Filename safe Base"
+                                 "64 alphabet", errno=113)
 
     @validates_schema
     def validate_cypto_headers(self, d):
@@ -352,18 +364,11 @@ class WebPushRequestSchema(Schema):
         #       schema logic to run first.
         self.validate_auth(d)
 
-        # Add a message_id
-        sub = d["subscription"]
-        d["message_id"] = self.context["settings"].fernet.encrypt(
-            ":".join(["m", sub["uaid"].hex, sub["chid"].hex]).encode('utf8')
-        )
-
-        # Strip crypto/encryption headers down
-        for hdr in ["crypto-key", "encryption"]:
-            if strip_padding.search(d["headers"].get(hdr, "")):
-                head = d["headers"][hdr].replace('"', '')
-                d["headers"][hdr] = strip_padding.sub("", head)
-
         # Base64-encode data for Web Push
         d["body"] = base64url_encode(d["body"])
+
+        # Set the notification based on the validated request schema data
+        d["notification"] = WebPushNotification.from_webpush_request_schema(
+            data=d, fernet=self.context["settings"].fernet
+        )
         return d

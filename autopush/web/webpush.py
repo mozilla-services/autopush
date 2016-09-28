@@ -5,7 +5,6 @@ from twisted.internet.threads import deferToThread
 
 from autopush.web.base import (
     BaseWebHandler,
-    Notification,
 )
 from autopush.web.validation import (
     threaded_validate,
@@ -35,18 +34,11 @@ class WebPushHandler(BaseWebHandler):
             for i in jwt["jwt_data"]:
                 self._client_info["jwt_" + i] = jwt["jwt_data"][i]
 
-        sub = self.valid_input["subscription"]
-        user_data = sub["user_data"]
+        user_data = self.valid_input["subscription"]["user_data"]
         router = self.ap_settings.routers[user_data["router_type"]]
-        self._client_info["message_id"] = self.valid_input["message_id"]
+        notification = self.valid_input["notification"]
+        self._client_info["message_id"] = notification.message_id
 
-        notification = Notification(
-            version=self.valid_input["message_id"],
-            data=self.valid_input["body"],
-            channel_id=str(sub["chid"]),
-            headers=self.valid_input["headers"],
-            ttl=self.valid_input["headers"]["ttl"]
-        )
         self._client_info["uaid"] = hasher(user_data.get("uaid"))
         self._client_info["channel_id"] = user_data.get("chid")
         d = Deferred()
