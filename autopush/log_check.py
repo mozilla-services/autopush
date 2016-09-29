@@ -13,6 +13,10 @@ class LogCheckHandler(AutoendpointHandler):
         self.ap_settings = ap_settings
         self._client_info = self._init_info()
 
+    def authenticate_peer_cert(self):
+        """LogCheck skips authentication checks"""
+        pass
+
     @cyclone.web.asynchronous
     def get(self, err_type=None):
         """HTTP GET

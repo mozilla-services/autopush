@@ -1,3 +1,5 @@
 [report]
-omit = *noseplugin*
+omit =
+    *noseplugin*
+    autopush/tests/certs/makecerts.py
 show_missing = true
