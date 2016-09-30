@@ -1,7 +1,7 @@
 import unittest
 import uuid
 
-from autopush.exceptions import AutopushException
+from autopush.websocket import ms_time
 from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
     ProvisionedThroughputExceededException,
@@ -23,7 +23,9 @@ from autopush.db import (
     Storage,
     Message,
     Router,
+    generate_last_connect,
 )
+from autopush.exceptions import AutopushException
 from autopush.metrics import SinkMetrics
 from autopush.utils import WebPushNotification
 
@@ -360,6 +362,25 @@ class RouterTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.real_table.connection = self.real_connection
+
+    def _create_minimal_record(self):
+        data = {
+            "uaid": str(uuid.uuid4()),
+            "router_type": "webupsh",
+            "last_connect": generate_last_connect(),
+            "connected_at": ms_time(),
+        }
+        return data
+
+    def test_drop_old_users(self):
+        # First create a bunch of users
+        r = get_router_table()
+        router = Router(r, SinkMetrics())
+        for _ in range(0, 53):
+            router.register_user(self._create_minimal_record())
+
+        results = router.drop_old_users(months_ago=0)
+        eq_(list(results), [25, 25, 3])
 
     def test_custom_tablename(self):
         db = DynamoDBConnection()

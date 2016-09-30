@@ -47,6 +47,7 @@ from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table, Item
 from boto.dynamodb2.types import NUMBER
+from typing import Iterable, List  # flake8: noqa
 
 from autopush.exceptions import AutopushException
 from autopush.utils import (
@@ -62,7 +63,13 @@ DB_CALLS = []
 
 def get_month(delta=0):
     """Basic helper function to get a datetime.date object iterations months
-    ahead/behind of now."""
+    ahead/behind of now.
+
+    :type delta: int
+
+    :rtype: datetime.datetime
+
+    """
     new = last = datetime.date.today()
     # Move until we hit a new month, this avoids having to manually
     # check year changes as we push forward or backward since the Python
@@ -155,8 +162,9 @@ def create_router_table(tablename="router", read_throughput=5,
                         global_indexes=[
                             GlobalKeysOnlyIndex(
                                 'AccessIndex',
-                                parts=[HashKey('last_connect',
-                                               data_type=NUMBER)],
+                                parts=[
+                                    HashKey('last_connect',
+                                             data_type=NUMBER)],
                                 throughput=dict(read=5, write=5))],
                         )
 
@@ -265,7 +273,13 @@ def track_provisioned(func):
 
 
 def has_connected_this_month(item):
-    """Whether or not a router item has connected this month"""
+    """Whether or not a router item has connected this month
+
+    :type item: dict
+
+    :rtype: bool
+
+    """
     last_connect = item.get("last_connect")
     if not last_connect:
         return False
@@ -276,15 +290,45 @@ def has_connected_this_month(item):
 
 
 def generate_last_connect():
-    """Generate a last_connect"""
+    """Generate a last_connect
+
+    This intentionally generates a limited set of keys for each month in a
+    known sequence. For each month, there's 24 hours * 10 random numbers for
+    a total of 240 keys per month depending on when the user migrates forward.
+
+    :type date: datetime.datetime
+
+    :rtype: int
+
+    """
     today = datetime.datetime.today()
     val = "".join([
-                  str(today.year),
-                  str(today.month).zfill(2),
-                  str(today.hour).zfill(2),
-                  str(random.randint(0, 10)).zfill(4),
-                  ])
+        str(today.year),
+        str(today.month).zfill(2),
+        str(today.hour).zfill(2),
+        str(random.randint(0, 10)).zfill(4),
+    ])
     return int(val)
+
+
+def generate_last_connect_values(date):
+    """Generator of last_connect values for a given date
+
+    Creates an iterator that yields all the valid values for ``last_connect``
+    for a given year/month.
+
+    :type date: datetime.datetime
+
+    :rtype: Iterable[int]
+
+    """
+    year = str(date.year)
+    month = str(date.month).zfill(2)
+    for hour in range(0, 24):
+        for rand_int in range(0, 11):
+            val = "".join([year, month, str(hour).zfill(2),
+                           str(rand_int).zfill(4)])
+            yield int(val)
 
 
 class Storage(object):
@@ -605,6 +649,64 @@ class Router(object):
         huaid = hasher(uaid)
         return self.table.delete_item(uaid=huaid,
                                       expected={"uaid__eq": huaid})
+
+    def delete_uaids(self, uaids):
+        """Issue a batch delete call for the given uaids
+
+        :type uaids: List[str]
+
+        """
+        with self.table.batch_write() as batch:
+            for uaid in uaids:
+                batch.delete_item(uaid=uaid)
+
+    def drop_old_users(self, months_ago=2):
+        """Drops user records that have no recent connection
+
+        Utilizes the last_connect index to locate users that haven't
+        connected in the given time-frame.
+
+        The caller must iterate through this generator to trigger batch
+        delete calls. Caller should wait as appropriate to avoid exceeding
+        table limits.
+
+        Each iteration will result in a batch delete for the currently
+        iterated batch. This implies a set of writes equal in size to the
+        ``25 * record-size`` minimum.
+
+        .. warning::
+
+            Calling list() on this generator will likely exceed provisioned
+            write through-put as the batch-delete calls will be made as
+            quickly as possible.
+
+        :param months_ago: how many months ago since the last connect
+        :type months_ago: int
+
+        :returns: Iterable of how many deletes were run
+        :rtype: Iterable[int]
+
+        """
+        prior_date = get_month(-months_ago)
+
+        batched = []
+        for hash_key in generate_last_connect_values(prior_date):
+            result_set = self.table.query_2(
+                last_connect__eq=hash_key,
+                index="AccessIndex",
+            )
+            for result in result_set:
+                batched.append(result["uaid"])
+
+                if len(batched) == 25:
+                    self.delete_uaids(batched)
+                    batched = []
+                    yield 25
+
+        # Delete any leftovers
+        if batched:
+            self.delete_uaids(batched)
+            yield len(batched)
 
     @track_provisioned
     def update_message_month(self, uaid, month):

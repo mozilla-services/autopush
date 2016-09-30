@@ -40,6 +40,7 @@ setup(name="AutoPush",
       autoendpoint = autopush.main:endpoint_main
       autokey = autokey:main
       endpoint_diagnostic = autopush.diagnostic_cli:run_endpoint_diagnostic_cli
+      drop_users = autopush.scripts.drop_user:drop_users
       [nose.plugins]
       object-tracker = autopush.noseplugin:ObjectTracker
       """,
