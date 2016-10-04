@@ -37,7 +37,8 @@ class DiagnosticCLITestCase(unittest.TestCase):
             "--router_tablename=fred",
             "http://someendpoint",
         ])
-        assert cli.run()
+        returncode = cli.run()
+        ok_(returncode not in (None, 0))
 
     @patch("autopush.diagnostic_cli.AutopushSettings")
     def test_successfull_lookup(self, mock_settings_class):

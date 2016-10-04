@@ -151,8 +151,8 @@ class StorageTestCase(unittest.TestCase):
         db_name = "storage_%s" % uuid.uuid4()
 
         s = create_storage_table(db_name, 8, 11)
-        assert s.throughput["read"] == 8
-        assert s.throughput["write"] == 11
+        eq_(s.throughput["read"], 8)
+        eq_(s.throughput["write"], 11)
 
     def test_dont_save_older(self):
         s = get_storage_table()
@@ -236,7 +236,7 @@ class MessageTestCase(unittest.TestCase):
         # Verify its in the db
         rows = m.query_2(uaid__eq=self.uaid, chidmessageid__eq=" ")
         results = list(rows)
-        assert(len(results) == 1)
+        eq_(len(results), 1)
 
     def test_unregister(self):
         chid = str(uuid.uuid4())
@@ -247,7 +247,7 @@ class MessageTestCase(unittest.TestCase):
         # Verify its in the db
         rows = m.query_2(uaid__eq=self.uaid, chidmessageid__eq=" ")
         results = list(rows)
-        assert(len(results) == 1)
+        eq_(len(results), 1)
         eq_(results[0]["chids"], set([chid]))
 
         message.unregister_channel(self.uaid, chid)
@@ -255,7 +255,7 @@ class MessageTestCase(unittest.TestCase):
         # Verify its not in the db
         rows = m.query_2(uaid__eq=self.uaid, chidmessageid__eq=" ")
         results = list(rows)
-        assert(len(results) == 1)
+        eq_(len(results), 1)
         eq_(results[0]["chids"], None)
 
         # Test for the very unlikely case that there's no 'chid'
@@ -301,7 +301,7 @@ class MessageTestCase(unittest.TestCase):
         m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
         exists, chans = message.all_channels(dummy_uaid)
-        assert(chans == set([]))
+        eq_(chans, set([]))
 
     def test_message_storage(self):
         chid = str(uuid.uuid4())
@@ -396,8 +396,8 @@ class RouterTestCase(unittest.TestCase):
         db_name = "router_%s" % uuid.uuid4()
 
         r = create_router_table(db_name, 3, 17)
-        assert r.throughput["read"] == 3
-        assert r.throughput["write"] == 17
+        eq_(r.throughput["read"], 3)
+        eq_(r.throughput["write"], 17)
 
     def test_no_uaid_found(self):
         uaid = str(uuid.uuid4())
