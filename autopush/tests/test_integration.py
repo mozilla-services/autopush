@@ -458,7 +458,7 @@ class TestSimple(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         ok_(result != {})
-        self.assertTrue(len(result["updates"]) == 1)
+        eq_(len(result["updates"]), 1)
         eq_(result["updates"][0]["channelID"], chan)
         yield self.shut_down(client)
 
@@ -473,7 +473,7 @@ class TestSimple(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification()
         ok_(result != {})
-        self.assertTrue(len(result["updates"]) == 1)
+        eq_(len(result["updates"]), 1)
         eq_(result["updates"][0]["channelID"], chan)
 
         yield client.disconnect()
