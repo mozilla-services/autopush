@@ -403,7 +403,7 @@ class RouterTestCase(unittest.TestCase):
         uaid = str(uuid.uuid4())
         r = get_router_table()
         router = Router(r, SinkMetrics())
-        self.assertRaises(ItemNotFound, router.get_uaid, uaid)
+        assert_raises(ItemNotFound, router.get_uaid, uaid)
 
     def test_uaid_provision_failed(self):
         r = get_router_table()
@@ -414,7 +414,7 @@ class RouterTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         router.table.get_item.side_effect = raise_error
-        with self.assertRaises(ProvisionedThroughputExceededException):
+        with assert_raises(ProvisionedThroughputExceededException):
             router.get_uaid(uaid="asdf")
 
     def test_register_user_provision_failed(self):
@@ -426,7 +426,7 @@ class RouterTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         router.table.connection.update_item.side_effect = raise_error
-        with self.assertRaises(ProvisionedThroughputExceededException):
+        with assert_raises(ProvisionedThroughputExceededException):
             router.register_user(dict(uaid=dummy_uaid, node_id="me",
                                       connected_at=1234,
                                       router_type="simplepush"))
@@ -440,7 +440,7 @@ class RouterTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         router.table.connection.put_item.side_effect = raise_error
-        with self.assertRaises(ProvisionedThroughputExceededException):
+        with assert_raises(ProvisionedThroughputExceededException):
             router.clear_node(Item(r, dict(uaid=dummy_uaid,
                                            connected_at="1234",
                                            node_id="asdf",
@@ -459,7 +459,7 @@ class RouterTestCase(unittest.TestCase):
             router.register_user(dict(uaid=uaid))
         except AutopushException:
             pass
-        self.assertRaises(ItemNotFound, router.get_uaid, uaid)
+        assert_raises(ItemNotFound, router.get_uaid, uaid)
         ok_(router.drop_user.called)
 
     def test_save_new(self):
