@@ -4,7 +4,7 @@ from cryptography.fernet import Fernet
 from cyclone.web import Application
 from mock import Mock
 from moto import mock_dynamodb2
-from nose.tools import eq_
+from nose.tools import eq_, ok_
 from twisted.internet.defer import Deferred
 from twisted.logger import Logger
 from twisted.trial import unittest
@@ -79,7 +79,7 @@ class TestWebpushHandler(unittest.TestCase):
             eq_(result, True)
             self.wp.set_status.assert_called_with(503)
             ru = self.router_mock.register_user
-            assert(ru.called)
+            ok_(ru.called)
             eq_('webpush', ru.call_args[0][0].get('router_type'))
 
         self.finish_deferred.addCallback(handle_finish)
@@ -107,7 +107,7 @@ class TestWebpushHandler(unittest.TestCase):
         def handle_finish(result):
             eq_(result, True)
             self.wp.set_status.assert_called_with(503)
-            assert(self.router_mock.drop_user.called)
+            ok_(self.router_mock.drop_user.called)
 
         self.finish_deferred.addCallback(handle_finish)
 

@@ -253,14 +253,14 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                 ttl_header = resp.getheader("TTL")
                 eq_(ttl_header, str(ttl))
             if ttl != 0 and status == 201:
-                assert(location is not None)
+                ok_(location is not None)
                 if channel in self.messages:
                     self.messages[channel].append(location)
                 else:
                     self.messages[channel] = [location]
         else:
             # Simple Push messages are not individually addressable.
-            assert(location is None)
+            ok_(location is None)
 
         # Pull the notification if connected
         if self.ws and self.ws.connected:
@@ -960,7 +960,7 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         result = yield client.send_notification(data=data, ttl=None)
-        assert(result is not None)
+        ok_(result is not None)
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
@@ -971,7 +971,7 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         result = yield client.send_notification(data=data, ttl=None)
-        assert(result is not None)
+        ok_(result is not None)
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
@@ -987,7 +987,7 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         result = yield client.send_notification(data=data, ttl=0)
-        assert(result is not None)
+        ok_(result is not None)
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")

@@ -141,11 +141,11 @@ class StorageTestCase(unittest.TestCase):
         db = DynamoDBConnection()
         db_name = "storage_%s" % uuid.uuid4()
         dblist = db.list_tables()["TableNames"]
-        assert db_name not in dblist
+        ok_(db_name not in dblist)
 
         create_storage_table(db_name)
         dblist = db.list_tables()["TableNames"]
-        assert db_name in dblist
+        ok_(db_name in dblist)
 
     def test_provisioning(self):
         db_name = "storage_%s" % uuid.uuid4()
@@ -275,13 +275,13 @@ class MessageTestCase(unittest.TestCase):
         message.register_channel(self.uaid, chid2)
 
         _, chans = message.all_channels(self.uaid)
-        assert(chid in chans)
-        assert(chid2 in chans)
+        ok_(chid in chans)
+        ok_(chid2 in chans)
 
         message.unregister_channel(self.uaid, chid2)
         _, chans = message.all_channels(self.uaid)
-        assert(chid2 not in chans)
-        assert(chid in chans)
+        ok_(chid2 not in chans)
+        ok_(chid in chans)
 
     def test_save_channels(self):
         chid = str(uuid.uuid4())
@@ -386,11 +386,11 @@ class RouterTestCase(unittest.TestCase):
         db = DynamoDBConnection()
         db_name = "router_%s" % uuid.uuid4()
         dblist = db.list_tables()["TableNames"]
-        assert db_name not in dblist
+        ok_(db_name not in dblist)
 
         create_router_table(db_name)
         dblist = db.list_tables()["TableNames"]
-        assert db_name in dblist
+        ok_(db_name in dblist)
 
     def test_provisioning(self):
         db_name = "router_%s" % uuid.uuid4()

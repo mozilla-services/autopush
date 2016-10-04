@@ -96,9 +96,9 @@ class SentryLogTestCase(twisted.trial.unittest.TestCase):
             eq_(len(logged), 1)
             # Ensure a top level stacktrace was included
             stacktrace = logged[0]['stacktrace']
-            assert any(
+            ok_(any(
                 filename == f['abs_path'] and testname == f['function']
-                for f in stacktrace['frames'])
+                for f in stacktrace['frames']))
 
             self._port.stopListening()
             pl.stop()

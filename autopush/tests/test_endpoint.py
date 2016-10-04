@@ -260,7 +260,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
-            assert(frouter.route_notification.called)
+            ok_(frouter.route_notification.called)
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -297,7 +297,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
-            assert(frouter.route_notification.called)
+            ok_(frouter.route_notification.called)
             args, kwargs = frouter.route_notification.call_args
             notif = args[0]
             eq_(notif.ttl, MAX_TTL)
@@ -398,7 +398,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
-            assert(frouter.route_notification.called)
+            ok_(frouter.route_notification.called)
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -414,7 +414,7 @@ class EndpointTestCase(unittest.TestCase):
         self.endpoint._uaid_lookup_results(fresult)
 
         def handle_finish(value):
-            assert(frouter.route_notification.called)
+            ok_(frouter.route_notification.called)
 
         self.finish_deferred.addCallback(handle_finish)
         return self.finish_deferred
@@ -1337,10 +1337,10 @@ class EndpointTestCase(unittest.TestCase):
         ch4 = "Access-Control-Expose-Headers"
         endpoint = self.endpoint
         endpoint.ap_settings.cors = False
-        assert endpoint._headers.get(ch1) != "*"
-        assert endpoint._headers.get(ch2) != self.CORS_METHODS
-        assert endpoint._headers.get(ch3) != self.CORS_HEADERS
-        assert endpoint._headers.get(ch4) != self.CORS_RESPONSE_HEADERS
+        ok_(endpoint._headers.get(ch1) != "*")
+        ok_(endpoint._headers.get(ch2) != self.CORS_METHODS)
+        ok_(endpoint._headers.get(ch3) != self.CORS_HEADERS)
+        ok_(endpoint._headers.get(ch4) != self.CORS_RESPONSE_HEADERS)
 
         endpoint.clear_header(ch1)
         endpoint.clear_header(ch2)
@@ -1657,8 +1657,8 @@ class RegistrationTestCase(unittest.TestCase):
         ch2 = "Access-Control-Allow-Methods"
         reg = self.reg
         reg.ap_settings.cors = False
-        assert reg._headers.get(ch1) != "*"
-        assert reg._headers.get(ch2) != CORS_HEAD
+        ok_(reg._headers.get(ch1) != "*")
+        ok_(reg._headers.get(ch2) != CORS_HEAD)
 
         reg.clear_header(ch1)
         reg.clear_header(ch2)

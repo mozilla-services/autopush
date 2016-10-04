@@ -260,7 +260,7 @@ class APNSRouterTestCase(unittest.TestCase):
             eq_(result.status_code, 201)
             eq_(result.logged_status, 200)
             ok_("TTL" in result.headers)
-            assert(self.mock_connection.called)
+            ok_(self.mock_connection.called)
 
         d.addCallback(check_results)
         return d
@@ -308,7 +308,7 @@ class GCMRouterTestCase(unittest.TestCase):
     def _check_error_call(self, exc, code):
         ok_(isinstance(exc, RouterException))
         eq_(exc.status_code, code)
-        assert(self.router.gcm['test123'].send.called)
+        ok_(self.router.gcm['test123'].send.called)
         self.flushLoggedErrors()
 
     def test_init(self):
@@ -357,7 +357,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            assert(self.router.gcm['test123'].send.called)
+            ok_(self.router.gcm['test123'].send.called)
             # Make sure the data was encoded as base64
             data = self.router.gcm['test123'].send.call_args[0][0].data
             eq_(data['body'], 'q60d6g')
@@ -383,7 +383,7 @@ class GCMRouterTestCase(unittest.TestCase):
             eq_(result.status_code, 201)
             eq_(result.logged_status, 200)
             ok_("TTL" in result.headers)
-            assert(self.router.gcm['test123'].send.called)
+            ok_(self.router.gcm['test123'].send.called)
             # Make sure the data was encoded as base64
             data = self.router.gcm['test123'].send.call_args[0][0].data
             options = self.router.gcm['test123'].send.call_args[0][0].options
@@ -409,7 +409,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            assert(self.router.gcm['test123'].send.called)
+            ok_(self.router.gcm['test123'].send.called)
             # Make sure the data was encoded as base64
             data = self.router.gcm['test123'].send.call_args[0][0].data
             options = self.router.gcm['test123'].send.call_args[0][0].options
@@ -449,7 +449,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            assert(self.router.gcm['test123'].send.called)
+            ok_(self.router.gcm['test123'].send.called)
         d.addCallback(check_results)
         return d
 
@@ -485,7 +485,7 @@ class GCMRouterTestCase(unittest.TestCase):
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict(token="new"))
-            assert(self.router.gcm['test123'].send.called)
+            ok_(self.router.gcm['test123'].send.called)
         d.addCallback(check_results)
         return d
 
@@ -497,7 +497,7 @@ class GCMRouterTestCase(unittest.TestCase):
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict())
-            assert(self.router.gcm['test123'].send.called)
+            ok_(self.router.gcm['test123'].send.called)
         d.addCallback(check_results)
         return d
 
@@ -589,7 +589,7 @@ class FCMRouterTestCase(unittest.TestCase):
     def _check_error_call(self, exc, code):
         ok_(isinstance(exc, RouterException))
         eq_(exc.status_code, code)
-        assert(self.router.fcm.notify_single_device.called)
+        ok_(self.router.fcm.notify_single_device.called)
         self.flushLoggedErrors()
 
     @patch("pyfcm.FCMNotification", spec=pyfcm.FCMNotification)
@@ -627,7 +627,7 @@ class FCMRouterTestCase(unittest.TestCase):
             eq_(result.status_code, 201)
             eq_(result.logged_status, 200)
             ok_("TTL" in result.headers)
-            assert(self.router.fcm.notify_single_device.called)
+            ok_(self.router.fcm.notify_single_device.called)
             # Make sure the data was encoded as base64
             args = self.router.fcm.notify_single_device.call_args[1]
             data = args['data_message']
@@ -651,7 +651,7 @@ class FCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            assert(self.router.fcm.notify_single_device.called)
+            ok_(self.router.fcm.notify_single_device.called)
             # Make sure the data was encoded as base64
             args = self.router.fcm.notify_single_device.call_args[1]
             data = args['data_message']
@@ -677,7 +677,7 @@ class FCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            assert(self.router.fcm.notify_single_device.called)
+            ok_(self.router.fcm.notify_single_device.called)
             # Make sure the data was encoded as base64
             args = self.router.fcm.notify_single_device.call_args[1]
             data = args['data_message']
@@ -718,7 +718,7 @@ class FCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
-            assert(self.router.fcm.notify_single_device.called)
+            ok_(self.router.fcm.notify_single_device.called)
         d.addCallback(check_results)
         return d
 
@@ -755,7 +755,7 @@ class FCMRouterTestCase(unittest.TestCase):
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict(token="new"))
-            assert(self.router.fcm.notify_single_device.called)
+            ok_(self.router.fcm.notify_single_device.called)
         d.addCallback(check_results)
         return d
 
@@ -768,7 +768,7 @@ class FCMRouterTestCase(unittest.TestCase):
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict())
-            assert(self.router.fcm.notify_single_device.called)
+            ok_(self.router.fcm.notify_single_device.called)
         d.addCallback(check_results)
         return d
 
@@ -960,7 +960,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         def verify_deliver(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
-            assert(self.router_mock.get_uaid.called)
+            ok_(self.router_mock.get_uaid.called)
         d.addBoth(verify_deliver)
         return d
 
@@ -978,7 +978,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         def verify_deliver(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
-            assert(self.router_mock.clear_node.called)
+            ok_(self.router_mock.clear_node.called)
         d.addBoth(verify_deliver)
         return d
 
@@ -999,7 +999,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         def verify_deliver(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 202)
-            assert(self.router_mock.clear_node.called)
+            ok_(self.router_mock.clear_node.called)
         d.addBoth(verify_deliver)
         return d
 

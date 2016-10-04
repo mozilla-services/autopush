@@ -5,7 +5,7 @@ from boto.exception import BotoServerError
 from cyclone.web import Application
 from mock import Mock, patch
 from moto import mock_dynamodb2
-from nose.tools import eq_
+from nose.tools import eq_, ok_
 from twisted.internet.defer import Deferred
 from twisted.logger import Logger
 from twisted.python.failure import Failure
@@ -81,10 +81,10 @@ class TestBase(unittest.TestCase):
         ch4 = "Access-Control-Expose-Headers"
         base = self.base
         base.ap_settings.cors = False
-        assert base._headers.get(ch1) != "*"
-        assert base._headers.get(ch2) != self.CORS_METHODS
-        assert base._headers.get(ch3) != self.CORS_HEADERS
-        assert base._headers.get(ch4) != self.CORS_RESPONSE_HEADERS
+        ok_(base._headers.get(ch1) != "*")
+        ok_(base._headers.get(ch2) != self.CORS_METHODS)
+        ok_(base._headers.get(ch3) != self.CORS_HEADERS)
+        ok_(base._headers.get(ch4) != self.CORS_RESPONSE_HEADERS)
 
         base.clear_header(ch1)
         base.clear_header(ch2)
