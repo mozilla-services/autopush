@@ -38,6 +38,12 @@ MOZILLA_INTERMEDIATE_CIPHERS = (
 
 class AutopushSSLContextFactory(ssl.DefaultOpenSSLContextFactory):
     """A SSL context factory"""
+
+    def __init__(self, *args, **kwargs):
+        self.dh_file = kwargs.pop('dh_file', None)
+        self.require_peer_certs = kwargs.pop('require_peer_certs', False)
+        ssl.DefaultOpenSSLContextFactory.__init__(self, *args, **kwargs)
+
     def cacheContext(self):
         """Setup the main context factory with custom SSL settings"""
         if self._context is None:
@@ -54,4 +60,21 @@ class AutopushSSLContextFactory(ssl.DefaultOpenSSLContextFactory):
             ctx.use_certificate_chain_file(self.certificateFileName)
             ctx.use_privatekey_file(self.privateKeyFileName)
 
+            if self.dh_file:
+                ctx.load_tmp_dh(self.dh_file)
+
+            if self.require_peer_certs:
+                # Require peer certs but only for use by
+                # RequestHandlers
+                ctx.set_verify(
+                    SSL.VERIFY_PEER |
+                    SSL.VERIFY_FAIL_IF_NO_PEER_CERT |
+                    SSL.VERIFY_CLIENT_ONCE,
+                    self._allow_peer)
+
             self._context = ctx
+
+    def _allow_peer(self, conn, cert, errno, depth, preverify_ok):
+        # skip verification: we only care about whitelisted signatures
+        # on file
+        return True

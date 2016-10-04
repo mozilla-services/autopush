@@ -13,6 +13,7 @@ boto3==1.4.0
 botocore==1.4.50
 cffi==1.7.0
 characteristic==14.3.0
+click==6.6
 contextlib2==0.5.4
 cryptography==1.5
 cyclone==1.1

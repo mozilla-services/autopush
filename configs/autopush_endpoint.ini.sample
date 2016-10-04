@@ -30,3 +30,13 @@ port = 8082
 ; autokey generator as the crypto_key argument, and sorted [newest, oldest]
 #auth_key = [HJVPy4ZwF4Yz_JdvXTL8hRcwIhv742vC60Tg5Ycrvw8=]
 
+; Require specific client TLS certificates for endpoint node
+; connections. Specified as a JSON object formatted as follows:
+;
+; {<client_name>: <array of certificate sha256 signatures>}
+;
+; where each signature is encoded in hex with colons between each byte
+; (every second digit)
+; e.g.:
+; {"client1": ["2C:78:31.."], "client2": ["3F:D0:E0..", "E2:19:B1.."]}
+#client_certs =

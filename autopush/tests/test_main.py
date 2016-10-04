@@ -245,6 +245,12 @@ class EndpointMainTestCase(unittest.TestCase):
         fcm_collapsekey = "collapse"
         fcm_senderid = '12345'
         fcm_auth = 'abcde'
+        ssl_key = "keys/server.crt"
+        ssl_cert = "keys/server.key"
+        _client_certs = dict(partner1=["1A:"*31 + "F9"],
+                             partner2=["2B:"*31 + "E8",
+                                       "3C:"*31 + "D7"])
+        client_certs = json.dumps(_client_certs)
 
     def setUp(self):
         patchers = [
@@ -283,6 +289,39 @@ class EndpointMainTestCase(unittest.TestCase):
         assert endpoint_main([
             "--apns_creds='[Invalid'"
         ], False)
+
+    def test_client_certs(self):
+        cert = self.TestArg._client_certs['partner1'][0]
+        returncode = endpoint_main([
+            "--ssl_cert=keys/server.crt",
+            "--ssl_key=keys/server.key",
+            '--client_certs={"foo": ["%s"]}' % cert
+        ], False)
+        ok_(not returncode)
+
+    @patch('hyper.tls', spec=hyper.tls)
+    def test_client_certs_parse(self, mock):
+        ap = make_settings(self.TestArg)
+        eq_(ap.client_certs["1A:"*31 + "F9"], 'partner1')
+        eq_(ap.client_certs["2B:"*31 + "E8"], 'partner2')
+        eq_(ap.client_certs["3C:"*31 + "D7"], 'partner2')
+
+    def test_bad_client_certs(self):
+        cert = self.TestArg._client_certs['partner1'][0]
+        ssl_opts = ["--ssl_cert=keys/server.crt", "--ssl_key=keys/server.key"]
+        eq_(endpoint_main(ssl_opts + ["--client_certs='[Invalid'"], False),
+            1)
+        eq_(endpoint_main(
+            ssl_opts + ['--client_certs={"": ["%s"]}' % cert], False),
+            1)
+        eq_(endpoint_main(
+            ssl_opts + ['--client_certs={"quux": [""]}'], False),
+            1)
+        eq_(endpoint_main(
+            ssl_opts + ['--client_certs={"foo": "%s"}' % cert], False),
+            1)
+        eq_(endpoint_main(['--client_certs={"foo": ["%s"]}' % cert], False),
+            1)
 
     @patch('autopush.router.apns2.HTTP20Connection',
            spec=hyper.HTTP20Connection)

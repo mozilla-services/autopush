@@ -86,7 +86,7 @@ def add_shared_args(parser):
                         default="", env_var="SSL_CERT")
     parser.add_argument('--ssl_dh_param',
                         help="SSL DH Param file (openssl dhparam 1024)",
-                        type=str, default="", env_var="SSL_DH_PARAM")
+                        type=str, default=None, env_var="SSL_DH_PARAM")
     parser.add_argument('--router_tablename', help="DynamoDB Router Tablename",
                         type=str, default="router", env_var="ROUTER_TABLENAME")
     parser.add_argument('--storage_tablename',
@@ -297,6 +297,9 @@ def _parse_endpoint(sysargs, use_files=True):
     parser.add_argument('--auth_key', help='Bearer Token source key',
                         type=str, default=[], env_var='AUTH_KEY',
                         action="append")
+    parser.add_argument('--client_certs',
+                        help="Allowed TLS client certificates",
+                        type=str, env_var='CLIENT_CERTS', default="{}")
 
     add_shared_args(parser)
 
@@ -342,6 +345,34 @@ def make_settings(args, **kwargs):
                               "max_data": args.max_data,
                               "collapsekey": args.gcm_collapsekey,
                               "senderIDs": sender_ids}
+
+    client_certs = None
+    # endpoint only
+    if getattr(args, 'client_certs', None):
+        try:
+            client_certs_arg = json.loads(args.client_certs)
+        except (ValueError, TypeError):
+            log.critical(format="Invalid JSON specified for client_certs")
+            return
+        if client_certs_arg:
+            if not args.ssl_key:
+                log.critical(format="client_certs specified without SSL "
+                                    "enabled (no ssl_key specified)")
+                return
+            client_certs = {}
+            for name, sigs in client_certs_arg.iteritems():
+                if not isinstance(sigs, list):
+                    log.critical(
+                        format="Invalid JSON specified for client_certs")
+                    return
+                for sig in sigs:
+                    sig = sig.upper()
+                    if (not name or not utils.CLIENT_SHA256_RE.match(sig) or
+                            sig in client_certs):
+                        log.critical(format="Invalid client_certs argument")
+                        return
+                    client_certs[sig] = name
+
     if args.fcm_enabled:
         # Create a common gcmclient
         if not args.fcm_auth:
@@ -383,6 +414,7 @@ def make_settings(args, **kwargs):
         resolve_hostname=args.resolve_hostname,
         wake_timeout=args.wake_timeout,
         ami_id=ami_id,
+        client_certs=client_certs,
         **kwargs
     )
 
@@ -472,21 +504,20 @@ def connection_main(sysargs=None, use_files=True):
 
     # Start the WebSocket listener.
     if args.ssl_key:
-        context_factory = AutopushSSLContextFactory(args.ssl_key,
-                                                    args.ssl_cert)
-        if args.ssl_dh_param:
-            context_factory.getContext().load_tmp_dh(args.ssl_dh_param)
-
+        context_factory = AutopushSSLContextFactory(
+            args.ssl_key,
+            args.ssl_cert,
+            dh_file=args.ssl_dh_param)
         reactor.listenSSL(args.port, site_factory, context_factory)
     else:
         reactor.listenTCP(args.port, site_factory)
 
     # Start the internal routing listener.
     if args.router_ssl_key:
-        context_factory = AutopushSSLContextFactory(args.router_ssl_key,
-                                                    args.router_ssl_cert)
-        if args.ssl_dh_param:
-            context_factory.getContext().load_tmp_dh(args.ssl_dh_param)
+        context_factory = AutopushSSLContextFactory(
+            args.router_ssl_key,
+            args.router_ssl_cert,
+            dh_file=args.ssl_dh_param)
         reactor.listenSSL(args.router_port, site, context_factory)
     else:
         reactor.listenTCP(args.router_port, site)
@@ -558,10 +589,11 @@ def endpoint_main(sysargs=None, use_files=True):
 
     # start the senderIDs refresh timer
     if args.ssl_key:
-        context_factory = AutopushSSLContextFactory(args.ssl_key,
-                                                    args.ssl_cert)
-        if args.ssl_dh_param:
-            context_factory.getContext().load_tmp_dh(args.ssl_dh_param)
+        context_factory = AutopushSSLContextFactory(
+            args.ssl_key,
+            args.ssl_cert,
+            dh_file=args.ssl_dh_param,
+            require_peer_certs=settings.enable_tls_auth)
         reactor.listenSSL(args.port, site, context_factory)
     else:
         reactor.listenTCP(args.port, site)
