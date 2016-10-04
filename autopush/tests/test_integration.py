@@ -451,13 +451,13 @@ class TestSimple(IntegrationBase):
     def test_delivery_while_disconnected(self):
         client = yield self.quick_register()
         yield client.disconnect()
-        self.assertTrue(client.channels)
+        ok_(client.channels)
         chan = client.channels.keys()[0]
         yield client.send_notification(status=202)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        self.assertTrue(result != {})
+        ok_(result != {})
         self.assertTrue(len(result["updates"]) == 1)
         eq_(result["updates"][0]["channelID"], chan)
         yield self.shut_down(client)
@@ -466,13 +466,13 @@ class TestSimple(IntegrationBase):
     def test_delivery_repeat_without_ack(self):
         client = yield self.quick_register()
         yield client.disconnect()
-        self.assertTrue(client.channels)
+        ok_(client.channels)
         chan = client.channels.keys()[0]
         yield client.send_notification(status=202)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        self.assertTrue(result != {})
+        ok_(result != {})
         self.assertTrue(len(result["updates"]) == 1)
         eq_(result["updates"][0]["channelID"], chan)
 
@@ -480,8 +480,8 @@ class TestSimple(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        self.assertTrue(result != {})
-        self.assertTrue(result["updates"] > 0)
+        ok_(result != {})
+        ok_(result["updates"] > 0)
         eq_(result["updates"][0]["channelID"], chan)
         yield self.shut_down(client)
 
@@ -506,7 +506,7 @@ class TestSimple(IntegrationBase):
     def test_dont_deliver_acked(self):
         client = yield self.quick_register()
         yield client.disconnect()
-        self.assertTrue(client.channels)
+        ok_(client.channels)
         chan = client.channels.keys()[0]
         yield client.send_notification(status=202)
         yield client.connect()
@@ -527,7 +527,7 @@ class TestSimple(IntegrationBase):
     def test_no_delivery_to_unregistered(self):
         client = yield self.quick_register()
         yield client.disconnect()
-        self.assertTrue(client.channels)
+        ok_(client.channels)
         chan = client.channels.keys()[0]
         yield client.send_notification(status=202)
         yield client.connect()
@@ -605,7 +605,7 @@ class TestData(IntegrationBase):
     @inlineCallbacks
     def test_webpush_data_delivery_to_connected_client(self):
         client = yield self.quick_register(use_webpush=True)
-        self.assertTrue(client.channels)
+        ok_(client.channels)
         chan = client.channels.keys()[0]
 
         # Invalid UTF-8 byte sequence.
@@ -1084,7 +1084,7 @@ class TestWebPush(IntegrationBase):
     def test_delete_saved_notification(self):
         client = yield self.quick_register(use_webpush=True)
         yield client.disconnect()
-        self.assertTrue(client.channels)
+        ok_(client.channels)
         chan = client.channels.keys()[0]
         yield client.send_notification()
         yield client.delete_notification(chan)

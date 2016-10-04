@@ -913,7 +913,7 @@ class WebsocketTestCase(unittest.TestCase):
             raise twisted.internet.defer.CancelledError
 
         def fail2(failure):
-            self.assertTrue(failure)
+            ok_(failure)
 
         def check_result(result):  # pragma: nocover
             pass
@@ -1778,7 +1778,7 @@ class WebsocketTestCase(unittest.TestCase):
                     eq_(ver, 12)
                 elif uchid == chid3:
                     eq_(ver, 9)
-                self.assert_(uchid in [chid, chid3])
+                ok_(uchid in [chid, chid3])
             d.callback(True)
 
         def check_result(msg):

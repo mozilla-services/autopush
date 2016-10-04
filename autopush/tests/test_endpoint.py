@@ -174,7 +174,7 @@ class MessageTestCase(unittest.TestCase):
             ProvisionedThroughputExceededException(None, None)})
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.status_mock.assert_called_with(503, None)
         self.finish_deferred.addCallback(handle_finish)
 
@@ -691,7 +691,7 @@ class EndpointTestCase(unittest.TestCase):
         self.sp_router_mock.route_notification.return_value = RouterResponse()
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(200)
         self.finish_deferred.addCallback(handle_finish)
 
@@ -714,7 +714,7 @@ class EndpointTestCase(unittest.TestCase):
         )
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(200)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -733,7 +733,7 @@ class EndpointTestCase(unittest.TestCase):
         )
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(500, None)
             ru = self.router_mock.register_user
             ok_(ru.called)
@@ -756,7 +756,7 @@ class EndpointTestCase(unittest.TestCase):
         )
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(503, None)
             self.router_mock.drop_user.assert_called()
 
@@ -782,7 +782,7 @@ class EndpointTestCase(unittest.TestCase):
         )
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(400, None)
 
         self.finish_deferred.addBoth(handle_finish)
@@ -806,7 +806,7 @@ class EndpointTestCase(unittest.TestCase):
         )
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(400, None)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -830,7 +830,7 @@ class EndpointTestCase(unittest.TestCase):
         )
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(401, None)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -854,7 +854,7 @@ class EndpointTestCase(unittest.TestCase):
         )
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(401, None)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -876,7 +876,7 @@ class EndpointTestCase(unittest.TestCase):
         )
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(201)
             self.endpoint.set_header.assert_called_with(
                 "Location", "Somewhere")
@@ -929,7 +929,7 @@ class EndpointTestCase(unittest.TestCase):
             for i in payload:
                 n = 'jwt_' + i
                 eq_(self.endpoint._client_info.get(n), payload[i])
-            self.assertTrue(result)
+            ok_(result)
 
         self.finish_deferred.addCallback(handle_finish, crypto_key, token)
         self.endpoint.post(None, dummy_uaid)
@@ -983,7 +983,7 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.endpoint.set_status.assert_called_with(201)
             eq_(self.endpoint._client_info.get('jwt'), None)
-            self.assertTrue(result)
+            ok_(result)
 
         self.finish_deferred.addCallback(handle_finish)
         self.endpoint.post("v1", dummy_uaid)
@@ -1015,7 +1015,7 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.endpoint.set_status.assert_called_with(401, None)
             eq_(self.endpoint._client_info.get('jwt'), None)
-            self.assertTrue(result)
+            ok_(result)
 
         self.finish_deferred.addCallback(handle_finish)
         self.endpoint.post(None, dummy_uaid)
@@ -1049,7 +1049,7 @@ class EndpointTestCase(unittest.TestCase):
         def handle_finish(result):
             self.endpoint.set_status.assert_called_with(401, None)
             eq_(self.endpoint._client_info.get('jwt'), None)
-            self.assertTrue(result)
+            ok_(result)
 
         self.finish_deferred.addCallback(handle_finish)
         self.endpoint.post("v2", dummy_uaid)
@@ -1082,7 +1082,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             eq_(self.endpoint._client_info.get('jwt'), None)
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(401, None)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -1128,7 +1128,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             eq_(self.endpoint._client_info.get('jwt'), None)
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(401, None)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -1160,7 +1160,7 @@ class EndpointTestCase(unittest.TestCase):
 
         def handle_finish(result):
             eq_(self.endpoint._client_info.get('jwt'), None)
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(401, None)
 
         self.finish_deferred.addCallback(handle_finish)
@@ -1183,7 +1183,7 @@ class EndpointTestCase(unittest.TestCase):
         )
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(201)
             self.endpoint.set_header.assert_called_with(
                 "Location", "Somewhere")
@@ -1208,7 +1208,7 @@ class EndpointTestCase(unittest.TestCase):
         )
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(201)
             self.endpoint.set_header.assert_called_with(
                 "Location", "Somewhere")
@@ -1235,7 +1235,7 @@ class EndpointTestCase(unittest.TestCase):
         )
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(201)
             self.endpoint.set_header.assert_called_with(
                 "Location", "Somewhere")
@@ -1311,7 +1311,7 @@ class EndpointTestCase(unittest.TestCase):
         self.router_mock.get_uaid.side_effect = self._throw_provisioned_error
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(503, None)
         self.finish_deferred.addCallback(handle_finish)
 
@@ -1323,7 +1323,7 @@ class EndpointTestCase(unittest.TestCase):
         self.router_mock.get_uaid.side_effect = self._throw_boto_err
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(503, None)
         self.finish_deferred.addCallback(handle_finish)
 
@@ -1546,7 +1546,7 @@ class EndpointTestCase(unittest.TestCase):
         self.fernet_mock.decrypt.return_value = dummy_token
 
         def handle_finish(result):
-            self.assertTrue(result)
+            ok_(result)
             self.endpoint.set_status.assert_called_with(401, None)
 
         self.finish_deferred.addCallback(handle_finish)
