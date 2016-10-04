@@ -148,8 +148,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.sendClose = self.orig_close
         self._connect()
         self.proto._sendAutoPing()
-        assert(mock_reactor.callLater.called)
-        assert(WebSocketServerProtocol.sendClose.called)
+        ok_(mock_reactor.callLater.called)
+        ok_(WebSocketServerProtocol.sendClose.called)
 
     @patch("autopush.websocket.reactor")
     def test_autoping_uaid_not_in_clients(self, mock_reactor):
@@ -160,8 +160,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto._sendAutoPing()
-        assert(mock_reactor.callLater.called)
-        assert(WebSocketServerProtocol.sendClose.called)
+        ok_(mock_reactor.callLater.called)
+        ok_(WebSocketServerProtocol.sendClose.called)
 
     @patch("autopush.websocket.reactor")
     def test_nuke_connection(self, mock_reactor):
@@ -170,7 +170,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.state = ""
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.nukeConnection()
-        assert(self.proto.ap_settings.metrics.increment.called)
+        ok_(self.proto.ap_settings.metrics.increment.called)
 
     @patch("autopush.websocket.reactor")
     def test_nuke_connection_shutdown_ran(self, mock_reactor):
@@ -610,7 +610,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         def check_result(msg):
             eq_(msg["status"], 200)
-            assert("use_webpush" in msg)
+            ok_("use_webpush" in msg)
         eq_(self.proto.base_tags, ['use_webpush:True'])
         return self._check_response(check_result)
 
@@ -673,7 +673,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         def check_result(msg):
             eq_(msg["status"], 200)
-            assert msg["uaid"] != uaid
+            ok_(msg["uaid"] != uaid)
         return self._check_response(check_result)
 
     def test_hello_with_bad_uaid_dash(self):
@@ -684,7 +684,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         def check_result(msg):
             eq_(msg["status"], 200)
-            assert msg["uaid"] != uaid
+            ok_(msg["uaid"] != uaid)
         return self._check_response(check_result)
 
     def test_hello_with_bad_uaid_case(self):
@@ -695,7 +695,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         def check_result(msg):
             eq_(msg["status"], 200)
-            assert msg["uaid"] != uaid
+            ok_(msg["uaid"] != uaid)
         return self._check_response(check_result)
 
     def test_hello_failure(self):
@@ -913,7 +913,7 @@ class WebsocketTestCase(unittest.TestCase):
             raise twisted.internet.defer.CancelledError
 
         def fail2(failure):
-            self.assertTrue(failure)
+            ok_(failure)
 
         def check_result(result):  # pragma: nocover
             pass
@@ -977,12 +977,12 @@ class WebsocketTestCase(unittest.TestCase):
         def check_register_result(msg):
             eq_(msg["status"], 200)
             eq_(msg["messageType"], "register")
-            assert "pushEndpoint" in msg
+            ok_("pushEndpoint" in msg)
             assert_called_included(self.proto.log.info, format="Register")
             d.callback(True)
 
         def check_hello_result(msg):
-            assert "messageType" in msg
+            ok_("messageType" in msg)
             self._send_message(dict(messageType="register",
                                     channelID=str(uuid.uuid4())))
             self._check_response(check_register_result)
@@ -1001,7 +1001,7 @@ class WebsocketTestCase(unittest.TestCase):
         d = Deferred()
 
         def check_register_result(msg):
-            assert self.proto.ap_settings.message.register_channel.called
+            ok_(self.proto.ap_settings.message.register_channel.called)
             assert_called_included(self.proto.log.info, format="Register")
             d.callback(True)
 
@@ -1033,7 +1033,7 @@ class WebsocketTestCase(unittest.TestCase):
         def check_register_result(msg, endpoint):
             eq_(endpoint,
                 self.proto.sendJSON.call_args[0][0]['pushEndpoint'])
-            assert self.proto.ap_settings.message.register_channel.called
+            ok_(self.proto.ap_settings.message.register_channel.called)
             assert_called_included(self.proto.log.info, format="Register")
             d.callback(True)
 
@@ -1056,7 +1056,7 @@ class WebsocketTestCase(unittest.TestCase):
             d.callback(True)
 
         def check_hello_result(msg):
-            assert "messageType" in msg
+            ok_("messageType" in msg)
             self._send_message(dict(messageType="register"))
             self._check_response(check_register_result)
 
@@ -1077,7 +1077,7 @@ class WebsocketTestCase(unittest.TestCase):
             d.callback(True)
 
         def check_hello_result(msg):
-            assert "messageType" in msg
+            ok_("messageType" in msg)
             self._send_message(dict(messageType="register", channelID="oof"))
             self._check_response(check_register_result)
 
@@ -1098,7 +1098,7 @@ class WebsocketTestCase(unittest.TestCase):
             d.callback(True)
 
         def check_hello_result(msg):
-            assert "messageType" in msg
+            ok_("messageType" in msg)
             self._send_message(dict(messageType="register",
                                     channelID=str(uuid.uuid4()).upper()))
             self._check_response(check_register_result)
@@ -1120,7 +1120,7 @@ class WebsocketTestCase(unittest.TestCase):
             d.callback(True)
 
         def check_hello_result(msg):
-            assert "messageType" in msg
+            ok_("messageType" in msg)
             self._send_message(
                 dict(messageType="register",
                      channelID=str(uuid.uuid4()).replace('-', '')))
@@ -1230,7 +1230,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.use_webpush = True
         self.proto.force_retry = Mock()
         self.proto.process_unregister(dict(channelID=chid))
-        assert self.proto.force_retry.called
+        ok_(self.proto.force_retry.called)
 
     def test_ws_unregister(self):
         self._connect()
@@ -1336,12 +1336,12 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Check the call result
         args = self.send_mock.call_args
-        assert args is not None
+        ok_(args is not None)
         self.send_mock.reset_mock()
 
         msg = json.loads(args[0][0])
         eq_(msg["messageType"], "notification")
-        assert "updates" in msg
+        ok_("updates" in msg)
         eq_(len(msg["updates"]), 1)
         update = msg["updates"][0]
         eq_(update["channelID"], chid)
@@ -1456,8 +1456,8 @@ class WebsocketTestCase(unittest.TestCase):
             version="bleh:jialsdjfilasjdf",
             code=200
         ))
-        assert self.proto.force_retry.called
-        assert mock_defer.addBoth.called
+        ok_(self.proto.force_retry.called)
+        ok_(mock_defer.addBoth.called)
         eq_(len(self.proto.log.info.mock_calls), 1)
         assert_called_included(self.proto.log.info,
                                format="Ack",
@@ -1667,7 +1667,7 @@ class WebsocketTestCase(unittest.TestCase):
         ]
         self.proto.deferToLater = Mock()
         self.proto.process_notifications()
-        assert self.proto.deferToLater.called
+        ok_(self.proto.deferToLater.called)
         eq_(self.proto.ps._notification_fetch, None)
 
     def test_process_notif_doesnt_run_when_paused(self):
@@ -1700,7 +1700,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.deferToLater = Mock()
         self.proto.ps._check_notifications = True
         self.proto.finish_notifications(None)
-        assert self.proto.deferToLater.called
+        ok_(self.proto.deferToLater.called)
 
     def test_notif_finished_with_webpush_with_notifications(self):
         self._connect()
@@ -1716,7 +1716,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.updates_sent[str(notif.channel_id)] = []
 
         self.proto.finish_webpush_notifications([notif])
-        assert self.send_mock.called
+        ok_(self.send_mock.called)
 
     def test_notif_finished_with_webpush_with_old_notifications(self):
         self._connect()
@@ -1734,8 +1734,8 @@ class WebsocketTestCase(unittest.TestCase):
 
         self.proto.force_retry = Mock()
         self.proto.finish_webpush_notifications([notif])
-        assert self.proto.force_retry.called
-        assert not self.send_mock.called
+        ok_(self.proto.force_retry.called)
+        ok_(not self.send_mock.called)
 
     def test_notification_results(self):
         # Populate the database for ourself
@@ -1778,7 +1778,7 @@ class WebsocketTestCase(unittest.TestCase):
                     eq_(ver, 12)
                 elif uchid == chid3:
                     eq_(ver, 9)
-                self.assert_(uchid in [chid, chid3])
+                ok_(uchid in [chid, chid3])
             d.callback(True)
 
         def check_result(msg):
@@ -1934,7 +1934,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = uaid
         reply = self.proto._verify_user_record()
         eq_(reply, None)
-        assert(fr.called)
+        ok_(fr.called)
         eq_(fr.call_args[0], (mm.drop_user, uaid))
 
 
@@ -2031,4 +2031,4 @@ class NotificationHandlerTestCase(unittest.TestCase):
         mock_client.ps.connected_at = now
         mock_client.sendClose = Mock()
         self.handler.delete(uaid, "", now)
-        assert(mock_client.sendClose.called)
+        ok_(mock_client.sendClose.called)

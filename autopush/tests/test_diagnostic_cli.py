@@ -2,7 +2,7 @@ import unittest
 
 from mock import Mock, patch
 from moto import mock_dynamodb2
-from nose.tools import eq_
+from nose.tools import eq_, ok_
 
 
 mock_dynamodb2 = mock_dynamodb2()
@@ -37,7 +37,8 @@ class DiagnosticCLITestCase(unittest.TestCase):
             "--router_tablename=fred",
             "http://someendpoint",
         ])
-        assert cli.run()
+        returncode = cli.run()
+        ok_(returncode not in (None, 0))
 
     @patch("autopush.diagnostic_cli.AutopushSettings")
     def test_successfull_lookup(self, mock_settings_class):

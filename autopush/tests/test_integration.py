@@ -253,14 +253,14 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                 ttl_header = resp.getheader("TTL")
                 eq_(ttl_header, str(ttl))
             if ttl != 0 and status == 201:
-                assert(location is not None)
+                ok_(location is not None)
                 if channel in self.messages:
                     self.messages[channel].append(location)
                 else:
                     self.messages[channel] = [location]
         else:
             # Simple Push messages are not individually addressable.
-            assert(location is None)
+            ok_(location is None)
 
         # Pull the notification if connected
         if self.ws and self.ws.connected:
@@ -454,14 +454,14 @@ class TestSimple(IntegrationBase):
     def test_delivery_while_disconnected(self):
         client = yield self.quick_register()
         yield client.disconnect()
-        self.assertTrue(client.channels)
+        ok_(client.channels)
         chan = client.channels.keys()[0]
         yield client.send_notification(status=202)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        self.assertTrue(result != {})
-        self.assertTrue(len(result["updates"]) == 1)
+        ok_(result != {})
+        eq_(len(result["updates"]), 1)
         eq_(result["updates"][0]["channelID"], chan)
         yield self.shut_down(client)
 
@@ -469,22 +469,22 @@ class TestSimple(IntegrationBase):
     def test_delivery_repeat_without_ack(self):
         client = yield self.quick_register()
         yield client.disconnect()
-        self.assertTrue(client.channels)
+        ok_(client.channels)
         chan = client.channels.keys()[0]
         yield client.send_notification(status=202)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        self.assertTrue(result != {})
-        self.assertTrue(len(result["updates"]) == 1)
+        ok_(result != {})
+        eq_(len(result["updates"]), 1)
         eq_(result["updates"][0]["channelID"], chan)
 
         yield client.disconnect()
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        self.assertTrue(result != {})
-        self.assertTrue(result["updates"] > 0)
+        ok_(result != {})
+        ok_(result["updates"] > 0)
         eq_(result["updates"][0]["channelID"], chan)
         yield self.shut_down(client)
 
@@ -509,7 +509,7 @@ class TestSimple(IntegrationBase):
     def test_dont_deliver_acked(self):
         client = yield self.quick_register()
         yield client.disconnect()
-        self.assertTrue(client.channels)
+        ok_(client.channels)
         chan = client.channels.keys()[0]
         yield client.send_notification(status=202)
         yield client.connect()
@@ -530,7 +530,7 @@ class TestSimple(IntegrationBase):
     def test_no_delivery_to_unregistered(self):
         client = yield self.quick_register()
         yield client.disconnect()
-        self.assertTrue(client.channels)
+        ok_(client.channels)
         chan = client.channels.keys()[0]
         yield client.send_notification(status=202)
         yield client.connect()
@@ -608,7 +608,7 @@ class TestData(IntegrationBase):
     @inlineCallbacks
     def test_webpush_data_delivery_to_connected_client(self):
         client = yield self.quick_register(use_webpush=True)
-        self.assertTrue(client.channels)
+        ok_(client.channels)
         chan = client.channels.keys()[0]
 
         # Invalid UTF-8 byte sequence.
@@ -963,7 +963,7 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         result = yield client.send_notification(data=data, ttl=None)
-        assert(result is not None)
+        ok_(result is not None)
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
@@ -974,7 +974,7 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         result = yield client.send_notification(data=data, ttl=None)
-        assert(result is not None)
+        ok_(result is not None)
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
@@ -990,7 +990,7 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         result = yield client.send_notification(data=data, ttl=0)
-        assert(result is not None)
+        ok_(result is not None)
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
@@ -1087,7 +1087,7 @@ class TestWebPush(IntegrationBase):
     def test_delete_saved_notification(self):
         client = yield self.quick_register(use_webpush=True)
         yield client.disconnect()
-        self.assertTrue(client.channels)
+        ok_(client.channels)
         chan = client.channels.keys()[0]
         yield client.send_notification()
         yield client.delete_notification(chan)

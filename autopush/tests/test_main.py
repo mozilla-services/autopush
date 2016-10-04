@@ -280,15 +280,17 @@ class EndpointMainTestCase(unittest.TestCase):
         ], False)
 
     def test_bad_senderidlist(self):
-        assert endpoint_main([
+        returncode = endpoint_main([
             "--gcm_enabled",
             "--senderid_list='[Invalid'"
         ], False)
+        ok_(returncode not in (None, 0))
 
     def test_bad_apnsconf(self):
-        assert endpoint_main([
+        returncode = endpoint_main([
             "--apns_creds='[Invalid'"
         ], False)
+        ok_(returncode not in (None, 0))
 
     def test_client_certs(self):
         cert = self.TestArg._client_certs['partner1'][0]

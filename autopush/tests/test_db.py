@@ -141,18 +141,18 @@ class StorageTestCase(unittest.TestCase):
         db = DynamoDBConnection()
         db_name = "storage_%s" % uuid.uuid4()
         dblist = db.list_tables()["TableNames"]
-        assert db_name not in dblist
+        ok_(db_name not in dblist)
 
         create_storage_table(db_name)
         dblist = db.list_tables()["TableNames"]
-        assert db_name in dblist
+        ok_(db_name in dblist)
 
     def test_provisioning(self):
         db_name = "storage_%s" % uuid.uuid4()
 
         s = create_storage_table(db_name, 8, 11)
-        assert s.throughput["read"] == 8
-        assert s.throughput["write"] == 11
+        eq_(s.throughput["read"], 8)
+        eq_(s.throughput["write"], 11)
 
     def test_dont_save_older(self):
         s = get_storage_table()
@@ -236,7 +236,7 @@ class MessageTestCase(unittest.TestCase):
         # Verify its in the db
         rows = m.query_2(uaid__eq=self.uaid, chidmessageid__eq=" ")
         results = list(rows)
-        assert(len(results) == 1)
+        eq_(len(results), 1)
 
     def test_unregister(self):
         chid = str(uuid.uuid4())
@@ -247,7 +247,7 @@ class MessageTestCase(unittest.TestCase):
         # Verify its in the db
         rows = m.query_2(uaid__eq=self.uaid, chidmessageid__eq=" ")
         results = list(rows)
-        assert(len(results) == 1)
+        eq_(len(results), 1)
         eq_(results[0]["chids"], set([chid]))
 
         message.unregister_channel(self.uaid, chid)
@@ -255,7 +255,7 @@ class MessageTestCase(unittest.TestCase):
         # Verify its not in the db
         rows = m.query_2(uaid__eq=self.uaid, chidmessageid__eq=" ")
         results = list(rows)
-        assert(len(results) == 1)
+        eq_(len(results), 1)
         eq_(results[0]["chids"], None)
 
         # Test for the very unlikely case that there's no 'chid'
@@ -275,13 +275,13 @@ class MessageTestCase(unittest.TestCase):
         message.register_channel(self.uaid, chid2)
 
         _, chans = message.all_channels(self.uaid)
-        assert(chid in chans)
-        assert(chid2 in chans)
+        ok_(chid in chans)
+        ok_(chid2 in chans)
 
         message.unregister_channel(self.uaid, chid2)
         _, chans = message.all_channels(self.uaid)
-        assert(chid2 not in chans)
-        assert(chid in chans)
+        ok_(chid2 not in chans)
+        ok_(chid in chans)
 
     def test_save_channels(self):
         chid = str(uuid.uuid4())
@@ -301,7 +301,7 @@ class MessageTestCase(unittest.TestCase):
         m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
         exists, chans = message.all_channels(dummy_uaid)
-        assert(chans == set([]))
+        eq_(chans, set([]))
 
     def test_message_storage(self):
         chid = str(uuid.uuid4())
@@ -386,24 +386,24 @@ class RouterTestCase(unittest.TestCase):
         db = DynamoDBConnection()
         db_name = "router_%s" % uuid.uuid4()
         dblist = db.list_tables()["TableNames"]
-        assert db_name not in dblist
+        ok_(db_name not in dblist)
 
         create_router_table(db_name)
         dblist = db.list_tables()["TableNames"]
-        assert db_name in dblist
+        ok_(db_name in dblist)
 
     def test_provisioning(self):
         db_name = "router_%s" % uuid.uuid4()
 
         r = create_router_table(db_name, 3, 17)
-        assert r.throughput["read"] == 3
-        assert r.throughput["write"] == 17
+        eq_(r.throughput["read"], 3)
+        eq_(r.throughput["write"], 17)
 
     def test_no_uaid_found(self):
         uaid = str(uuid.uuid4())
         r = get_router_table()
         router = Router(r, SinkMetrics())
-        self.assertRaises(ItemNotFound, router.get_uaid, uaid)
+        assert_raises(ItemNotFound, router.get_uaid, uaid)
 
     def test_uaid_provision_failed(self):
         r = get_router_table()
@@ -414,7 +414,7 @@ class RouterTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         router.table.get_item.side_effect = raise_error
-        with self.assertRaises(ProvisionedThroughputExceededException):
+        with assert_raises(ProvisionedThroughputExceededException):
             router.get_uaid(uaid="asdf")
 
     def test_register_user_provision_failed(self):
@@ -426,7 +426,7 @@ class RouterTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         router.table.connection.update_item.side_effect = raise_error
-        with self.assertRaises(ProvisionedThroughputExceededException):
+        with assert_raises(ProvisionedThroughputExceededException):
             router.register_user(dict(uaid=dummy_uaid, node_id="me",
                                       connected_at=1234,
                                       router_type="simplepush"))
@@ -440,7 +440,7 @@ class RouterTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         router.table.connection.put_item.side_effect = raise_error
-        with self.assertRaises(ProvisionedThroughputExceededException):
+        with assert_raises(ProvisionedThroughputExceededException):
             router.clear_node(Item(r, dict(uaid=dummy_uaid,
                                            connected_at="1234",
                                            node_id="asdf",
@@ -459,7 +459,7 @@ class RouterTestCase(unittest.TestCase):
             router.register_user(dict(uaid=uaid))
         except AutopushException:
             pass
-        self.assertRaises(ItemNotFound, router.get_uaid, uaid)
+        assert_raises(ItemNotFound, router.get_uaid, uaid)
         ok_(router.drop_user.called)
 
     def test_save_new(self):
