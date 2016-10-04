@@ -266,6 +266,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
             return object.__getattribute__(self, "get_notification")(timeout)
 
     def get_notification(self, timeout=1):
+        orig_timeout = self.ws.gettimeout()
         self.ws.settimeout(timeout)
         try:
             d = self.ws.recv()
@@ -273,6 +274,8 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
             return json.loads(d)
         except:
             return None
+        finally:
+            self.ws.settimeout(orig_timeout)
 
     def ping(self):
         log.debug("Send: %s", "{}")
