@@ -1,22 +1,16 @@
 """Health Check HTTP Handler"""
-import cyclone.web
-from autopush.base import BaseHandler
 
-from boto.dynamodb2.exceptions import (
-    InternalServerError,
-)
+import cyclone.web
+from boto.dynamodb2.exceptions import InternalServerError
 from twisted.internet.defer import DeferredList
 from twisted.internet.threads import deferToThread
 
 from autopush import __version__
+from autopush.exceptions import MissingTableException
+from autopush.web.base import BaseWebHandler
 
 
-class MissingTableException(Exception):
-    """Exception for missing tables"""
-    pass
-
-
-class HealthHandler(BaseHandler):
+class HealthHandler(BaseWebHandler):
     """HTTP Health Handler"""
 
     @cyclone.web.asynchronous
@@ -38,6 +32,10 @@ class HealthHandler(BaseHandler):
             self._check_table(self.ap_settings.storage.table)
         ])
         dl.addBoth(self._finish_response)
+
+    def authenticate_peer_cert(self):
+        """Skip authentication checks"""
+        pass
 
     def _check_table(self, table):
         """Checks the tables known about in DynamoDB"""
@@ -71,15 +69,19 @@ class HealthHandler(BaseHandler):
         if self._healthy:
             self._health_checks["status"] = "OK"
         else:
-            self.set_status(503)
+            self.set_status(503, reason=None)
             self._health_checks["status"] = "NOT OK"
 
         self.write(self._health_checks)
         self.finish()
 
 
-class StatusHandler(BaseHandler):
+class StatusHandler(BaseWebHandler):
     """HTTP Status Handler"""
+
+    def authenticate_peer_cert(self):
+        """skip authentication checks"""
+        pass
 
     def get(self):
         """HTTP Get

@@ -1,10 +1,11 @@
 """FCM Router"""
-import pyfcm
 
+import pyfcm
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
-from autopush.router.interface import RouterException, RouterResponse
+from autopush.exceptions import RouterException
+from autopush.router.interface import RouterResponse
 
 
 class FCMRouter(object):

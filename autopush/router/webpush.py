@@ -16,14 +16,15 @@ from twisted.internet.defer import (
 from twisted.internet.threads import deferToThread
 from twisted.web.client import FileBodyProducer
 
-from autopush.protocol import IgnoreBody
-from autopush.router.interface import RouterException, RouterResponse
-from autopush.router.simple import SimpleRouter
 from autopush.db import (
     dump_uaid,
     hasher,
     normalize_id,
 )
+from autopush.exceptions import RouterException
+from autopush.protocol import IgnoreBody
+from autopush.router.interface import RouterResponse
+from autopush.router.simple import SimpleRouter
 
 TTL_URL = "https://webpush-wg.github.io/webpush-protocol/#rfc.section.6.2"
 

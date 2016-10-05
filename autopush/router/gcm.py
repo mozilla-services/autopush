@@ -1,11 +1,12 @@
 """GCM Router"""
-import gcmclient
 
+import gcmclient
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
-from autopush.router.interface import RouterException, RouterResponse
-from autopush.websocket import ms_time
+from autopush.exceptions import RouterException
+from autopush.router.interface import RouterResponse
+from autopush.utils import ms_time
 
 
 class GCMRouter(object):

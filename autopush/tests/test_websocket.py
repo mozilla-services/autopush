@@ -6,9 +6,7 @@ from hashlib import sha256
 
 import twisted.internet.base
 from autopush.tests.test_db import make_webpush_notification
-from boto.dynamodb2.exceptions import (
-    ProvisionedThroughputExceededException,
-)
+from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from cyclone.web import Application
 from mock import Mock, patch
 from nose.tools import assert_raises, eq_, ok_
@@ -19,9 +17,7 @@ from twisted.internet.error import ConnectError
 from twisted.trial import unittest
 
 import autopush.db as db
-from autopush.db import (
-    create_rotating_message_table,
-)
+from autopush.db import create_rotating_message_table
 from autopush.settings import AutopushSettings
 from autopush.tests import MockAssist
 from autopush.websocket import (
@@ -31,9 +27,8 @@ from autopush.websocket import (
     Notification,
     NotificationHandler,
     WebSocketServerProtocol,
-    ms_time,
 )
-from autopush.utils import base64url_encode
+from autopush.utils import base64url_encode, ms_time
 
 
 def setUp():
@@ -2112,7 +2107,7 @@ class RouterHandlerTestCase(unittest.TestCase):
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
         eq_(len(self.status_mock.mock_calls), 1)
-        eq_(self.status_mock.call_args, ((404,),))
+        self.status_mock.assert_called_with(404, reason=None)
 
     def test_client_connected_but_busy(self):
         uaid = uuid.uuid4().hex
@@ -2121,8 +2116,7 @@ class RouterHandlerTestCase(unittest.TestCase):
         client_mock.accept_notification = False
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
-        eq_(len(self.status_mock.mock_calls), 1)
-        eq_(self.status_mock.call_args, ((503,),))
+        self.status_mock.assert_called_with(503, reason=None)
 
 
 class NotificationHandlerTestCase(unittest.TestCase):
@@ -2165,7 +2159,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
         self.mock_request.body = "{}"
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
-        eq_(self.status_mock.call_args, ((404,),))
+        self.status_mock.assert_called_with(404, reason=None)
 
     def test_delete(self):
         uaid = uuid.uuid4().hex

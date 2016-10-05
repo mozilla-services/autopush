@@ -21,16 +21,6 @@ HTTP Endpoints
     :private-members:
     :member-order: bysource
 
-.. autoclass:: RegistrationHandler
-    :members:
-    :private-members:
-    :member-order: bysource
-
-.. autoclass:: MessageHandler
-    :members:
-    :private-members:
-    :member-order: bysource
-
 Types
 +++++
 

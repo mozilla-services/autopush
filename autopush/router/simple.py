@@ -28,11 +28,9 @@ from twisted.logger import Logger
 from twisted.web._newclient import ResponseFailed
 from twisted.web.client import FileBodyProducer
 
+from autopush.exceptions import RouterException
 from autopush.protocol import IgnoreBody
-from autopush.router.interface import (
-    RouterException,
-    RouterResponse,
-)
+from autopush.router.interface import RouterResponse
 
 
 class SimpleRouter(object):
