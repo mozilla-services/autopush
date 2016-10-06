@@ -2,11 +2,8 @@
 import re
 import time
 import urlparse
-from functools import wraps
 
-from boto.dynamodb2.exceptions import (
-    ItemNotFound,
-)
+from boto.dynamodb2.exceptions import ItemNotFound
 from cryptography.fernet import InvalidToken
 from jose import JOSEError
 from marshmallow import (
@@ -17,9 +14,8 @@ from marshmallow import (
     validates,
     validates_schema,
 )
-from twisted.internet.threads import deferToThread
-from twisted.logger import Logger
 
+from autopush.web.base import AUTH_SCHEMES, PREF_SCHEME
 from autopush.exceptions import (
     InvalidRequest,
     InvalidTokenException,
@@ -28,89 +24,13 @@ from autopush.exceptions import (
 from autopush.utils import (
     base64url_encode,
     extract_jwt,
-    WebPushNotification)
+    WebPushNotification
+)
 
 MAX_TTL = 60 * 60 * 24 * 60
-# Older versions used "bearer", newer specification requires "webpush"
-AUTH_SCHEMES = ["bearer", "webpush"]
-PREF_SCHEME = "webpush"
 
 # Base64 URL validation
 VALID_BASE64_URL = re.compile(r'^[0-9A-Za-z\-_]+=*$')
-
-
-class ThreadedValidate(object):
-    """A cyclone request validation decorator
-
-    Exposed as a classmethod for running a marshmallow-based validation schema
-    in a separate thread for a cyclone request handler.
-
-    """
-    log = Logger()
-
-    def __init__(self, schema):
-        self.schema = schema
-
-    def _validate_request(self, request_handler):
-        """Validates a schema_class against a cyclone request"""
-        data = {
-            "headers": request_handler.request.headers,
-            "body": request_handler.request.body,
-            "path_args": request_handler.path_args,
-            "path_kwargs": request_handler.path_kwargs,
-            "arguments": request_handler.request.arguments,
-        }
-        schema = self.schema()
-        schema.context["settings"] = request_handler.ap_settings
-        schema.context["log"] = self.log
-        return schema.load(data)
-
-    def _call_func(self, result, func, request_handler, *args, **kwargs):
-        output, errors = result
-        if errors:
-            request_handler._write_validation_err(errors)
-        else:
-            request_handler.valid_input = output
-            return func(request_handler, *args, **kwargs)
-
-    def _decorator(self, func):
-        @wraps(func)
-        def wrapper(request_handler, *args, **kwargs):
-            # Wrap the handler in @cyclone.web.synchronous
-            request_handler._auto_finish = False
-            d = deferToThread(self._validate_request, request_handler)
-            d.addCallback(self._call_func, func, request_handler, *args,
-                          **kwargs)
-            d.addErrback(request_handler._overload_err)
-            d.addErrback(request_handler._boto_err)
-            d.addErrback(request_handler._validation_err)
-            d.addErrback(request_handler._response_err)
-        return wrapper
-
-    @classmethod
-    def validate(cls, schema):
-        """Validate a request schema in a separate thread before calling the
-        request handler
-
-        An alias `threaded_validate` should be used from this module.
-
-        Using `cyclone.web.asynchronous` is not needed as this function
-        will attach equivilant functionality to the method handler. Calling
-        `self.finish()` is needed on decorated handlers.
-
-        .. code-block::
-
-            class MyHandler(cyclone.web.RequestHandler):
-                @threaded_validate(MySchema())
-                def post(self):
-                    ...
-
-        """
-        return cls(schema)._decorator
-
-
-# Alias to the validation classmethod decorator
-threaded_validate = ThreadedValidate.validate
 
 
 class SimplePushSubscriptionSchema(Schema):

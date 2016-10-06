@@ -4,12 +4,11 @@ import hashlib
 import hmac
 import re
 import socket
+import time
 import uuid
 
 import ecdsa
 import requests
-import time
-
 from attr import (
     Factory,
     attrs,
@@ -414,7 +413,7 @@ class WebPushNotification(object):
 
         This is a blocking call.
 
-        :type data: autopush.web.validation.WebPushRequestSchema
+        :type data: autopush.web.push_validation.WebPushRequestSchema
         :type fernet: cryptography.fernet.Fernet
 
         :rtype: WebPushNotification
@@ -522,3 +521,8 @@ class WebPushNotification(object):
             payload["data"] = self.data
             payload["headers"] = self.headers
         return payload
+
+
+def ms_time():
+    """Return current time.time call as ms and a Python int"""
+    return int(time.time() * 1000)

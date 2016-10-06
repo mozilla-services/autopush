@@ -6,9 +6,7 @@ from hashlib import sha256
 
 import twisted.internet.base
 from autopush.tests.test_db import make_webpush_notification
-from boto.dynamodb2.exceptions import (
-    ProvisionedThroughputExceededException,
-)
+from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from cyclone.web import Application
 from mock import Mock, patch
 from nose.tools import assert_raises, eq_, ok_
@@ -19,10 +17,9 @@ from twisted.internet.error import ConnectError
 from twisted.trial import unittest
 
 import autopush.db as db
-from autopush.db import (
-    create_rotating_message_table,
-)
+from autopush.db import create_rotating_message_table
 from autopush.settings import AutopushSettings
+from autopush.tests import MockAssist
 from autopush.websocket import (
     PushState,
     PushServerProtocol,
@@ -30,11 +27,8 @@ from autopush.websocket import (
     Notification,
     NotificationHandler,
     WebSocketServerProtocol,
-    ms_time,
 )
-from autopush.utils import base64url_encode
-
-from .test_router import MockAssist
+from autopush.utils import base64url_encode, ms_time
 
 
 def setUp():
@@ -554,6 +548,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         mock_msg = Mock(wraps=db.Message)
         mock_msg.fetch_messages.return_value = []
+        mock_msg.all_channels.return_value = (None, [])
         self.proto.ap_settings.router.register_user = fake_msg
         # massage message_tables to include our fake range
         mt = self.proto.ps.settings.message_tables
@@ -571,15 +566,117 @@ class WebsocketTestCase(unittest.TestCase):
                                channelIDs=[],
                                use_webpush=True))
 
-        def check_result(msg):
+        d = Deferred()
+
+        def check_rotation(time_spent):
+            if time_spent > 3:  # pragma: nocover
+                d.errback(Exception("Failed to rotate message table"))
+
+            if self.proto.ps.rotate_message_table:  # pragma: nocover
+                reactor.callLater(0.2, check_rotation, 0.2 + time_spent)
+                return
+
             eq_(self.proto.ps.rotate_message_table, False)
+            d.callback(True)
+
+        def check_result(msg):
             # it's fine you've not connected in a while, but
             # you should recycle your endpoints since they're probably
             # invalid by now anyway.
             eq_(msg["status"], 200)
             eq_(msg["uaid"], orig_uaid)
 
-        return self._check_response(check_result)
+            # Wait to see that the message table gets rotated
+            reactor.callLater(0.2, check_rotation, 0.2)
+
+        self._check_response(check_result)
+        return d
+
+    def test_hello_tomorrow_provision_error(self):
+        orig_uaid = "deadbeef00000000abad1dea00000000"
+        router = self.proto.ap_settings.router
+        router.register_user(dict(
+            uaid=orig_uaid,
+            connected_at=ms_time(),
+            current_month="message_2016_3",
+            router_type="simplepush",
+        ))
+
+        # router.register_user returns (registered, previous
+        target_day = datetime.date(2016, 2, 29)
+        msg_day = datetime.date(2016, 3, 1)
+        msg_date = "{}_{}_{}".format(
+            self.proto.ap_settings._message_prefix,
+            msg_day.year,
+            msg_day.month)
+        msg_data = {
+            "router_type": "webpush",
+            "node_id": "http://localhost",
+            "last_connect": int(msg_day.strftime("%s")),
+            "current_month": msg_date,
+        }
+
+        def fake_msg(data):
+            return (True, msg_data, data)
+
+        mock_msg = Mock(wraps=db.Message)
+        mock_msg.fetch_messages.return_value = []
+        mock_msg.all_channels.return_value = (None, [])
+        self.proto.ap_settings.router.register_user = fake_msg
+        # massage message_tables to include our fake range
+        mt = self.proto.ps.settings.message_tables
+        mt.clear()
+        mt['message_2016_1'] = mock_msg
+        mt['message_2016_2'] = mock_msg
+        mt['message_2016_3'] = mock_msg
+
+        patch_range = patch("autopush.websocket.randrange")
+        mock_patch = patch_range.start()
+        mock_patch.return_value = 1
+
+        def raise_error(*args):
+            raise ProvisionedThroughputExceededException(None, None)
+
+        self.proto.ap_settings.router.update_message_month = MockAssist([
+            raise_error,
+            Mock(),
+        ])
+
+        with patch.object(datetime, 'date',
+                          Mock(wraps=datetime.date)) as patched:
+            patched.today.return_value = target_day
+            self._connect()
+            self._send_message(dict(messageType="hello",
+                                    uaid=orig_uaid,
+                                    channelIDs=[],
+                                    use_webpush=True))
+
+        d = Deferred()
+        d.addBoth(lambda x: patch_range.stop())
+
+        def check_rotation(time_spent):
+            if time_spent > 3:  # pragma: nocover
+                d.errback(Exception("Failed to rotate message table"))
+
+            if self.proto.ps.rotate_message_table:  # pragma: nocover
+                reactor.callLater(0.2, check_rotation, 0.2 + time_spent)
+                return
+
+            eq_(self.proto.ps.rotate_message_table, False)
+            d.callback(True)
+
+        def check_result(msg):
+            # it's fine you've not connected in a while, but
+            # you should recycle your endpoints since they're probably
+            # invalid by now anyway.
+            eq_(msg["status"], 200)
+            eq_(msg["uaid"], orig_uaid)
+
+            # Wait to see that the message table gets rotated
+            reactor.callLater(0.2, check_rotation, 0.2)
+
+        self._check_response(check_result)
+        return d
 
     def test_hello(self):
         self._connect()
@@ -713,7 +810,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         return self._check_response(check_result)
 
-    def test_hello_provisioned_exception(self):
+    def test_hello_provisioned_during_check(self):
         self._connect()
         self.proto.randrange = Mock(return_value=0.1)
         # Fail out the register_user call
@@ -1183,6 +1280,33 @@ class WebsocketTestCase(unittest.TestCase):
         d.errback(ConnectError())
         return d
 
+    def test_register_over_provisioning(self):
+        self._connect()
+        self.proto.ps.use_webpush = True
+        chid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
+        self.proto.ap_settings.message.register_channel = register = Mock()
+
+        def throw_provisioned(*args, **kwargs):
+            raise ProvisionedThroughputExceededException(None, None)
+
+        register.side_effect = throw_provisioned
+
+        d = Deferred()
+
+        def check_register_result(_):
+            ok_(self.proto.ap_settings.message.register_channel.called)
+            ok_(self.send_mock.called)
+            args, _ = self.send_mock.call_args
+            msg = json.loads(args[0])
+            eq_(msg["messageType"], "error")
+            eq_(msg["reason"], "overloaded")
+            d.callback(True)
+
+        res = self.proto.process_register(dict(channelID=chid))
+        res.addCallback(check_register_result)
+        return d
+
     def test_check_kill_self(self):
         self._connect()
         mock_agent = Mock()
@@ -1614,6 +1738,42 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps._notification_fetch.addErrback(lambda x: d.errback(x))
         return d
 
+    def test_process_notifications_overload(self):
+        twisted.internet.base.DelayedCall.debug = True
+        self._connect()
+        self.proto.ps.uaid = uuid.uuid4().hex
+
+        def throw_error(*args):
+            raise ProvisionedThroughputExceededException(None, None)
+
+        # Swap out fetch_notifications
+        self.proto.ap_settings.storage.fetch_notifications = MockAssist([
+            throw_error,
+            [],
+        ])
+
+        # Start the randrange patch
+        patch_randrange = patch("autopush.websocket.randrange")
+        mock_randrange = patch_randrange.start()
+        mock_randrange.return_value = 0.1
+
+        # No-op the deferToLater
+        self.proto.deferToLater = Mock()
+
+        self.proto.process_notifications()
+
+        # Tag on our own to follow up
+        d = Deferred()
+
+        def wait(result):
+            ok_(self.proto.deferToLater.called)
+            ok_(mock_randrange.called)
+            patch_randrange.stop()
+            d.callback(True)
+        self.proto.ps._notification_fetch.addCallback(wait)
+        self.proto.ps._notification_fetch.addErrback(lambda x: d.errback(x))
+        return d
+
     def test_process_notification_error(self):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
@@ -1635,27 +1795,6 @@ class WebsocketTestCase(unittest.TestCase):
 
         self.proto.ps._notification_fetch.addBoth(check_error)
         return d
-
-    def test_process_notification_provisioned_error(self):
-        self._connect()
-        self.proto.randrange = Mock(return_value=0.1)
-        self.proto.ps.uaid = uuid.uuid4().hex
-
-        def throw_error(*args, **kwargs):
-            raise ProvisionedThroughputExceededException(None, None)
-
-        self.proto.ap_settings.storage = Mock(
-            **{"fetch_notifications.side_effect": throw_error})
-        self.proto.ps._check_notifications = True
-        self.proto.process_notifications()
-
-        def check_result(msg):
-            eq_(self.proto.ps._check_notifications, False)
-            eq_(msg["status"], 503)
-            eq_(msg["reason"], "error - overloaded")
-            self.flushLoggedErrors()
-
-        return self._check_response(check_result)
 
     def test_process_notif_doesnt_run_with_webpush_outstanding(self):
         self._connect()
@@ -1968,7 +2107,7 @@ class RouterHandlerTestCase(unittest.TestCase):
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
         eq_(len(self.status_mock.mock_calls), 1)
-        eq_(self.status_mock.call_args, ((404,),))
+        self.status_mock.assert_called_with(404, reason=None)
 
     def test_client_connected_but_busy(self):
         uaid = uuid.uuid4().hex
@@ -1977,8 +2116,7 @@ class RouterHandlerTestCase(unittest.TestCase):
         client_mock.accept_notification = False
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
-        eq_(len(self.status_mock.mock_calls), 1)
-        eq_(self.status_mock.call_args, ((503,),))
+        self.status_mock.assert_called_with(503, reason=None)
 
 
 class NotificationHandlerTestCase(unittest.TestCase):
@@ -2021,7 +2159,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
         self.mock_request.body = "{}"
         self.handler.put(uaid)
         eq_(len(self.write_mock.mock_calls), 1)
-        eq_(self.status_mock.call_args, ((404,),))
+        self.status_mock.assert_called_with(404, reason=None)
 
     def test_delete(self):
         uaid = uuid.uuid4().hex

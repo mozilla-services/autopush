@@ -5,7 +5,8 @@ import hyper.tls
 from hyper import HTTP20Connection
 from hyper.http20.exceptions import HTTP20Error
 
-from autopush.router.interface import RouterException
+from autopush.exceptions import RouterException
+
 
 SANDBOX = 'api.development.push.apple.com'
 SERVER = 'api.push.apple.com'

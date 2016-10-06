@@ -27,11 +27,17 @@ from autopush.db import (
     create_rotating_message_table,
 )
 from autopush.endpoint import Notification
-from autopush.router import (APNSRouter, GCMRouter,
-                             SimpleRouter, WebPushRouter,
-                             FCMRouter)
-from autopush.router.interface import RouterException, RouterResponse, IRouter
+from autopush.exceptions import RouterException
+from autopush.router import (
+    APNSRouter,
+    GCMRouter,
+    SimpleRouter,
+    WebPushRouter,
+    FCMRouter,
+)
+from autopush.router.interface import RouterResponse, IRouter
 from autopush.settings import AutopushSettings
+from autopush.tests import MockAssist
 
 
 mock_dynamodb2 = mock_dynamodb2()
@@ -44,25 +50,6 @@ def setUp():
 
 def tearDown():
     mock_dynamodb2.stop()
-
-
-class MockAssist(object):
-    def __init__(self, results):
-        self.cur = 0
-        self.max = len(results)
-        self.results = results
-
-    def __call__(self, *args, **kwargs):
-        try:
-            r = self.results[self.cur]
-            print r
-            if callable(r):
-                return r()
-            else:
-                return r
-        finally:
-            if self.cur < (self.max - 1):
-                self.cur += 1
 
 
 class RouterInterfaceTestCase(TestCase):

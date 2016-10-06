@@ -1,23 +1,26 @@
-import cyclone.web
+from marshmallow import Schema, fields, pre_load
 
-from autopush.endpoint import AutoendpointHandler
-
-
-class LogCheckError(Exception):
-    pass
+from autopush.exceptions import LogCheckError
+from autopush.web.base import threaded_validate, BaseWebHandler
 
 
-class LogCheckHandler(AutoendpointHandler):
+class LogCheckSchema(Schema):
+    """Empty schema for log check"""
+    fields.err_type = fields.Str(allow_none=True)
 
-    def initialize(self, ap_settings):
-        self.ap_settings = ap_settings
-        self._client_info = self._init_info()
+    @pre_load
+    def extract_data(self, req):
+        # req['path_kwargs'] could be set to None, which would be returned
+        return dict(err_type=(req.get('path_kwargs') or {}).get('err_type'))
+
+
+class LogCheckHandler(BaseWebHandler):
 
     def authenticate_peer_cert(self):
         """LogCheck skips authentication checks"""
         pass
 
-    @cyclone.web.asynchronous
+    @threaded_validate(LogCheckSchema)
     def get(self, err_type=None):
         """HTTP GET
 
@@ -33,7 +36,7 @@ class LogCheckHandler(AutoendpointHandler):
                            status_code=418, errno=0,
                            client_info=self._client_info)
             self._write_response(418, 999, message="ERROR:Success",
-                                 reason="Test Error")
+                                 error="Test Error")
         if 'crit' in err_type:
             try:
                 raise LogCheckError("LogCheck")
@@ -42,4 +45,4 @@ class LogCheckHandler(AutoendpointHandler):
                                  status_code=418, errno=0,
                                  client_info=self._client_info)
                 self._write_response(418, 999, message="FAILURE:Success",
-                                     reason="Test Failure")
+                                     error="Test Failure")

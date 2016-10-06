@@ -41,7 +41,6 @@ from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
     ItemNotFound
 )
-from typing import List  # flake8: noqa
 from twisted.internet import reactor
 from twisted.internet.defer import (
     Deferred,
@@ -59,6 +58,7 @@ from twisted.protocols import policies
 from twisted.python import failure
 from twisted.web._newclient import ResponseFailed
 from twisted.web.resource import Resource
+from typing import List  # flake8: noqa
 from zope.interface import implements
 
 from autopush import __version__
@@ -67,13 +67,16 @@ from autopush.db import (
     has_connected_this_month,
     hasher,
     generate_last_connect,
-    dump_uaid)
+    dump_uaid
+)
+from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
 from autopush.utils import (
     parse_user_agent,
     validate_uaid,
-    WebPushNotification)
-from autopush.noseplugin import track_object
+    WebPushNotification,
+    ms_time
+)
 
 
 USER_RECORD_VERSION = 1
@@ -89,11 +92,6 @@ def extract_code(data):
     else:
         code = 0
     return code
-
-
-def ms_time():
-    """Return current time.time call as ms and a Python int"""
-    return int(time.time() * 1000)
 
 
 def periodic_reporter(settings):
@@ -583,21 +581,34 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if close:
             self.sendClose()
 
-    def err_overload(self, failure, message_type):
+    def err_overload(self, failure, message_type, disconnect=True):
         """Handle database overloads
 
-        Pause producing to cease incoming notifications while we wait a random
-        interval up to 8 seconds before closing down the connection. Most
-        clients wait up to 10 seconds for a command, but this is not a
-        guarantee, so rather than never reply, we still shut the connection
-        down.
+        If ``disconnect`` is False, the an overload error is returned and the
+        client is not disconnected.
+
+        Otherwise, pause producing to cease incoming notifications while we
+        wait a random interval up to 8 seconds before closing down the
+        connection. Most clients wait up to 10 seconds for a command,
+        but this is not a guarantee, so rather than never reply, we still
+        shut the connection down.
+
+        :param disconnect: Whether the client should be disconnected or not.
 
         """
         failure.trap(ProvisionedThroughputExceededException)
-        self.transport.pauseProducing()
-        d = self.deferToLater(self.randrange(4, 9), self.err_finish_overload,
-                              message_type)
-        d.addErrback(self.trap_cancel)
+
+        if disconnect:
+            self.transport.pauseProducing()
+            d = self.deferToLater(self.randrange(4, 9),
+                                  self.err_finish_overload, message_type)
+            d.addErrback(self.trap_cancel)
+        else:
+            send = {"messageType": "error",
+                    "reason": "overloaded",
+                    "status": 503
+                    }
+            self.sendJSON(send)
 
     def err_finish_overload(self, message_type):
         """Close the connection down and resume consuming input after the
@@ -844,8 +855,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             d = self.deferToThread(
                 self.ap_settings.storage.fetch_notifications, self.ps.uaid)
         d.addCallback(self.finish_notifications)
+        d.addErrback(self.error_notification_overload)
         d.addErrback(self.trap_cancel)
-        d.addErrback(self.err_overload, "notif")
         d.addErrback(self.error_notifications)
         self.ps._notification_fetch = d
 
@@ -854,6 +865,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # If we error'd out on this important check, we drop the connection
         self.log_failure(fail)
         self.sendClose()
+
+    def error_notification_overload(self, fail):
+        """errBack for provisioned errors during notification check"""
+        fail.trap(ProvisionedThroughputExceededException)
+        # Silently ignore the error, and reschedule the notification check
+        # to run up to a minute in the future to distribute load farther out
+        d = self.deferToLater(randrange(5, 60), self.process_notifications)
+        d.addErrback(self.trap_cancel)
 
     def finish_notifications(self, notifs):
         """callback for processing notifications from storage"""
@@ -912,8 +931,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # Not told to check for notifications, do we need to now rotate
             # the message table?
             if self.ps.rotate_message_table:
-                self.transport.pauseProducing()
-                self.ps.rotate_message_table = False
                 self._rotate_message_table()
             return
 
@@ -933,38 +950,53 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         """Function to fire off a message table copy of channels + update the
         router current_month entry"""
         self.transport.pauseProducing()
-        d = self.deferToThread(self.ps.message.all_channels, self.ps.uaid)
-        d.addCallback(self._register_rotated_channels)
+        d = self.deferToThread(self._monthly_transition)
+        d.addCallback(self._finish_monthly_transition)
         d.addErrback(self.trap_cancel)
-        d.addErrback(self.err_overload, "notif")
-        d.addErrback(self.log_failure)
+        d.addErrback(self.error_monthly_rotation_overload)
+        d.addErrback(self.error_notifications)
 
-    def _register_rotated_channels(self, result):
-        """Register the channels into a new entry in the current month"""
-        # Update the current month now, so that we can save the channels into
-        # the right location
+    def _monthly_transition(self):
+        """Transition the client to use a new message month
+
+        Utilized to migrate a users channels to a new message month and
+        update the router record reflecting the proper month.
+
+        This is a blocking function that does *not* run on the event loop.
+
+        """
+        # Get the current channels for this month
+        _, channels = self.ps.message.all_channels(self.ps.uaid)
+
+        # Get the current message month
+        cur_month = self.ap_settings.current_msg_month
+        if channels:
+            # Save the current channels into this months message table
+            msg_table = self.ap_settings.message_tables[cur_month]
+            msg_table.save_channels(self.ps.uaid, channels)
+
+        # Finally, update the route message month
+        self.ap_settings.router.update_message_month(self.ps.uaid, cur_month)
+
+    def _finish_monthly_transition(self, result):
+        """Mark the client as successfully transitioned and resume"""
+        # Update the current month now that we've moved forward a month
         self.ps.message_month = self.ap_settings.current_msg_month
+        self.ps.rotate_message_table = False
+        self.transport.resumeProducing()
 
-        _, channels = result
-        if not channels:
-            # No previously registered channels, skip to updating the router
-            # table
-            return self._update_router_for_message_month(None)
+    def error_monthly_rotation_overload(self, fail):
+        """Capture overload on monthly table rotation attempt
 
-        # Register the channels, then update the router
-        d = self.deferToThread(self.ps.message.save_channels, self.ps.uaid,
-                               channels)
-        d.addCallback(self._update_router_for_message_month)
-        return d
+        If a provision exdeeded error hits while attempting monthly table
+        rotation, schedule it all over and re-scan the messages. Normal
+        websocket client flow is returned in the meantime.
 
-    def _update_router_for_message_month(self, result):
-        """Update the router for the message month"""
-        # This is returned so that the error handling in _rotate_message_table
-        # still applies since the deferred chain is fully followed.
-        d = self.deferToThread(self.ap_settings.router.update_message_month,
-                               self.ps.uaid, self.ps.message_month)
-        d.addCallback(lambda x: self.transport.resumeProducing())
-        return d
+        """
+        fail.trap(ProvisionedThroughputExceededException)
+        self.transport.resumeProducing()
+        d = self.deferToLater(randrange(1, 60), self.process_notifications)
+        d.addErrback(self.trap_cancel)
 
     def _send_ping(self):
         """Helper for ping sending that tracks when the ping was sent"""
@@ -1027,12 +1059,12 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def finish_register(self, endpoint, chid):
         """callback for successful endpoint creation, sends register reply"""
         if self.ps.use_webpush:
-            d = self.deferToThread(self.ap_settings.message.register_channel,
+            d = self.deferToThread(self.ps.message.register_channel,
                                    self.ps.uaid, chid)
             d.addCallback(self.send_register_finish, endpoint, chid)
             # Note: No trap_cancel needed here since the deferred here is
             # returned to process_register which will trap it
-            d.addErrback(self.err_overload, "register")
+            d.addErrback(self.err_overload, "register", disconnect=False)
             return d
         else:
             self.send_register_finish(None, endpoint, chid)
@@ -1084,7 +1116,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         if self.ps.use_webpush:
             # Unregister the channel
-            self.force_retry(self.ap_settings.message.unregister_channel,
+            self.force_retry(self.ps.message.unregister_channel,
                              self.ps.uaid, chid)
         else:
             # Delete any record from storage, we don't wait for this
@@ -1290,13 +1322,13 @@ class RouterHandler(BaseHandler):
         settings = self.ap_settings
         client = settings.clients.get(uaid)
         if not client:
-            self.set_status(404)
+            self.set_status(404, reason=None)
             settings.metrics.increment("updates.router.disconnected")
             self.write("Client not connected.")
             return
 
         if client.paused:
-            self.set_status(503)
+            self.set_status(503, reason=None)
 
             settings.metrics.increment("updates.router.busy")
             self.write("Client busy.")
@@ -1320,7 +1352,7 @@ class NotificationHandler(BaseHandler):
         client = self.ap_settings.clients.get(uaid)
         settings = self.ap_settings
         if not client:
-            self.set_status(404)
+            self.set_status(404, reason=None)
             settings.metrics.increment("updates.notification.disconnected")
             self.write("Client not connected.")
             return

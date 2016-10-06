@@ -12,16 +12,17 @@ from twisted.web.server import Site
 
 import autopush.db as db
 import autopush.utils as utils
-from autopush.endpoint import (
-    EndpointHandler,
-    MessageHandler,
-    RegistrationHandler,
-)
-from autopush.log_check import LogCheckHandler
-from autopush.health import (HealthHandler, StatusHandler)
+from autopush.endpoint import EndpointHandler
 from autopush.logging import PushLogger
 from autopush.settings import AutopushSettings
 from autopush.ssl import AutopushSSLContextFactory
+from autopush.web.health import HealthHandler, StatusHandler
+from autopush.web.limitedhttpconnection import LimitedHTTPConnection
+from autopush.web.log_check import LogCheckHandler
+from autopush.web.message import MessageHandler
+from autopush.web.simplepush import SimplePushHandler
+from autopush.web.registration import RegistrationHandler
+from autopush.web.webpush import WebPushHandler
 from autopush.websocket import (
     PushServerProtocol,
     RouterHandler,
@@ -30,10 +31,6 @@ from autopush.websocket import (
     DefaultResource,
     StatusResource,
 )
-from autopush.web.simplepush import SimplePushHandler
-from autopush.web.webpush import WebPushHandler
-from autopush.web.limitedhttpconnection import LimitedHTTPConnection
-
 
 shared_config_files = [
     '/etc/autopush_shared.ini',
@@ -42,6 +39,23 @@ shared_config_files = [
     '.autopush_shared.ini',
 ]
 log = Logger()
+
+# These are the known entry points for autopush. These are used here and in
+# testing for consistency.
+endpoint_paths = {
+    'route': r"/push/([^\/]+)",
+    'notification': r"/notif/([^\/]+)(/([^\/]+))?",
+    'old': r"/push/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
+    'simple': r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
+    'webpush': r"/wpush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
+    'message': r"/m/(?P<message_id>[^\/]+)",
+    'registration': r"/v1/(?P<router_type>[^\/]+)/(?P<router_token>[^\/]+)/"
+                    r"registration(?:/(?P<uaid>[^\/]+))?(?:/subscription)?"
+                    r"(?:/(?P<chid>[^\/]+))?",
+    'logcheck': r"/v1/err(?:/(?P<err_type>[^\/]+))?",
+    'status': r"^/status",
+    'health': r"^/health",
+}
 
 
 def add_shared_args(parser):
@@ -428,8 +442,8 @@ def mount_health_handlers(site, settings):
     """Create a health check HTTP handler on a cyclone site object"""
     h_kwargs = dict(ap_settings=settings)
     site.add_handlers(".*$", [
-        (r"^/status", StatusHandler, h_kwargs),
-        (r"^/health", HealthHandler, h_kwargs),
+        (endpoint_paths['status'], StatusHandler, h_kwargs),
+        (endpoint_paths['health'], HealthHandler, h_kwargs),
     ])
 
 
@@ -468,8 +482,8 @@ def connection_main(sysargs=None, use_files=True):
     # Internal HTTP notification router
     h_kwargs = dict(ap_settings=settings)
     site = cyclone.web.Application([
-        (r"/push/([^\/]+)", RouterHandler, h_kwargs),
-        (r"/notif/([^\/]+)(/([^\/]+))?", NotificationHandler, h_kwargs),
+        (endpoint_paths['route'], RouterHandler, h_kwargs),
+        (endpoint_paths['notification'], NotificationHandler, h_kwargs),
     ],
         default_host=settings.router_hostname, debug=args.debug,
         log_function=skip_request_logging
@@ -566,17 +580,12 @@ def endpoint_main(sysargs=None, use_files=True):
     # Endpoint HTTP router
     h_kwargs = dict(ap_settings=settings)
     site = cyclone.web.Application([
-        (r"/push/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
-         EndpointHandler, h_kwargs),
-        (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
-         SimplePushHandler, h_kwargs),
-        (r"/wpush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
-         WebPushHandler, h_kwargs),
-        (r"/m/([^\/]+)", MessageHandler, h_kwargs),
-        (r"/v1/([^\/]+)/([^\/]+)/registration(?:/([^\/]+))"
-            "?(?:/subscription)?(?:/([^\/]+))?",
-         RegistrationHandler, h_kwargs),
-        (r"/v1/err(?:/([^\/]+))?", LogCheckHandler, h_kwargs),
+        (endpoint_paths['old'], EndpointHandler, h_kwargs),
+        (endpoint_paths['simple'], SimplePushHandler, h_kwargs),
+        (endpoint_paths['webpush'], WebPushHandler, h_kwargs),
+        (endpoint_paths['message'], MessageHandler, h_kwargs),
+        (endpoint_paths['registration'], RegistrationHandler, h_kwargs),
+        (endpoint_paths['logcheck'], LogCheckHandler, h_kwargs),
     ],
         default_host=settings.hostname, debug=args.debug,
         log_function=skip_request_logging

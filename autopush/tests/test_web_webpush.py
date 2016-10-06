@@ -9,10 +9,7 @@ from twisted.internet.defer import Deferred
 from twisted.logger import Logger
 from twisted.trial import unittest
 
-from autopush.db import (
-    Router,
-    create_rotating_message_table,
-)
+from autopush.db import Router, create_rotating_message_table
 from autopush.router.interface import IRouter, RouterResponse
 from autopush.settings import AutopushSettings
 
@@ -77,7 +74,7 @@ class TestWebpushHandler(unittest.TestCase):
 
         def handle_finish(result):
             eq_(result, True)
-            self.wp.set_status.assert_called_with(503)
+            self.wp.set_status.assert_called_with(503, reason=None)
             ru = self.router_mock.register_user
             ok_(ru.called)
             eq_('webpush', ru.call_args[0][0].get('router_type'))
@@ -106,7 +103,7 @@ class TestWebpushHandler(unittest.TestCase):
 
         def handle_finish(result):
             eq_(result, True)
-            self.wp.set_status.assert_called_with(503)
+            self.wp.set_status.assert_called_with(503, reason=None)
             ok_(self.router_mock.drop_user.called)
 
         self.finish_deferred.addCallback(handle_finish)

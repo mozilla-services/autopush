@@ -2,18 +2,15 @@ import json
 
 import twisted
 from cyclone.web import Application
-from twisted.trial import unittest
 from mock import Mock
 from moto import mock_dynamodb2
 from nose.tools import eq_
-
-from autopush.db import (
-    create_rotating_message_table,
-)
-from autopush.log_check import LogCheckHandler
-from autopush.settings import AutopushSettings
 from twisted.internet.defer import Deferred
+from twisted.trial import unittest
 
+from autopush.db import create_rotating_message_table
+from autopush.settings import AutopushSettings
+from autopush.web.log_check import LogCheckHandler
 
 mock_dynamodb2 = mock_dynamodb2()
 

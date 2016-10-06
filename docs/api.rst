@@ -20,6 +20,13 @@ documentation is organized alphabetically by module name.
    api/router/fcm
    api/router/interface
    api/router/simple
+   api/web/base
+   api/web/webpush
+   api/web/simplepush
+   api/web/message
+   api/web/registration
+   api/web/health
+   api/web/log_check
    api/settings
    api/ssl
    api/utils
