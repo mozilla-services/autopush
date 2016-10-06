@@ -1,13 +1,15 @@
 """APNS Router"""
 import uuid
 
+from twisted.logger import Logger
+from twisted.internet.threads import deferToThread
+
+from autopush.exceptions import RouterException
 from autopush.router.apns2 import (
     APNSClient,
     APNS_MAX_CONNECTIONS,
 )
-from twisted.logger import Logger
-from twisted.internet.threads import deferToThread
-from autopush.router.interface import RouterException, RouterResponse
+from autopush.router.interface import RouterResponse
 
 
 # https://github.com/djacobs/PyAPNs

@@ -2,15 +2,13 @@ import time
 
 from twisted.internet.defer import Deferred
 
-from autopush.web.base import (
-    BaseWebHandler,
-    Notification,
-)
-from autopush.web.validation import (
-    threaded_validate,
-    SimplePushRequestSchema,
-)
 from autopush.db import hasher
+from autopush.web.base import (
+    threaded_validate,
+    Notification,
+    BaseWebHandler,
+)
+from autopush.web.push_validation import SimplePushRequestSchema
 
 
 class SimplePushHandler(BaseWebHandler):

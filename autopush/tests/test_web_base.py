@@ -177,7 +177,7 @@ class TestBase(unittest.TestCase):
     def test_write_response(self):
         self.base._write_response(400, 103, message="Fail",
                                   headers=dict(Location="http://a.com/"))
-        self.status_mock.assert_called_with(400)
+        self.status_mock.assert_called_with(400, reason=None)
 
     def test_validation_error(self):
         try:
@@ -185,7 +185,7 @@ class TestBase(unittest.TestCase):
         except InvalidRequest:
             fail = Failure()
         self.base._validation_err(fail)
-        self.status_mock.assert_called_with(400)
+        self.status_mock.assert_called_with(400, reason=None)
 
     def test_response_err(self):
         try:
@@ -193,7 +193,7 @@ class TestBase(unittest.TestCase):
         except Exception:
             fail = Failure()
         self.base._response_err(fail)
-        self.status_mock.assert_called_with(500)
+        self.status_mock.assert_called_with(500, reason=None)
 
     def test_overload_err(self):
         try:
@@ -201,7 +201,7 @@ class TestBase(unittest.TestCase):
         except ProvisionedThroughputExceededException:
             fail = Failure()
         self.base._overload_err(fail)
-        self.status_mock.assert_called_with(503)
+        self.status_mock.assert_called_with(503, reason=None)
 
     def test_boto_err(self):
         try:
@@ -209,52 +209,52 @@ class TestBase(unittest.TestCase):
         except BotoServerError:
             fail = Failure()
         self.base._boto_err(fail)
-        self.status_mock.assert_called_with(503)
+        self.status_mock.assert_called_with(503, reason=None)
 
     def test_router_response(self):
         from autopush.router.interface import RouterResponse
         response = RouterResponse(headers=dict(Location="http://a.com/"))
         self.base._router_response(response)
-        self.status_mock.assert_called_with(200)
+        self.status_mock.assert_called_with(200, reason=None)
 
     def test_router_response_client_error(self):
         from autopush.router.interface import RouterResponse
         response = RouterResponse(headers=dict(Location="http://a.com/"),
                                   status_code=400)
         self.base._router_response(response)
-        self.status_mock.assert_called_with(400)
+        self.status_mock.assert_called_with(400, reason=None)
 
     def test_router_fail_err(self):
-        from autopush.router.interface import RouterException
+        from autopush.exceptions import RouterException
 
         try:
             raise RouterException("error")
         except RouterException:
             fail = Failure()
         self.base._router_fail_err(fail)
-        self.status_mock.assert_called_with(500)
+        self.status_mock.assert_called_with(500, reason=None)
 
     def test_router_fail_err_200_status(self):
-        from autopush.router.interface import RouterException
+        from autopush.exceptions import RouterException
 
         try:
             raise RouterException("Abort Ok", status_code=200)
         except RouterException:
             fail = Failure()
         self.base._router_fail_err(fail)
-        self.status_mock.assert_called_with(200)
+        self.status_mock.assert_called_with(200, reason=None)
 
     def test_router_fail_err_400_status(self):
-        from autopush.router.interface import RouterException
+        from autopush.exceptions import RouterException
 
         try:
             raise RouterException("Abort Ok", status_code=400)
         except RouterException:
             fail = Failure()
         self.base._router_fail_err(fail)
-        self.status_mock.assert_called_with(400)
+        self.status_mock.assert_called_with(400, reason=None)
 
     def test_write_validation_err(self):
         errors = dict(data="Value too large")
         self.base._write_validation_err(errors)
-        self.status_mock.assert_called_with(400)
+        self.status_mock.assert_called_with(400, reason=None)

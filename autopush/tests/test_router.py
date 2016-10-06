@@ -27,10 +27,15 @@ from autopush.db import (
     create_rotating_message_table,
 )
 from autopush.endpoint import Notification
-from autopush.router import (APNSRouter, GCMRouter,
-                             SimpleRouter, WebPushRouter,
-                             FCMRouter)
-from autopush.router.interface import RouterException, RouterResponse, IRouter
+from autopush.exceptions import RouterException
+from autopush.router import (
+    APNSRouter,
+    GCMRouter,
+    SimpleRouter,
+    WebPushRouter,
+    FCMRouter,
+)
+from autopush.router.interface import RouterResponse, IRouter
 from autopush.settings import AutopushSettings
 from autopush.tests import MockAssist
 

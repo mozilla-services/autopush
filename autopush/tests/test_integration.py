@@ -13,25 +13,26 @@ from unittest.case import SkipTest
 import boto
 import ecdsa
 import psutil
-import websocket
 import twisted.internet.base
+import websocket
 from autobahn.twisted.websocket import WebSocketServerFactory
 from jose import jws
 from nose.tools import eq_, ok_
-from twisted.trial import unittest
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.threads import deferToThread
-from twisted.web.client import Agent
 from twisted.test.proto_helpers import AccumulatingProtocol
+from twisted.trial import unittest
+from twisted.web.client import Agent
 
-from autopush import __version__
 import autopush.db as db
+from autopush import __version__
 from autopush.db import (
     create_rotating_message_table,
     get_month,
     has_connected_this_month
 )
+from autopush.main import endpoint_paths
 from autopush.settings import AutopushSettings
 from autopush.utils import base64url_encode
 
@@ -317,14 +318,16 @@ class IntegrationBase(unittest.TestCase):
         import cyclone.web
         from autobahn.twisted.websocket import WebSocketServerFactory
         from autobahn.twisted.resource import WebSocketResource
-        from autopush.log_check import LogCheckHandler
+        from twisted.web.server import Site
+
+        from autopush.web.log_check import LogCheckHandler
         from autopush.main import mount_health_handlers, skip_request_logging
-        from autopush.endpoint import (
-            EndpointHandler,
-            MessageHandler,
-            RegistrationHandler,
-        )
+        from autopush.endpoint import EndpointHandler
         from autopush.settings import AutopushSettings
+        from autopush.web.message import MessageHandler
+        from autopush.web.registration import RegistrationHandler
+        from autopush.web.simplepush import SimplePushHandler
+        from autopush.web.webpush import WebPushHandler
         from autopush.websocket import (
             PushServerProtocol,
             RouterHandler,
@@ -332,9 +335,6 @@ class IntegrationBase(unittest.TestCase):
             DefaultResource,
             StatusResource,
         )
-        from autopush.web.simplepush import SimplePushHandler
-        from autopush.web.webpush import WebPushHandler
-        from twisted.web.server import Site
 
         router_table = os.environ.get("ROUTER_TABLE", "router_int_test")
         storage_table = os.environ.get("STORAGE_TABLE", "storage_int_test")
@@ -375,8 +375,8 @@ class IntegrationBase(unittest.TestCase):
         # Internal HTTP notification router
         h_kwargs = dict(ap_settings=settings)
         ws_site = cyclone.web.Application([
-            (r"/push/([^\/]+)", RouterHandler, h_kwargs),
-            (r"/notif/([^\/]+)(/([^\/]+))?", NotificationHandler, h_kwargs),
+            (endpoint_paths['route'], RouterHandler, h_kwargs),
+            (endpoint_paths['notification'], NotificationHandler, h_kwargs),
         ],
             default_host=settings.router_hostname,
             log_function=skip_request_logging,
@@ -386,17 +386,15 @@ class IntegrationBase(unittest.TestCase):
 
         # Endpoint HTTP router
         site = cyclone.web.Application([
-            (r"/push/(v\d+)?/?([^\/]+)", EndpointHandler, h_kwargs),
-            (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
-             SimplePushHandler, h_kwargs),
-            (r"/m/([^\/]+)", MessageHandler, h_kwargs),
-            (r"/wpush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
-             WebPushHandler, h_kwargs),
+            (endpoint_paths['old'], EndpointHandler, h_kwargs),
+            (endpoint_paths['simple'], SimplePushHandler, h_kwargs),
+            (endpoint_paths['message'], MessageHandler, h_kwargs),
+            (endpoint_paths['webpush'], WebPushHandler, h_kwargs),
 
             # PUT /register/ => connect info
             # GET /register/uaid => chid + endpoint
-            (r"/register(?:/(.+))?", RegistrationHandler, h_kwargs),
-            (r"/v1/err(?:/([^\/]+))?", LogCheckHandler, h_kwargs),
+            (endpoint_paths['registration'], RegistrationHandler, h_kwargs),
+            (endpoint_paths['logcheck'], LogCheckHandler, h_kwargs),
         ],
             default_host=settings.hostname,
             log_function=skip_request_logging,

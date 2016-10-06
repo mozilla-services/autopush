@@ -41,7 +41,6 @@ from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
     ItemNotFound
 )
-from typing import List  # flake8: noqa
 from twisted.internet import reactor
 from twisted.internet.defer import (
     Deferred,
@@ -59,6 +58,7 @@ from twisted.protocols import policies
 from twisted.python import failure
 from twisted.web._newclient import ResponseFailed
 from twisted.web.resource import Resource
+from typing import List  # flake8: noqa
 from zope.interface import implements
 
 from autopush import __version__
@@ -67,13 +67,16 @@ from autopush.db import (
     has_connected_this_month,
     hasher,
     generate_last_connect,
-    dump_uaid)
+    dump_uaid
+)
+from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
 from autopush.utils import (
     parse_user_agent,
     validate_uaid,
-    WebPushNotification)
-from autopush.noseplugin import track_object
+    WebPushNotification,
+    ms_time
+)
 
 
 USER_RECORD_VERSION = 1
@@ -89,11 +92,6 @@ def extract_code(data):
     else:
         code = 0
     return code
-
-
-def ms_time():
-    """Return current time.time call as ms and a Python int"""
-    return int(time.time() * 1000)
 
 
 def periodic_reporter(settings):
@@ -1324,13 +1322,13 @@ class RouterHandler(BaseHandler):
         settings = self.ap_settings
         client = settings.clients.get(uaid)
         if not client:
-            self.set_status(404)
+            self.set_status(404, reason=None)
             settings.metrics.increment("updates.router.disconnected")
             self.write("Client not connected.")
             return
 
         if client.paused:
-            self.set_status(503)
+            self.set_status(503, reason=None)
 
             settings.metrics.increment("updates.router.busy")
             self.write("Client busy.")
@@ -1354,7 +1352,7 @@ class NotificationHandler(BaseHandler):
         client = self.ap_settings.clients.get(uaid)
         settings = self.ap_settings
         if not client:
-            self.set_status(404)
+            self.set_status(404, reason=None)
             settings.metrics.increment("updates.notification.disconnected")
             self.write("Client not connected.")
             return

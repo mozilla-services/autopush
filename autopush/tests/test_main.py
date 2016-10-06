@@ -17,10 +17,8 @@ from autopush.main import (
     make_settings,
     skip_request_logging,
 )
-from autopush.utils import (
-    resolve_ip,
-)
 from autopush.settings import AutopushSettings
+from autopush.utils import resolve_ip
 
 
 mock_dynamodb2 = mock_dynamodb2()

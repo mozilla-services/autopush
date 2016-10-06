@@ -3,18 +3,10 @@ import time
 from twisted.internet.defer import Deferred
 from twisted.internet.threads import deferToThread
 
-from autopush.web.base import (
-    BaseWebHandler,
-)
-from autopush.web.validation import (
-    threaded_validate,
-    WebPushRequestSchema,
-)
-from autopush.websocket import ms_time
-from autopush.db import (
-    dump_uaid,
-    hasher,
-)
+from autopush.db import dump_uaid, hasher
+from autopush.utils import ms_time
+from autopush.web.base import threaded_validate, BaseWebHandler
+from autopush.web.push_validation import WebPushRequestSchema
 
 
 class WebPushHandler(BaseWebHandler):

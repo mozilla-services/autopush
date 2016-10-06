@@ -1,8 +1,5 @@
 import twisted.internet.base
-
-from boto.dynamodb2.exceptions import (
-    InternalServerError,
-)
+from boto.dynamodb2.exceptions import InternalServerError
 from cyclone.web import Application
 from mock import Mock
 from moto import mock_dynamodb2
@@ -10,12 +7,9 @@ from twisted.internet.defer import Deferred
 from twisted.trial import unittest
 
 from autopush import __version__
-from autopush.health import (
-    HealthHandler,
-    MissingTableException,
-    StatusHandler,
-)
+from autopush.exceptions import MissingTableException
 from autopush.settings import AutopushSettings
+from autopush.web.health import HealthHandler, StatusHandler
 
 
 class HealthTestCase(unittest.TestCase):
@@ -117,7 +111,7 @@ class HealthTestCase(unittest.TestCase):
     def _assert_reply(self, reply, exception=None):
         def handle_finish(result):
             if exception:
-                self.status_mock.assert_called_with(503)
+                self.status_mock.assert_called_with(503, reason=None)
                 self.flushLoggedErrors(exception)
             self.write_mock.assert_called_with(reply)
         self.finish_deferred.addCallback(handle_finish)

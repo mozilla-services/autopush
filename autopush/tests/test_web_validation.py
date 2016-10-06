@@ -17,13 +17,8 @@ from nose.tools import eq_, ok_, assert_raises
 from twisted.internet.defer import Deferred
 from twisted.trial import unittest
 
-from autopush.db import (
-    create_rotating_message_table,
-)
-from autopush.exceptions import (
-    InvalidRequest,
-    InvalidTokenException,
-)
+from autopush.db import create_rotating_message_table
+from autopush.exceptions import InvalidRequest, InvalidTokenException
 import autopush.utils as utils
 
 
@@ -48,7 +43,7 @@ class InvalidSchema(Schema):
 
 class TestThreadedValidate(unittest.TestCase):
     def _make_fut(self, schema):
-        from autopush.web.validation import ThreadedValidate
+        from autopush.web.base import ThreadedValidate
         return ThreadedValidate(schema)
 
     def _make_basic_schema(self):
@@ -118,7 +113,7 @@ class TestThreadedValidate(unittest.TestCase):
 
     def test_decorator(self):
         from cyclone.web import RequestHandler
-        from autopush.web.validation import threaded_validate
+        from autopush.web.base import threaded_validate
         schema = self._make_basic_schema()
 
         class AHandler(RequestHandler):
@@ -155,7 +150,7 @@ class TestThreadedValidate(unittest.TestCase):
 
 class TestSimplePushRequestSchema(unittest.TestCase):
     def _make_fut(self):
-        from autopush.web.validation import SimplePushRequestSchema
+        from autopush.web.push_validation import SimplePushRequestSchema
         schema = SimplePushRequestSchema()
         schema.context["settings"] = Mock()
         schema.context["log"] = Mock()
@@ -288,7 +283,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
 
 class TestWebPushRequestSchema(unittest.TestCase):
     def _make_fut(self):
-        from autopush.web.validation import WebPushRequestSchema
+        from autopush.web.push_validation import WebPushRequestSchema
         schema = WebPushRequestSchema()
         schema.context["settings"] = Mock()
         schema.context["log"] = Mock()
@@ -570,7 +565,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
 class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
     def _make_fut(self):
-        from autopush.web.validation import WebPushRequestSchema
+        from autopush.web.push_validation import WebPushRequestSchema
         from autopush.settings import AutopushSettings
         schema = WebPushRequestSchema()
         schema.context["log"] = Mock()
@@ -664,7 +659,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         eq_(errors, {})
         ok_("jwt" in result)
 
-    @patch("autopush.web.validation.extract_jwt")
+    @patch("autopush.web.push_validation.extract_jwt")
     def test_invalid_vapid_crypto_header(self, mock_jwt):
         schema = self._make_fut()
         mock_jwt.side_effect = ValueError("Unknown public key "
@@ -700,7 +695,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         eq_(cm.exception.status_code, 401)
         eq_(cm.exception.errno, 109)
 
-    @patch("autopush.web.validation.extract_jwt")
+    @patch("autopush.web.push_validation.extract_jwt")
     def test_invalid_encryption_header(self, mock_jwt):
         schema = self._make_fut()
         mock_jwt.side_effect = ValueError("Unknown public key "
@@ -736,7 +731,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         eq_(cm.exception.status_code, 401)
         eq_(cm.exception.errno, 110)
 
-    @patch("autopush.web.validation.extract_jwt")
+    @patch("autopush.web.push_validation.extract_jwt")
     def test_invalid_encryption_jwt(self, mock_jwt):
         schema = self._make_fut()
         # use a deeply superclassed error to make sure that it gets picked up.
@@ -772,7 +767,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         eq_(cm.exception.status_code, 401)
         eq_(cm.exception.errno, 109)
 
-    @patch("autopush.web.validation.extract_jwt")
+    @patch("autopush.web.push_validation.extract_jwt")
     def test_invalid_crypto_key_header_content(self, mock_jwt):
         schema = self._make_fut()
         mock_jwt.side_effect = ValueError("Unknown public key "
