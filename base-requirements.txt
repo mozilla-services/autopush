@@ -57,7 +57,6 @@ typing==3.5.2.2
 txaio==2.5.1
 ua_parser==0.7.1
 virtualenv==15.0.3
-wsaccel==0.6.2
 xmltodict==0.10.2
 zope.deprecation==4.1.2
 zope.interface==4.3.1
