@@ -1,3 +1,33 @@
+<a name="1.19.0"></a>
+## 1.19.0 (2016-10-07)
+
+
+#### Features
+
+*   move Message and Registration handlers to own validated class ([ea3b48c2](https://github.com/mozilla-services/autopush/commit/ea3b48c2fa9c3fa1c554f78fe5e367935b7aa10d))
+*   handle provisioned errors gracefully (#682) ([8e5f52ad](https://github.com/mozilla-services/autopush/commit/8e5f52ad36f754013ea7fb4739b94bf5634ed7f7), closes [#658](https://github.com/mozilla-services/autopush/issues/658))
+*   add user record cleanup script (#677) ([9e5a95f9](https://github.com/mozilla-services/autopush/commit/9e5a95f9004046e5195273c3d4ab7b12eaa7f63c), closes [#645](https://github.com/mozilla-services/autopush/issues/645))
+*   include timestamps in tests' logs (#675) ([a3c3b82a](https://github.com/mozilla-services/autopush/commit/a3c3b82a38ed3ffe07c5e07855a009232eff8b1f))
+*   add a new client_certs endpoint config option ([58e0cbbd](https://github.com/mozilla-services/autopush/commit/58e0cbbd3ebd83cff149d59281a81123a01ac428))
+*   add webpush topics ([0fe241bb](https://github.com/mozilla-services/autopush/commit/0fe241bb8be36aefbdaa0a4e71549fb2355f40cd), closes [#643](https://github.com/mozilla-services/autopush/issues/643))
+*   Switch to new http2 based APNS protocol ([15fea87d](https://github.com/mozilla-services/autopush/commit/15fea87d4ebe2f95f226eb4dfac6296d62fff04b))
+
+#### Chore
+
+*   remove the wsaccel dependency on pypy (#683) ([aa047f36](https://github.com/mozilla-services/autopush/commit/aa047f36f7d13c9a9094183cfaee9a289ccd8920))
+*   fix travis' virtualenv giving us an older python (#664) ([f47b7435](https://github.com/mozilla-services/autopush/commit/f47b7435429771372a3d0ab2487fe5915129686e))
+
+#### Bug Fixes
+
+*   assertRaises -> assert_raises ([e417325c](https://github.com/mozilla-services/autopush/commit/e417325cfa740067414f87752ee2a855d59179aa))
+*   assertTrue -> eq_ ([c01eb4de](https://github.com/mozilla-services/autopush/commit/c01eb4de19f0e9fe11f24d9028950b225e3ee383))
+*   assertTrue -> ok_ ([db4e6dca](https://github.com/mozilla-services/autopush/commit/db4e6dca82ad38db66d27b5221ff6dbc5e1c5d7d))
+*   adapt asserts to ok/eq_ ([e9fd8a1c](https://github.com/mozilla-services/autopush/commit/e9fd8a1c1ea9ac7e50af08136c7f352fed90aea4))
+*   assert -> ok_ ([9b83d9c6](https://github.com/mozilla-services/autopush/commit/9b83d9c6d577437386380eaf688b6249d892d7fc))
+*   remove extra jws_err handler which caused extra write after finish ([65c7a3a5](https://github.com/mozilla-services/autopush/commit/65c7a3a5c8216c759207df6fef599446b2c7491a))
+
+
+
 <a name="1.18.0"></a>
 ## 1.18.0 (2016-09-20)
 
