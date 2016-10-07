@@ -15,7 +15,7 @@ class SimplePushHandler(BaseWebHandler):
     cors_methods = "PUT"
 
     @threaded_validate(SimplePushRequestSchema)
-    def put(self, api_ver="v1", token=None):
+    def put(self, *args, **kwargs):
         sub = self.valid_input["subscription"]
         user_data = sub["user_data"]
         router = self.ap_settings.routers[user_data["router_type"]]

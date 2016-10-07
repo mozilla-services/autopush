@@ -127,7 +127,7 @@ class RegistrationHandler(BaseWebHandler):
     #                    Cyclone HTTP Methods
     #############################################################
     @threaded_validate(RegistrationSchema)
-    def post(self, *args):
+    def post(self, *args, **kwargs):
         """HTTP POST
 
         Endpoint generation and optionally router type/data registration.
@@ -173,7 +173,7 @@ class RegistrationHandler(BaseWebHandler):
             d.addErrback(self._response_err)
 
     @threaded_validate(RegistrationSchema)
-    def put(self, *args):
+    def put(self, *args, **kwargs):
         """HTTP PUT
 
         Update router type/data for a UAID.
@@ -214,7 +214,7 @@ class RegistrationHandler(BaseWebHandler):
         return endpoint, router_data
 
     @threaded_validate(RegistrationSchema)
-    def delete(self, *args):
+    def delete(self, *args, **kwargs):
         """HTTP DELETE
 
         Delete all pending records for the given channel or UAID
