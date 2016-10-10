@@ -1,3 +1,18 @@
+<a name="1.19.1"></a>
+## 1.19.1 (2016-10-10)
+
+
+#### Chore
+
+*   kill unneeded deps: ([de1aeb62](https://github.com/mozilla-services/autopush/commit/de1aeb6219655a59285dc67e54780ebf0ef2063f))
+*   tag 1.19.0 release (#685) ([3be87959](https://github.com/mozilla-services/autopush/commit/3be879590d1d64c2b451a675d696a0422a2cffd2))
+
+#### Bug Fixes
+
+*   validated methods ignore raw arguments ([dbbd0816](https://github.com/mozilla-services/autopush/commit/dbbd0816b474e47d25e1566cf101f90c9ef4f393))
+
+
+
 <a name="1.19.0"></a>
 ## 1.19.0 (2016-10-07)
 
