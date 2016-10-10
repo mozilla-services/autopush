@@ -2,8 +2,13 @@
 nose
 coverage
 mock>=1.0.1
+funcsigs==1.0.2
+pbr==1.10.0
 -e git+https://github.com/habnabit/txstatsd.git@master#egg=txStatsD
 -e git+https://github.com/bbangert/moto.git@3bdb75a961148ea5aa526f0e88d9e7835a30df3a#egg=moto
 flake8==3.0.4
+mccabe==0.5.2
+pyflakes==1.2.3
 psutil
 websocket-client
+Pympler==0.4.3
