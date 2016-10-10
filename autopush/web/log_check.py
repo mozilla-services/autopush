@@ -21,7 +21,7 @@ class LogCheckHandler(BaseWebHandler):
         pass
 
     @threaded_validate(LogCheckSchema)
-    def get(self, err_type=None):
+    def get(self, err_type=None, *args, **kwargs):
         """HTTP GET
 
         Generate a dummy error message for logging

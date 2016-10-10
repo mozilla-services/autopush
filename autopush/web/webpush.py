@@ -18,7 +18,7 @@ class WebPushHandler(BaseWebHandler):
     cors_response_headers = ("location", "www-authenticate")
 
     @threaded_validate(WebPushRequestSchema)
-    def post(self, api_ver="v1", token=None):
+    def post(self, *args, **kwargs):
         # Store Vapid info if present
         jwt = self.valid_input.get("jwt")
         if jwt:

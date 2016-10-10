@@ -14,7 +14,7 @@ class HealthHandler(BaseWebHandler):
     """HTTP Health Handler"""
 
     @cyclone.web.asynchronous
-    def get(self):
+    def get(self, *args, **kwargs):
         """HTTP Get
 
         Returns basic information about the version and how many clients are
@@ -83,7 +83,7 @@ class StatusHandler(BaseWebHandler):
         """skip authentication checks"""
         pass
 
-    def get(self):
+    def get(self, *args, **kwargs):
         """HTTP Get
 
         Returns that this node is alive, and the version.
