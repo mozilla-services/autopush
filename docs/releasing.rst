@@ -72,17 +72,14 @@ i.e. If a new minor version is being released after ``1.21.0``, the
    accounted for in ``CHANGELOG.md``.
 #. ``git add CHANGELOG.md autopush/__init__.py`` to add the two changes to the
    new release commit.
-#. ``git commit -m "chore: tag {version}`` to commit the new version and
+#. ``git commit -m "chore: tag {version}"`` to commit the new version and
    record of changes.
 #. ``git tag {version}`` to tag the current HEAD commit for release.
 #. ``git push --set-upstream origin release/{major}.{minor}`` to push the
    commits to a new origin release branch.
 #. ``git push --tags origin release/{major}.{minor}`` to push the tags to the
    release branch.
-#. ``git checkout master``
-#. ``git merge release/{major}.{minor}`` to merge the new version/changelog
-   back into the ``master`` branch.
-#. ``git push`` to push the merged version/changelog updates.
+#. Submit a pull request on github to merge the release branch to master.
 #. Go to the `autopush releases page`_, you should see the new tag with no
    release information under it.
 #. Click the ``Draft a new release`` button.
@@ -91,10 +88,11 @@ i.e. If a new minor version is being released after ``1.21.0``, the
    omitting the top 2 lines (the a name HTML and the version) of the file.
 
    Keep these changes handy, you'll need them again shortly.
-#. Click ``Publish Release``.
+#. Once the release branch pull request is approved and merged, click ``Publish
+   Release``.
 #. File a bug for stage deployment in Bugzilla, in the ``Cloud Services``
    product, under the ``Operations: Deployment Requests`` component. It should
-   be titled ``Please deploy autopush {major}.{minor} to stage`` and include
+   be titled ``Please deploy autopush {major}.{minor} to STAGE`` and include
    the changes in the Description along with any additional instructions to
    operations regarding deployment changes and special test cases if needed
    for QA to verify.
