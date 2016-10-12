@@ -56,7 +56,7 @@ class WebPushRouter(SimpleRouter):
         :type channel_id: uuid.UUID
 
         """
-        channel_id = normalize_id(channel_id.hex)
+        channel_id = normalize_id(channel_id)
         uaid = uaid_data["uaid"]
         if 'current_month' not in uaid_data:
             self.log.info(format="Dropping User", code=102,

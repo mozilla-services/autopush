@@ -151,7 +151,7 @@ class FCMRouter(object):
 
     def _route(self, notification, router_data):
         """Blocking FCM call to route the notification"""
-        data = {"chid": notification.channel_id}
+        data = {"chid": str(notification.channel_id)}
         if not router_data.get("token"):
             raise self._error("No registration token found. "
                               "Rejecting message.",

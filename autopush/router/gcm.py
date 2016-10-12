@@ -75,7 +75,7 @@ class GCMRouter(object):
     def _route(self, notification, uaid_data):
         """Blocking GCM call to route the notification"""
         router_data = uaid_data["router_data"]
-        data = {"chid": notification.channel_id}
+        data = {"chid": str(notification.channel_id)}
         # Payload data is optional. The endpoint handler validates that the
         # correct encryption headers are included with the data.
         if notification.data:
