@@ -1243,8 +1243,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if not version:
             return
 
-        version, updateid = version.split(":")
-
         self.log.info(format="Nack", uaid_hash=self.ps.uaid_hash,
                       user_agent=self.ps.user_agent, message_id=version,
                       code=code, **self.ps.raw_agent)

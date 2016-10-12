@@ -9,7 +9,7 @@ from autopush.web.base import threaded_validate, BaseWebHandler
 
 class MessageSchema(Schema):
     uaid = fields.UUID()
-    channel_id = fields.UUID(allow_none=True)
+    channel_id = fields.UUID()
     topic = fields.Str(allow_none=True)
     message_id = fields.Str()
 
