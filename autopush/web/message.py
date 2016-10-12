@@ -8,10 +8,7 @@ from autopush.web.base import threaded_validate, BaseWebHandler
 
 
 class MessageSchema(Schema):
-    uaid = fields.UUID()
-    channel_id = fields.UUID()
-    topic = fields.Str(allow_none=True)
-    message_id = fields.Str()
+    notification = fields.Raw()
 
     @pre_load
     def extract_data(self, req):
@@ -32,10 +29,7 @@ class MessageSchema(Schema):
         except (InvalidToken, InvalidTokenException):
             raise InvalidRequest("Invalid message ID",
                                  status_code=400)
-        return dict(uaid=notif.uaid,
-                    channel_id=notif.channel_id,
-                    topic=notif.topic,
-                    message_id=message_id)
+        return dict(notification=notif)
 
 
 class MessageHandler(BaseWebHandler):
@@ -52,13 +46,7 @@ class MessageHandler(BaseWebHandler):
 
 
         """
-        notif = WebPushNotification(
-            uaid=self.valid_input['uaid'],
-            channel_id=self.valid_input['channel_id'],
-            data=None,
-            ttl=None,
-            topic=self.valid_input['topic'],
-            message_id=self.valid_input['message_id'])
+        notif = self.valid_input['notification']
         d = deferToThread(self.ap_settings.message.delete_message,
                           notif)
         d.addCallback(self._delete_completed)
