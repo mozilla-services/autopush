@@ -50,13 +50,12 @@ $
 
 
 def normalize_id(ident):
-    if (len(ident) == 36 and
-            ident[8] == ident[13] == ident[18] == ident[23] == '-'):
-        return ident.lower()
-    raw = filter(lambda x: x in '0123456789abcdef', ident.lower())
-    if len(raw) != 32:
+    if isinstance(ident, uuid.UUID):
+        return str(ident)
+    try:
+        return str(uuid.UUID(ident))
+    except ValueError:
         raise ValueError("Invalid UUID")
-    return '-'.join((raw[:8], raw[8:12], raw[12:16], raw[16:20], raw[20:]))
 
 
 def canonical_url(scheme, hostname, port=None):
@@ -343,7 +342,7 @@ class WebPushNotification(object):
     @property
     def sort_key(self):
         """Return an appropriate sort_key for this notification"""
-        chid = normalize_id(self.channel_id.hex)
+        chid = normalize_id(self.channel_id)
         if self.topic:
             return "01:{chid}:{topic}".format(chid=chid, topic=self.topic)
         else:
@@ -397,7 +396,8 @@ class WebPushNotification(object):
         if key_info.get("topic"):
             key_info["message_id"] = item["updateid"]
 
-        return cls(uaid=uaid, channel_id=uuid.UUID(key_info["channel_id"]),
+        return cls(uaid=uaid,
+                   channel_id=uuid.UUID(key_info["channel_id"]),
                    data=item.get("data"),
                    headers=item.get("headers"),
                    ttl=item["ttl"],
@@ -498,7 +498,7 @@ class WebPushNotification(object):
     def serialize(self):
         """Serialize to a dict for delivery to a connection node"""
         payload = dict(
-            channelID=normalize_id(self.channel_id.hex),
+            channelID=normalize_id(self.channel_id),
             version=self.version,
             ttl=self.ttl,
             topic=self.topic,
@@ -514,7 +514,7 @@ class WebPushNotification(object):
         # Firefox currently requires channelIDs to be '-' formatted.
         payload = dict(
             messageType="notification",
-            channelID=normalize_id(self.channel_id.hex),
+            channelID=normalize_id(self.channel_id),
             version=self.version,
         )
         if self.data:

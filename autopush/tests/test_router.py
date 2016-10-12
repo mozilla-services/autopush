@@ -347,6 +347,7 @@ class GCMRouterTestCase(unittest.TestCase):
             data = self.router.gcm['test123'].send.call_args[0][0].data
             eq_(data['body'], 'q60d6g')
             eq_(data['enc'], 'test')
+            eq_(data['chid'], dummy_chid)
             eq_(data['enckey'], 'test')
             eq_(data['con'], 'aesgcm')
         d.addCallback(check_results)
@@ -374,6 +375,7 @@ class GCMRouterTestCase(unittest.TestCase):
             options = self.router.gcm['test123'].send.call_args[0][0].options
             eq_(data['body'], 'q60d6g')
             eq_(data['enc'], 'test')
+            eq_(data['chid'], dummy_chid)
             eq_(data['enckey'], 'test')
             eq_(data['con'], 'aesgcm')
             # use the defined min TTL
@@ -400,6 +402,7 @@ class GCMRouterTestCase(unittest.TestCase):
             options = self.router.gcm['test123'].send.call_args[0][0].options
             eq_(data['body'], 'q60d6g')
             eq_(data['enc'], 'test')
+            eq_(data['chid'], dummy_chid)
             eq_(data['enckey'], 'test')
             eq_(data['con'], 'aesgcm')
             # use the defined min TTL
@@ -620,6 +623,7 @@ class FCMRouterTestCase(unittest.TestCase):
             args = self.router.fcm.notify_single_device.call_args[1]
             data = args['data_message']
             eq_(data['body'], 'q60d6g')
+            eq_(data['chid'], dummy_chid)
             eq_(data['enc'], 'test')
             eq_(data['enckey'], 'test')
             eq_(data['con'], 'aesgcm')
@@ -644,6 +648,7 @@ class FCMRouterTestCase(unittest.TestCase):
             args = self.router.fcm.notify_single_device.call_args[1]
             data = args['data_message']
             eq_(data['body'], 'q60d6g')
+            eq_(data['chid'], dummy_chid)
             eq_(data['enc'], 'test')
             eq_(data['enckey'], 'test')
             eq_(data['con'], 'aesgcm')
@@ -670,6 +675,7 @@ class FCMRouterTestCase(unittest.TestCase):
             args = self.router.fcm.notify_single_device.call_args[1]
             data = args['data_message']
             eq_(data['body'], 'q60d6g')
+            eq_(data['chid'], dummy_chid)
             eq_(data['enc'], 'test')
             eq_(data['enckey'], 'test')
             eq_(data['con'], 'aesgcm')
