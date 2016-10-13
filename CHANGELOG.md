@@ -1,3 +1,22 @@
+<a name="1.19.2"></a>
+## 1.19.2 (2016-10-13)
+
+
+#### Bug Fixes
+
+*   correct headers to use transcoded values ([0e5e1e34](https://github.com/mozilla-services/autopush/commit/0e5e1e3405093c00271eee820eb5f128143b652f))
+*   Set TTL to 0 if None when doing expiration checks (#701) ([0aab2a95](https://github.com/mozilla-services/autopush/commit/0aab2a95f4e635983d9a6104f1c8b05099c31131))
+*   do not return error informtion for 500 errors for router ([5206cab6](https://github.com/mozilla-services/autopush/commit/5206cab634fe20337ec8a0c5a555633ad5ae7ff6))
+*   simplify Message validation by passing WebPushNotification ([0a3d94da](https://github.com/mozilla-services/autopush/commit/0a3d94da33689142507d1f756b38290247e8b9bc))
+*   Stop splitting version info when logging for websocket ([bd3c2c30](https://github.com/mozilla-services/autopush/commit/bd3c2c3034e622990883a42bf4ada5378ce2d1b0))
+*   normalize channelids to JSON encodable entities ([777dff44](https://github.com/mozilla-services/autopush/commit/777dff4452a138dad82a6d9e7eb63180e1fec7c8))
+
+#### Doc
+
+*   minor updates to the release workflow (#690) ([cc7cc306](https://github.com/mozilla-services/autopush/commit/cc7cc306ade7c35c4e12029085e1d816a6423b14))
+
+
+
 <a name="1.19.1"></a>
 ## 1.19.1 (2016-10-10)
 
