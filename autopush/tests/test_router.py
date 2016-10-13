@@ -65,7 +65,9 @@ class RouterInterfaceTestCase(TestCase):
         assert_raises(NotImplementedError, ir.amend_msg, {})
 
 
-dummy_chid = str(uuid.uuid4())
+# FOR LEGACY REASONS, CHANNELID MUST BE IN HEX FORMAT FOR BRIDGE PUBLICATION
+# AND REGISTRATION
+dummy_chid = uuid.uuid4().hex
 dummy_uaid = str(uuid.uuid4())
 
 
