@@ -326,13 +326,14 @@ class WebPushNotification(object):
                 head = headers[hdr].replace('"', '')
                 headers[hdr] = STRIP_PADDING.sub("", head)
 
-        data = dict(
-            encoding=headers["content-encoding"],
-            encryption=headers["encryption"],
-        )
+        # content-encoding header may already be stored as "encoding",
+        # this is a failover to ensure that the proper value is pulled in.
+        # Webpush expects the value of "encoding".
+        data = dict(encoding=headers.get("encoding",
+                                         headers.get("content-encoding")))
         # AWS cannot store empty strings, so we only add these keys if
         # they're present to avoid empty strings.
-        for name in ["encryption-key", "crypto-key"]:
+        for name in ["encryption", "encryption-key", "crypto-key"]:
             if name in headers:
                 # NOTE: The client code expects all header keys to be lower
                 # case and s/-/_/.
@@ -519,7 +520,9 @@ class WebPushNotification(object):
         )
         if self.data:
             payload["data"] = self.data
-            payload["headers"] = self.headers
+            payload["headers"] = {
+                k.replace("-", "_"): v for k, v in self.headers.items()
+            }
         return payload
 
 

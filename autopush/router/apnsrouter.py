@@ -115,13 +115,13 @@ class APNSRouter(object):
         }
         if notification.data:
             payload["body"] = notification.data
-            payload["con"] = notification.headers["content-encoding"]
+            payload["con"] = notification.headers["encoding"]
             payload["enc"] = notification.headers["encryption"]
 
-            if "crypto-key" in notification.headers:
-                payload["cryptokey"] = notification.headers["crypto-key"]
-            elif "encryption-key" in notification.headers:
-                payload["enckey"] = notification.headers["encryption-key"]
+            if "crypto_key" in notification.headers:
+                payload["cryptokey"] = notification.headers["crypto_key"]
+            elif "encryption_key" in notification.headers:
+                payload["enckey"] = notification.headers["encryption_key"]
             payload['aps'] = dict(
                 alert=router_data.get("title", config.get('default_title',
                                                           'Mozilla Push')),
