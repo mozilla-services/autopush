@@ -292,10 +292,12 @@ class GCMRouterTestCase(unittest.TestCase):
         self.mock_result = mock_result
         fgcm.send.return_value = mock_result
 
-    def _check_error_call(self, exc, code):
+    def _check_error_call(self, exc, code, response=None):
         ok_(isinstance(exc, RouterException))
         eq_(exc.status_code, code)
         ok_(self.router.gcm['test123'].send.called)
+        if response:
+            eq_(exc.response_body, response)
         self.flushLoggedErrors()
 
     def test_init(self):
@@ -449,7 +451,7 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
-            self._check_error_call(fail.value, 500)
+            self._check_error_call(fail.value, 500, "Server error")
         d.addBoth(check_results)
         return d
 
@@ -461,7 +463,7 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
-            self._check_error_call(fail.value, 500)
+            self._check_error_call(fail.value, 500, "Server error")
         d.addBoth(check_results)
         return d
 
@@ -514,7 +516,7 @@ class GCMRouterTestCase(unittest.TestCase):
                                            {"router_data": {"token": "abc"}})
 
         def check_results(fail):
-            eq_(fail.value.status_code, 500)
+            eq_(fail.value.status_code, 500, "Server error")
         d.addBoth(check_results)
         return d
 

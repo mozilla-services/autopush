@@ -191,10 +191,11 @@ class FCMRouter(object):
                 time_to_live=router_ttl,
             )
         except pyfcm.errors.AuthenticationError as e:
-            raise self._error("Authentication Error: %s" % e, 500)
+            self.log.error("Authentication Error: %s" % e)
+            raise RouterException("Server error", status_code=500)
         except Exception as e:
-            raise self._error("Unhandled exception in FCM Routing: %s" % e,
-                              500)
+            self.log.error("Unhandled FCM Error: %s" % e)
+            raise RouterException("Server error", status_code=500)
         self.metrics.increment("updates.client.bridge.fcm.attempted",
                                self._base_tags)
         return self._process_reply(result, notification, router_data,

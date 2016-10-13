@@ -31,6 +31,28 @@ from autopush.websocket import (
 from autopush.utils import base64url_encode, ms_time
 
 
+dummy_version = (u'gAAAAABX_pXhN22H-hvscOHsMulKvtC0hKJimrZivbgQPFB3sQAtOPmb'
+                 u'0HWIbRgrxIURB6o3nOaNjGk6k-Nhhyo33SAgnXo6827ICGGC1wSoPA4k'
+                 u'Bzs5q2i9-hGKgT5oYohxwz84WG3iWDUkaJMM8CMq_9tjoyENoQ_mjFpb'
+                 u'Yw7k4oCFcDJxOX8=')
+dummy_data = (u'\x73\x7e\xda\x1b\x04\xbb\xed\x48\x2a\x6a\x19\x05\x5f\x8a\x4a'
+              u'\xda\x98\xd7\x51\x9e\xc7\xd3\x4e\x8f\x20\x14\x26\x13\xe0\x5d'
+              u'\x5d\xac\x81\x10\x1f\xa0\x22')
+dummy_headers = {
+    "Authorization": "Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJFUzI1NiJ9.eyJzdWIiOiJ"
+                     "tYWlsdG86IGZvb0BleGFtcGxlLmNvbSIsImV4cCI6IjE0NzYzODA0ND"
+                     "QifQ.otqruh-8rm0uI3Ali-Tc49bF0hXOJ30irxedxyTOqh1O1uCler"
+                     "dV4kWbGM5en6Ig00hT3lXh_bDa6hnrq5bATA",
+    "crypto-key": "keyid=p256dh;dh=BIj2iQzjgqtWBZ9WAz0ybuJkdq5wVco_qdU5Ilv2ro"
+                  "0I_fcujPManFGfqUci5gV3Zdm2EcHpLDpD2YPxlzlgxrI,p256ecdsa=BJ"
+                  "dLQlHn8RxNWN97P4EPN1E8gTXmyt076dMozixe_4KzfVFVHkqdE60_a0MK"
+                  "Yt2-fCwoPnQhXiuMQA7JiLdag2g",
+    "encryption": "keyid=p256dh;salt=susKL-fdFoKur1aTjpJ51g",
+    "content-encoding": "aesgcm",
+    "TTL": "60",
+}
+
+
 def setUp():
     from .test_integration import setUp
     setUp()
@@ -196,7 +218,10 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_base_tags(self):
         req = Mock()
-        req.headers = {'user-agent': "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2.3) Gecko/20100401 Firefox/3.6.3 (.NET CLR 3.5.30729)"}  # NOQA
+        req.headers = {
+            'user-agent': "Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; "
+                          "rv:1.9.2.3) Gecko/20100401 Firefox/3.6.3 (.NET "
+                          "CLR 3.5.30729)"}
         req.host = "example.com:8080"
         ps = PushState(settings=self.proto.ap_settings, request=req)
         eq_(sorted(ps._base_tags),
@@ -373,8 +398,9 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Stick an un-acked direct notification in
         self.proto.ps.direct_updates[chid] = [
-            Notification(channel_id=chid, version=str(uuid.uuid4()),
-                         headers={}, data="blah", ttl=200,
+            Notification(channel_id=chid, version=dummy_version,
+                         headers=dummy_headers,
+                         data=dummy_data.encode("utf-8"), ttl=200,
                          timestamp=0)
         ]
 
@@ -1483,14 +1509,21 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.direct_updates[chid] = []
 
         # Send ourself a notification
-        payload = {"channelID": chid, "version": 10, "data": "bleh",
-                   "headers": {}, "ttl": 20, "timestamp": 0}
+        payload = {"channelID": chid,
+                   "version": 10,
+                   "data": dummy_data.encode('utf-8'),
+                   "headers": dummy_headers,
+                   "ttl": 20,
+                   "timestamp": 0}
         self.proto.send_notifications(payload)
 
         # Check the call result
         args = json.loads(self.send_mock.call_args[0][0])
-        eq_(args, {"messageType": "notification", "channelID": chid,
-                   "data": "bleh", "version": "10", "headers": {}})
+        eq_(args, {"messageType": "notification",
+                   "channelID": chid,
+                   "data": dummy_data,
+                   "version": "10",
+                   "headers": dummy_headers})
 
     def test_notification_avoid_newer_delivery(self):
         self._connect()
@@ -1548,13 +1581,13 @@ class WebsocketTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
 
         notif = make_webpush_notification(self.proto.ps.uaid, chid)
-        notif.message_id = "bleh:asdjfilajsdilfj"
+        notif.message_id = dummy_version
         self.proto.ps.use_webpush = True
         self.proto.ps.direct_updates[chid] = [notif]
 
         self.proto.ack_update(dict(
             channelID=chid,
-            version="bleh:asdjfilajsdilfj"
+            version=dummy_version
         ))
         eq_(self.proto.ps.direct_updates[chid], [])
         eq_(len(self.proto.log.info.mock_calls), 1)
@@ -1570,14 +1603,14 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.use_webpush = True
         self.proto.ps.direct_updates[chid] = []
         notif = make_webpush_notification(self.proto.ps.uaid, chid)
-        notif.message_id = "bleh:jialsdjfilasjdf"
+        notif.message_id = dummy_version
         self.proto.ps.updates_sent[chid] = [notif]
 
         mock_defer = Mock()
         self.proto.force_retry = Mock(return_value=mock_defer)
         self.proto.ack_update(dict(
             channelID=chid,
-            version="bleh:jialsdjfilasjdf",
+            version=dummy_version,
             code=200
         ))
         ok_(self.proto.force_retry.called)
@@ -1593,7 +1626,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.onMessage(json.dumps(dict(
             messageType="nack",
-            version="bleh:asdfhjklhjkl",
+            version=dummy_version,
             code=200
         )), False)
         eq_(len(self.proto.log.info.mock_calls), 1)
@@ -1610,7 +1643,8 @@ class WebsocketTestCase(unittest.TestCase):
     def test_ack_remove(self):
         self._connect()
         chid = str(uuid.uuid4())
-        notif = Notification(version="bleh", headers={}, data="meh",
+        notif = Notification(version=dummy_version, headers=dummy_headers,
+                             data=dummy_data.encode("utf-8"),
                              channel_id=chid, ttl=200, timestamp=0)
         self.proto.ps.updates_sent[chid] = [notif]
         self.proto._handle_webpush_update_remove(None, chid, notif)
@@ -1619,7 +1653,8 @@ class WebsocketTestCase(unittest.TestCase):
     def test_ack_remove_not_set(self):
         self._connect()
         chid = str(uuid.uuid4())
-        notif = Notification(version="bleh", headers={}, data="meh",
+        notif = Notification(version=dummy_version, headers=dummy_headers,
+                             data=dummy_data.encode("utf-8"),
                              channel_id=chid, ttl=200, timestamp=0)
         self.proto.ps.updates_sent[chid] = None
         self.proto._handle_webpush_update_remove(None, chid, notif)
@@ -1627,7 +1662,8 @@ class WebsocketTestCase(unittest.TestCase):
     def test_ack_remove_missing(self):
         self._connect()
         chid = str(uuid.uuid4())
-        notif = Notification(version="bleh", headers={}, data="meh",
+        notif = Notification(version=dummy_version, headers=dummy_headers,
+                             data=dummy_data.encode("utf-8"),
                              channel_id=chid, ttl=200, timestamp=0)
         self.proto.ps.updates_sent[chid] = []
         self.proto._handle_webpush_update_remove(None, chid, notif)
@@ -1801,8 +1837,9 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ps.use_webpush = True
         self.proto.ps.updates_sent["chid"] = [
-            Notification(channel_id="chid", data="bleh", headers={},
-                         version="now", ttl=200, timestamp=0)
+            Notification(channel_id="chid", data=dummy_data.encode("utf-8"),
+                         headers=dummy_headers, version="now", ttl=200,
+                         timestamp=0)
         ]
         self.proto.deferToLater = Mock()
         self.proto.process_notifications()
