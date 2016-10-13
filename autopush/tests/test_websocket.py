@@ -1517,13 +1517,17 @@ class WebsocketTestCase(unittest.TestCase):
                    "timestamp": 0}
         self.proto.send_notifications(payload)
 
+        fixed_headers = dict()
+        for header in dummy_headers:
+            fixed_headers[header.replace("-", "_")] = dummy_headers[header]
+
         # Check the call result
         args = json.loads(self.send_mock.call_args[0][0])
         eq_(args, {"messageType": "notification",
                    "channelID": chid,
                    "data": dummy_data,
                    "version": "10",
-                   "headers": dummy_headers})
+                   "headers": fixed_headers})
 
     def test_notification_avoid_newer_delivery(self):
         self._connect()

@@ -122,6 +122,7 @@ class APNSRouterTestCase(unittest.TestCase):
             ttl=200,
             message_id=10,
         )
+        self.notif.cleanup_headers()
         self.router_data = dict(router_data=dict(token="connect_data",
                                                  rel_channel="firefox"))
 
@@ -240,6 +241,7 @@ class APNSRouterTestCase(unittest.TestCase):
             ttl=200,
             message_id=10,
         )
+        self.notif.cleanup_headers()
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -280,6 +282,7 @@ class GCMRouterTestCase(unittest.TestCase):
             ttl=200,
             message_id=10,
         )
+        self.notif.cleanup_headers()
         self.router_data = dict(
             router_data=dict(
                 token="connect_data",
@@ -364,6 +367,7 @@ class GCMRouterTestCase(unittest.TestCase):
             headers=self.headers,
             ttl=None
         )
+        self.notif.cleanup_headers()
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -394,6 +398,7 @@ class GCMRouterTestCase(unittest.TestCase):
             headers=self.headers,
             ttl=5184000
         )
+        self.notif.cleanup_headers()
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -421,6 +426,7 @@ class GCMRouterTestCase(unittest.TestCase):
             headers=self.headers,
             ttl=200
         )
+
         d = self.router.route_notification(bad_notif, self.router_data)
 
         def check_results(result):
@@ -433,8 +439,8 @@ class GCMRouterTestCase(unittest.TestCase):
 
     def test_route_crypto_notification(self):
         self.router.gcm['test123'] = self.gcm
-        del(self.notif.headers['encryption-key'])
-        self.notif.headers['crypto-key'] = 'crypto'
+        del(self.notif.headers['encryption_key'])
+        self.notif.headers['crypto_key'] = 'crypto'
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -564,6 +570,7 @@ class FCMRouterTestCase(unittest.TestCase):
             headers=self.headers,
             ttl=200
         )
+        self.notif.cleanup_headers()
         self.router_data = dict(
             router_data=dict(
                 token="connect_data",
@@ -641,6 +648,7 @@ class FCMRouterTestCase(unittest.TestCase):
             headers=self.headers,
             ttl=None
         )
+        self.notif.cleanup_headers()
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -668,6 +676,7 @@ class FCMRouterTestCase(unittest.TestCase):
             headers=self.headers,
             ttl=5184000
         )
+        self.notif.cleanup_headers()
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -696,6 +705,7 @@ class FCMRouterTestCase(unittest.TestCase):
             ttl=200,
             message_id=10,
         )
+        self.notif.cleanup_headers()
         d = self.router.route_notification(bad_notif, self.router_data)
 
         def check_results(result):
@@ -708,8 +718,8 @@ class FCMRouterTestCase(unittest.TestCase):
 
     def test_route_crypto_notification(self):
         self.router.fcm = self.fcm
-        del(self.notif.headers['encryption-key'])
-        self.notif.headers['crypto-key'] = 'crypto'
+        del(self.notif.headers['encryption_key'])
+        self.notif.headers['crypto_key'] = 'crypto'
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -1119,6 +1129,7 @@ class WebPushRouterTestCase(unittest.TestCase):
             ttl=0,
             message_id=uuid.uuid4().hex,
         )
+        self.notif.cleanup_headers()
         self.agent_mock.request.return_value = response_mock = Mock()
         response_mock.addCallback.return_value = response_mock
         type(response_mock).code = PropertyMock(
