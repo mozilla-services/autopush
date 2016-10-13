@@ -86,7 +86,7 @@ class AutopushSettings(object):
                  enable_cors=False,
                  hello_timeout=0,
                  bear_hash_key=None,
-                 preflight_uaid="deadbeef00000000deadbeef000000000",
+                 preflight_uaid="deadbeef00000000deadbeef00000000",
                  ami_id=None,
                  client_certs=None,
                  ):
