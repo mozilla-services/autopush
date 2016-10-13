@@ -380,7 +380,7 @@ class WebPushNotification(object):
 
         """
         now = at_time or int(time.time())
-        return now >= (self.ttl + self.timestamp)
+        return now >= ((self.ttl or 0) + self.timestamp)
 
     @classmethod
     def from_message_table(cls, uaid, item):
