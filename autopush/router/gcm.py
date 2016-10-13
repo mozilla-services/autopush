@@ -113,13 +113,15 @@ class GCMRouter(object):
             gcm = self.gcm[creds['senderID']]
             result = gcm.send(payload)
         except KeyError:
-            raise self._error("Server error, missing bridge credentials " +
-                              "for %s" % creds.get("senderID"), 500)
+            self.log.critical("Missing GCM bridge credentials for : %s" %
+                              creds.get("senderID"))
+            raise RouterException("Server error", status_code=500)
         except gcmclient.GCMAuthenticationError as e:
-            raise self._error("Authentication Error: %s" % e, 500)
+            self.log.error("GCM Authentication Error: %s" % e)
+            raise RouterException("Server error", status_code=500)
         except Exception as e:
-            raise self._error("Unhandled exception in GCM Routing: %s" % e,
-                              500)
+            self.log.error("Unhandled exception in GCM Routing: %s" % e)
+            raise RouterException("Server error", status_code=500)
         self.metrics.increment("updates.client.bridge.gcm.attempted",
                                self._base_tags)
         return self._process_reply(result, uaid_data, ttl=router_ttl,
