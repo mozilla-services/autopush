@@ -121,12 +121,6 @@ def log_exception(func):
     return wrapper
 
 
-class Notification(namedtuple(
-                   "Notification",
-                   "channel_id data headers version ttl timestamp")):
-    """Parsed notification from the request"""
-
-
 class PushState(object):
     implements(IProducer)
 
