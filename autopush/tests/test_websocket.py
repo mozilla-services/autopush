@@ -20,11 +20,11 @@ import autopush.db as db
 from autopush.db import create_rotating_message_table
 from autopush.settings import AutopushSettings
 from autopush.tests import MockAssist
+from autopush.utils import WebPushNotification
 from autopush.websocket import (
     PushState,
     PushServerProtocol,
     RouterHandler,
-    Notification,
     NotificationHandler,
     WebSocketServerProtocol,
 )
@@ -51,6 +51,21 @@ dummy_headers = {
     "content-encoding": "aesgcm",
     "TTL": "60",
 }
+dummy_chid = uuid.uuid4()
+dummy_chid_str = str(dummy_chid)
+dummy_uaid = uuid.uuid4()
+
+
+def dummy_notif(**kwargs):
+    _kwargs = dict(
+        uaid=dummy_uaid,
+        channel_id=dummy_chid,
+        data=dummy_data.encode("utf-8"),
+        headers=dummy_headers,
+        ttl=20
+    )
+    _kwargs.update(kwargs)
+    return WebPushNotification(**_kwargs)
 
 
 def setUp():
@@ -391,18 +406,12 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_close_with_delivery_cleanup_using_webpush(self):
         self._connect()
-        self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.ap_settings.clients["asdf"] = self.proto
+        self.proto.ps.uaid = dummy_uaid.hex
+        self.proto.ap_settings.clients[dummy_uaid.hex] = self.proto
         self.proto.ps.use_webpush = True
-        chid = str(uuid.uuid4())
 
         # Stick an un-acked direct notification in
-        self.proto.ps.direct_updates[chid] = [
-            Notification(channel_id=chid, version=dummy_version,
-                         headers=dummy_headers,
-                         data=dummy_data.encode("utf-8"), ttl=200,
-                         timestamp=0)
-        ]
+        self.proto.ps.direct_updates[dummy_chid_str] = [dummy_notif()]
 
         # Apply some mocks
         self.proto.ap_settings.message.store_message = Mock()
@@ -1646,31 +1655,22 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_ack_remove(self):
         self._connect()
-        chid = str(uuid.uuid4())
-        notif = Notification(version=dummy_version, headers=dummy_headers,
-                             data=dummy_data.encode("utf-8"),
-                             channel_id=chid, ttl=200, timestamp=0)
-        self.proto.ps.updates_sent[chid] = [notif]
-        self.proto._handle_webpush_update_remove(None, chid, notif)
-        eq_(self.proto.ps.updates_sent[chid], [])
+        notif = dummy_notif()
+        self.proto.ps.updates_sent[dummy_chid_str] = [notif]
+        self.proto._handle_webpush_update_remove(None, dummy_chid_str, notif)
+        eq_(self.proto.ps.updates_sent[dummy_chid_str], [])
 
     def test_ack_remove_not_set(self):
         self._connect()
-        chid = str(uuid.uuid4())
-        notif = Notification(version=dummy_version, headers=dummy_headers,
-                             data=dummy_data.encode("utf-8"),
-                             channel_id=chid, ttl=200, timestamp=0)
-        self.proto.ps.updates_sent[chid] = None
-        self.proto._handle_webpush_update_remove(None, chid, notif)
+        notif = dummy_notif()
+        self.proto.ps.updates_sent[dummy_chid_str] = None
+        self.proto._handle_webpush_update_remove(None, dummy_chid_str, notif)
 
     def test_ack_remove_missing(self):
         self._connect()
-        chid = str(uuid.uuid4())
-        notif = Notification(version=dummy_version, headers=dummy_headers,
-                             data=dummy_data.encode("utf-8"),
-                             channel_id=chid, ttl=200, timestamp=0)
-        self.proto.ps.updates_sent[chid] = []
-        self.proto._handle_webpush_update_remove(None, chid, notif)
+        notif = dummy_notif()
+        self.proto.ps.updates_sent[dummy_chid_str] = []
+        self.proto._handle_webpush_update_remove(None, dummy_chid_str, notif)
 
     def test_ack_fails_first_time(self):
         self._connect()
@@ -1838,13 +1838,9 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_process_notif_doesnt_run_with_webpush_outstanding(self):
         self._connect()
-        self.proto.ps.uaid = uuid.uuid4().hex
+        self.proto.ps.uaid = dummy_uaid.hex
         self.proto.ps.use_webpush = True
-        self.proto.ps.updates_sent["chid"] = [
-            Notification(channel_id="chid", data=dummy_data.encode("utf-8"),
-                         headers=dummy_headers, version="now", ttl=200,
-                         timestamp=0)
-        ]
+        self.proto.ps.updates_sent[dummy_chid_str] = [dummy_notif()]
         self.proto.deferToLater = Mock()
         self.proto.process_notifications()
         ok_(self.proto.deferToLater.called)
