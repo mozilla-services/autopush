@@ -139,6 +139,8 @@ class RegistrationHandler(BaseWebHandler):
         params = self.valid_input['params']
         # If the client didn't provide a CHID, make one up.
         # Note, valid_input may explicitly set "chid" to None
+        # THIS VALUE MUST MATCH WHAT'S SPECIFIED IN THE BRIDGE CONNECTIONS.
+        # currently hex formatted.
         self.chid = params["channelID"] = (self.valid_input["chid"] or
                                            uuid.uuid4().hex)
         self.ap_settings.metrics.increment("updates.client.register",
