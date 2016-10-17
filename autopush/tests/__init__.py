@@ -7,7 +7,6 @@ class MockAssist(object):
     def __call__(self, *args, **kwargs):
         try:
             r = self.results[self.cur]
-            print r
             if callable(r):
                 return r()
             else:

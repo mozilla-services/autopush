@@ -14,7 +14,16 @@ from attr import (
     attrs,
     attrib
 )
+from boto.dynamodb2.items import Item  # flake8: noqa
+from cryptography.fernet import Fernet  # flake8: noqa
 from jose import jwt
+from typing import (
+    Any,
+    Dict,
+    Optional,
+    Union,
+    Tuple,
+)  # flake8: noqa
 from ua_parser import user_agent_parser
 
 from autopush.exceptions import InvalidTokenException
@@ -50,6 +59,7 @@ $
 
 
 def normalize_id(ident):
+    # type: (Union[uuid.UUID, str]) -> str
     if isinstance(ident, uuid.UUID):
         return str(ident)
     try:
@@ -59,6 +69,7 @@ def normalize_id(ident):
 
 
 def canonical_url(scheme, hostname, port=None):
+    # type: (str, str, Optional[int]) -> str
     """Return a canonical URL given a scheme/hostname and optional port"""
     if port is None or port == default_ports.get(scheme):
         return "%s://%s" % (scheme, hostname)
@@ -66,6 +77,7 @@ def canonical_url(scheme, hostname, port=None):
 
 
 def resolve_ip(hostname):
+    # type: (str) -> str
     """Resolve a hostname to its IP if possible"""
     interfaces = socket.getaddrinfo(hostname, 0, socket.AF_INET,
                                     socket.SOCK_STREAM,
@@ -77,6 +89,7 @@ def resolve_ip(hostname):
 
 
 def validate_uaid(uaid):
+    # type: (str) -> Tuple[bool, str]
     """Validates a UAID a tuple indicating if its valid and the original
     uaid, or a new uaid if its invalid"""
     if uaid:
@@ -89,6 +102,7 @@ def validate_uaid(uaid):
 
 
 def generate_hash(key, payload):
+    # type: (str, str) -> str
     """Generate a HMAC for the uaid using the secret
 
     :returns: HMAC hash and the nonce used as a tuple (nonce, hash).
@@ -99,19 +113,21 @@ def generate_hash(key, payload):
 
 
 def base64url_encode(string):
+    # type: (str) -> str
     """Encodes an unpadded Base64 URL-encoded string per RFC 7515."""
     return base64.urlsafe_b64encode(string).strip('=')
 
 
 def repad(string):
+    # type: (str) -> str
     """Adds padding to strings for base64 decoding"""
-
     if len(string) % 4:
         string += '===='[len(string) % 4:]
     return string
 
 
 def base64url_decode(string):
+    # type: (str) -> str
     """Decodes a Base64 URL-encoded string per RFC 7515.
 
     RFC 7515 (used for Encrypted Content-Encoding and JWT) requires unpadded
@@ -122,6 +138,7 @@ def base64url_decode(string):
 
 
 def get_amid():
+    # type: () -> str
     """Fetch the AMI instance ID
 
     """
@@ -135,6 +152,7 @@ def get_amid():
 
 
 def decipher_public_key(key_data):
+    # type: (str) -> str
     """A public key may come in several flavors. Attempt to extract the
     valid key bits from keys doing minimal validation checks.
 
@@ -161,6 +179,7 @@ def decipher_public_key(key_data):
 
 
 def extract_jwt(token, crypto_key):
+    # type: (str, str) -> Dict[str, str]
     """Extract the claims from the validated JWT. """
     # first split and convert the jwt.
     if not token or not crypto_key:
@@ -180,6 +199,7 @@ def extract_jwt(token, crypto_key):
 
 
 def parse_user_agent(agent_string):
+    # type: (str) -> Tuple[Dict[str, str], Dict[str, Any]]
     """Extracts user-agent data from a UA string
 
     Parses the user-agent into two forms. A limited one suitable for Datadog
@@ -187,7 +207,6 @@ def parse_user_agent(agent_string):
 
     :returns: A tuple of dicts, the first being the Datadog limited and the
               second being the complete info.
-    :rtype: (dict, dict)
 
     """
     parsed = user_agent_parser.Parse(agent_string)
@@ -247,10 +266,10 @@ class WebPushNotification(object):
     uaid = attrib()  # type: uuid.UUID
     channel_id = attrib()  # type: uuid.UUID
     ttl = attrib()  # type: int
-    data = attrib(default=None)
-    headers = attrib(default=None)  # type: dict
-    timestamp = attrib(default=Factory(lambda: int(time.time())))
-    topic = attrib(default=None)
+    data = attrib(default=None)  # type: Optional[str]
+    headers = attrib(default=None)  # type: Optional[Dict[str, str]]
+    timestamp = attrib(default=Factory(lambda: int(time.time())))  # type: int
+    topic = attrib(default=None)  # type: Optional[str]
 
     message_id = attrib(default=None)  # type: str
 
@@ -259,6 +278,7 @@ class WebPushNotification(object):
     update_id = attrib(default=None)  # type: str
 
     def generate_message_id(self, fernet):
+        # type: (Fernet) -> str
         """Generate a message-id suitable for accessing the message
 
         For non-topic messages, no sort_key version is currently used and the
@@ -273,8 +293,6 @@ class WebPushNotification(object):
 
         This is a blocking call.
 
-        :type fernet: cryptography.fernet.Fernet
-
         """
         if self.topic:
             msg_key = ":".join(["01", self.uaid.hex, self.channel_id.hex,
@@ -287,12 +305,8 @@ class WebPushNotification(object):
 
     @staticmethod
     def parse_decrypted_message_id(decrypted_token):
-        """Parses a decrypted message-id into component parts
-
-        :type decrypted_token: str
-        :rtype: dict
-
-        """
+        # type: (str) -> Dict[str, str]
+        """Parses a decrypted message-id into component parts"""
         topic = None
         if decrypted_token.startswith("01:"):
             info = decrypted_token.split(":")
@@ -313,6 +327,7 @@ class WebPushNotification(object):
         )
 
     def cleanup_headers(self):
+        # type: () -> None
         """Sanitize the headers for this notification
 
         This only needs to be run when creating a notification from passed
@@ -342,6 +357,7 @@ class WebPushNotification(object):
 
     @property
     def sort_key(self):
+        # type: () -> str
         """Return an appropriate sort_key for this notification"""
         chid = normalize_id(self.channel_id)
         if self.topic:
@@ -352,12 +368,8 @@ class WebPushNotification(object):
 
     @staticmethod
     def parse_sort_key(sort_key):
-        """Parse the sort key from the database
-
-        :type sort_key: str
-        :rtype: dict
-
-        """
+        # type: (str) -> Dict[str, str]
+        """Parse the sort key from the database"""
         topic = None
         message_id = None
         if re.match(r'^\d\d:', sort_key):
@@ -370,14 +382,15 @@ class WebPushNotification(object):
 
     @property
     def location(self):
+        # type: () -> str
         """Return an appropriate value for the Location header"""
         return self.message_id
 
     def expired(self, at_time=None):
+        # type: (Optional[int]) -> bool
         """Indicates whether the message has expired or not
 
         :param at_time: Optional time to compare for expiration
-        :type at_time: int
 
         """
         now = at_time or int(time.time())
@@ -385,14 +398,8 @@ class WebPushNotification(object):
 
     @classmethod
     def from_message_table(cls, uaid, item):
-        """Create a WebPushNotification from a message table item
-
-        :type uaid: uuid.UUID
-        :type item: dict or boto.dynamodb2.item.Item
-
-        :rtype: WebPushNotification
-
-        """
+        # type: (uuid.UUID, Union[Dict[str, Any], Item]) -> WebPushNotification
+        """Create a WebPushNotification from a message table item"""
         key_info = cls.parse_sort_key(item["chidmessageid"])
         if key_info.get("topic"):
             key_info["message_id"] = item["updateid"]
@@ -410,15 +417,10 @@ class WebPushNotification(object):
 
     @classmethod
     def from_webpush_request_schema(cls, data, fernet):
+        # type: (Dict[str, Any], Fernet) -> WebPushNotification
         """Create a WebPushNotification from a validated WebPushRequestSchema
 
         This is a blocking call.
-
-        :type data: autopush.web.push_validation.WebPushRequestSchema
-        :type fernet: cryptography.fernet.Fernet
-
-        :rtype: WebPushNotification
-
         """
         sub = data["subscription"]
         notif = cls(uaid=sub["uaid"], channel_id=sub["chid"],
@@ -436,6 +438,7 @@ class WebPushNotification(object):
 
     @classmethod
     def from_message_id(cls, message_id, fernet):
+        # type: (str, Fernet) -> WebPushNotification
         """Create a WebPushNotification from a message_id
 
         This is a blocking call.
@@ -445,11 +448,6 @@ class WebPushNotification(object):
         available that can be derived from the message_id.
 
         This is suitable for passing to delete calls.
-
-        :type message_id: str
-        :type fernet: cryptography.fernet.Fernet
-
-        :rtype: WebPushNotification
 
         """
         decrypted_message_id = fernet.decrypt(message_id)
@@ -467,14 +465,8 @@ class WebPushNotification(object):
 
     @classmethod
     def from_serialized(cls, uaid, data):
-        """Create a WebPushNotification from a deserialized JSON dict
-
-        :type uaid: uuid.UUID
-        :type data: dict
-
-        :rtype: WebPushNotification
-
-        """
+        # type: (uuid.UUID, Dict[str, str]) -> WebPushNotification
+        """Create a WebPushNotification from a deserialized JSON dict"""
         notif = cls(uaid=uaid, channel_id=uuid.UUID(data["channelID"]),
                     data=data.get("data"),
                     headers=data.get("headers"),
@@ -488,6 +480,7 @@ class WebPushNotification(object):
 
     @property
     def version(self):
+        # type: () -> str
         """Return a 'version' for use with a websocket client
 
         In our case we use the message-id as its a unique value for every
@@ -497,6 +490,7 @@ class WebPushNotification(object):
         return self.message_id
 
     def serialize(self):
+        # type: () -> Dict[str, Any]
         """Serialize to a dict for delivery to a connection node"""
         payload = dict(
             channelID=normalize_id(self.channel_id),
@@ -511,6 +505,7 @@ class WebPushNotification(object):
         return payload
 
     def websocket_format(self):
+        # type: () -> Dict[str, Any]
         """Format a notification for a websocket client"""
         # Firefox currently requires channelIDs to be '-' formatted.
         payload = dict(
@@ -527,5 +522,6 @@ class WebPushNotification(object):
 
 
 def ms_time():
+    # type: () -> int
     """Return current time.time call as ms and a Python int"""
     return int(time.time() * 1000)
