@@ -214,7 +214,7 @@ class FCMRouter(object):
         # acks:
         #  for reg_id, msg_id in reply.success.items():
         # updates
-        result = reply.get('results', [])[0]
+        result = reply.get('results', [{}])[0]
         if reply.get('canonical_ids'):
             old_id = router_data['token']
             new_id = result.get('registration_id')

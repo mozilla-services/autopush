@@ -18,7 +18,7 @@ class APNSRouter(object):
     log = Logger()
     apns = None
 
-    def _connect(self, rel_channel):
+    def _connect(self, rel_channel, load_connections=True):
         """Connect to APNS
 
         :param rel_channel: Release channel name (e.g. Firefox. FirefoxBeta,..)
@@ -38,16 +38,18 @@ class APNSRouter(object):
                                           APNS_MAX_CONNECTIONS),
             topic=cert_info.get("topic", default_topic),
             logger=self.log,
-            metrics=self.ap_settings.metrics)
+            metrics=self.ap_settings.metrics,
+            load_connections=load_connections)
 
-    def __init__(self, ap_settings, router_conf):
+    def __init__(self, ap_settings, router_conf, load_connections=True):
         """Create a new APNS router and connect to APNS"""
         self.ap_settings = ap_settings
         self._base_tags = []
         self.apns = dict()
         self._config = router_conf
         for rel_channel in self._config:
-            self.apns[rel_channel] = self._connect(rel_channel)
+            self.apns[rel_channel] = self._connect(rel_channel,
+                                                   load_connections)
         self.ap_settings = ap_settings
         self.log.debug("Starting APNS router...")
 

@@ -8,6 +8,7 @@ import subprocess
 import time
 import urlparse
 import uuid
+from StringIO import StringIO
 from unittest.case import SkipTest
 
 import boto
@@ -23,7 +24,8 @@ from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.threads import deferToThread
 from twisted.test.proto_helpers import AccumulatingProtocol
 from twisted.trial import unittest
-from twisted.web.client import Agent
+from twisted.web.client import Agent, FileBodyProducer
+from twisted.web.http_headers import Headers
 
 import autopush.db as db
 from autopush import __version__
@@ -343,13 +345,13 @@ class IntegrationBase(unittest.TestCase):
         client_certs = self.make_client_certs()
         is_https = client_certs is not None
 
-        endpoint_port = 9020
-        router_port = 9030
+        self.endpoint_port = 9020
+        self.router_port = 9030
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
-            endpoint_port=str(endpoint_port),
-            router_port=str(router_port),
+            endpoint_port=str(self.endpoint_port),
+            router_port=str(self.router_port),
             router_tablename=router_table,
             storage_tablename=storage_table,
             message_tablename=message_table,
@@ -382,7 +384,7 @@ class IntegrationBase(unittest.TestCase):
             log_function=skip_request_logging,
             debug=False,
         )
-        self.ws_website = reactor.listenTCP(router_port, ws_site)
+        self.ws_website = reactor.listenTCP(self.router_port, ws_site)
 
         # Endpoint HTTP router
         site = cyclone.web.Application([
@@ -404,10 +406,10 @@ class IntegrationBase(unittest.TestCase):
         mount_health_handlers(site, settings)
         self._settings = settings
         if is_https:
-            endpoint = reactor.listenSSL(endpoint_port, site,
+            endpoint = reactor.listenSSL(self.endpoint_port, site,
                                          self.endpoint_SSLCF())
         else:
-            endpoint = reactor.listenTCP(endpoint_port, site)
+            endpoint = reactor.listenTCP(self.endpoint_port, site)
         self.website = endpoint
 
     def _make_v0_endpoint(self, uaid, chid):
@@ -1519,13 +1521,269 @@ class TestHealth(IntegrationBase):
         eq_(payload, dict(status="OK", version=__version__))
 
 
+class TestGCMBridgeIntegration(IntegrationBase):
+
+    senderID = "1009375523940"
+
+    class MockReply(object):
+        success = dict()
+        canonical = dict()
+        failed_items = dict()
+        not_registered = dict()
+        failed = dict()
+        _needs_retry = False
+
+        @classmethod
+        def needs_retry(cls=None):
+            return False
+
+    def _add_router(self):
+        from autopush.router.gcm import GCMRouter
+        from mock import Mock
+        gcm = GCMRouter(
+            self._settings,
+            {
+                "ttl": 0,
+                "dryrun": True,
+                "max_data": 4096,
+                "collapsekey": "test",
+                "senderIDs": {self.senderID:
+                              {"auth": "AIzaSyCx9PRtH8ByaJR3Cf"
+                                       "Jamz0D2N0uaCgRGiI"}}
+            }
+        )
+        self._settings.routers["gcm"] = gcm
+        # Set up the mock call to avoid calling the live system.
+        # The problem with calling the live system (even sandboxed) is that
+        # you need a valid credential set from a mobile device, which can be
+        # subject to change.
+        self._mock_send = Mock()
+        self._mock_reply = self.MockReply
+        self._mock_send.return_value = self._mock_reply
+        gcm.gcm[self.senderID].send = self._mock_send
+
+    @inlineCallbacks
+    def test_registration(self):
+        self._add_router()
+        # get the senderid
+        url = "{}/v1/{}/{}/registration".format(
+            self._settings.endpoint_url,
+            "gcm",
+            self.senderID,
+        )
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {"chid": str(uuid.uuid4()),
+             "token": uuid.uuid4().hex,
+             }
+        ))
+        eq_(response.code, 200)
+        jbody = json.loads(body)
+
+        # Send a fake message
+        data = ("\xa2\xa5\xbd\xda\x40\xdc\xd1\xa5\xf9\x6a\x60\xa8\x57\x7b\x48"
+                "\xe4\x43\x02\x5a\x72\xe0\x64\x69\xcd\x29\x6f\x65\x44\x53\x78"
+                "\xe1\xd9\xf6\x46\x26\xce\x69")
+        crypto_key = ("keyid=p256dh;dh=BAFJxCIaaWyb4JSkZopERL9MjXBeh3WdBxew"
+                      "SYP0cZWNMJaT7YNaJUiSqBuGUxfRj-9vpTPz5ANmUYq3-u-HWOI")
+        salt = "keyid=p256dh;salt=S82AseB7pAVBJ2143qtM3A"
+        content_encoding = "aesgcm"
+
+        response, body = yield _agent(
+            'POST',
+            str(jbody['endpoint']),
+            headers=Headers({
+                "crypto-key": [crypto_key],
+                "encryption": [salt],
+                "ttl": ["0"],
+                "content-encoding": [content_encoding],
+            }),
+            body=data
+        )
+
+        ca_data = self._mock_send.call_args[0][0].data
+        eq_(response.code, 201)
+        # ChannelID here MUST match what we got from the registration call.
+        # Currently, this is a lowercase, hex UUID without dashes.
+        eq_(ca_data['chid'], jbody['channelID'])
+        eq_(ca_data['con'], content_encoding)
+        eq_(ca_data['cryptokey'], crypto_key)
+        eq_(ca_data['enc'], salt)
+        eq_(ca_data['body'], base64url_encode(data))
+
+
+class TestFCMBridgeIntegration(IntegrationBase):
+
+    senderID = "1009375523940"
+
+    def _add_router(self):
+        from autopush.router.fcm import FCMRouter
+        from mock import Mock
+        fcm = FCMRouter(
+            self._settings,
+            {
+                "ttl": 0,
+                "dryrun": True,
+                "max_data": 4096,
+                "collapsekey": "test",
+                "senderID": self.senderID,
+                "auth": "AIzaSyCx9PRtH8ByaJR3CfJamz0D2N0uaCgRGiI",
+            }
+        )
+        self._settings.routers["fcm"] = fcm
+        # Set up the mock call to avoid calling the live system.
+        # The problem with calling the live system (even sandboxed) is that
+        # you need a valid credential set from a mobile device, which can be
+        # subject to change.
+        self._mock_send = Mock()
+        self._mock_reply = dict(
+            canonical_ids=0,
+            failure=0,
+            results=[{}],
+        )
+        self._mock_send.return_value = self._mock_reply
+        fcm.fcm.send_request = self._mock_send
+
+    @inlineCallbacks
+    def test_registration(self):
+        self._add_router()
+        # get the senderid
+        url = "{}/v1/{}/{}/registration".format(
+            self._settings.endpoint_url,
+            "fcm",
+            self.senderID,
+        )
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {"chid": str(uuid.uuid4()),
+             "token": uuid.uuid4().hex,
+             }
+        ))
+        eq_(response.code, 200)
+        jbody = json.loads(body)
+
+        # Send a fake message
+        data = ("\xa2\xa5\xbd\xda\x40\xdc\xd1\xa5\xf9\x6a\x60\xa8\x57\x7b\x48"
+                "\xe4\x43\x02\x5a\x72\xe0\x64\x69\xcd\x29\x6f\x65\x44\x53\x78"
+                "\xe1\xd9\xf6\x46\x26\xce\x69")
+        crypto_key = ("keyid=p256dh;dh=BAFJxCIaaWyb4JSkZopERL9MjXBeh3WdBxew"
+                      "SYP0cZWNMJaT7YNaJUiSqBuGUxfRj-9vpTPz5ANmUYq3-u-HWOI")
+        salt = "keyid=p256dh;salt=S82AseB7pAVBJ2143qtM3A"
+        content_encoding = "aesgcm"
+
+        response, body = yield _agent(
+            'POST',
+            str(jbody['endpoint']),
+            headers=Headers({
+                "crypto-key": [crypto_key],
+                "encryption": [salt],
+                "ttl": ["0"],
+                "content-encoding": [content_encoding],
+            }),
+            body=data
+        )
+
+        ca = json.loads(self._mock_send.call_args[0][0][0])
+        ca_data = ca['data']
+        eq_(response.code, 201)
+        # ChannelID here MUST match what we got from the registration call.
+        # Currently, this is a lowercase, hex UUID without dashes.
+        eq_(ca_data['chid'], jbody['channelID'])
+        eq_(ca_data['con'], content_encoding)
+        eq_(ca_data['cryptokey'], crypto_key)
+        eq_(ca_data['enc'], salt)
+        eq_(ca_data['body'], base64url_encode(data))
+
+
+class TestAPNSBridgeIntegration(IntegrationBase):
+
+    class m_response:
+        status = 200
+
+    def _add_router(self):
+        from autopush.router.apnsrouter import APNSRouter
+        from mock import Mock
+        apns = APNSRouter(
+            self._settings, {
+                "firefox": {
+                    "cert": "/home/user/certs/SimplePushDemo.p12_cert.pem",
+                    "key": "/home/user/certs/SimplePushDemo.p12_key.pem",
+                    "sandbox": True,
+                }
+            },
+            load_connections=False,)
+        self._settings.routers["apns"] = apns
+        # Set up the mock call to avoid calling the live system.
+        # The problem with calling the live system (even sandboxed) is that
+        # you need a valid credential set from a mobile device, which can be
+        # subject to change.
+        self._mock_connection = Mock()
+        self._mock_connection.request = Mock()
+        self._mock_connection.get_response = Mock()
+        self._mock_connection.get_response.return_value = self.m_response
+        apns.apns["firefox"]._return_connection(self._mock_connection)
+
+    @inlineCallbacks
+    def test_registration(self):
+        self._add_router()
+        # get the senderid
+        url = "{}/v1/{}/{}/registration".format(
+            self._settings.endpoint_url,
+            "apns",
+            "firefox",
+        )
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {"chid": str(uuid.uuid4()),
+             "token": uuid.uuid4().hex,
+             }
+        ))
+        eq_(response.code, 200)
+        jbody = json.loads(body)
+
+        # Send a fake message
+        data = ("\xa2\xa5\xbd\xda\x40\xdc\xd1\xa5\xf9\x6a\x60\xa8\x57\x7b\x48"
+                "\xe4\x43\x02\x5a\x72\xe0\x64\x69\xcd\x29\x6f\x65\x44\x53\x78"
+                "\xe1\xd9\xf6\x46\x26\xce\x69")
+        crypto_key = ("keyid=p256dh;dh=BAFJxCIaaWyb4JSkZopERL9MjXBeh3WdBxew"
+                      "SYP0cZWNMJaT7YNaJUiSqBuGUxfRj-9vpTPz5ANmUYq3-u-HWOI")
+        salt = "keyid=p256dh;salt=S82AseB7pAVBJ2143qtM3A"
+        content_encoding = "aesgcm"
+
+        response, body = yield _agent(
+            'POST',
+            str(jbody['endpoint']),
+            headers=Headers({
+                "crypto-key": [crypto_key],
+                "encryption": [salt],
+                "ttl": ["0"],
+                "content-encoding": [content_encoding],
+            }),
+            body=data
+        )
+
+        ca_data = json.loads(
+            self._mock_connection.request.call_args[1]['body'])
+        eq_(response.code, 201)
+        # ChannelID here MUST match what we got from the registration call.
+        # Currently, this is a lowercase, hex UUID without dashes.
+        eq_(ca_data['chid'], jbody['channelID'])
+        eq_(ca_data['con'], content_encoding)
+        eq_(ca_data['cryptokey'], crypto_key)
+        eq_(ca_data['enc'], salt)
+        eq_(ca_data['aps']['content_available'], 1)
+        eq_(ca_data['body'], base64url_encode(data))
+
+
 @inlineCallbacks
-def _agent(method, url, contextFactory=None):
+def _agent(method, url, contextFactory=None, headers=None, body=None):
     kwargs = {}
     if contextFactory:
         kwargs['contextFactory'] = contextFactory
     agent = Agent(reactor, **kwargs)
-    response = yield agent.request(method, url)
+    rbody = None
+    if body:
+        rbody = FileBodyProducer(StringIO(body))
+    response = yield agent.request(method, url,
+                                   headers=headers,
+                                   bodyProducer=rbody)
 
     proto = AccumulatingProtocol()
     proto.closedDeferred = Deferred()

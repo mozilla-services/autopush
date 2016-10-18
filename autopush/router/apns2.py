@@ -24,7 +24,8 @@ class APNSClient(object):
     def __init__(self, cert_file, key_file, topic,
                  alt=False, use_sandbox=False,
                  max_connections=APNS_MAX_CONNECTIONS,
-                 logger=None, metrics=None):
+                 logger=None, metrics=None,
+                 load_connections=True):
         """Create the APNS client connector.
 
         The cert_file and key_file can be derived from the exported `.p12`
@@ -57,23 +58,27 @@ class APNSClient(object):
         :type logger: logger
         :param metrics: Metric recorder
         :type metrics: autopush.metrics.IMetric
+        :param load_connections: used for testing
+        :type load_connections: bool
+
         """
         self.server = SANDBOX if use_sandbox else SERVER
         self.port = 2197 if alt else 443
-        self.ssl_context = hyper.tls.init_context(cert=(cert_file, key_file))
         self.log = logger
         self.metrics = metrics
         self.topic = topic
         self._max_connections = max_connections
         self.connections = deque(maxlen=max_connections)
+        if load_connections:
+            self.ssl_context = hyper.tls.init_context(cert=(cert_file,
+                                                            key_file))
+            self.connections.extendleft((HTTP20Connection(
+                self.server,
+                self.port,
+                ssl_context=self.ssl_context,
+                force_proto='h2') for x in range(0, max_connections)))
         if self.log:
             self.log.info("Starting APNS connection")
-
-        self.connections.extendleft((HTTP20Connection(
-            self.server,
-            self.port,
-            ssl_context=self.ssl_context,
-            force_proto='h2') for x in range(0, max_connections)))
 
     def send(self, router_token, payload, apns_id,
              priority=True, topic=None, exp=None):
