@@ -1,3 +1,14 @@
+<a name="1.19.3"></a>
+## 1.19.3 (2016-10-17)
+
+
+#### Bug Fixes
+
+*   use hex formatted ChannelID strings for bridged connections (#709) ([8aa1a7eb](https://github.com/mozilla-services/autopush/commit/8aa1a7eb1266f792538723f35569ae13e0355adc))
+*   kill websocket.Notification (#707) ([e564a974](https://github.com/mozilla-services/autopush/commit/e564a9746feafbb30f2548eef89889c172fc5bb6))
+
+
+
 <a name="1.19.2"></a>
 ## 1.19.2 (2016-10-13)
 
