@@ -41,6 +41,7 @@ from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
     ItemNotFound
 )
+from boto.exception import JSONResponseError
 from twisted.internet import reactor
 from twisted.internet.defer import (
     Deferred,
@@ -317,7 +318,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def log_failure(self, failure, **kwargs):
         """Log a twisted failure out through twisted's log.failure"""
-        self.log.failure(format="Unexpected error", failure=failure, **kwargs)
+        exc = failure.value
+        if isinstance(exc, JSONResponseError):
+            self.log.info("JSONResponseError: {exc}", exc=exc, **kwargs)
+        else:
+            self.log.failure(format="Unexpected error", failure=failure, **kwargs)
 
     @property
     def paused(self):
