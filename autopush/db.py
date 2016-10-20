@@ -266,6 +266,9 @@ def track_provisioned(func):
         except ProvisionedThroughputExceededException:
             self.metrics.increment("error.provisioned.%s" % func.__name__)
             raise
+        except JSONResponseError:
+            self.metrics.increment("error.jsonresponse.%s" % func.__name__)
+            raise
         except BotoServerError:
             self.metrics.increment("error.botoserver.%s" % func.__name__)
             raise
@@ -535,9 +538,9 @@ class Message(object):
 
         """
         # Eagerly fetches all results in the result set.
-        results = list(self.table.query_2(uaid__eq=hasher(uaid.hex),
-                                          chidmessageid__gt=" ",
-                                          consistent=True, limit=limit))
+        results = self.table.query_2(uaid__eq=hasher(uaid.hex),
+                                     chidmessageid__gt=" ",
+                                     consistent=True, limit=limit)
         return [
             WebPushNotification.from_message_table(uaid, x) for x in results
         ]

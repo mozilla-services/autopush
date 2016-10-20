@@ -7,6 +7,7 @@ from hashlib import sha256
 import twisted.internet.base
 from autopush.tests.test_db import make_webpush_notification
 from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
+from boto.exception import JSONResponseError
 from cyclone.web import Application
 from mock import Mock, patch
 from nose.tools import assert_raises, eq_, ok_
@@ -861,6 +862,26 @@ class WebsocketTestCase(unittest.TestCase):
         def check_result(msg):
             eq_(msg["status"], 503)
             eq_(msg["reason"], "error - overloaded")
+            self.flushLoggedErrors()
+
+        return self._check_response(check_result)
+
+    def test_hello_jsonresponseerror_logged(self):
+        self._connect()
+
+        def throw_error(*args, **kwargs):
+            raise JSONResponseError(None, None)
+
+        router = self.proto.ap_settings.router
+        router.table.connection.update_item = Mock(side_effect=throw_error)
+
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+
+        def check_result(msg):
+            eq_(msg["status"], 503)
+            eq_(msg["reason"], "error")
+            self.proto.log.info.assert_called()
+            self.proto.log.failure.assert_not_called()
             self.flushLoggedErrors()
 
         return self._check_response(check_result)
