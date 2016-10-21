@@ -1,6 +1,7 @@
 """FCM Router"""
 
 import pyfcm
+from requests.exceptions import ConnectionError
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
@@ -195,6 +196,12 @@ class FCMRouter(object):
         except pyfcm.errors.AuthenticationError as e:
             self.log.error("Authentication Error: %s" % e)
             raise RouterException("Server error", status_code=500)
+        except ConnectionError as e:
+            self.metrics.increment("updates.client.bridge.fcm.connection_err",
+                                   self._base_tags)
+            self.log.warn("Could not connect to FCM server: %s" % e)
+            raise RouterException("Server error", status_code=502,
+                                  log_exception=False)
         except Exception as e:
             self.log.error("Unhandled FCM Error: %s" % e)
             raise RouterException("Server error", status_code=500)

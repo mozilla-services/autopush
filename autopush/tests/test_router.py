@@ -146,6 +146,23 @@ class APNSRouterTestCase(unittest.TestCase):
                 app_id="unknown")
 
     @inlineCallbacks
+    def test_connection_error(self):
+        from hyper.http20.exceptions import ConnectionError
+
+        def raiser(*args, **kwargs):
+            raise ConnectionError("oops")
+
+        self.router.apns['firefox'].connections[1].request = Mock(
+            side_effect=raiser)
+
+        with assert_raises(RouterException) as e:
+            yield self.router.route_notification(self.notif, self.router_data)
+
+        eq_(e.exception.response_body, 'APNS returned an error '
+                                       'processing request')
+        eq_(e.exception.status_code, 502)
+
+    @inlineCallbacks
     def test_route_notification(self):
         result = yield self.router.route_notification(self.notif,
                                                       self.router_data)
@@ -195,7 +212,7 @@ class APNSRouterTestCase(unittest.TestCase):
         with assert_raises(RouterException) as ex:
             yield self.router.route_notification(self.notif, self.router_data)
         ok_(isinstance(ex.exception, RouterException))
-        eq_(ex.exception.status_code, 500)
+        eq_(ex.exception.status_code, 502)
         eq_(ex.exception.message, 'APNS Transmit Error 400:boo')
         eq_(ex.exception.response_body, 'APNS could not process your '
                                         'message boo')
@@ -209,9 +226,8 @@ class APNSRouterTestCase(unittest.TestCase):
         with assert_raises(RouterException) as ex:
             yield self.router.route_notification(self.notif, self.router_data)
         ok_(isinstance(ex.exception, RouterException))
-        eq_(ex.exception.status_code, 503)
-        eq_(ex.exception.message, "APNS Processing error: "
-                                  "HTTP20Error('oops',)")
+        eq_(ex.exception.status_code, 502)
+        eq_(ex.exception.message, "Server error")
         eq_(ex.exception.response_body, 'APNS returned an error processing '
                                         'request')
 
@@ -472,6 +488,21 @@ class GCMRouterTestCase(unittest.TestCase):
 
         def check_results(fail):
             self._check_error_call(fail.value, 500, "Server error")
+        d.addBoth(check_results)
+        return d
+
+    def test_router_notification_connection_error(self):
+        from requests.exceptions import ConnectionError
+
+        def throw_other(*args, **kwargs):
+            raise ConnectionError("oh my!")
+
+        self.gcm.send.side_effect = throw_other
+        self.router.gcm['test123'] = self.gcm
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(fail):
+            self._check_error_call(fail.value, 502, "Server error")
         d.addBoth(check_results)
         return d
 
@@ -751,6 +782,21 @@ class FCMRouterTestCase(unittest.TestCase):
 
         def check_results(fail):
             self._check_error_call(fail.value, 500)
+        d.addBoth(check_results)
+        return d
+
+    def test_router_notification_connection_error(self):
+        from requests.exceptions import ConnectionError
+
+        def throw_other(*args, **kwargs):
+            raise ConnectionError("oh my!")
+
+        self.fcm.notify_single_device.side_effect = throw_other
+        self.router.fcm = self.fcm
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(fail):
+            self._check_error_call(fail.value, 502)
         d.addBoth(check_results)
         return d
 
