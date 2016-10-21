@@ -122,16 +122,13 @@ class APNSClient(object):
                 raise RouterException(
                     "APNS Transmit Error {}:{}".format(response.status,
                                                        reason),
-                    status_code=500,
+                    status_code=502,
                     response_body="APNS could not process "
-                                  "your message {}".format(reason))
-        except HTTP20Error as ex:
+                                  "your message {}".format(reason)
+                )
+        except HTTP20Error:
             connection.close()
-            raise RouterException(
-                "APNS Processing error: {}".format(repr(ex)),
-                status_code=503,
-                response_body="APNS returned an error processing request",
-            )
+            raise
         finally:
             # Returning a closed connection to the pool is ok.
             # hyper will reconnect on .request()

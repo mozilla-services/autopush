@@ -1,8 +1,9 @@
 """APNS Router"""
 import uuid
 
-from twisted.logger import Logger
+from hyper.http20.exceptions import ConnectionError, HTTP20Error
 from twisted.internet.threads import deferToThread
+from twisted.logger import Logger
 
 from autopush.exceptions import RouterException
 from autopush.router.apns2 import (
@@ -131,9 +132,27 @@ class APNSRouter(object):
                                                           'Mozilla Push')),
                 content_available=1)
         apns_id = str(uuid.uuid4()).lower()
+        try:
+            apns_client.send(router_token=router_token, payload=payload,
+                             apns_id=apns_id)
+        except ConnectionError:
+            self.ap_settings.metrics.increment(
+                "updates.client.bridge.apns.connection_err",
+                self._base_tags
+            )
+            raise RouterException(
+                "Server error",
+                status_code=502,
+                response_body="APNS returned an error processing request",
+                log_exception=False,
+            )
+        except HTTP20Error:
+            raise RouterException(
+                "Server error",
+                status_code=502,
+                response_body="APNS returned an error processing request",
+            )
 
-        apns_client.send(router_token=router_token, payload=payload,
-                         apns_id=apns_id)
         location = "%s/m/%s" % (self.ap_settings.endpoint_url,
                                 notification.version)
         self.ap_settings.metrics.increment(

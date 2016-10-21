@@ -1,6 +1,7 @@
 """GCM Router"""
 
 import gcmclient
+from requests.exceptions import ConnectionError
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
@@ -121,6 +122,12 @@ class GCMRouter(object):
         except gcmclient.GCMAuthenticationError as e:
             self.log.error("GCM Authentication Error: %s" % e)
             raise RouterException("Server error", status_code=500)
+        except ConnectionError as e:
+            self.log.warn("GCM Unavailable: %s" % e)
+            self.metrics.increment("updates.client.bridge.gcm.connection_err",
+                                   self._base_tags)
+            raise RouterException("Server error", status_code=502,
+                                  log_exception=False)
         except Exception as e:
             self.log.error("Unhandled exception in GCM Routing: %s" % e)
             raise RouterException("Server error", status_code=500)
@@ -175,7 +182,9 @@ class GCMRouter(object):
                                      "send message.",
                  })
             raise RouterException("GCM unable to deliver", status_code=410,
-                                  response_body="GCM recipient not available.")
+                                  response_body="GCM recipient not available.",
+                                  log_exception=False,
+                                  )
 
         # retries:
         if reply.needs_retry():
@@ -185,7 +194,8 @@ class GCMRouter(object):
                                    self._base_tags)
             raise RouterException("GCM failure to deliver, retry",
                                   status_code=503,
-                                  response_body="Please try request later.")
+                                  response_body="Please try request later.",
+                                  log_exception=False)
 
         self.metrics.increment("updates.client.bridge.gcm.succeeded",
                                self._base_tags)
