@@ -32,8 +32,8 @@ not be publicly exposed.
 import json
 import time
 import uuid
-from collections import defaultdict, namedtuple
-from functools import wraps
+from collections import defaultdict
+from functools import partial, wraps
 from random import randrange
 
 from autobahn.twisted.websocket import WebSocketServerProtocol
@@ -59,7 +59,12 @@ from twisted.protocols import policies
 from twisted.python import failure
 from twisted.web._newclient import ResponseFailed
 from twisted.web.resource import Resource
-from typing import List  # flake8: noqa
+from typing import (  # noqa
+    Dict,
+    List,
+    Optional,
+    Tuple,
+)
 from zope.interface import implements
 
 from autopush import __version__
@@ -68,8 +73,9 @@ from autopush.db import (
     has_connected_this_month,
     hasher,
     generate_last_connect,
-    dump_uaid
+    dump_uaid,
 )
+from autopush.db import Message  # noqa
 from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
 from autopush.utils import (
@@ -149,6 +155,10 @@ class PushState(object):
         'message',
         'rotate_message_table',
 
+        # Timestamped message handling
+        'scan_timestamps',
+        'current_timestamp',
+
         'ping_time_out',
         '_check_notifications',
         '_more_notifications',
@@ -188,8 +198,8 @@ class PushState(object):
         self.metrics = settings.metrics
         self.metrics.increment("client.socket.connect",
                                tags=self._base_tags or None)
-        self.uaid = None
-        self.uaid_obj = None
+        self.uaid = None  # Optional[str]
+        self.uaid_obj = None  # Optional[uuid.UUID]
         self.uaid_hash = ""
         self.last_ping = 0
         self.check_storage = False
@@ -206,6 +216,10 @@ class PushState(object):
         self._check_notifications = False
         self._more_notifications = False
 
+        # Timestamp message defaults
+        self.scan_timestamps = False
+        self.current_timestamp = None
+
         # Hanger for common actions we defer
         self._notification_fetch = None
         self._register = None
@@ -218,6 +232,7 @@ class PushState(object):
 
     @property
     def message(self):
+        # type: () -> Message
         """Property to access the currently used message table"""
         return self.settings.message_tables[self.message_month]
 
@@ -322,7 +337,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if isinstance(exc, JSONResponseError):
             self.log.info("JSONResponseError: {exc}", exc=exc, **kwargs)
         else:
-            self.log.failure(format="Unexpected error", failure=failure, **kwargs)
+            self.log.failure(format="Unexpected error", failure=failure,
+                             **kwargs)
 
     @property
     def paused(self):
@@ -848,8 +864,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.ps._more_notifications = True
 
         if self.ps.use_webpush:
-            d = self.deferToThread(self.ps.message.fetch_messages,
-                                   self.ps.uaid_obj)
+            d = self.deferToThread(self.webpush_fetch())
         else:
             d = self.deferToThread(
                 self.ap_settings.storage.fetch_notifications, self.ps.uaid)
@@ -858,6 +873,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         d.addErrback(self.trap_cancel)
         d.addErrback(self.error_notifications)
         self.ps._notification_fetch = d
+
+    def webpush_fetch(self):
+        """Helper to return an appropriate function to fetch messages"""
+        if self.ps.scan_timestamps:
+            return partial(self.ps.message.fetch_timestamp_messages,
+                           self.ps.uaid_obj, self.ps.current_timestamp)
+        else:
+            return partial(self.ps.message.fetch_messages, self.ps.uaid_obj)
 
     def error_notifications(self, fail):
         """errBack for notification check failing"""
@@ -912,16 +935,29 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             d = self.deferToLater(1, self.process_notifications)
             d.addErrback(self.trap_cancel)
 
-    def finish_webpush_notifications(self, notifs):
-        """webpush notification processor
+    def finish_webpush_notifications(self, result):
+        # type: (Tuple[str, List[WebPushNotification]]) -> None
+        """WebPush notification processor"""
+        timestamp, notifs = result
 
-        :type notifs: List[autopush.utils.WebPushNotification]
+        # If there's a timestamp, update our current one to it
+        if timestamp:
+            self.ps.current_timestamp = timestamp
 
-        """
         if not notifs:
-            # No more notifications, we can stop.
+            # No more notifications, check timestamped?
+            if not self.ps.scan_timestamps:
+                # Scan for timestamped then
+                self.ps.scan_timestamps = True
+                d = self.deferToLater(0, self.process_notifications)
+                d.addErrback(self.trap_cancel)
+                return
+
+            # No more notifications, and we've scanned timestamped.
             self.ps._more_notifications = False
+            self.ps.scan_timestamps = False
             if self.ps._check_notifications:
+                # Told to check again, start over
                 self.ps._check_notifications = False
                 d = self.deferToLater(1, self.process_notifications)
                 d.addErrback(self.trap_cancel)
@@ -935,15 +971,37 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         # Send out all the notifications
         now = int(time.time())
+        messages_sent = False
         for notif in notifs:
             # If the TTL is too old, don't deliver and fire a delete off
             if notif.expired(at_time=now):
-                self.force_retry(self.ps.message.delete_message, notif)
-                continue
+                if not notif.sortkey_timestamp:
+                    # Delete non-timestamped messages
+                    self.force_retry(self.ps.message.delete_message, notif)
+
+                # nocover here as coverage gets confused on the line below
+                # for unknown reasons
+                continue  # pragma: nocover
 
             self.ps.updates_sent[str(notif.channel_id)].append(notif)
             msg = notif.websocket_format()
+            messages_sent = True
             self.sendJSON(msg)
+
+        # Did we send any messages?
+        if messages_sent:
+            return
+
+        # No messages sent, update the record if needed
+        if self.ps.current_timestamp:
+            self.force_retry(
+                self.ps.message.update_last_message_read,
+                self.ps.uaid_obj,
+                self.ps.current_timestamp
+            )
+
+        # Schedule a new process check
+        self.check_missed_notifications(None)
 
     def _rotate_message_table(self):
         """Function to fire off a message table copy of channels + update the
@@ -1152,7 +1210,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         def ver_filter(notif):
             return notif.version == version
 
-        found = filter(ver_filter, self.ps.direct_updates[chid])
+        found = filter(
+            ver_filter, self.ps.direct_updates[chid]
+        )  # type: List[WebPushNotification]
         if found:
             msg = found[0]
             size = len(msg.data) if msg.data else 0
@@ -1164,7 +1224,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.direct_updates[chid].remove(msg)
             return
 
-        found = filter(ver_filter, self.ps.updates_sent[chid])
+        found = filter(
+            ver_filter, self.ps.updates_sent[chid]
+        )  # type: List[WebPushNotification]
         if found:
             msg = found[0]
             size = len(msg.data) if msg.data else 0
@@ -1173,12 +1235,36 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                           message_size=size, uaid_hash=self.ps.uaid_hash,
                           user_agent=self.ps.user_agent, code=code,
                           **self.ps.raw_agent)
-            d = self.force_retry(self.ps.message.delete_message, msg)
-            # We don't remove the update until we know the delete ran
-            # This is because we don't use range queries on dynamodb and we
-            # need to make sure this notification is deleted from the db before
-            # we query it again (to avoid dupes).
-            d.addBoth(self._handle_webpush_update_remove, chid, msg)
+
+            if msg.sortkey_timestamp:
+                # Is this the last un-acked message we're waiting for?
+                last_unacked = sum(
+                    len(sent) for sent in self.ps.updates_sent.itervalues()
+                ) == 1
+
+                if (msg.sortkey_timestamp == self.ps.current_timestamp or
+                        last_unacked):
+                    # If it's the last message in the batch, or last un-acked
+                    # message
+                    d = self.force_retry(
+                        self.ps.message.update_last_message_read,
+                        self.ps.uaid_obj,
+                        self.ps.current_timestamp,
+                    )
+                    d.addBoth(self._handle_webpush_update_remove, chid, msg)
+                else:
+                    # It's timestamped, but not the last of this batch,
+                    # so we just remove it from local tracking
+                    self._handle_webpush_update_remove(None, chid, msg)
+                    d = None
+            else:
+                # No sortkey_timestamp, so legacy/topic message, delete
+                d = self.force_retry(self.ps.message.delete_message, msg)
+                # We don't remove the update until we know the delete ran
+                # This is because we don't use range queries on dynamodb and
+                # we need to make sure this notification is deleted from the
+                # db before we query it again (to avoid dupes).
+                d.addBoth(self._handle_webpush_update_remove, chid, msg)
             return d
 
     def _handle_webpush_update_remove(self, result, chid, notif):
@@ -1262,7 +1348,12 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             return
 
         # Should we check again?
-        if self.ps._check_notifications or self.ps._more_notifications:
+        if self.ps._more_notifications:
+            self.process_notifications()
+        elif self.ps._check_notifications:
+            # If we were told to check notifications, start over since we might
+            # have missed a topic message
+            self.ps.scan_timestamps = False
             self.process_notifications()
 
     def bad_message(self, typ, message=None, url=DEFAULT_WS_ERR):

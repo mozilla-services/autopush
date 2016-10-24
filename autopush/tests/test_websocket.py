@@ -583,7 +583,8 @@ class WebsocketTestCase(unittest.TestCase):
             return (True, msg_data, data)
 
         mock_msg = Mock(wraps=db.Message)
-        mock_msg.fetch_messages.return_value = []
+        mock_msg.fetch_messages.return_value = "01;", []
+        mock_msg.fetch_timestamp_messages.return_value = None, []
         mock_msg.all_channels.return_value = (None, [])
         self.proto.ap_settings.router.register_user = fake_msg
         # massage message_tables to include our fake range
@@ -656,7 +657,8 @@ class WebsocketTestCase(unittest.TestCase):
             return (True, msg_data, data)
 
         mock_msg = Mock(wraps=db.Message)
-        mock_msg.fetch_messages.return_value = []
+        mock_msg.fetch_messages.return_value = "01;", []
+        mock_msg.fetch_timestamp_messages.return_value = None, []
         mock_msg.all_channels.return_value = (None, [])
         self.proto.ap_settings.router.register_user = fake_msg
         # massage message_tables to include our fake range
@@ -730,7 +732,8 @@ class WebsocketTestCase(unittest.TestCase):
                                 channelIDs=[]))
 
         def check_result(msg):
-            eq_(db.DB_CALLS, ['register_user', 'fetch_messages'])
+            eq_(db.DB_CALLS, ['register_user', 'fetch_messages',
+                              'fetch_timestamp_messages'])
             eq_(msg["status"], 200)
             db.DB_CALLS = []
             db.TRACK_DB_CALLS = False
@@ -1882,6 +1885,13 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.process_notifications()
         eq_(self.proto.ps._notification_fetch, None)
 
+    def test_check_notif_doesnt_run_after_stop(self):
+        self._connect()
+        self.proto.ps.uaid = uuid.uuid4().hex
+        self.proto.ps._should_stop = True
+        self.proto.check_missed_notifications(None)
+        eq_(self.proto.ps._notification_fetch, None)
+
     def test_process_notif_paused_on_finish(self):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
@@ -1896,7 +1906,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.use_webpush = True
         self.proto.deferToLater = Mock()
         self.proto.ps._check_notifications = True
-        self.proto.finish_notifications(None)
+        self.proto.ps.scan_timestamps = True
+        self.proto.finish_notifications((None, []))
         ok_(self.proto.deferToLater.called)
 
     def test_notif_finished_with_webpush_with_notifications(self):
@@ -1912,7 +1923,7 @@ class WebsocketTestCase(unittest.TestCase):
         )
         self.proto.ps.updates_sent[str(notif.channel_id)] = []
 
-        self.proto.finish_webpush_notifications([notif])
+        self.proto.finish_webpush_notifications((None, [notif]))
         ok_(self.send_mock.called)
 
     def test_notif_finished_with_webpush_with_old_notifications(self):
@@ -1930,7 +1941,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.updates_sent[str(notif.channel_id)] = []
 
         self.proto.force_retry = Mock()
-        self.proto.finish_webpush_notifications([notif])
+        self.proto.finish_webpush_notifications((None, [notif]))
         ok_(self.proto.force_retry.called)
         ok_(not self.send_mock.called)
 

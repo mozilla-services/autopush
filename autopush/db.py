@@ -47,14 +47,29 @@ from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table, Item
 from boto.dynamodb2.types import NUMBER
-from typing import Iterable, List  # flake8: noqa
+from typing import (  # noqa
+    Any,
+    Callable,
+    Dict,
+    Iterable,
+    List,
+    Optional,
+    Set,
+    TypeVar,
+    Tuple,
+    Union,
+)
 
 from autopush.exceptions import AutopushException
+from autopush.metrics import IMetrics  # noqa
 from autopush.utils import (
     generate_hash,
     normalize_id,
     WebPushNotification,
 )
+
+# Typing
+T = TypeVar('T')  # noqa
 
 key_hash = ""
 TRACK_DB_CALLS = False
@@ -62,12 +77,9 @@ DB_CALLS = []
 
 
 def get_month(delta=0):
+    # type: (int) -> datetime.date
     """Basic helper function to get a datetime.date object iterations months
     ahead/behind of now.
-
-    :type delta: int
-
-    :rtype: datetime.datetime
 
     """
     new = last = datetime.date.today()
@@ -85,12 +97,15 @@ def get_month(delta=0):
 
 
 def hasher(uaid):
+    # type: (str) -> str
+    """Hashes a key using a key_hash if present"""
     if key_hash:
         return generate_hash(key_hash, uaid)
     return uaid
 
 
 def dump_uaid(uaid_data):
+    # type: (Union[Dict[str, Any], Item]) -> str
     """Return a dict for a uaid.
 
     This is utilized instead of repr since some db methods return a
@@ -105,6 +120,7 @@ def dump_uaid(uaid_data):
 
 
 def make_rotating_tablename(prefix, delta=0, date=None):
+    # type: (str, int, Optional[datetime.date]) -> str
     """Creates a tablename for table rotation based on a prefix with a given
     month delta."""
     if not date:
@@ -114,6 +130,7 @@ def make_rotating_tablename(prefix, delta=0, date=None):
 
 def create_rotating_message_table(prefix="message", read_throughput=5,
                                   write_throughput=5, delta=0):
+    # type: (str, int, int, int) -> Table
     """Create a new message table for webpush style message storage"""
     tablename = make_rotating_tablename(prefix, delta)
     return Table.create(tablename,
@@ -127,6 +144,7 @@ def create_rotating_message_table(prefix="message", read_throughput=5,
 def get_rotating_message_table(prefix="message", delta=0, date=None,
                                message_read_throughput=5,
                                message_write_throughput=5):
+    # type: (str, int, Optional[datetime.date], int, int) -> Table
     """Gets the message table for the current month."""
     db = DynamoDBConnection()
     dblist = db.list_tables()["TableNames"]
@@ -142,6 +160,7 @@ def get_rotating_message_table(prefix="message", delta=0, date=None,
 
 def create_router_table(tablename="router", read_throughput=5,
                         write_throughput=5):
+    # type: (str, int, int) -> Table
     """Create a new router table
 
     The last_connect index is a value used to determine the last month a user
@@ -164,13 +183,14 @@ def create_router_table(tablename="router", read_throughput=5,
                                 'AccessIndex',
                                 parts=[
                                     HashKey('last_connect',
-                                             data_type=NUMBER)],
+                                            data_type=NUMBER)],
                                 throughput=dict(read=5, write=5))],
                         )
 
 
 def create_storage_table(tablename="storage", read_throughput=5,
                          write_throughput=5):
+    # type: (str, int, int) -> Table
     """Create a new storage table for simplepush style notification storage"""
     return Table.create(tablename,
                         schema=[HashKey("uaid"), RangeKey("chid")],
@@ -180,6 +200,7 @@ def create_storage_table(tablename="storage", read_throughput=5,
 
 
 def _make_table(table_func, tablename, read_throughput, write_throughput):
+    # type: (Callable[[str, int, int], Table], str, int, int) -> Table
     """Private common function to make a table with a table func"""
     db = DynamoDBConnection()
     dblist = db.list_tables()["TableNames"]
@@ -191,6 +212,7 @@ def _make_table(table_func, tablename, read_throughput, write_throughput):
 
 def get_router_table(tablename="router", read_throughput=5,
                      write_throughput=5):
+    # type: (str, int, int) -> Table
     """Get the main router table object
 
     Creates the table if it doesn't already exist, otherwise returns the
@@ -203,6 +225,7 @@ def get_router_table(tablename="router", read_throughput=5,
 
 def get_storage_table(tablename="storage", read_throughput=5,
                       write_throughput=5):
+    # type: (str, int, int) -> Table
     """Get the main storage table object
 
     Creates the table if it doesn't already exist, otherwise returns the
@@ -214,6 +237,7 @@ def get_storage_table(tablename="storage", read_throughput=5,
 
 
 def preflight_check(storage, router, uaid="deadbeef00000000deadbeef00000000"):
+    # type: (Storage, Router, str) -> None
     """Performs a pre-flight check of the storage/router/message to ensure
     appropriate permissions for operation.
 
@@ -255,6 +279,7 @@ def preflight_check(storage, router, uaid="deadbeef00000000deadbeef00000000"):
 
 
 def track_provisioned(func):
+    # type: (Callable[..., T]) -> Callable[..., T]
     """Tracks provisioned exceptions and increments a metric for them named
     after the function decorated"""
     @wraps(func)
@@ -276,13 +301,8 @@ def track_provisioned(func):
 
 
 def has_connected_this_month(item):
-    """Whether or not a router item has connected this month
-
-    :type item: dict
-
-    :rtype: bool
-
-    """
+    # type: (Dict[str, Any]) -> bool
+    """Whether or not a router item has connected this month"""
     last_connect = item.get("last_connect")
     if not last_connect:
         return False
@@ -293,15 +313,12 @@ def has_connected_this_month(item):
 
 
 def generate_last_connect():
+    # type: () -> int
     """Generate a last_connect
 
     This intentionally generates a limited set of keys for each month in a
     known sequence. For each month, there's 24 hours * 10 random numbers for
     a total of 240 keys per month depending on when the user migrates forward.
-
-    :type date: datetime.datetime
-
-    :rtype: int
 
     """
     today = datetime.datetime.today()
@@ -315,14 +332,11 @@ def generate_last_connect():
 
 
 def generate_last_connect_values(date):
+    # type: (datetime.date) -> Iterable[int]
     """Generator of last_connect values for a given date
 
     Creates an iterator that yields all the valid values for ``last_connect``
     for a given year/month.
-
-    :type date: datetime.datetime
-
-    :rtype: Iterable[int]
 
     """
     year = str(date.year)
@@ -337,6 +351,7 @@ def generate_last_connect_values(date):
 class Storage(object):
     """Create a Storage table abstraction on top of a DynamoDB Table object"""
     def __init__(self, table, metrics):
+        # type: (Table, IMetrics) -> None
         """Create a new Storage object
 
         :param table: :class:`Table` object.
@@ -350,6 +365,7 @@ class Storage(object):
 
     @track_provisioned
     def fetch_notifications(self, uaid):
+        # type: (str) -> List[Dict[str, Any]]
         """Fetch all notifications for a UAID
 
         :raises:
@@ -363,6 +379,7 @@ class Storage(object):
 
     @track_provisioned
     def save_notification(self, uaid, chid, version):
+        # type: (str, str, Optional[int]) -> bool
         """Save a notification for the UAID
 
         :raises:
@@ -388,10 +405,10 @@ class Storage(object):
             return False
 
     def delete_notification(self, uaid, chid, version=None):
+        # type: (str, str, Optional[int]) -> bool
         """Delete a notification for a UAID
 
         :returns: Whether or not the notification was able to be deleted.
-        :rtype: bool
 
         """
         try:
@@ -411,6 +428,7 @@ class Storage(object):
 class Message(object):
     """Create a Message table abstraction on top of a DynamoDB Table object"""
     def __init__(self, table, metrics):
+        # type: (Table, IMetrics) -> None
         """Create a new Message object
 
         :param table: :class:`Table` object.
@@ -424,6 +442,7 @@ class Message(object):
 
     @track_provisioned
     def register_channel(self, uaid, channel_id):
+        # type: (str, str) -> bool
         """Register a channel for a given uaid"""
         conn = self.table.connection
         db_key = self.encode({"uaid": hasher(uaid), "chidmessageid": " "})
@@ -441,6 +460,7 @@ class Message(object):
 
     @track_provisioned
     def unregister_channel(self, uaid, channel_id, **kwargs):
+        # type: (str, str, **str) -> bool
         """Remove a channel registration for a given uaid"""
         conn = self.table.connection
         db_key = self.encode({"uaid": hasher(uaid), "chidmessageid": " "})
@@ -466,6 +486,7 @@ class Message(object):
 
     @track_provisioned
     def all_channels(self, uaid):
+        # type: (str) -> Tuple[bool, Set[str]]
         """Retrieve a list of all channels for a given uaid"""
 
         # Note: This only returns the chids associated with the UAID.
@@ -480,6 +501,7 @@ class Message(object):
 
     @track_provisioned
     def save_channels(self, uaid, channels):
+        # type: (str, Set[str]) -> None
         """Save out a set of channels"""
         self.table.put_item(data=dict(
             uaid=hasher(uaid),
@@ -489,12 +511,8 @@ class Message(object):
 
     @track_provisioned
     def store_message(self, notification):
-        """Stores a WebPushNotification in the message table
-
-        :type notification: WebPushNotification
-        :type timestamp: int
-
-        """
+        # type: (WebPushNotification) -> bool
+        """Stores a WebPushNotification in the message table"""
         item = dict(
             uaid=hasher(notification.uaid.hex),
             chidmessageid=notification.sort_key,
@@ -509,11 +527,8 @@ class Message(object):
 
     @track_provisioned
     def delete_message(self, notification):
-        """Deletes a specific message
-
-        :type notification: WebPushNotification
-
-        """
+        # type: (WebPushNotification) -> bool
+        """Deletes a specific message"""
         if notification.update_id:
             try:
                 self.table.delete_item(
@@ -530,25 +545,94 @@ class Message(object):
         return True
 
     @track_provisioned
-    def fetch_messages(self, uaid, limit=10):
+    def fetch_messages(
+            self,
+            uaid,  # type: uuid.UUID
+            limit=10,  # type: int
+            ):
+        # type: (...) -> Tuple[Optional[int], List[WebPushNotification]]
         """Fetches messages for a uaid
 
-        :type uaid: uuid.UUID
-        :type limit: int
+        :returns: A tuple of the last timestamp to read for timestamped
+                  messages and the list of non-timestamped messages.
 
         """
         # Eagerly fetches all results in the result set.
-        results = self.table.query_2(uaid__eq=hasher(uaid.hex),
-                                     chidmessageid__gt=" ",
-                                     consistent=True, limit=limit)
-        return [
+        results = list(self.table.query_2(uaid__eq=hasher(uaid.hex),
+                                          chidmessageid__lt="02",
+                                          consistent=True, limit=limit))
+
+        # First extract the position if applicable, slightly higher than 01:
+        # to ensure we don't load any 01 remainders that didn't get deleted
+        # yet
+        last_position = None
+        if results:
+            # Ensure we return an int, as boto2 can return Decimals
+            if results[0].get("current_timestamp"):
+                last_position = int(results[0]["current_timestamp"])
+
+        return last_position, [
+            WebPushNotification.from_message_table(uaid, x)
+            for x in results[1:]
+        ]
+
+    @track_provisioned
+    def fetch_timestamp_messages(
+            self,
+            uaid,  # type: uuid.UUID
+            timestamp=None,  # type: Optional[int]
+            limit=10,  # type: int
+            ):
+        # type: (...) -> Tuple[Optional[int], List[WebPushNotification]]
+        """Fetches timestamped messages for a uaid
+
+        Note that legacy messages start with a hex UUID, so they may be mixed
+        in with timestamp messages beginning with 02. As such we only move our
+        last_position forward to the last timestamped message.
+
+        :returns: A tuple of the last timestamp to read and the list of
+                  timestamped messages.
+
+        """
+        # Turn the timestamp into a proper sort key
+        if timestamp:
+            sortkey = "02:{timestamp}:z".format(timestamp=timestamp)
+        else:
+            sortkey = "01;"
+
+        results = list(self.table.query_2(uaid__eq=hasher(uaid.hex),
+                                          chidmessageid__gt=sortkey,
+                                          consistent=True, limit=limit))
+        notifs = [
             WebPushNotification.from_message_table(uaid, x) for x in results
         ]
+        ts_notifs = [x for x in notifs if x.sortkey_timestamp]
+        last_position = None
+        if ts_notifs:
+            last_position = ts_notifs[-1].sortkey_timestamp
+        return last_position, notifs
+
+    @track_provisioned
+    def update_last_message_read(self, uaid, timestamp):
+        # type: (uuid.UUID, int) -> bool
+        """Update the last read timestamp for a user"""
+        conn = self.table.connection
+        db_key = self.encode({"uaid": hasher(uaid.hex), "chidmessageid": " "})
+        expr = "SET current_timestamp=:timestamp"
+        expr_values = self.encode({":timestamp": timestamp})
+        conn.update_item(
+            self.table.table_name,
+            db_key,
+            update_expression=expr,
+            expression_attribute_values=expr_values,
+        )
+        return True
 
 
 class Router(object):
     """Create a Router table abstraction on top of a DynamoDB Table object"""
     def __init__(self, table, metrics):
+        # type: (Table, IMetrics) -> None
         """Create a new Router object
 
         :param table: :class:`Table` object.
@@ -561,10 +645,9 @@ class Router(object):
         self.encode = table._encode_keys
 
     def get_uaid(self, uaid):
+        # type: (str) -> Item
         """Get the database record for the UAID
 
-        :returns: User item
-        :rtype: :class:`~boto.dynamodb2.items.Item`
         :raises:
             :exc:`ItemNotFound` if there is no record for this UAID.
             :exc:`ProvisionedThroughputExceededException` if dynamodb table
@@ -592,13 +675,13 @@ class Router(object):
 
     @track_provisioned
     def register_user(self, data):
+        # type: (Dict[str, Any]) -> Tuple[bool, Dict[str, Any], Dict[str, Any]]
         """Register this user
 
         If a record exists with a newer ``connected_at``, then the user will
         not be registered.
 
         :returns: Whether the user was registered or not.
-        :rtype: tuple
         :raises:
             :exc:`ProvisionedThroughputExceededException` if dynamodb table
             exceeds throughput.
@@ -647,6 +730,8 @@ class Router(object):
 
     @track_provisioned
     def drop_user(self, uaid):
+        # type: (str) -> bool
+        """Drops a user record"""
         # The following hack ensures that only uaids that exist and are
         # deleted return true.
         huaid = hasher(uaid)
@@ -654,16 +739,14 @@ class Router(object):
                                       expected={"uaid__eq": huaid})
 
     def delete_uaids(self, uaids):
-        """Issue a batch delete call for the given uaids
-
-        :type uaids: List[str]
-
-        """
+        # type: (List[str]) -> None
+        """Issue a batch delete call for the given uaids"""
         with self.table.batch_write() as batch:
             for uaid in uaids:
                 batch.delete_item(uaid=uaid)
 
     def drop_old_users(self, months_ago=2):
+        # type: (int) -> Iterable[int]
         """Drops user records that have no recent connection
 
         Utilizes the last_connect index to locate users that haven't
@@ -684,10 +767,8 @@ class Router(object):
             quickly as possible.
 
         :param months_ago: how many months ago since the last connect
-        :type months_ago: int
 
         :returns: Iterable of how many deletes were run
-        :rtype: Iterable[int]
 
         """
         prior_date = get_month(-months_ago)
@@ -713,17 +794,20 @@ class Router(object):
 
     @track_provisioned
     def update_message_month(self, uaid, month):
+        # type: (str, str) -> bool
         """Update the route tables current_message_month
 
         Note that we also update the last_connect at this point since webpush
-        users when connecting will always call this once that month.
+        users when connecting will always call this once that month. The
+        current_timestamp is also reset as a new month has no last read
+        timestamp.
 
         """
         conn = self.table.connection
         db_key = self.encode({"uaid": hasher(uaid)})
-        expr = "SET current_month=:curmonth, last_connect=:last_connect"
+        expr = ("SET current_month=:curmonth, last_connect=:last_connect")
         expr_values = self.encode({":curmonth": month,
-                                   ":last_connect": generate_last_connect()
+                                   ":last_connect": generate_last_connect(),
                                    })
         conn.update_item(
             self.table.table_name,
@@ -735,13 +819,13 @@ class Router(object):
 
     @track_provisioned
     def clear_node(self, item):
+        # type: (Item) -> bool
         """Given a router item and remove the node_id
 
         The node_id will only be cleared if the ``connected_at`` matches up
         with the item's ``connected_at``.
 
         :returns: Whether the node was cleared or not.
-        :rtype: bool
         :raises:
             :exc:`ProvisionedThroughputExceededException` if dynamodb table
             exceeds throughput.

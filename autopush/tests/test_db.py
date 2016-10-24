@@ -315,7 +315,8 @@ class MessageTestCase(unittest.TestCase):
         message.store_message(make_webpush_notification(self.uaid, chid))
         message.store_message(make_webpush_notification(self.uaid, chid))
 
-        all_messages = list(message.fetch_messages(uuid.UUID(self.uaid)))
+        _, all_messages = message.fetch_timestamp_messages(
+            uuid.UUID(self.uaid), " ")
         eq_(len(all_messages), 3)
 
     def test_message_storage_overwrite(self):

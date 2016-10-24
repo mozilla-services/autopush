@@ -211,6 +211,10 @@ class AutopushSettings(object):
 
         self.ami_id = ami_id
 
+        # Generate messages per legacy rules, only used for testing to
+        # generate legacy data.
+        self._notification_legacy = False
+
     @property
     def message(self):
         """Property that access the current message table"""

@@ -14,16 +14,16 @@ from attr import (
     attrs,
     attrib
 )
-from boto.dynamodb2.items import Item  # flake8: noqa
-from cryptography.fernet import Fernet  # flake8: noqa
+from boto.dynamodb2.items import Item  # noqa
+from cryptography.fernet import Fernet  # noqa
 from jose import jwt
-from typing import (
+from typing import (  # noqa
     Any,
     Dict,
     Optional,
     Union,
     Tuple,
-)  # flake8: noqa
+)
 from ua_parser import user_agent_parser
 
 from autopush.exceptions import InvalidTokenException
@@ -56,6 +56,10 @@ CLIENT_SHA256_RE = re.compile("""\
  [0-9A-F]{2}
 $
 """, re.VERBOSE)
+
+# Time multipliers for conversion from seconds to ms/ns
+MS_MULT = pow(10, 3)
+NS_MULT = pow(10, 6)
 
 
 def normalize_id(ident):
@@ -269,6 +273,7 @@ class WebPushNotification(object):
     data = attrib(default=None)  # type: Optional[str]
     headers = attrib(default=None)  # type: Optional[Dict[str, str]]
     timestamp = attrib(default=Factory(lambda: int(time.time())))  # type: int
+    sortkey_timestamp = attrib(default=None)  # type: Optional[int]
     topic = attrib(default=None)  # type: Optional[str]
 
     message_id = attrib(default=None)  # type: str
@@ -277,19 +282,26 @@ class WebPushNotification(object):
     # message with any update_id should be removed.
     update_id = attrib(default=None)  # type: str
 
+    # Whether this notification should follow legacy non-topic rules
+    legacy = attrib(default=False)  # type: bool
+
     def generate_message_id(self, fernet):
         # type: (Fernet) -> str
         """Generate a message-id suitable for accessing the message
 
-        For non-topic messages, no sort_key version is currently used and the
-        message-id is:
-
-            Encrypted(m : uaid.hex : channel_id.hex)
-
         For topic messages, a sort_key version of 01 is used, and the topic
         is included for reference:
 
-            Encrypted(01 : uaid.hex : channel_id.hex : topic)
+            Encrypted('01' : uaid.hex : channel_id.hex : topic)
+
+        For topic messages, a sort_key version of 02 is used:
+
+            Encrypted('02' : uaid.hex : channel_id.hex : timestamp)
+
+        For legacy non-topic messages, no sort_key version was used and the
+        message-id was:
+
+            Encrypted('m' : uaid.hex : channel_id.hex)
 
         This is a blocking call.
 
@@ -297,22 +309,33 @@ class WebPushNotification(object):
         if self.topic:
             msg_key = ":".join(["01", self.uaid.hex, self.channel_id.hex,
                                 self.topic])
-        else:
+        elif self.legacy:
             msg_key = ":".join(["m", self.uaid.hex, self.channel_id.hex])
+        else:
+            self.sortkey_timestamp = self.sortkey_timestamp or ns_time()
+            msg_key = ":".join(["02", self.uaid.hex, self.channel_id.hex,
+                                str(self.sortkey_timestamp)])
         self.message_id = fernet.encrypt(msg_key.encode('utf8'))
         self.update_id = self.message_id
         return self.message_id
 
     @staticmethod
     def parse_decrypted_message_id(decrypted_token):
-        # type: (str) -> Dict[str, str]
+        # type: (str) -> Dict[str, Any]
         """Parses a decrypted message-id into component parts"""
         topic = None
+        sortkey_timestamp = None
         if decrypted_token.startswith("01:"):
             info = decrypted_token.split(":")
             if len(info) != 4:
                 raise InvalidTokenException("Incorrect number of token parts.")
             api_ver, uaid, chid, topic = info
+        elif decrypted_token.startswith("02:"):
+            info = decrypted_token.split(":")
+            if len(info) != 4:
+                raise InvalidTokenException("Incorrect number of token parts.")
+            api_ver, uaid, chid, raw_sortkey = info
+            sortkey_timestamp = int(raw_sortkey)
         else:
             info = decrypted_token.split(":")
             if len(info) != 3:
@@ -324,6 +347,7 @@ class WebPushNotification(object):
             uaid=uaid,
             chid=chid,
             topic=topic,
+            sortkey_timestamp=sortkey_timestamp,
         )
 
     def cleanup_headers(self):
@@ -358,27 +382,54 @@ class WebPushNotification(object):
     @property
     def sort_key(self):
         # type: () -> str
-        """Return an appropriate sort_key for this notification"""
+        """Return an appropriate sort_key for this notification
+
+        For new messages:
+
+            02:{sortkey_timestamp}:{chid}
+
+        For topic messages:
+
+            01:{chid}:{topic}
+
+        Old format for non-topic messages that is no longer returned:
+
+            {chid}:{message_id}
+
+        """
         chid = normalize_id(self.channel_id)
         if self.topic:
             return "01:{chid}:{topic}".format(chid=chid, topic=self.topic)
+        elif self.legacy:
+            return "{chid}:{message_id}".format(
+                chid=chid, message_id=self.message_id
+            )
         else:
-            return "{chid}:{message_id}".format(chid=chid,
-                                                message_id=self.message_id)
+            # Created as late as possible when storing a message
+            self.sortkey_timestamp = self.sortkey_timestamp or ns_time()
+            return "02:{sortkey_timestamp}:{chid}".format(
+                sortkey_timestamp=self.sortkey_timestamp,
+                chid=chid,
+            )
 
     @staticmethod
     def parse_sort_key(sort_key):
-        # type: (str) -> Dict[str, str]
+        # type: (str) -> Dict[str, Any]
         """Parse the sort key from the database"""
         topic = None
+        sortkey_timestamp = None
         message_id = None
-        if re.match(r'^\d\d:', sort_key):
+        if sort_key.startswith("01:"):
             api_ver, channel_id, topic = sort_key.split(":")
+        elif sort_key.startswith("02:"):
+            api_ver, raw_sortkey, channel_id = sort_key.split(":")
+            sortkey_timestamp = int(raw_sortkey)
         else:
             channel_id, message_id = sort_key.split(":")
             api_ver = "00"
         return dict(api_ver=api_ver, channel_id=channel_id,
-                    topic=topic, message_id=message_id)
+                    topic=topic, message_id=message_id,
+                    sortkey_timestamp=sortkey_timestamp)
 
     @property
     def location(self):
@@ -401,32 +452,41 @@ class WebPushNotification(object):
         # type: (uuid.UUID, Union[Dict[str, Any], Item]) -> WebPushNotification
         """Create a WebPushNotification from a message table item"""
         key_info = cls.parse_sort_key(item["chidmessageid"])
-        if key_info.get("topic"):
+        if key_info["api_ver"] in ["01", "02"]:
             key_info["message_id"] = item["updateid"]
 
-        return cls(uaid=uaid,
-                   channel_id=uuid.UUID(key_info["channel_id"]),
-                   data=item.get("data"),
-                   headers=item.get("headers"),
-                   ttl=item["ttl"],
-                   topic=key_info.get("topic"),
-                   message_id=key_info["message_id"],
-                   update_id=item.get("updateid"),
-                   timestamp=item.get("timestamp"),
-                   )
+        notif = cls(
+            uaid=uaid,
+            channel_id=uuid.UUID(key_info["channel_id"]),
+            data=item.get("data"),
+            headers=item.get("headers"),
+            ttl=item["ttl"],
+            topic=key_info.get("topic"),
+            message_id=key_info["message_id"],
+            update_id=item.get("updateid"),
+            timestamp=item.get("timestamp"),
+            sortkey_timestamp=key_info.get("sortkey_timestamp")
+        )
+
+        # Ensure we generate the sort-key properly for legacy messges
+        if key_info["api_ver"] == "00":
+            notif.legacy = True
+
+        return notif
 
     @classmethod
-    def from_webpush_request_schema(cls, data, fernet):
-        # type: (Dict[str, Any], Fernet) -> WebPushNotification
+    def from_webpush_request_schema(cls, data, fernet, legacy=False):
+        # type: (Dict[str, Any], Fernet, bool) -> WebPushNotification
         """Create a WebPushNotification from a validated WebPushRequestSchema
 
         This is a blocking call.
         """
         sub = data["subscription"]
-        notif = cls(uaid=sub["uaid"], channel_id=sub["chid"],
-                    data=data["body"], headers=data["headers"],
-                    ttl=data["headers"]["ttl"],
-                    topic=data["headers"]["topic"])
+        notif = cls(
+            uaid=sub["uaid"], channel_id=sub["chid"], data=data["body"],
+            headers=data["headers"], ttl=data["headers"]["ttl"],
+            topic=data["headers"]["topic"], legacy=legacy,
+        )
 
         if notif.data:
             notif.cleanup_headers()
@@ -458,6 +518,7 @@ class WebPushNotification(object):
                     ttl=None,
                     topic=key_info["topic"],
                     message_id=message_id,
+                    sortkey_timestamp=key_info.get("sortkey_timestamp"),
                     )
         if key_info["topic"]:
             notif.update_id = message_id
@@ -512,7 +573,7 @@ class WebPushNotification(object):
             messageType="notification",
             channelID=normalize_id(self.channel_id),
             version=self.version,
-        )
+        )  # type: Dict[str, Any]
         if self.data:
             payload["data"] = self.data
             payload["headers"] = {
@@ -524,4 +585,10 @@ class WebPushNotification(object):
 def ms_time():
     # type: () -> int
     """Return current time.time call as ms and a Python int"""
-    return int(time.time() * 1000)
+    return int(time.time() * MS_MULT)
+
+
+def ns_time():
+    # type: () -> int
+    """Return current time.time call as a ns int"""
+    return int(time.time() * NS_MULT)
