@@ -289,6 +289,7 @@ class WebPushRequestSchema(Schema):
 
         # Set the notification based on the validated request schema data
         d["notification"] = WebPushNotification.from_webpush_request_schema(
-            data=d, fernet=self.context["settings"].fernet
+            data=d, fernet=self.context["settings"].fernet,
+            legacy=self.context["settings"]._notification_legacy,
         )
         return d

@@ -139,6 +139,17 @@ class MessageTestCase(unittest.TestCase):
         self.message.delete(self._make_req('ignored'))
         return self.finish_deferred
 
+    def test_delete_invalid_timestamp_token(self):
+        tok = ":".join(["02", str(dummy_chid)])
+        self.fernet_mock.decrypt.return_value = tok
+
+        def handle_finish(result):
+            self.status_mock.assert_called_with(400, reason=None)
+        self.finish_deferred.addCallback(handle_finish)
+
+        self.message.delete(self._make_req('ignored'))
+        return self.finish_deferred
+
     def test_delete_success(self):
         tok = ":".join(["m", dummy_uaid.hex, str(dummy_chid)])
         self.fernet_mock.decrypt.return_value = tok

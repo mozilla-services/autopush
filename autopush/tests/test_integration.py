@@ -8,6 +8,7 @@ import subprocess
 import time
 import urlparse
 import uuid
+from contextlib import contextmanager
 from StringIO import StringIO
 from unittest.case import SkipTest
 
@@ -448,6 +449,12 @@ class IntegrationBase(unittest.TestCase):
         if client:
             yield client.disconnect()
 
+    @contextmanager
+    def legacy_endpoint(self):
+        self._settings._notification_legacy = True
+        yield
+        self._settings._notification_legacy = False
+
 
 class TestSimple(IntegrationBase):
     @inlineCallbacks
@@ -703,15 +710,16 @@ class TestLoop(IntegrationBase):
 
 class TestWebPush(IntegrationBase):
     @inlineCallbacks
-    def test_hello_only_has_two_calls(self):
+    def test_hello_only_has_three_calls(self):
         db.TRACK_DB_CALLS = True
         client = Client(self._ws_url, use_webpush=True)
         yield client.connect()
         result = yield client.hello()
         ok_(result != {})
         eq_(result["use_webpush"], True)
-        yield client.wait_for(lambda: len(db.DB_CALLS) == 2)
-        eq_(db.DB_CALLS, ['register_user', 'fetch_messages'])
+        yield client.wait_for(lambda: len(db.DB_CALLS) == 3)
+        eq_(db.DB_CALLS, ['register_user', 'fetch_messages',
+                          'fetch_timestamp_messages'])
         db.DB_CALLS = []
         db.TRACK_DB_CALLS = False
 
@@ -872,17 +880,18 @@ class TestWebPush(IntegrationBase):
         yield self.shut_down(client)
 
     @inlineCallbacks
-    def test_multiple_delivery_with_single_ack(self):
+    def test_multiple_legacy_delivery_with_single_ack(self):
         data = str(uuid.uuid4())
         data2 = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         yield client.disconnect()
         ok_(client.channels)
-        yield client.send_notification(data=data)
-        yield client.send_notification(data=data2)
+        with self.legacy_endpoint():
+            yield client.send_notification(data=data)
+            yield client.send_notification(data=data2)
         yield client.connect()
         yield client.hello()
-        result = yield client.get_notification()
+        result = yield client.get_notification(timeout=5)
         ok_(result != {})
         ok_(result["data"] in map(base64url_encode, [data, data2]))
         result = yield client.get_notification()
@@ -899,6 +908,45 @@ class TestWebPush(IntegrationBase):
         ok_(result["messageType"], "notification")
         result = yield client.get_notification()
         eq_(result, None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_multiple_delivery_with_single_ack(self):
+        data = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        ok_(client.channels)
+        yield client.send_notification(data=data)
+        yield client.send_notification(data=data2)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result != {})
+        eq_(result["data"], base64url_encode(data))
+        result2 = yield client.get_notification()
+        ok_(result2 != {})
+        eq_(result2["data"], base64url_encode(data2))
+        yield client.ack(result["channelID"], result["version"])
+
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result != {})
+        eq_(result["data"], base64url_encode(data))
+        ok_(result["messageType"], "notification")
+        result2 = yield client.get_notification()
+        ok_(result2 != {})
+        eq_(result2["data"], base64url_encode(data2))
+        yield client.ack(result2["channelID"], result2["version"])
+
+        # Verify no messages are delivered
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        ok_(result is None)
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -1017,6 +1065,64 @@ class TestWebPush(IntegrationBase):
         time.sleep(1.5)
         yield client.connect()
         yield client.hello()
+        result = yield client.get_notification()
+        eq_(result, None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_ttl_batch_expired_and_good_one(self):
+        data = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        for x in range(0, 12):
+            yield client.send_notification(data=data, ttl=1)
+
+        yield client.send_notification(data=data2)
+        time.sleep(1.5)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification(timeout=4)
+        ok_(result is not None)
+        eq_(result["headers"]["encryption"], client._crypto_key)
+        eq_(result["data"], base64url_encode(data2))
+        eq_(result["messageType"], "notification")
+        result = yield client.get_notification()
+        eq_(result, None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_ttl_batch_partly_expired_and_good_one(self):
+        data = str(uuid.uuid4())
+        data1 = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        yield client.disconnect()
+        for x in range(0, 6):
+            yield client.send_notification(data=data)
+
+        for x in range(0, 6):
+            yield client.send_notification(data=data1, ttl=1)
+
+        yield client.send_notification(data=data2)
+        time.sleep(1.5)
+        yield client.connect()
+        yield client.hello()
+
+        # Pull out and ack the first
+        for x in range(0, 6):
+            result = yield client.get_notification(timeout=4)
+            ok_(result is not None)
+            eq_(result["data"], base64url_encode(data))
+            yield client.ack(result["channelID"], result["version"])
+
+        # Should have one more that is data2, this will only arrive if the
+        # other six were acked as that hits the batch size
+        result = yield client.get_notification(timeout=4)
+        ok_(result is not None)
+        eq_(result["data"], base64url_encode(data2))
+
+        # No more
         result = yield client.get_notification()
         eq_(result, None)
         yield self.shut_down(client)
@@ -1154,9 +1260,11 @@ class TestWebPush(IntegrationBase):
         # Send in a notification, verify it landed in last months notification
         # table
         data = uuid.uuid4().hex
-        yield client.send_notification(data=data)
-        notifs = yield deferToThread(lm_message.fetch_messages,
-                                     uuid.UUID(client.uaid))
+        with self.legacy_endpoint():
+            yield client.send_notification(data=data)
+        ts, notifs = yield deferToThread(lm_message.fetch_timestamp_messages,
+                                         uuid.UUID(client.uaid),
+                                         " ")
         eq_(len(notifs), 1)
 
         # Connect the client, verify the migration
@@ -1247,9 +1355,11 @@ class TestWebPush(IntegrationBase):
         # Send in a notification, verify it landed in last months notification
         # table
         data = uuid.uuid4().hex
-        yield client.send_notification(data=data)
-        notifs = yield deferToThread(lm_message.fetch_messages,
-                                     uuid.UUID(client.uaid))
+        with self.legacy_endpoint():
+            yield client.send_notification(data=data)
+        _, notifs = yield deferToThread(lm_message.fetch_timestamp_messages,
+                                        uuid.UUID(client.uaid),
+                                        " ")
         eq_(len(notifs), 1)
 
         # Connect the client, verify the migration
