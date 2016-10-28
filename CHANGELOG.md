@@ -1,3 +1,20 @@
+<a name="1.20.0"></a>
+## 1.20.0 (2016-10-28)
+
+
+#### Bug Fixes
+
+*   improve handling of JSONResponseErrors ([7dcb0a0d](https://github.com/mozilla-services/autopush/commit/7dcb0a0d2884dc7f717815594324c0c31550f1d5))
+*   improve handling of JSONResponseErrors (#718) ([29ff0fe4](https://github.com/mozilla-services/autopush/commit/29ff0fe4e959958ba3c6e9578a3cb8a4d4c2ecf4))
+
+#### Features
+
+*   skip timestamped messages instead of deleting (#720) ([c2418107](https://github.com/mozilla-services/autopush/commit/c241810711aa8fa84dc8eded89e9aedf3cdea45c), closes [#661](https://github.com/mozilla-services/autopush/issues/661))
+*   Add integration tests for bridges ([5bc3abe7](https://github.com/mozilla-services/autopush/commit/5bc3abe7b20818c9432d6784a958dced8f755bd8))
+*   add type hints to autopush/utils.py (#713) ([12a9b7cd](https://github.com/mozilla-services/autopush/commit/12a9b7cd20596a1766d25e6c66db1694de8668b3))
+
+
+
 <a name="1.19.3"></a>
 ## 1.19.3 (2016-10-17)
 
