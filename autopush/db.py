@@ -125,7 +125,7 @@ def make_rotating_tablename(prefix, delta=0, date=None):
     month delta."""
     if not date:
         date = get_month(delta=delta)
-    return "{}_{}_{}".format(prefix, date.year, date.month)
+    return "{}_{:04d}_{:02d}".format(prefix, date.year, date.month)
 
 
 def create_rotating_message_table(prefix="message", read_throughput=5,

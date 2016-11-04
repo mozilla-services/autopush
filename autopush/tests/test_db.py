@@ -1,5 +1,6 @@
 import unittest
 import uuid
+from datetime import datetime
 
 from autopush.websocket import ms_time
 from boto.dynamodb2.exceptions import (
@@ -109,6 +110,11 @@ class DbCheckTestCase(unittest.TestCase):
         this_month = month0.month
         next_month = 1 if this_month == 12 else this_month + 1
         eq_(next_month, month1.month)
+
+    def test_zero_fill_month(self):
+        from autopush.db import make_rotating_tablename
+        eq_('test_2016_03',
+            make_rotating_tablename('test', date=datetime(2016, 3, 15)))
 
     def test_hasher(self):
         import autopush.db as db
