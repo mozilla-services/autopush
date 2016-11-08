@@ -89,6 +89,7 @@ class AutopushSettings(object):
                  preflight_uaid="deadbeef00000000deadbeef00000000",
                  ami_id=None,
                  client_certs=None,
+                 msg_limit=100,
                  ):
         """Initialize the Settings object
 
@@ -170,6 +171,7 @@ class AutopushSettings(object):
             message_read_throughput=message_read_throughput,
             message_write_throughput=message_write_throughput)
         self._message_prefix = message_tablename
+        self.message_limit = msg_limit
         self.storage = Storage(self.storage_table, self.metrics)
         self.router = Router(self.router_table, self.metrics)
 

@@ -3,6 +3,7 @@ import datetime
 import time
 import uuid
 from hashlib import sha256
+from collections import defaultdict
 
 import twisted.internet.base
 from autopush.tests.test_db import make_webpush_notification
@@ -1944,6 +1945,38 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.finish_webpush_notifications((None, [notif]))
         ok_(self.proto.force_retry.called)
         ok_(not self.send_mock.called)
+
+    def test_notif_finished_with_too_many_messages(self):
+        self._connect()
+        self.proto.ps.uaid = uuid.uuid4().hex
+        self.proto.ps.use_webpush = True
+        self.proto.ps._check_notifications = True
+        self.proto.ps.msg_limit = 2
+        self.proto.ap_settings.router.drop_user = Mock()
+        self.proto.ps.message.fetch_messages = Mock()
+
+        notif = make_webpush_notification(
+            self.proto.ps.uaid,
+            dummy_chid_str,
+            ttl=500
+        )
+        self.proto.ps.updates_sent = defaultdict(lambda: [])
+        self.proto.ps.message.fetch_messages.return_value = (
+            None,
+            [notif, notif, notif]
+        )
+
+        d = Deferred()
+
+        def check(*args, **kwargs):
+            ok_(self.proto.ap_settings.router.drop_user.called)
+            ok_(self.send_mock.called)
+            d.callback(True)
+
+        self.proto.force_retry = Mock()
+        self.proto.process_notifications()
+        self.proto.ps._notification_fetch.addBoth(check)
+        return d
 
     def test_notification_results(self):
         # Populate the database for ourself

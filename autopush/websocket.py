@@ -76,6 +76,7 @@ from autopush.db import (
     dump_uaid,
 )
 from autopush.db import Message  # noqa
+from autopush.exceptions import MessageOverloadException
 from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
 from autopush.utils import (
@@ -167,6 +168,8 @@ class PushState(object):
         'updates_sent',
         'direct_updates',
 
+        'msg_limit',
+
         # iProducer methods
         'pauseProducing',
         'resumeProducing',
@@ -215,6 +218,7 @@ class PushState(object):
 
         self._check_notifications = False
         self._more_notifications = False
+        self.msg_limit = settings.message_limit
 
         # Timestamp message defaults
         self.scan_timestamps = False
@@ -262,6 +266,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     parent_class = WebSocketServerProtocol
     randrange = randrange
     _log_exc = True
+    sent_notification_count = 0
 
     # Defer helpers
     def deferToThread(self, func, *args, **kwargs):
@@ -871,6 +876,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         d.addCallback(self.finish_notifications)
         d.addErrback(self.error_notification_overload)
         d.addErrback(self.trap_cancel)
+        d.addErrback(self.error_message_overload)
+        # The following errback closes the connection. It must be the last
+        # errback in the chain.
         d.addErrback(self.error_notifications)
         self.ps._notification_fetch = d
 
@@ -895,6 +903,12 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # to run up to a minute in the future to distribute load farther out
         d = self.deferToLater(randrange(5, 60), self.process_notifications)
         d.addErrback(self.trap_cancel)
+
+    def error_message_overload(self, fail):
+        """errBack for handling excessive messages per UAID"""
+        fail.trap(MessageOverloadException)
+        self.force_retry(self.ap_settings.router.drop_user(self.ps.uaid))
+        self.sendClose()
 
     def finish_notifications(self, notifs):
         """callback for processing notifications from storage"""
@@ -956,6 +970,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # No more notifications, and we've scanned timestamped.
             self.ps._more_notifications = False
             self.ps.scan_timestamps = False
+            self.sent_notification_count = 0
             if self.ps._check_notifications:
                 # Told to check again, start over
                 self.ps._check_notifications = False
@@ -986,6 +1001,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.updates_sent[str(notif.channel_id)].append(notif)
             msg = notif.websocket_format()
             messages_sent = True
+            self.sent_notification_count += 1
+            if self.sent_notification_count > self.ps.msg_limit:
+                raise MessageOverloadException()
             self.sendJSON(msg)
 
         # Did we send any messages?
