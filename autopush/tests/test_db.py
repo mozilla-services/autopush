@@ -1,6 +1,6 @@
 import unittest
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from autopush.websocket import ms_time
 from boto.dynamodb2.exceptions import (
@@ -25,7 +25,7 @@ from autopush.db import (
     Message,
     Router,
     generate_last_connect,
-)
+    make_rotating_tablename)
 from autopush.exceptions import AutopushException
 from autopush.metrics import SinkMetrics
 from autopush.utils import WebPushNotification
@@ -359,6 +359,14 @@ class MessageTestCase(unittest.TestCase):
         message.table.delete_item.side_effect = raise_condition
         result = message.delete_message(notif)
         eq_(result, False)
+
+    def test_message_rotate_table_with_date(self):
+        prefix = "message" + uuid.uuid4().hex
+        future = datetime.today() + timedelta(days=32)
+        tbl_name = make_rotating_tablename(prefix, date=future)
+
+        m = get_rotating_message_table(prefix=prefix, date=future)
+        eq_(m.table_name, tbl_name)
 
 
 class RouterTestCase(unittest.TestCase):
