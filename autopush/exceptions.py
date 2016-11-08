@@ -33,6 +33,11 @@ class APNSException(Exception):
     pass
 
 
+class MessageOverloadException(Exception):
+    """Too many messages per UAID"""
+    pass
+
+
 class RouterException(AutopushException):
     """Exception if routing has failed, may include a custom status_code and
     body to write to the response.

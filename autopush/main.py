@@ -145,6 +145,9 @@ def add_shared_args(parser):
                         env_var="HUMAN_LOGS")
     parser.add_argument('--no_aws', help="Skip AWS meta information checks",
                         action="store_true", default=False)
+    parser.add_argument('--msg_limit', help="Max limit for messages per uaid "
+                        "before reset", type=int, default="100",
+                        env_var="MSG_LIMIT")
     # No ENV because this is for humans
     add_external_router_args(parser)
     obsolete_args(parser)
@@ -429,6 +432,7 @@ def make_settings(args, **kwargs):
         wake_timeout=args.wake_timeout,
         ami_id=ami_id,
         client_certs=client_certs,
+        msg_limit=args.msg_limit,
         **kwargs
     )
 

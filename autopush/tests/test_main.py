@@ -245,6 +245,7 @@ class EndpointMainTestCase(unittest.TestCase):
         fcm_auth = 'abcde'
         ssl_key = "keys/server.crt"
         ssl_cert = "keys/server.key"
+        msg_limit = 1000
         _client_certs = dict(partner1=["1A:"*31 + "F9"],
                              partner2=["2B:"*31 + "E8",
                                        "3C:"*31 + "D7"])
