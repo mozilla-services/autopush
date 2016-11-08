@@ -1052,7 +1052,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         """
         fail.trap(ProvisionedThroughputExceededException)
         self.transport.resumeProducing()
-        d = self.deferToLater(randrange(1, 60), self.process_notifications)
+        d = self.deferToLater(randrange(1, 30*60), self.process_notifications)
         d.addErrback(self.trap_cancel)
 
     def _send_ping(self):
