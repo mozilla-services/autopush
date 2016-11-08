@@ -128,11 +128,12 @@ def make_rotating_tablename(prefix, delta=0, date=None):
     return "{}_{:04d}_{:02d}".format(prefix, date.year, date.month)
 
 
-def create_rotating_message_table(prefix="message", read_throughput=5,
-                                  write_throughput=5, delta=0):
-    # type: (str, int, int, int) -> Table
+def create_rotating_message_table(prefix="message", delta=0, date=None,
+                                  read_throughput=5,
+                                  write_throughput=5):
+    # type: (str, int, Optional[datetime.date], int, int) -> Table
     """Create a new message table for webpush style message storage"""
-    tablename = make_rotating_tablename(prefix, delta)
+    tablename = make_rotating_tablename(prefix, delta, date)
     return Table.create(tablename,
                         schema=[HashKey("uaid"),
                                 RangeKey("chidmessageid")],
@@ -151,9 +152,10 @@ def get_rotating_message_table(prefix="message", delta=0, date=None,
     tablename = make_rotating_tablename(prefix, delta, date)
     if tablename not in dblist:
         return create_rotating_message_table(
-            prefix=prefix, delta=delta,
+            prefix=prefix, delta=delta, date=date,
             read_throughput=message_read_throughput,
-            write_throughput=message_write_throughput)
+            write_throughput=message_write_throughput,
+        )
     else:
         return Table(tablename)
 

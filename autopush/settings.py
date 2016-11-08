@@ -264,8 +264,10 @@ class AutopushSettings(object):
         if ((tomorrow.month != today.month) and
                 sorted(self.message_tables.keys())[-1] !=
                 tomorrow.month):
-            next_month = get_rotating_message_table(
-                self._message_prefix, 0, tomorrow)
+            next_month = yield deferToThread(
+                get_rotating_message_table,
+                self._message_prefix, 0, tomorrow
+            )
             self.message_tables[next_month.table_name] = Message(
                 next_month, self.metrics)
 
