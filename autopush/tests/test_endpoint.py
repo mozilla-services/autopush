@@ -378,7 +378,6 @@ class EndpointTestCase(unittest.TestCase):
                 status_code=400,
                 response_body="Missing TTL Header",
                 errno=111,
-                log_exception=False,
             )
 
         self.wp_router_mock.route_notification.side_effect = raise_error
@@ -1299,17 +1298,17 @@ class EndpointTestCase(unittest.TestCase):
 
         def raise_error(*args):
             raise RouterException(
-                "Provisioned throughput error",
-                status_code=202,
+                "Throughput Exceeded",
+                status_code=201,
                 response_body="Success",
-                log_exception=False
+                log_exception=True
             )
 
         self.wp_router_mock.route_notification.side_effect = raise_error
 
         def handle_finish(result):
             self.flushLoggedErrors()
-            self.status_mock.assert_called_with(202)
+            self.status_mock.assert_called_with(201)
         self.finish_deferred.addCallback(handle_finish)
 
         self.endpoint.post(None, dummy_uaid.hex)
@@ -1328,11 +1327,10 @@ class EndpointTestCase(unittest.TestCase):
 
         def raise_error(*args):
             raise RouterException(
-                "Provisioned throughput error",
+                "Throughput Exceeded",
                 status_code=503,
                 response_body="Retry Request",
                 errno=201,
-                log_exception=False
             )
 
         self.wp_router_mock.route_notification.side_effect = raise_error
