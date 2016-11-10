@@ -252,15 +252,17 @@ class AutoendpointHandler(BaseHandler):
         """errBack for router failures"""
         fail.trap(RouterException)
         exc = fail.value
-        if isinstance(exc, RouterException):
-            if exc.log_exception or exc.status_code >= 500:
+        if exc.log_exception:
+            if exc.status_code >= 500:
                 fmt = fail.value.message or 'Exception'
                 self.log.failure(format=fmt,  # pragma nocover
-                                 failure=fail, status_code=exc.status_code,
+                                 failure=fail,
+                                 status_code=exc.status_code,
                                  errno=exc.errno or "",
                                  client_info=self._client_info)
             if 200 <= exc.status_code < 300:
-                self.log.info(format="Success", status_code=exc.status_code,
+                self.log.info(format="Success",
+                              status_code=exc.status_code,
                               logged_status=exc.logged_status or "",
                               client_info=self._client_info)
             elif 400 <= exc.status_code < 500:
@@ -269,7 +271,7 @@ class AutoendpointHandler(BaseHandler):
                               logged_status=exc.logged_status or "",
                               errno=exc.errno or "",
                               client_info=self._client_info)
-            self._router_response(exc)
+        self._router_response(exc)
 
     def _uaid_not_found_err(self, fail):
         """errBack for uaid lookup not finding the user"""

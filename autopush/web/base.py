@@ -233,22 +233,24 @@ class BaseWebHandler(BaseHandler):
         """errBack for router failures"""
         fail.trap(RouterException)
         exc = fail.value
-        if exc.log_exception or exc.status_code >= 500:
-            fmt = fail.value.message or 'Exception'
-            self.log.failure(format=fmt,
-                             failure=fail, status_code=exc.status_code,
-                             errno=exc.errno or "",
-                             client_info=self._client_info)  # pragma nocover
-        if 200 <= exc.status_code < 300:
-            self.log.info(format="Success", status_code=exc.status_code,
-                          logged_status=exc.logged_status or "",
-                          client_info=self._client_info)
-        elif 400 <= exc.status_code < 500:
-            self.log.info(format="Client error",
-                          status_code=exc.status_code,
-                          logged_status=exc.logged_status or "",
-                          errno=exc.errno or "",
-                          client_info=self._client_info)
+        if exc.log_exception:
+            if exc.status_code >= 500:
+                fmt = fail.value.message or 'Exception'
+                self.log.failure(
+                    format=fmt,
+                    failure=fail, status_code=exc.status_code,
+                    errno=exc.errno or "",
+                    client_info=self._client_info)  # pragma nocover
+            if 200 <= exc.status_code < 300:
+                self.log.info(format="Success", status_code=exc.status_code,
+                              logged_status=exc.logged_status or "",
+                              client_info=self._client_info)
+            elif 400 <= exc.status_code < 500:
+                self.log.info(format="Client error",
+                              status_code=exc.status_code,
+                              logged_status=exc.logged_status or "",
+                              errno=exc.errno or "",
+                              client_info=self._client_info)
         self._router_response(exc)
 
     def _write_validation_err(self, errors):
