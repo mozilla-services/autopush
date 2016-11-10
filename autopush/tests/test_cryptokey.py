@@ -1,8 +1,8 @@
 import unittest
 
-from nose.tools import (eq_, ok_)
+from nose.tools import (eq_, ok_, assert_raises)
 
-from autopush.crypto_key import CryptoKey
+from autopush.crypto_key import CryptoKey, CryptoKeyException
 
 
 class CryptoKeyTestCase(unittest.TestCase):
@@ -24,6 +24,11 @@ class CryptoKeyTestCase(unittest.TestCase):
             "xV_vIsAsHSyaiuyfofvxT8ZVIXccykd4V2Z7iJVfreT8")
         ok_(ckey.get_keyid("missing") is None)
         ok_(ckey.get_label("missing") is None)
+
+    def test_parse_invalid(self):
+        with assert_raises(CryptoKeyException) as ex:
+            CryptoKey("invalid key")
+        eq_(ex.exception.message, "Invalid Crypto Key value")
 
     def test_parse_different_order(self):
         ckey = CryptoKey(self.valid_key)

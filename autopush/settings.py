@@ -1,6 +1,5 @@
 """Autopush Settings Object and Setup"""
 import datetime
-import re
 import socket
 
 from hashlib import sha256
@@ -43,9 +42,6 @@ from autopush.utils import (
     base64url_decode
 )
 from autopush.crypto_key import (CryptoKey, CryptoKeyException)
-
-
-VALID_V0_TOKEN = re.compile(r'[0-9A-Za-z-]{32,36}:[0-9A-Za-z-]{32,36}')
 
 
 class AutopushSettings(object):
@@ -314,7 +310,6 @@ class AutopushSettings(object):
         """Create an v1 or v2 WebPush endpoint from the identifiers.
 
         Both endpoints use bytes instead of hex to reduce ID length.
-        v0 is uaid.hex + ':' + chid.hex and is deprecated.
         v1 is the uaid + chid
         v2 is the uaid + chid + sha256(key).bytes
 
@@ -335,7 +330,7 @@ class AutopushSettings(object):
         ep = self.fernet.encrypt(base + sha256(raw_key).digest()).strip('=')
         return root + 'v2/' + ep
 
-    def parse_endpoint(self, token, version="v0", ckey_header=None,
+    def parse_endpoint(self, token, version="v1", ckey_header=None,
                        auth_header=None):
         """Parse an endpoint into component elements of UAID, CHID and optional
         key hash if v2
@@ -360,11 +355,6 @@ class AutopushSettings(object):
                 raise InvalidTokenException("Invalid key data")
             public_key = crypto_key.get_label('p256ecdsa')
 
-        if version == 'v0':
-            if not VALID_V0_TOKEN.match(token):
-                raise InvalidTokenException("Corrupted push token")
-            items = token.split(':')
-            return dict(uaid=items[0], chid=items[1], public_key=public_key)
         if version == 'v1' and len(token) != 32:
             raise InvalidTokenException("Corrupted push token")
         if version == 'v2':
