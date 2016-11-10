@@ -169,6 +169,7 @@ class PushState(object):
         'direct_updates',
 
         'msg_limit',
+        'reset_uaid',
 
         # iProducer methods
         'pauseProducing',
@@ -233,6 +234,10 @@ class PushState(object):
 
         # Track Notification's we don't need to delete separately
         self.direct_updates = {}
+
+        # Whether this record should be reset after delivering stored
+        # messages
+        self.reset_uaid = False
 
     @property
     def message(self):
@@ -769,6 +774,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         else:
             record["last_connect"] = generate_last_connect()
 
+        # Determine if this is missing a record version
+        if ("record_version" not in record or
+                int(record["record_version"]) < USER_RECORD_VERSION):
+            self.ps.reset_uaid = True
+
         # Update the node_id, connected_at for this node/connected_at
         record["node_id"] = self.ap_settings.router_url
         record["connected_at"] = self.ps.connected_at
@@ -948,6 +958,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps._check_notifications = False
             d = self.deferToLater(1, self.process_notifications)
             d.addErrback(self.trap_cancel)
+        elif self.ps.reset_uaid:
+            # Told to reset the user?
+            self.force_retry(
+                self.ap_settings.router.drop_user(self.ps.uaid))
+            self.sendClose()
 
     def finish_webpush_notifications(self, result):
         # type: (Tuple[str, List[WebPushNotification]]) -> None
@@ -977,6 +992,12 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                 d = self.deferToLater(1, self.process_notifications)
                 d.addErrback(self.trap_cancel)
                 return
+
+            # Told to reset the user?
+            if self.ps.reset_uaid:
+                self.force_retry(
+                    self.ap_settings.router.drop_user(self.ps.uaid))
+                self.sendClose()
 
             # Not told to check for notifications, do we need to now rotate
             # the message table?

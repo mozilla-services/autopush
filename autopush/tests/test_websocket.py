@@ -802,6 +802,24 @@ class WebsocketTestCase(unittest.TestCase):
             eq_(msg["uaid"], uaid)
         return self._check_response(check_result)
 
+    def test_hello_resets_record(self):
+        self._connect()
+        uaid = uuid.uuid4().hex
+        router = self.proto.ap_settings.router
+        router.register_user(dict(
+            uaid=uaid,
+            connected_at=ms_time(),
+            router_type="simplepush",
+        ))
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                uaid=uaid))
+
+        def check_result(msg):
+            eq_(msg["status"], 200)
+            eq_(msg["uaid"], uaid)
+            eq_(self.proto.ps.reset_uaid, True)
+        return self._check_response(check_result)
+
     def test_hello_with_bad_uaid(self):
         self._connect()
         uaid = "ajsidlfjlsdjflasjjailsdf"
