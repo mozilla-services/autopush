@@ -1,3 +1,26 @@
+<a name="1.21.0"></a>
+## 1.21.0 (2016-11-10)
+
+
+#### Breaking Changes
+
+*   Kill v0 endpoints ([99e921c0](https://github.com/mozilla-services/autopush/commit/99e921c0c044f24acc076485538978a1ab2d941b), closes [#492](https://github.com/mozilla-services/autopush/issues/492))
+
+#### Bug Fixes
+
+*   Don't log exceptions that don't want to be logged ([8819b3d5](https://github.com/mozilla-services/autopush/commit/8819b3d5d981ad0bf8baf7818daded752d11513c))
+*   reset UAID if too many messages are pending ([461a8661](https://github.com/mozilla-services/autopush/commit/461a8661c71a17dc4650100e790e8685109858fa))
+*   Zero pad months in table names ([5ca85e07](https://github.com/mozilla-services/autopush/commit/5ca85e07609ef204dc743f13025bfce7f42596ad))
+
+#### Features
+
+*   Kill v0 endpoints ([99e921c0](https://github.com/mozilla-services/autopush/commit/99e921c0c044f24acc076485538978a1ab2d941b), closes [#492](https://github.com/mozilla-services/autopush/issues/492))
+*   reset users missing a record version or expired version ([2ef3762d](https://github.com/mozilla-services/autopush/commit/2ef3762d8fdb54f73d5d52258c3f2df66fd7362b), closes [#711](https://github.com/mozilla-services/autopush/issues/711))
+*   retain date when checking message tables (#727) ([04756c44](https://github.com/mozilla-services/autopush/commit/04756c440552ba35c51d040d6bcaac0847f0c963), closes [#722](https://github.com/mozilla-services/autopush/issues/722))
+*   spread monthly rotation retry over 30 minutes (#726) ([7c084596](https://github.com/mozilla-services/autopush/commit/7c084596885e9e062cc1041f5242068d53e7ff1d), closes [#723](https://github.com/mozilla-services/autopush/issues/723))
+
+
+
 <a name="1.20.0"></a>
 ## 1.20.0 (2016-10-28)
 
