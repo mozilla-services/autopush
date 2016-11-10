@@ -12,7 +12,6 @@ from twisted.web.server import Site
 
 import autopush.db as db
 import autopush.utils as utils
-from autopush.endpoint import EndpointHandler
 from autopush.logging import PushLogger
 from autopush.settings import AutopushSettings
 from autopush.ssl import AutopushSSLContextFactory
@@ -45,7 +44,6 @@ log = Logger()
 endpoint_paths = {
     'route': r"/push/([^\/]+)",
     'notification': r"/notif/([^\/]+)(/([^\/]+))?",
-    'old': r"/push/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
     'simple': r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
     'webpush': r"/wpush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
     'message': r"/m/(?P<message_id>[^\/]+)",
@@ -584,7 +582,6 @@ def endpoint_main(sysargs=None, use_files=True):
     # Endpoint HTTP router
     h_kwargs = dict(ap_settings=settings)
     site = cyclone.web.Application([
-        (endpoint_paths['old'], EndpointHandler, h_kwargs),
         (endpoint_paths['simple'], SimplePushHandler, h_kwargs),
         (endpoint_paths['webpush'], WebPushHandler, h_kwargs),
         (endpoint_paths['message'], MessageHandler, h_kwargs),

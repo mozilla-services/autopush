@@ -54,7 +54,7 @@ class EndpointDiagnosticCLI(object):
             return "Not a valid endpoint"
 
         md = match.groupdict()
-        api_ver, token = md.get("api_ver", "v0"), md["token"]
+        api_ver, token = md.get("api_ver", "v1"), md["token"]
 
         parsed = self._settings.parse_endpoint(
             token=token,

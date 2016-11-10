@@ -325,7 +325,6 @@ class IntegrationBase(unittest.TestCase):
 
         from autopush.web.log_check import LogCheckHandler
         from autopush.main import mount_health_handlers, skip_request_logging
-        from autopush.endpoint import EndpointHandler
         from autopush.settings import AutopushSettings
         from autopush.web.message import MessageHandler
         from autopush.web.registration import RegistrationHandler
@@ -389,7 +388,6 @@ class IntegrationBase(unittest.TestCase):
 
         # Endpoint HTTP router
         site = cyclone.web.Application([
-            (endpoint_paths['old'], EndpointHandler, h_kwargs),
             (endpoint_paths['simple'], SimplePushHandler, h_kwargs),
             (endpoint_paths['message'], MessageHandler, h_kwargs),
             (endpoint_paths['webpush'], WebPushHandler, h_kwargs),
@@ -412,11 +410,6 @@ class IntegrationBase(unittest.TestCase):
         else:
             endpoint = reactor.listenTCP(self.endpoint_port, site)
         self.website = endpoint
-
-    def _make_v0_endpoint(self, uaid, chid):
-        return self._settings.endpoint_url + '/push/' + \
-            self._settings.fernet.encrypt(
-                (uaid + ":" + chid).encode('utf-8'))
 
     def make_client_certs(self):
         return None
@@ -807,18 +800,6 @@ class TestWebPush(IntegrationBase):
         yield self.shut_down(client)
 
     @inlineCallbacks
-    def test_basic_delivery_v0_endpoint(self):
-        data = str(uuid.uuid4())
-        client = yield self.quick_register(use_webpush=True)
-        endpoint = self._make_v0_endpoint(
-            client.uaid, client.channels.keys()[0])
-        result = yield client.send_notification(endpoint=endpoint, data=data)
-        eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], base64url_encode(data))
-        eq_(result["messageType"], "notification")
-        yield self.shut_down(client)
-
-    @inlineCallbacks
     def test_basic_delivery_with_vapid(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
@@ -827,6 +808,18 @@ class TestWebPush(IntegrationBase):
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_basic_delivery_with_invalid_vapid(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        vapid_info = _get_vapid()
+        vapid_info['crypto-key'] = "invalid"
+        yield client.send_notification(
+            data=data,
+            vapid=vapid_info,
+            status=401)
         yield self.shut_down(client)
 
     @inlineCallbacks

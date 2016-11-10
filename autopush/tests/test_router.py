@@ -26,7 +26,6 @@ from autopush.db import (
     ItemNotFound,
     create_rotating_message_table,
 )
-from autopush.endpoint import Notification
 from autopush.exceptions import RouterException
 from autopush.router import (
     APNSRouter,
@@ -38,6 +37,7 @@ from autopush.router import (
 from autopush.router.interface import RouterResponse, IRouter
 from autopush.settings import AutopushSettings
 from autopush.tests import MockAssist
+from autopush.web.base import Notification
 
 
 mock_dynamodb2 = mock_dynamodb2()
