@@ -1,12 +1,329 @@
+import re
 import time
 
+from boto.dynamodb2.exceptions import ItemNotFound
+from cryptography.fernet import InvalidToken
+from jose import JOSEError
+from marshmallow import (
+    Schema,
+    fields,
+    pre_load,
+    post_load,
+    validates,
+    validates_schema,
+)
+from marshmallow_polyfield import PolyField
+from marshmallow.validate import OneOf
 from twisted.internet.defer import Deferred
 from twisted.internet.threads import deferToThread
 
+from autopush.crypto_key import CryptoKey
 from autopush.db import dump_uaid, hasher
-from autopush.utils import ms_time
-from autopush.web.base import threaded_validate, BaseWebHandler
-from autopush.web.push_validation import WebPushRequestSchema
+from autopush.exceptions import (
+    InvalidRequest,
+    InvalidTokenException,
+    VapidAuthException,
+)
+from autopush.utils import (
+    base64url_encode,
+    extract_jwt,
+    ms_time,
+    WebPushNotification,
+)
+from autopush.web.base import (
+    AUTH_SCHEMES,
+    threaded_validate,
+    BaseWebHandler,
+    PREF_SCHEME,
+)
+
+MAX_TTL = 60 * 60 * 24 * 60
+
+# Base64 URL validation
+VALID_BASE64_URL = re.compile(r'^[0-9A-Za-z\-_]+=*$')
+
+
+class WebPushSubscriptionSchema(Schema):
+    uaid = fields.UUID(required=True)
+    chid = fields.UUID(required=True)
+    public_key = fields.Raw(missing=None)
+
+    @pre_load
+    def extract_subscription(self, d):
+        try:
+            result = self.context["settings"].parse_endpoint(
+                token=d["token"],
+                version=d["api_ver"],
+                ckey_header=d["ckey_header"],
+                auth_header=d["auth_header"],
+            )
+        except (VapidAuthException):
+            raise InvalidRequest("missing authorization header",
+                                 status_code=401, errno=109)
+        except (InvalidTokenException, InvalidToken):
+            raise InvalidRequest("invalid token", status_code=404, errno=102)
+        return result
+
+    @validates_schema(skip_on_field_errors=True)
+    def validate_uaid(self, d):
+        try:
+            result = self.context["settings"].router.get_uaid(d["uaid"].hex)
+        except ItemNotFound:
+            raise InvalidRequest("UAID not found", status_code=410, errno=103)
+
+        if result.get("router_type") not in ["webpush", "gcm", "apns", "fcm"]:
+            raise InvalidRequest("Wrong URL for user", errno=108)
+
+        if result.get("critical_failure"):
+            raise InvalidRequest("Critical Failure: %s" %
+                                 result.get("critical_failure"),
+                                 status_code=410,
+                                 errno=105)
+
+        # Propagate the looked up user data back out
+        d["user_data"] = result
+
+
+class WebPushBasicHeaderSchema(Schema):
+    authorization = fields.String()
+    ttl = fields.Integer(required=False, missing=None)
+    topic = fields.String(required=False, missing=None)
+    api_ver = fields.String()
+
+    @validates('topic')
+    def validate_topic(self, value):
+        if value is None:
+            return True
+
+        if len(value) > 32:
+            raise InvalidRequest("Topic must be no greater than 32 "
+                                 "characters", errno=113)
+
+        if not VALID_BASE64_URL.match(value):
+            raise InvalidRequest("Topic must be URL and Filename safe Base"
+                                 "64 alphabet", errno=113)
+
+    @post_load
+    def cap_ttl(self, d):
+        if 'ttl' in d:
+            d["ttl"] = min(d["ttl"], MAX_TTL)
+
+
+class WebPushCrypto01HeaderSchema(Schema):
+    """Validates WebPush Message Encryption
+
+    Uses draft-ietf-webpush-encryption-01 rules for validation.
+
+    """
+    content_encoding = fields.String(
+        required=True,
+        load_from="content-encoding",
+        validate=OneOf(["aesgcm128"])
+    )
+    encryption = fields.String(required=True)
+    encryption_key = fields.String(
+        required=True,
+        load_from="encryption-key"
+    )
+    crypto_key = fields.String(load_from="crypto-key")
+
+    @validates("encryption")
+    def validate_encryption(self, value):
+        """Must contain a salt value"""
+        ck = CryptoKey(value)
+        salt = ck.get_label("salt")
+        if not salt or not VALID_BASE64_URL.match(salt):
+            raise InvalidRequest("Invalid salt value in Encryption header",
+                                 status_code=400,
+                                 errno=110)
+
+    @validates("crypto_key")
+    def validate_crypto_key(self, value):
+        """Must not contain a dh value"""
+        ck = CryptoKey(value)
+        dh = ck.get_label("dh")
+        if dh:
+            raise InvalidRequest(
+                "dh value in Crypto-Key header not valid for 01 or earlier "
+                "webpush-encryption",
+                status_code=400,
+                errno=110,
+            )
+
+    @validates("encryption_key")
+    def validate_encryption_key(self, value):
+        """Must contain a dh value"""
+        ck = CryptoKey(value)
+        dh = ck.get_label("dh")
+        if not dh or not VALID_BASE64_URL.match("dh"):
+            raise InvalidRequest("Invalid dh value in Encryption-Key header",
+                                 status_code=400,
+                                 errno=110)
+
+
+class WebPushCrypto04HeaderSchema(Schema):
+    """Validates WebPush Message Encryption
+
+    Uses draft-ietf-webpush-encryption-04 rules for validation.
+
+    """
+    content_encoding = fields.String(
+        required=True,
+        load_from="content-encoding",
+        validate=OneOf(["aesgcm"])
+    )
+    encryption = fields.String(required=True)
+    crypto_key = fields.String(
+        required=True,
+        load_from="crypto-key",
+    )
+
+    @validates("encryption")
+    def validate_encryption(self, value):
+        """Must contain a salt value"""
+        ck = CryptoKey(value)
+        salt = ck.get_label("salt")
+        if not salt or not VALID_BASE64_URL.match(salt):
+            raise InvalidRequest("Invalid salt value in Encryption header",
+                                 status_code=400,
+                                 errno=110)
+
+    @validates("crypto_key")
+    def validate_crypto_key(self, value):
+        """Must contain a dh value"""
+        ck = CryptoKey(value)
+        dh = ck.get_label("dh")
+        if not dh or not VALID_BASE64_URL.match("dh"):
+            raise InvalidRequest("Invalid dh value in Encryption-Key header",
+                                 status_code=400,
+                                 errno=110)
+
+    @validates_schema(pass_original=True)
+    def check_unknown_fields(self, data, original_data):
+        if "encryption-key" in original_data:
+            raise InvalidRequest(
+                "Encryption-Key header not valid for 02 or later "
+                "webpush-encryption",
+                status_code=400,
+                errno=110,
+            )
+
+
+class WebPushInvalidContentEncodingSchema(Schema):
+    """Returned to raise an Invalid Content-encoding error"""
+    @validates_schema
+    def invalid_content_encoding(self, d):
+        raise InvalidRequest(
+            "Unknown Content-Encoding",
+            status_code=400,
+            errno=110
+        )
+
+
+def conditional_crypto_deserialize(object_dict, parent_object_dict):
+    """Return the WebPush Crypto Schema if there's a data payload"""
+    if parent_object_dict.get("body"):
+        encoding = object_dict.get("content-encoding")
+        # Validate the crypto headers appropriately
+        if encoding == "aesgcm128":
+            return WebPushCrypto01HeaderSchema()
+        elif encoding == "aesgcm":
+            return WebPushCrypto04HeaderSchema()
+        else:
+            return WebPushInvalidContentEncodingSchema()
+    else:
+        return Schema()
+
+
+class WebPushRequestSchema(Schema):
+    subscription = fields.Nested(WebPushSubscriptionSchema,
+                                 load_from="token_info")
+    headers = fields.Nested(WebPushBasicHeaderSchema)
+    crypto_headers = PolyField(
+        load_from="headers",
+        deserialization_schema_selector=conditional_crypto_deserialize,
+    )
+    body = fields.Raw()
+    token_info = fields.Raw()
+
+    @validates('body')
+    def validate_data(self, value):
+        max_data = self.context["settings"].max_data
+        if value and len(value) > max_data:
+            raise InvalidRequest(
+                "Data payload must be smaller than {}".format(max_data),
+                errno=104,
+            )
+
+    @pre_load
+    def token_prep(self, d):
+        d["token_info"] = dict(
+            api_ver=d["path_kwargs"].get("api_ver"),
+            token=d["path_kwargs"].get("token"),
+            ckey_header=d["headers"].get("crypto-key", ""),
+            auth_header=d["headers"].get("authorization", ""),
+        )
+        return d
+
+    def validate_auth(self, d):
+        auth = d["headers"].get("authorization")
+        needs_auth = d["token_info"]["api_ver"] == "v2"
+        if not auth and not needs_auth:
+            return
+
+        public_key = d["subscription"].get("public_key")
+        try:
+            auth_type, token = auth.split(' ', 1)
+        except ValueError:
+            raise InvalidRequest("Invalid Authorization Header",
+                                 status_code=401, errno=109,
+                                 headers={"www-authenticate": PREF_SCHEME})
+
+        # If its not a bearer token containing what may be JWT, stop
+        if auth_type.lower() not in AUTH_SCHEMES or '.' not in token:
+            if needs_auth:
+                raise InvalidRequest("Missing Authorization Header",
+                                     status_code=401, errno=109)
+            return
+
+        try:
+            jwt = extract_jwt(token, public_key)
+        except (AssertionError, ValueError, JOSEError):
+            raise InvalidRequest("Invalid Authorization Header",
+                                 status_code=401, errno=109,
+                                 headers={"www-authenticate": PREF_SCHEME})
+        if jwt.get('exp', 0) < time.time():
+            raise InvalidRequest("Invalid bearer token: Auth expired",
+                                 status_code=401, errno=109,
+                                 headers={"www-authenticate": PREF_SCHEME})
+        jwt_crypto_key = base64url_encode(public_key)
+        d["jwt"] = dict(jwt_crypto_key=jwt_crypto_key, jwt_data=jwt)
+
+    @post_load
+    def fixup_output(self, d):
+        # Verify authorization
+        # Note: This has to be done here, since schema validation takes place
+        #       before nested schemas, and in this case we need all the nested
+        #       schema logic to run first.
+        self.validate_auth(d)
+
+        # Merge crypto headers back in
+        if d["crypto_headers"]:
+            d["headers"].update(
+                {k.replace("_", "-"): v for k, v in
+                 d["crypto_headers"].items()}
+            )
+
+        # Base64-encode data for Web Push
+        d["body"] = base64url_encode(d["body"])
+
+        # Set the notification based on the validated request schema data
+        d["notification"] = WebPushNotification.from_webpush_request_schema(
+            data=d, fernet=self.context["settings"].fernet,
+            legacy=self.context["settings"]._notification_legacy,
+        )
+
+        return d
 
 
 class WebPushHandler(BaseWebHandler):
