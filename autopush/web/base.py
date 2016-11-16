@@ -99,6 +99,7 @@ class ThreadedValidate(object):
         """
         return cls(schema)._decorator
 
+
 # Alias to the validation classmethod decorator
 threaded_validate = ThreadedValidate.validate
 

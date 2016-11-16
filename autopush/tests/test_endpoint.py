@@ -206,6 +206,7 @@ class MessageTestCase(unittest.TestCase):
         self.message.delete(self._make_req("ignored"))
         return self.finish_deferred
 
+
 CORS_HEAD = "POST,PUT,DELETE"
 
 
