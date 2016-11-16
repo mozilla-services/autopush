@@ -213,7 +213,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
             if use_header:
                 headers.update({
                     "Content-Type": "application/octet-stream",
-                    "Content-Encoding": "aesgcm-128",
+                    "Content-Encoding": "aesgcm",
                     "Encryption": self._crypto_key,
                     "Crypto-Key": 'keyid="a1"; dh="JcqK-OLkJZlJ3sJJWstJCA"',
                 })

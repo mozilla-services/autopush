@@ -732,13 +732,25 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
 
-        def check_result(msg):
+        d = Deferred()
+
+        def check_result(msg, duration=0):
+            if len(db.DB_CALLS) < 3:  # pragma: nocover
+                if duration > 3.0:  # pragma: nocover
+                    raise Exception("db calls isn't 3 yet")
+                else:
+                    reactor.callLater(0.1, check_result, msg, duration+0.1)
+                    return
+
             eq_(db.DB_CALLS, ['register_user', 'fetch_messages',
                               'fetch_timestamp_messages'])
             eq_(msg["status"], 200)
             db.DB_CALLS = []
             db.TRACK_DB_CALLS = False
-        return self._check_response(check_result)
+            d.callback(True)
+        f = self._check_response(check_result)
+        f.addErrback(lambda x: d.callback(True))
+        return d
 
     def test_hello_with_webpush(self):
         self._connect()

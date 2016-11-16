@@ -1,6 +1,20 @@
 import time
+import urlparse
 
+from boto.dynamodb2.exceptions import ItemNotFound
+from marshmallow import (
+    Schema,
+    fields,
+    pre_load,
+    validates,
+    validates_schema,
+)
 from twisted.internet.defer import Deferred
+
+from autopush.exceptions import (
+    InvalidRequest,
+    InvalidTokenException,
+)
 
 from autopush.db import hasher
 from autopush.web.base import (
@@ -8,7 +22,77 @@ from autopush.web.base import (
     Notification,
     BaseWebHandler,
 )
-from autopush.web.push_validation import SimplePushRequestSchema
+
+
+class SimplePushSubscriptionSchema(Schema):
+    uaid = fields.UUID(required=True)
+    chid = fields.UUID(required=True)
+
+    @pre_load
+    def extract_subscription(self, d):
+        try:
+            result = self.context["settings"].parse_endpoint(
+                token=d["token"],
+                version=d["api_ver"],
+            )
+        except InvalidTokenException:
+            raise InvalidRequest("invalid token", errno=102)
+        return result
+
+    @validates_schema
+    def validate_uaid_chid(self, d):
+        try:
+            result = self.context["settings"].router.get_uaid(d["uaid"].hex)
+        except ItemNotFound:
+            raise InvalidRequest("UAID not found", status_code=410, errno=103)
+
+        if result.get("router_type") != "simplepush":
+            raise InvalidRequest("Wrong URL for user", errno=108)
+
+        # Propagate the looked up user data back out
+        d["user_data"] = result
+
+
+class SimplePushRequestSchema(Schema):
+    subscription = fields.Nested(SimplePushSubscriptionSchema,
+                                 load_from="token_info")
+    version = fields.Integer(missing=time.time)
+    data = fields.String(missing=None)
+
+    @validates('data')
+    def validate_data(self, value):
+        max_data = self.context["settings"].max_data
+        if value and len(value) > max_data:
+            raise InvalidRequest(
+                "Data payload must be smaller than {}".format(max_data),
+                errno=104,
+            )
+
+    @pre_load
+    def token_prep(self, d):
+        d["token_info"] = dict(
+            api_ver=d["path_kwargs"].get("api_ver"),
+            token=d["path_kwargs"].get("token"),
+        )
+        return d
+
+    @pre_load
+    def extract_fields(self, d):
+        body_string = d["body"]
+        if len(body_string) > 0:
+            body_args = urlparse.parse_qs(body_string, keep_blank_values=True)
+            version = body_args.get("version")
+            data = body_args.get("data")
+        else:
+            version = d["arguments"].get("version")
+            data = d["arguments"].get("data")
+        version = version[0] if version is not None else version
+        data = data[0] if data is not None else data
+        if version and version >= "1":
+            d["version"] = version
+        if data:
+            d["data"] = data
+        return d
 
 
 class SimplePushHandler(BaseWebHandler):
