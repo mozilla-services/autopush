@@ -1534,7 +1534,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Send ourself a notification
         payload = {"channelID": chid, "version": 10}
-        self.proto.send_notifications(payload)
+        self.proto.send_notification(payload)
 
         # Check the call result
         args = self.send_mock.call_args
@@ -1567,7 +1567,7 @@ class WebsocketTestCase(unittest.TestCase):
                    "headers": dummy_headers,
                    "ttl": 20,
                    "timestamp": 0}
-        self.proto.send_notifications(payload)
+        self.proto.send_notification(payload)
 
         fixed_headers = dict()
         for header in dummy_headers:
@@ -1590,7 +1590,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Send ourself a notification
         payload = {"channelID": chid, "version": 10}
-        self.proto.send_notifications(payload)
+        self.proto.send_notification(payload)
 
         # Check the call result
         args = self.send_mock.call_args

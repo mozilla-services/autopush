@@ -1025,6 +1025,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.sent_notification_count += 1
             if self.sent_notification_count > self.ps.msg_limit:
                 raise MessageOverloadException()
+            if notif.topic:
+                self.ps.metrics.increment("updates.notification.topic",
+                                          tags=self.base_tags)
             self.sendJSON(msg)
 
         # Did we send any messages?
@@ -1409,11 +1412,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     ####################################
     # Utility function for external use
-    def send_notifications(self, update):
+    def send_notification(self, update):
         """Utility function for external use
 
-        This function is called by the HTTP handler to deliver incoming
-        notifications from an endpoint.
+        This function is called by the HTTP handler to deliver an incoming
+        update notification from an endpoint.
 
         """
         chid, version = (update["channelID"], update["version"])
@@ -1426,6 +1429,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             notif = WebPushNotification.from_serialized(self.ps.uaid_obj,
                                                         update)
             self.ps.direct_updates[chid].append(notif)
+            if notif.topic:
+                self.ps.metrics.increment("updates.notification.topic",
+                                          tags=self.base_tags)
             self.sendJSON(notif.websocket_format())
         else:
             self.ps.direct_updates[chid] = version
@@ -1462,7 +1468,7 @@ class RouterHandler(BaseHandler):
             return
 
         update = json.loads(self.request.body)
-        client.send_notifications(update)
+        client.send_notification(update)
         settings.metrics.increment("updates.router.received")
         self.write("Client accepted for delivery")
 
