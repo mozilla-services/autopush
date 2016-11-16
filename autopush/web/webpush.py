@@ -199,7 +199,7 @@ class WebPushCrypto04HeaderSchema(Schema):
                                  errno=110)
 
     @validates_schema(pass_original=True)
-    def check_unknown_fields(self, data, original_data):
+    def reject_encryption_key(self, data, original_data):
         if "encryption-key" in original_data:
             raise InvalidRequest(
                 "Encryption-Key header not valid for 02 or later "
