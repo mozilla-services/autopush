@@ -1,3 +1,13 @@
+<a name="1.21.2"></a>
+## 1.21.2 (2016-11-17)
+
+
+#### Chore
+
+*   tag 1.21.2 ([728f2606](https://github.com/mozilla-services/autopush/commit/728f2606b992c91de5df08cb370ca6bdbf392dc4))
+
+
+
 <a name="1.21.1"></a>
 ## 1.21.1 (2016-11-17)
 
