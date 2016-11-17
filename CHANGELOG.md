@@ -1,3 +1,13 @@
+<a name="1.21.1"></a>
+## 1.21.1 (2016-11-17)
+
+
+#### Bug Fixes
+
+*   call defer methods with callables (#737) ([aff89047](https://github.com/mozilla-services/autopush/commit/aff8904791420c1c44c90f0c4c79a93fea105d6a))
+
+
+
 <a name="1.21.0"></a>
 ## 1.21.0 (2016-11-10)
 

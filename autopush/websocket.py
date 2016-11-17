@@ -60,6 +60,8 @@ from twisted.python import failure
 from twisted.web._newclient import ResponseFailed
 from twisted.web.resource import Resource
 from typing import (  # noqa
+    Any,
+    Callable,
     Dict,
     List,
     Optional,
@@ -79,6 +81,7 @@ from autopush.db import Message  # noqa
 from autopush.exceptions import MessageOverloadException
 from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
+from autopush.settings import AutopushSettings  # noqa
 from autopush.utils import (
     parse_user_agent,
     validate_uaid,
@@ -273,8 +276,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     _log_exc = True
     sent_notification_count = 0
 
+    ap_settings = None  # type: AutopushSettings
+
     # Defer helpers
     def deferToThread(self, func, *args, **kwargs):
+        # type (Callable[..., Any], *Any, **Any) -> Deferred
         """deferToThread helper that tracks defers outstanding"""
         d = deferToThread(func, *args, **kwargs)
         self.ps._callbacks.append(d)
@@ -287,6 +293,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         return d
 
     def deferToLater(self, when, func, *args, **kwargs):
+        # type: (float, Callable[..., Any], *Any, **Any) -> Deferred
         """deferToLater helper that tracks defers outstanding"""
         def cancel(d):
             d._cancelled = True
@@ -317,6 +324,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         fail.trap(ConnectError, ConnectionClosed, ResponseFailed)
 
     def force_retry(self, func, *args, **kwargs):
+        # type: (Callable[..., Any], *Any, **Any) -> Deferred
         """Forcefully retry a function in a thread until it doesn't error
 
         Note that this does not use ``self.deferToThread``, so this will
@@ -917,7 +925,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def error_message_overload(self, fail):
         """errBack for handling excessive messages per UAID"""
         fail.trap(MessageOverloadException)
-        self.force_retry(self.ap_settings.router.drop_user(self.ps.uaid))
+        self.force_retry(self.ap_settings.router.drop_user, self.ps.uaid)
         self.sendClose()
 
     def finish_notifications(self, notifs):
@@ -960,8 +968,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             d.addErrback(self.trap_cancel)
         elif self.ps.reset_uaid:
             # Told to reset the user?
-            self.force_retry(
-                self.ap_settings.router.drop_user(self.ps.uaid))
+            self.force_retry(self.ap_settings.router.drop_user, self.ps.uaid)
             self.sendClose()
 
     def finish_webpush_notifications(self, result):
@@ -996,7 +1003,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # Told to reset the user?
             if self.ps.reset_uaid:
                 self.force_retry(
-                    self.ap_settings.router.drop_user(self.ps.uaid))
+                    self.ap_settings.router.drop_user, self.ps.uaid)
                 self.sendClose()
 
             # Not told to check for notifications, do we need to now rotate

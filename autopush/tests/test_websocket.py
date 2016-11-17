@@ -1999,7 +1999,7 @@ class WebsocketTestCase(unittest.TestCase):
         d = Deferred()
 
         def check(*args, **kwargs):
-            ok_(self.proto.ap_settings.router.drop_user.called)
+            ok_(self.proto.force_retry.called)
             ok_(self.send_mock.called)
             d.callback(True)
 
