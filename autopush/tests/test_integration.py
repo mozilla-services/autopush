@@ -38,6 +38,7 @@ from autopush.db import (
 from autopush.main import endpoint_paths
 from autopush.settings import AutopushSettings
 from autopush.utils import base64url_encode
+from autopush.metrics import SinkMetrics
 
 log = logging.getLogger(__name__)
 here_dir = os.path.abspath(os.path.dirname(__file__))
@@ -1127,6 +1128,19 @@ class TestWebPush(IntegrationBase):
         result = yield client.send_notification(data=data, use_header=False,
                                                 status=400)
         eq_(result, None)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_message_with_topic(self):
+        from mock import Mock, call
+        data = str(uuid.uuid4())
+        self._settings.metrics = Mock(spec=SinkMetrics)
+        client = yield self.quick_register(use_webpush=True)
+        yield client.send_notification(data=data, topic="topicname")
+        self._settings.metrics.increment.assert_has_calls([
+            call('updates.notification.topic',
+                 tags=['host:localhost', 'use_webpush:True'])
+        ])
         yield self.shut_down(client)
 
     @inlineCallbacks
