@@ -19,9 +19,6 @@ port = 8082
 ; Uncomment to disable CORS for incoming notifications.
 #no_cors
 
-; GCM requires a API Auth key. It is STRONGLY recommended you use one specific to this app.
-#gcm_apikey = <API_KEY>
-
 ; Minimum GCM Time To Live value. Set this in case of excessive loss of
 ; TTL 0 messages across the GCM bridge
 #gcm_ttl = 0

@@ -281,8 +281,7 @@ class GCMRouterTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
-        self.gcm_config = {'s3_bucket': 'None',
-                           'max_data': 32,
+        self.gcm_config = {'max_data': 32,
                            'ttl': 60,
                            'senderIDs': {'test123':
                                          {"auth": "12345678abcdefg"}}}
@@ -585,8 +584,7 @@ class FCMRouterTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
-        self.fcm_config = {'s3_bucket': 'None',
-                           'max_data': 32,
+        self.fcm_config = {'max_data': 32,
                            'ttl': 60,
                            'senderID': 'test123',
                            "auth": "12345678abcdefg"}

@@ -327,12 +327,11 @@ class EndpointMainTestCase(unittest.TestCase):
     @patch('autopush.router.apns2.HTTP20Connection',
            spec=hyper.HTTP20Connection)
     @patch('hyper.tls', spec=hyper.tls)
-    def test_ping_settings(self, *args):
+    def test_settings(self, *args):
         ap = make_settings(self.TestArg)
         # verify that the hostname is what we said.
         eq_(ap.hostname, self.TestArg.hostname)
-        # gcm isn't created until later since we may have to pull
-        # config info from s3
+        eq_(ap.routers["gcm"].config['collapsekey'], "collapse")
         eq_(ap.routers["apns"]._config['firefox']['cert'], "cert.file")
         eq_(ap.routers["apns"]._config['firefox']['key'], "key.file")
         eq_(ap.wake_timeout, 10)

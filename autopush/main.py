@@ -185,7 +185,7 @@ def add_external_router_args(parser):
                         help="%s string to collapse messages" % label,
                         type=str, default="simplepush",
                         env_var="GCM_COLLAPSEKEY")
-    parser.add_argument('--senderid_list', help='SenderIDs to load to S3',
+    parser.add_argument('--senderid_list', help='GCM SenderIDs/auth keys',
                         type=str, default="{}")
     # FCM
     parser.add_argument('--fcm_enabled', help="Enable FCM Bridge",
