@@ -106,6 +106,7 @@ class SimplePushHandler(BaseWebHandler):
         self._client_info["uaid"] = hasher(user_data.get("uaid"))
         self._client_info["channel_id"] = user_data.get("chid")
         self._client_info["message_id"] = self.valid_input["version"]
+        self._client_info["router_key"] = user_data["router_type"]
 
         notification = Notification(
             version=self.valid_input["version"],

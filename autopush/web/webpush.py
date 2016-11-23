@@ -347,9 +347,12 @@ class WebPushHandler(BaseWebHandler):
         router = self.ap_settings.routers[user_data["router_type"]]
         notification = self.valid_input["notification"]
         self._client_info["message_id"] = notification.message_id
-
         self._client_info["uaid"] = hasher(user_data.get("uaid"))
         self._client_info["channel_id"] = user_data.get("chid")
+        self._client_info["router_key"] = user_data["router_type"]
+        self._client_info["message_size"] = len(notification.data or "")
+        self._client_info["ttl"] = notification.ttl
+        self._client_info["version"] = notification.version
         d = Deferred()
         d.addCallback(router.route_notification, user_data)
         d.addCallback(self._router_completed, user_data, "")
@@ -362,6 +365,8 @@ class WebPushHandler(BaseWebHandler):
     def _router_completed(self, response, uaid_data, warning=""):
         """Called after router has completed successfully"""
         # Were we told to update the router data?
+        time_diff = time.time() - self.start_time
+        self._client_info["route_time"] = time_diff
         if response.router_data is not None:
             if not response.router_data:
                 # An empty router_data object indicates that the record should
@@ -369,7 +374,8 @@ class WebPushHandler(BaseWebHandler):
                 # this record.
                 self.log.info(format="Dropping User", code=100,
                               uaid_hash=hasher(uaid_data["uaid"]),
-                              uaid_record=dump_uaid(uaid_data))
+                              uaid_record=dump_uaid(uaid_data),
+                              client_info=self._client_info)
                 d = deferToThread(self.ap_settings.router.drop_user,
                                   uaid_data["uaid"])
                 d.addCallback(lambda x: self._router_response(response))
@@ -382,9 +388,10 @@ class WebPushHandler(BaseWebHandler):
             d = deferToThread(self.ap_settings.router.register_user,
                               uaid_data)
             response.router_data = None
-            d.addCallback(lambda x: self._router_completed(response,
-                                                           uaid_data,
-                                                           warning))
+            d.addCallback(lambda x: self._router_completed(
+                response,
+                uaid_data,
+                warning))
             return d
         else:
             # No changes are requested by the bridge system, proceed as normal
@@ -392,9 +399,9 @@ class WebPushHandler(BaseWebHandler):
                 self.log.info(format="Successful delivery",
                               client_info=self._client_info)
             elif response.status_code == 202 or response.logged_status == 202:
-                self.log.info(format="Router miss, message stored.",
-                              client_info=self._client_info)
-            time_diff = time.time() - self.start_time
+                self.log.info(
+                    format="Router miss, message stored.",
+                    client_info=self._client_info)
             self.metrics.timing("updates.handled", duration=time_diff)
             response.response_body = (
                 response.response_body + " " + warning).strip()

@@ -115,6 +115,7 @@ class PushLoggerTestCase(twisted.trial.unittest.TestCase):
         eq_(len(mock_stdout.mock_calls), 2)
         kwargs = mock_stdout.mock_calls[0][1][0]
         ok_("Type" in kwargs)
+        obj.stop()
 
     def test_human_logs(self):
         obj = PushLogger.setup_logging("Autopush", log_format="text")
@@ -124,6 +125,7 @@ class PushLoggerTestCase(twisted.trial.unittest.TestCase):
         mock_stdout.reset_mock()
         log.error("wtf!", Type=7)
         eq_(len(mock_stdout.mock_calls), 2)
+        obj.stop()
 
     def test_start_stop(self):
         obj = PushLogger.setup_logging("Autopush")
