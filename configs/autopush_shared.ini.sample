@@ -93,7 +93,6 @@ endpoint_port = 8082
 #gcm_enabled
 
 ; Default hash of senderids and associated authorization keys.
-; THIS WILL OVERWRITE ANY VALUES STORED IN S3!
 ; The list is specified as a JSON object formatted as:
 ; {<senderid> :{"auth": <auth_value>}}
 ; e.g.

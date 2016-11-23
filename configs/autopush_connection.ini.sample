@@ -19,15 +19,13 @@ port = 8080
 ; Settings for the internal routing listener, used to deliver routed
 ; notifications to clients connected to this node. The port should not
 ; be accessible externally.
-; router_hostname = push.services.mozilla.com | ec2-internal-name
+; If the router requires a specific DNS name that is different than
+; what the host can self discover, set this value
+#router_hostname = push.services.mozilla.com | ec2-internal-name
 router_port = 8081
 ; The TLS certificates if this node will be doing SSL termination.
 #router_ssl_key =
 #router_ssl_cert =
-# If the router requires a specific DNS name that is different than
-; what the host can self discover, set this value
-#router_hostname =
-#router_port = 8081
 
 ; Settings for the websocket ping. If a websocket ping fails or times out
 ; the connection is auto-closed. This is useful for detecting dead
