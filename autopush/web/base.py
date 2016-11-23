@@ -177,9 +177,10 @@ class BaseWebHandler(BaseHandler):
         """errBack for validation errors"""
         fail.trap(InvalidRequest)
         exc = fail.value
-        self.log.info(format="Request validation error",
+        self.log.info(format="Request validation error: {}".format(exc),
                       status_code=exc.status_code,
-                      errno=exc.errno)
+                      errno=exc.errno,
+                      client_info=self._client_info)
         self._write_response(exc.status_code, exc.errno,
                              message="Request did not validate %s" %
                                      (exc.message or ""),
