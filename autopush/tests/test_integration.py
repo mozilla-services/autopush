@@ -11,6 +11,7 @@ import uuid
 from contextlib import contextmanager
 from StringIO import StringIO
 from unittest.case import SkipTest
+from zope.interface import implementer
 
 import boto
 import ecdsa
@@ -23,6 +24,10 @@ from nose.tools import eq_, ok_
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.threads import deferToThread
+from twisted.logger import (
+    globalLogPublisher,
+    ILogObserver
+)
 from twisted.test.proto_helpers import AccumulatingProtocol
 from twisted.trial import unittest
 from twisted.web.client import Agent, FileBodyProducer
@@ -49,6 +54,16 @@ ddb_jar = os.path.join(ddb_dir, "DynamoDBLocal.jar")
 ddb_process = None
 
 twisted.internet.base.DelayedCall.debug = True
+
+
+@implementer(ILogObserver)
+class TestingLogObserver(object):
+    def __init__(self, test_callback):
+        self.success = False
+        self._test_callback = test_callback
+
+    def __call__(self, event):
+        self.success |= self._test_callback(event)
 
 
 def setUp():
@@ -614,13 +629,22 @@ class TestData(IntegrationBase):
 
         # Invalid UTF-8 byte sequence.
         data = b"\xc3\x28\xa0\xa1\xe2\x28\xa1"
-        result = yield client.send_notification(data=data)
 
+        def message_size_logged(event):
+            if 'client_info' in event:
+                if 'message_size' in event['client_info']:
+                    return True
+            return False
+
+        obs = TestingLogObserver(message_size_logged)
+        globalLogPublisher.addObserver(obs)
+        result = yield client.send_notification(data=data)
         ok_(result is not None)
         eq_(result["messageType"], "notification")
         eq_(result["channelID"], chan)
         eq_(result["data"], "wyigoeIooQ")
-
+        ok_(obs.success, "message_size not logged")
+        globalLogPublisher.removeObserver(obs)
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -636,6 +660,15 @@ class TestData(IntegrationBase):
             "6c33e055-5762-47e5-b90c-90ad9bfe3f53": dict(
                 data=b"\xc3\x28\xa0\xa1\xe2\x28\xa1", result="wyigoeIooQ"),
         }
+
+        def message_size_logged(event):
+            if 'client_info' in event:
+                if 'message_size' in event['client_info']:
+                    return True
+            return False
+
+        obs = TestingLogObserver(message_size_logged)
+        globalLogPublisher.addObserver(obs)
 
         client = Client("ws://localhost:9010/", use_webpush=True)
         yield client.connect()
@@ -662,6 +695,8 @@ class TestData(IntegrationBase):
             ok_("encoding" in headers)
             yield client.ack(chan, result["version"])
 
+        ok_(obs.success, "message_size not logged")
+        globalLogPublisher.removeObserver(obs)
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -703,6 +738,7 @@ class TestLoop(IntegrationBase):
 
 
 class TestWebPush(IntegrationBase):
+
     @inlineCallbacks
     def test_hello_only_has_three_calls(self):
         db.TRACK_DB_CALLS = True
@@ -802,6 +838,16 @@ class TestWebPush(IntegrationBase):
 
     @inlineCallbacks
     def test_basic_delivery_with_vapid(self):
+
+        def message_size_logged(event):
+            if 'client_info' in event:
+                if 'router_key' in event['client_info']:
+                    return True
+            return False
+
+        obs = TestingLogObserver(message_size_logged)
+        globalLogPublisher.addObserver(obs)
+
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         vapid_info = _get_vapid()
@@ -809,6 +855,9 @@ class TestWebPush(IntegrationBase):
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
+        ok_(obs.success, "message_size not logged")
+        globalLogPublisher.removeObserver(obs)
+
         yield self.shut_down(client)
 
     @inlineCallbacks
