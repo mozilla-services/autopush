@@ -1,3 +1,21 @@
+<a name="1.22.0"></a>
+## 1.22.0 (2016-11-28)
+
+
+#### Features
+
+*   enforce strict crypto header checks (#734) ([b4749d1d](https://github.com/mozilla-services/autopush/commit/b4749d1dda8a4c7162d7b4f266db64e31d547285), closes [#188](https://github.com/mozilla-services/autopush/issues/188))
+*   add topic metric for messages sent with topics. ([8c13078b](https://github.com/mozilla-services/autopush/commit/8c13078bcc0db23bb5afe4c2e55b54fa03e653ea))
+
+#### Bug Fixes
+
+*   handle CryptoKeyExceptions in new crypto validation (#751) ([cefe4788](https://github.com/mozilla-services/autopush/commit/cefe4788af03dd8131d05f62832fbd42921d7081))
+*   log router_key in web/webpush web/simplepush ([18cbfdfa](https://github.com/mozilla-services/autopush/commit/18cbfdfa1ea5ec7bc9dcfc215147c853f25e0bf9))
+*   Add exception info to log.info call (#743) ([c43788c1](https://github.com/mozilla-services/autopush/commit/c43788c1cf139f7325751f2e9423c617c503278c))
+*   kill lingering doc references to S3 (#741) ([00a2f9a3](https://github.com/mozilla-services/autopush/commit/00a2f9a39701df7d68dbdf23b3b3ee4616e069c6))
+
+
+
 <a name="1.21.2"></a>
 ## 1.21.2 (2016-11-17)
 
