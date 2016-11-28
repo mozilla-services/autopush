@@ -130,8 +130,7 @@ class WebPushCrypto01HeaderSchema(Schema):
     @validates("encryption")
     def validate_encryption(self, value):
         """Must contain a salt value"""
-        ck = CryptoKey(value)
-        salt = ck.get_label("salt")
+        salt = CryptoKey.parse_and_get_label(value, "salt")
         if not salt or not VALID_BASE64_URL.match(salt):
             raise InvalidRequest("Invalid salt value in Encryption header",
                                  status_code=400,
@@ -140,8 +139,7 @@ class WebPushCrypto01HeaderSchema(Schema):
     @validates("crypto_key")
     def validate_crypto_key(self, value):
         """Must not contain a dh value"""
-        ck = CryptoKey(value)
-        dh = ck.get_label("dh")
+        dh = CryptoKey.parse_and_get_label(value, "dh")
         if dh:
             raise InvalidRequest(
                 "dh value in Crypto-Key header not valid for 01 or earlier "
@@ -153,8 +151,7 @@ class WebPushCrypto01HeaderSchema(Schema):
     @validates("encryption_key")
     def validate_encryption_key(self, value):
         """Must contain a dh value"""
-        ck = CryptoKey(value)
-        dh = ck.get_label("dh")
+        dh = CryptoKey.parse_and_get_label(value, "dh")
         if not dh or not VALID_BASE64_URL.match("dh"):
             raise InvalidRequest("Invalid dh value in Encryption-Key header",
                                  status_code=400,
@@ -181,8 +178,7 @@ class WebPushCrypto04HeaderSchema(Schema):
     @validates("encryption")
     def validate_encryption(self, value):
         """Must contain a salt value"""
-        ck = CryptoKey(value)
-        salt = ck.get_label("salt")
+        salt = CryptoKey.parse_and_get_label(value, "salt")
         if not salt or not VALID_BASE64_URL.match(salt):
             raise InvalidRequest("Invalid salt value in Encryption header",
                                  status_code=400,
@@ -191,8 +187,7 @@ class WebPushCrypto04HeaderSchema(Schema):
     @validates("crypto_key")
     def validate_crypto_key(self, value):
         """Must contain a dh value"""
-        ck = CryptoKey(value)
-        dh = ck.get_label("dh")
+        dh = CryptoKey.parse_and_get_label(value, "dh")
         if not dh or not VALID_BASE64_URL.match("dh"):
             raise InvalidRequest("Invalid dh value in Encryption-Key header",
                                  status_code=400,
