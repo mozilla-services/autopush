@@ -257,7 +257,7 @@ class RegistrationHandler(BaseWebHandler):
         self.log.info(format="CHID not found in AWS.",
                       status_code=410, errno=106,
                       **self._client_info)
-        self._write_response(410, 106, message="Invalid endpoint.")
+        self._write_response(410, errno=106, message="Invalid endpoint.")
 
     #############################################################
     #                    Callbacks

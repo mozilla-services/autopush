@@ -35,7 +35,7 @@ class LogCheckHandler(BaseWebHandler):
             self.log.error(format="Test Error Message",
                            status_code=418, errno=0,
                            client_info=self._client_info)
-            self._write_response(418, 999, message="ERROR:Success",
+            self._write_response(418, errno=999, message="ERROR:Success",
                                  error="Test Error")
         if 'crit' in err_type:
             try:
@@ -44,5 +44,6 @@ class LogCheckHandler(BaseWebHandler):
                 self.log.failure(format="Test Critical Message",
                                  status_code=418, errno=0,
                                  client_info=self._client_info)
-                self._write_response(418, 999, message="FAILURE:Success",
+                self._write_response(418, errno=999,
+                                     message="FAILURE:Success",
                                      error="Test Failure")
