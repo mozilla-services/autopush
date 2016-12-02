@@ -15,10 +15,6 @@ PYTHON = $(BIN)/$(PTYPE)
 INSTALL = $(BIN)/pip install
 PATH := $(BIN):$(PATH)
 
-BUILD_DIRS = bin build deps include lib lib64 lib_pypy lib-python\
-	src site-packages .tox .eggs .coverage
-
-
 .PHONY: all build test coverage lint clean clean-env travis
 
 all:	build
@@ -50,9 +46,10 @@ $(PYTHON):
 
 clean-env:
 	rm -rf *.egg-info
-	rm -rf $(BUILD_DIRS)
+	rm -rf $(HERE)/$(PTYPE)
 
-clean:	clean-env
+clean: clean-env
+	rm -rf $(HERE)/ddb
 
 build: $(BIN)/pip
 	$(INSTALL) -r $(REQS)
