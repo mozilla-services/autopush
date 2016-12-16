@@ -23,6 +23,7 @@ from jose import jws
 from nose.tools import eq_, ok_
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
+from twisted.internet.endpoints import SSL4ServerEndpoint, TCP4ServerEndpoint
 from twisted.internet.threads import deferToThread
 from twisted.logger import (
     globalLogPublisher,
@@ -58,12 +59,22 @@ twisted.internet.base.DelayedCall.debug = True
 
 @implementer(ILogObserver)
 class TestingLogObserver(object):
-    def __init__(self, test_callback):
-        self.success = False
-        self._test_callback = test_callback
+    def __init__(self):
+        self._events = []
 
     def __call__(self, event):
-        self.success |= self._test_callback(event)
+        self._events.append(event)
+
+    def logged(self, predicate):
+        """Determine if any log events satisfy the callable"""
+        assert callable(predicate)
+        return any(predicate(e) for e in self._events)
+
+    def logged_ci(self, predicate):
+        """Determine if any log client_infos satisfy the callable"""
+        assert callable(predicate)
+        return self.logged(
+            lambda e: 'client_info' in e and predicate(e['client_info']))
 
 
 def setUp():
@@ -354,6 +365,9 @@ class IntegrationBase(unittest.TestCase):
             StatusResource,
         )
 
+        self.logs = TestingLogObserver()
+        globalLogPublisher.addObserver(self.logs)
+
         router_table = os.environ.get("ROUTER_TABLE", "router_int_test")
         storage_table = os.environ.get("STORAGE_TABLE", "storage_int_test")
         message_table = os.environ.get("MESSAGE_TABLE", "message_int_test")
@@ -421,17 +435,26 @@ class IntegrationBase(unittest.TestCase):
         mount_health_handlers(site, settings)
         self._settings = settings
         if is_https:
-            endpoint = reactor.listenSSL(self.endpoint_port, site,
-                                         self.endpoint_SSLCF())
+            ep = SSL4ServerEndpoint(
+                reactor,
+                self.endpoint_port,
+                self.endpoint_SSLCF())
         else:
-            endpoint = reactor.listenTCP(self.endpoint_port, site)
-        self.website = endpoint
+            ep = TCP4ServerEndpoint(reactor, self.endpoint_port)
+        ep = self.wrap_endpoint(ep)
+        ep.listen(site).addCallback(self._endpoint_listening)
+
+    def _endpoint_listening(self, port):
+        self.website = port
 
     def make_client_certs(self):
         return None
 
     def endpoint_SSLCF(self):
         raise NotImplementedError  # pragma: nocover
+
+    def wrap_endpoint(self, ep):
+        return ep
 
     @inlineCallbacks
     def tearDown(self):
@@ -442,6 +465,7 @@ class IntegrationBase(unittest.TestCase):
 
         # Dirty reactor unless we shut down the cached connections
         yield self._settings.agent._pool.closeCachedConnections()
+        globalLogPublisher.removeObserver(self.logs)
 
     @inlineCallbacks
     def quick_register(self, use_webpush=False, sslcontext=None):
@@ -630,21 +654,13 @@ class TestData(IntegrationBase):
         # Invalid UTF-8 byte sequence.
         data = b"\xc3\x28\xa0\xa1\xe2\x28\xa1"
 
-        def message_size_logged(event):
-            if 'client_info' in event:
-                if 'message_size' in event['client_info']:
-                    return True
-            return False
-
-        obs = TestingLogObserver(message_size_logged)
-        globalLogPublisher.addObserver(obs)
         result = yield client.send_notification(data=data)
         ok_(result is not None)
         eq_(result["messageType"], "notification")
         eq_(result["channelID"], chan)
         eq_(result["data"], "wyigoeIooQ")
-        ok_(obs.success, "message_size not logged")
-        globalLogPublisher.removeObserver(obs)
+        ok_(self.logs.logged_ci(lambda ci: 'message_size' in ci),
+            "message_size not logged")
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -660,15 +676,6 @@ class TestData(IntegrationBase):
             "6c33e055-5762-47e5-b90c-90ad9bfe3f53": dict(
                 data=b"\xc3\x28\xa0\xa1\xe2\x28\xa1", result="wyigoeIooQ"),
         }
-
-        def message_size_logged(event):
-            if 'client_info' in event:
-                if 'message_size' in event['client_info']:
-                    return True
-            return False
-
-        obs = TestingLogObserver(message_size_logged)
-        globalLogPublisher.addObserver(obs)
 
         client = Client("ws://localhost:9010/", use_webpush=True)
         yield client.connect()
@@ -695,8 +702,8 @@ class TestData(IntegrationBase):
             ok_("encoding" in headers)
             yield client.ack(chan, result["version"])
 
-        ok_(obs.success, "message_size not logged")
-        globalLogPublisher.removeObserver(obs)
+        ok_(self.logs.logged_ci(lambda ci: 'message_size' in ci),
+            "message_size not logged")
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -838,16 +845,6 @@ class TestWebPush(IntegrationBase):
 
     @inlineCallbacks
     def test_basic_delivery_with_vapid(self):
-
-        def message_size_logged(event):
-            if 'client_info' in event:
-                if 'router_key' in event['client_info']:
-                    return True
-            return False
-
-        obs = TestingLogObserver(message_size_logged)
-        globalLogPublisher.addObserver(obs)
-
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
         vapid_info = _get_vapid()
@@ -855,9 +852,8 @@ class TestWebPush(IntegrationBase):
         eq_(result["headers"]["encryption"], client._crypto_key)
         eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
-        ok_(obs.success, "message_size not logged")
-        globalLogPublisher.removeObserver(obs)
-
+        ok_(self.logs.logged_ci(lambda ci: 'router_key' in ci),
+            "router_key not logged")
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -1936,6 +1932,28 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         eq_(ca_data['enc'], salt)
         eq_(ca_data['aps']['content_available'], 1)
         eq_(ca_data['body'], base64url_encode(data))
+
+
+class TestProxyProtocol(IntegrationBase):
+
+    def wrap_endpoint(self, ep):
+        from twisted.protocols.haproxy import proxyEndpoint
+        return proxyEndpoint(ep)
+
+    @inlineCallbacks
+    def test_proxy_protocol(self):
+        ip = '198.51.100.22'
+        proto_line = 'PROXY TCP4 {} 203.0.113.7 35646 80\r\n'.format(ip)
+        # the proxy proto. line comes before the request: we can sneak
+        # it in before the verb
+        response, body = yield _agent(
+            '{}GET'.format(proto_line),
+            "http://localhost:9020/v1/err",
+        )
+        eq_(response.code, 418)
+        payload = json.loads(body)
+        eq_(payload['error'], "Test Error")
+        ok_(self.logs.logged_ci(lambda ci: ci.get('remote_ip') == ip))
 
 
 @inlineCallbacks
