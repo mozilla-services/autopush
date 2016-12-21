@@ -37,3 +37,6 @@ port = 8082
 ; e.g.:
 ; {"client1": ["2C:78:31.."], "client2": ["3F:D0:E0..", "E2:19:B1.."]}
 #client_certs =
+
+; Enable HAProxy Proxy Protocol handling
+#proxy_protocol

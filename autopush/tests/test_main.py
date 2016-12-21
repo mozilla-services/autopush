@@ -300,6 +300,11 @@ class EndpointMainTestCase(unittest.TestCase):
         ], False)
         ok_(not returncode)
 
+    def test_proxy_protocol(self):
+        endpoint_main([
+            "--proxy_protocol",
+        ], False)
+
     @patch('hyper.tls', spec=hyper.tls)
     def test_client_certs_parse(self, mock):
         ap = make_settings(self.TestArg)
