@@ -11,23 +11,9 @@ from twisted.logger import Logger
 from autopush.base import BaseHandler
 from autopush.exceptions import InvalidRequest, RouterException
 
-status_codes = {
-    200: "OK",
-    201: "Created",
-    202: "Accepted",
-    400: "Bad Request",
-    401: "Unauthorized",
-    404: "Not Found",
-    413: "Payload Too Large",
-    418: "I'm a teapot",
-    500: "Internal Server Error",
-    503: "Service Unavailable",
-}
 # Older versions used "bearer", newer specification requires "webpush"
 AUTH_SCHEMES = ["bearer", "webpush"]
 PREF_SCHEME = "webpush"
-DEFAULT_ERR_URL = ("http://autopush.readthedocs.io/en/latest/http.html"
-                   "#error-codes")
 
 
 class ThreadedValidate(object):
@@ -153,26 +139,6 @@ class BaseWebHandler(BaseHandler):
     #############################################################
     #                    Error Callbacks
     #############################################################
-    def _write_response(self, status_code, errno, message=None, error=None,
-                        headers=None,
-                        url=DEFAULT_ERR_URL):
-        """Writes out a full JSON error and sets the appropriate status"""
-        self.set_status(status_code, reason=error)
-        error_data = dict(
-            code=status_code,
-            errno=errno,
-            error=error or status_codes.get(status_code, ""),
-            more_info=url,
-        )
-        if message:
-            error_data["message"] = message
-        self.write(json.dumps(error_data))
-        self.set_header("Content-Type", "application/json")
-        if headers:
-            for header in headers.keys():
-                self.set_header(header, headers.get(header))
-        self.finish()
-
     def _validation_err(self, fail):
         """errBack for validation errors"""
         fail.trap(InvalidRequest)
@@ -181,7 +147,7 @@ class BaseWebHandler(BaseHandler):
                       status_code=exc.status_code,
                       errno=exc.errno,
                       client_info=self._client_info)
-        self._write_response(exc.status_code, exc.errno,
+        self._write_response(exc.status_code, errno=exc.errno,
                              message="Request did not validate %s" %
                                      (exc.message or ""),
                              headers=exc.headers)
@@ -197,15 +163,16 @@ class BaseWebHandler(BaseHandler):
         self.log.failure(format=fmt, failure=fail,
                          status_code=500, errno=999,
                          client_info=self._client_info)
-        self._write_response(500, 999, message="An unexpected server error"
-                                               " occurred.")
+        self._write_response(500, errno=999,
+                             message="An unexpected server error"
+                                     " occurred.")
 
     def _overload_err(self, fail):
         """errBack for throughput provisioned exceptions"""
         fail.trap(ProvisionedThroughputExceededException)
         self.log.info(format="Throughput Exceeded", status_code=503,
                       errno=201, client_info=self._client_info)
-        self._write_response(503, 201,
+        self._write_response(503, errno=201,
                              message="Please slow message send rate")
 
     def _boto_err(self, fail):

@@ -13,6 +13,7 @@ from twisted.web.server import Site
 
 import autopush.db as db
 import autopush.utils as utils
+from autopush.base import DefaultHandler
 from autopush.logging import PushLogger
 from autopush.settings import AutopushSettings
 from autopush.ssl import AutopushSSLContextFactory
@@ -592,6 +593,7 @@ def endpoint_main(sysargs=None, use_files=True):
         (endpoint_paths['message'], MessageHandler, h_kwargs),
         (endpoint_paths['registration'], RegistrationHandler, h_kwargs),
         (endpoint_paths['logcheck'], LogCheckHandler, h_kwargs),
+        (r".*", DefaultHandler, h_kwargs),
     ],
         default_host=settings.hostname, debug=args.debug,
         log_function=skip_request_logging

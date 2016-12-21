@@ -175,7 +175,7 @@ class TestBase(unittest.TestCase):
         eq_(d["authorization"], "webpush token barney")
 
     def test_write_response(self):
-        self.base._write_response(400, 103, message="Fail",
+        self.base._write_response(400, errno=103, message="Fail",
                                   headers=dict(Location="http://a.com/"))
         self.status_mock.assert_called_with(400, reason=None)
 

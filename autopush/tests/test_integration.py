@@ -36,6 +36,7 @@ from twisted.web.http_headers import Headers
 
 import autopush.db as db
 from autopush import __version__
+from autopush.base import DefaultHandler
 from autopush.db import (
     create_rotating_message_table,
     get_month,
@@ -426,6 +427,8 @@ class IntegrationBase(unittest.TestCase):
             # GET /register/uaid => chid + endpoint
             (endpoint_paths['registration'], RegistrationHandler, h_kwargs),
             (endpoint_paths['logcheck'], LogCheckHandler, h_kwargs),
+
+            (r".*", DefaultHandler, h_kwargs),
         ],
             default_host=settings.hostname,
             log_function=skip_request_logging,

@@ -1,8 +1,24 @@
+import json
 import uuid
 
 import cyclone.web
 from twisted.logger import Logger
 from twisted.python import failure
+
+status_codes = {
+    200: "OK",
+    201: "Created",
+    202: "Accepted",
+    400: "Bad Request",
+    401: "Unauthorized",
+    404: "Not Found",
+    413: "Payload Too Large",
+    418: "I'm a teapot",
+    500: "Internal Server Error",
+    503: "Service Unavailable",
+}
+DEFAULT_ERR_URL = ("http://autopush.readthedocs.io/en/latest/http.html"
+                   "#error-codes")
 
 
 class BaseHandler(cyclone.web.RequestHandler):
@@ -77,3 +93,35 @@ class BaseHandler(cyclone.web.RequestHandler):
         self.set_header('WWW-Authenticate',
                         'Transport mode="tls-client-certificate"')
         self.finish()
+
+    def _write_response(self, status_code, errno=None, message=None,
+                        error=None, headers=None, url=DEFAULT_ERR_URL):
+        """Writes out a full JSON error and sets the appropriate status"""
+        self.set_status(status_code, reason=error)
+        error_data = dict(
+            code=status_code,
+            error=error or status_codes.get(status_code, ""),
+            more_info=url,
+        )
+        if errno:
+            error_data["errno"] = errno
+        if message:
+            error_data["message"] = message
+        self.write(json.dumps(error_data))
+        self.set_header("Content-Type", "application/json")
+        if headers:
+            for header in headers.keys():
+                self.set_header(header, headers.get(header))
+        self.finish()
+
+
+class DefaultHandler(BaseHandler):
+    """Unauthenticated catch-all handler that returns a 404 for
+    unknown paths. Cyclone matches handlers in order, so this handler
+    should be registered last."""
+
+    def authenticate_peer_cert(self):
+        pass
+
+    def prepare(self):
+        self._write_response(404)
