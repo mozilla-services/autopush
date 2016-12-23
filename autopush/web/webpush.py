@@ -348,6 +348,7 @@ class WebPushHandler(BaseWebHandler):
         self._client_info["message_size"] = len(notification.data or "")
         self._client_info["ttl"] = notification.ttl
         self._client_info["version"] = notification.version
+        self._router_time = time.time()
         d = Deferred()
         d.addCallback(router.route_notification, user_data)
         d.addCallback(self._router_completed, user_data, "")
@@ -359,9 +360,10 @@ class WebPushHandler(BaseWebHandler):
 
     def _router_completed(self, response, uaid_data, warning=""):
         """Called after router has completed successfully"""
+        # Log the time taken for routing
+        self._timings["route_time"] = time.time() - self._router_time
         # Were we told to update the router data?
-        time_diff = time.time() - self.start_time
-        self._client_info["route_time"] = time_diff
+        time_diff = time.time() - self._start_time
         if response.router_data is not None:
             if not response.router_data:
                 # An empty router_data object indicates that the record should

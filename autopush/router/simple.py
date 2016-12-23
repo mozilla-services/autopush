@@ -6,10 +6,10 @@ based channel ID's (only newest version is stored, no data stored).
 
 """
 import json
-import requests
 from urllib import urlencode
 from StringIO import StringIO
 
+import requests
 from boto.dynamodb2.exceptions import (
     ItemNotFound,
     ProvisionedThroughputExceededException,

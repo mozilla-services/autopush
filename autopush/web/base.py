@@ -5,6 +5,8 @@ from functools import wraps
 from attr import attrs, attrib
 from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from boto.exception import BotoServerError
+from marshmallow.schema import UnmarshalResult  # noqa
+from typing import Any  # noqa
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
@@ -43,6 +45,7 @@ class ThreadedValidate(object):
         self.schema = schema
 
     def _validate_request(self, request_handler):
+        # type: (BaseWebHandler) -> UnmarshalResult
         """Validates a schema_class against a cyclone request"""
         data = {
             "headers": request_handler.request.headers,
@@ -64,12 +67,21 @@ class ThreadedValidate(object):
             request_handler.valid_input = output
             return func(request_handler, *args, **kwargs)
 
+    def _track_validation_timing(self, result, request_handler, start_time):
+        # type: (Any, BaseWebHandler, float) -> None
+        """Track the validation timing"""
+        request_handler._timings["validation_time"] = time.time() - start_time
+        return result
+
     def _decorator(self, func):
         @wraps(func)
         def wrapper(request_handler, *args, **kwargs):
+            start_time = time.time()
             # Wrap the handler in @cyclone.web.synchronous
             request_handler._auto_finish = False
             d = deferToThread(self._validate_request, request_handler)
+            d.addBoth(self._track_validation_timing, request_handler,
+                      start_time)
             d.addCallback(self._call_func, func, request_handler, *args,
                           **kwargs)
             d.addErrback(request_handler._overload_err)
@@ -124,9 +136,10 @@ class BaseWebHandler(BaseHandler):
     def initialize(self, ap_settings):
         """Setup basic aliases and attributes"""
         super(BaseWebHandler, self).initialize(ap_settings)
-        self.start_time = time.time()
         self.metrics = ap_settings.metrics
         self._base_tags = {}
+        self._start_time = time.time()
+        self._timings = {}
 
     def prepare(self):
         """Common request preparation"""
@@ -171,6 +184,7 @@ class BaseWebHandler(BaseHandler):
         if headers:
             for header in headers.keys():
                 self.set_header(header, headers.get(header))
+        self._track_timing()
         self.finish()
 
     def _validation_err(self, fail):
@@ -224,6 +238,7 @@ class BaseWebHandler(BaseHandler):
         if 200 <= response.status_code < 300:
             self.set_status(response.status_code, reason=None)
             self.write(response.response_body)
+            self._track_timing(status_code=response.logged_status)
             self.finish()
         else:
             self._write_response(
@@ -264,6 +279,7 @@ class BaseWebHandler(BaseHandler):
             errors=errors
         )
         self.write(json.dumps(error_data))
+        self._track_timing()
         self.finish()
 
     def _db_error_handling(self, d):
@@ -273,3 +289,18 @@ class BaseWebHandler(BaseHandler):
         d.addErrback(self._boto_err)
         d.addErrback(self._response_err)
         return d
+
+    #############################################################
+    #                    Utility Methods
+    #############################################################
+    def _track_timing(self, status_code=None):
+        """Logs out the request timing tracking stats
+
+        Note: The status code should be set before calling this function or
+        passed in.
+
+        """
+        status_code = status_code or self.get_status()
+        self._timings["request_time"] = time.time() - self._start_time
+        self.log.info("Request timings", client_info=self._client_info,
+                      timings=self._timings, status_code=status_code)

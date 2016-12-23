@@ -50,10 +50,12 @@ class SentryLogTestCase(twisted.trial.unittest.TestCase):
         pl = PushLogger.setup_logging("Autopush", sentry_dsn=True)
         pl._output = out
         _client_info = dict(key='value')
+        _timings = dict(key2='value')
 
         log.failure(format="error",
                     failure=failure.Failure(Exception("eek")),
-                    client_info=_client_info)
+                    client_info=_client_info,
+                    timings=_timings)
         self.flushLoggedErrors()
         d = Deferred()
 
@@ -70,7 +72,9 @@ class SentryLogTestCase(twisted.trial.unittest.TestCase):
             # Check that the json written actually contains the client info
             # collapsed up into 'Fields'.
             out.seek(0)
-            eq_(json.loads(out.readline())['Fields']['key'], 'value')
+            payload = json.loads(out.readline())
+            eq_(payload['Fields']['key'], 'value')
+            eq_(payload['Fields']['key2'], 'value')
             self._port.stopListening()
             pl.stop()
             d.callback(True)
