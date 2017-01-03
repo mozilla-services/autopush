@@ -6,6 +6,10 @@
 # DOCKER_PASS
 #
 machine:
+  environment:
+    LOADS_BROKER: http://52.87.240.190:8080/api/orchestrate
+    LOADS_TEST_PLAN: e366b4a9-eab2-422c-97e8-213e4f70549a
+    LOADS_RUN_OWNER: pjenvey
   services:
     - docker
 
@@ -58,3 +62,9 @@ deployment:
       - "docker images"
       - "docker push ${DOCKERHUB_REPO}:${CIRCLE_TAG}"
       - "docker push ${DOCKERHUB_REPO}:${CIRCLE_TAG}-pypy"
+
+# trigger a load test
+test:
+  override:
+    - >
+        curl -XPOST ${LOADS_BROKER}/${LOADS_TEST_PLAN}?owner=${LOADS_RUN_OWNER} -H "Content-Type: application/json" -d '{"SHA1":"'${CIRCLE_SHA1}'","MAYBE_AWS_ACCESS_KEY_ID":"XXX"}'
