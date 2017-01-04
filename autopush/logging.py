@@ -165,8 +165,15 @@ class PushLogger(object):
         if ci and isinstance(ci, dict):
             msg['Fields'].update(
                 to_fields(ci.iteritems()))
-        # Add the nicely formatted message
 
+        # flatten timings into Fields
+        ti = event.get('timings')
+        if ti and isinstance(ti, dict):
+            msg["Fields"].update(
+                to_fields(ti.iteritems())
+            )
+
+        # Add the nicely formatted message
         msg["Fields"]["message"] = formatEvent(event)
         return json.dumps(msg, skipkeys=True) + "\n"
 
