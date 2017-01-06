@@ -10,7 +10,9 @@ import urlparse
 import uuid
 from contextlib import contextmanager
 from StringIO import StringIO
+from httplib import HTTPResponse  # noqa
 from unittest.case import SkipTest
+
 from zope.interface import implementer
 
 import boto
@@ -21,6 +23,7 @@ import websocket
 from autobahn.twisted.websocket import WebSocketServerFactory
 from jose import jws
 from nose.tools import eq_, ok_
+from typing import Optional  # noqa
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.endpoints import SSL4ServerEndpoint, TCP4ServerEndpoint
@@ -135,6 +138,7 @@ class Client(object):
         self.use_webpush = use_webpush
         self.channels = {}
         self.messages = {}
+        self.notif_response = None  # type: Optional[HTTPResponse]
         self._crypto_key = """\
 keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 """
@@ -275,6 +279,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         log.debug("%s Response (%s): %s", method, resp.status, resp.read())
         http.close()
         eq_(resp.status, status)
+        self.notif_response = resp
         location = resp.getheader("Location", None)
         log.debug("Response Headers: %s", resp.getheaders())
         if self.use_webpush:
@@ -1018,7 +1023,7 @@ class TestWebPush(IntegrationBase):
     @inlineCallbacks
     def test_no_delivery_to_unregistered(self):
         data = str(uuid.uuid4())
-        client = yield self.quick_register(use_webpush=True)
+        client = yield self.quick_register(use_webpush=True)  # type: Client
         ok_(client.channels)
         chan = client.channels.keys()[0]
 
@@ -1029,6 +1034,10 @@ class TestWebPush(IntegrationBase):
 
         yield client.unregister(chan)
         result = yield client.send_notification(data=data, status=410)
+
+        # Verify cache-control
+        eq_(client.notif_response.getheader("Cache-Control"), "max-age=86400")
+
         eq_(result, None)
         yield self.shut_down(client)
 

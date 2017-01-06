@@ -184,6 +184,11 @@ class BaseWebHandler(BaseHandler):
         if headers:
             for header in headers.keys():
                 self.set_header(header, headers.get(header))
+
+        # 410's get the max-age cache control header
+        if status_code == 410:
+            self.set_header("Cache-Control", "max-age=86400")
+
         self._track_timing()
         self.finish()
 
@@ -195,6 +200,7 @@ class BaseWebHandler(BaseHandler):
                       status_code=exc.status_code,
                       errno=exc.errno,
                       client_info=self._client_info)
+
         self._write_response(exc.status_code, exc.errno,
                              message="Request did not validate %s" %
                                      (exc.message or ""),
