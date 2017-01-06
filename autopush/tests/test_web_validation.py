@@ -311,7 +311,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
         )
         result, errors = schema.load(self._make_test_data())
         eq_(errors, {})
@@ -543,7 +543,8 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
+            uaid=dummy_uaid,
         )
         info = self._make_test_data(
             headers={
@@ -567,7 +568,8 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
+            uaid=dummy_uaid,
         )
         schema.context["settings"].max_data = 1
 
@@ -589,7 +591,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
         )
 
         with assert_raises(InvalidRequest) as cm:
@@ -605,7 +607,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
         )
 
         padded_value = "asdfjiasljdf==="
@@ -662,7 +664,8 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
+            uaid=dummy_uaid,
         )
 
         info = self._make_test_data(
@@ -689,6 +692,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="webpush",
+            uaid=dummy_uaid,
         )
 
         info = self._make_test_data(
@@ -719,6 +723,50 @@ class TestWebPushRequestSchema(unittest.TestCase):
         eq_(cm.exception.message,
             "Topic must be URL and Filename safe Base64 alphabet")
 
+    def test_no_current_month(self):
+        schema = self._make_fut()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="webpush",
+            uaid=dummy_uaid,
+        )
+
+        info = self._make_test_data()
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 410)
+        eq_(cm.exception.errno, 106)
+        eq_(cm.exception.message, "No such subscription")
+
+    def test_old_current_month(self):
+        schema = self._make_fut()
+        schema.context["settings"].message_tables = dict()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="webpush",
+            uaid=dummy_uaid,
+            current_month="message_2014_01",
+        )
+
+        info = self._make_test_data()
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 410)
+        eq_(cm.exception.errno, 106)
+        eq_(cm.exception.message, "No such subscription")
+
 
 class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
     def _make_fut(self):
@@ -726,15 +774,16 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         from autopush.settings import AutopushSettings
         schema = WebPushRequestSchema()
         schema.context["log"] = Mock()
-        schema.context["settings"] = AutopushSettings(
+        schema.context["settings"] = settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
-        schema.context["settings"].router = Mock()
-        schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+        settings.router = Mock()
+        settings.router.get_uaid.return_value = dict(
+            router_type="gcm",
+            uaid=dummy_uaid,
         )
-        schema.context["settings"].fernet = self.fernet_mock = Mock()
+        settings.fernet = self.fernet_mock = Mock()
         return schema
 
     def _make_test_data(self, headers=None, body="", path_args=None,

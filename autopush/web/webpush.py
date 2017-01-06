@@ -14,6 +14,7 @@ from marshmallow import (
 )
 from marshmallow_polyfield import PolyField
 from marshmallow.validate import OneOf
+from twisted.logger import Logger  # noqa
 from twisted.internet.defer import Deferred
 from twisted.internet.threads import deferToThread
 
@@ -24,11 +25,13 @@ from autopush.exceptions import (
     InvalidTokenException,
     VapidAuthException,
 )
+from autopush.settings import AutopushSettings  # noqa
 from autopush.utils import (
     base64url_encode,
     extract_jwt,
     ms_time,
     WebPushNotification,
+    normalize_id,
 )
 from autopush.web.base import (
     AUTH_SCHEMES,
@@ -65,9 +68,10 @@ class WebPushSubscriptionSchema(Schema):
         return result
 
     @validates_schema(skip_on_field_errors=True)
-    def validate_uaid(self, d):
+    def validate_uaid_month_and_chid(self, d):
+        settings = self.context["settings"]  # type: AutopushSettings
         try:
-            result = self.context["settings"].router.get_uaid(d["uaid"].hex)
+            result = settings.router.get_uaid(d["uaid"].hex)
         except ItemNotFound:
             raise InvalidRequest("UAID not found", status_code=410, errno=103)
 
@@ -80,8 +84,42 @@ class WebPushSubscriptionSchema(Schema):
                                  status_code=410,
                                  errno=105)
 
+        if result["router_type"] == "webpush":
+            self._validate_webpush(d, result)
+
         # Propagate the looked up user data back out
         d["user_data"] = result
+
+    def _validate_webpush(self, d, result):
+        settings = self.context["settings"]  # type: AutopushSettings
+        log = self.context["log"]  # type: Logger
+        channel_id = normalize_id(d["chid"])
+        uaid = result["uaid"]
+        if 'current_month' not in result:
+            log.info(format="Dropping User", code=102,
+                     uaid_hash=hasher(uaid),
+                     uaid_record=dump_uaid(result))
+            settings.router.drop_user(uaid)
+            raise InvalidRequest("No such subscription", status_code=410,
+                                 errno=106)
+
+        month_table = result["current_month"]
+        if month_table not in settings.message_tables:
+            log.info(format="Dropping User", code=103,
+                     uaid_hash=hasher(uaid),
+                     uaid_record=dump_uaid(result))
+            settings.router.drop_user(uaid)
+            raise InvalidRequest("No such subscription", status_code=410,
+                                 errno=106)
+        exists, chans = settings.message_tables[month_table].all_channels(
+            uaid=uaid)
+
+        if (not exists or channel_id.lower() not
+                in map(lambda x: normalize_id(x), chans)):
+            log.info("Unknown subscription: {channel_id}",
+                     channel_id=channel_id)
+            raise InvalidRequest("No such subscription", status_code=410,
+                                 errno=106)
 
 
 class WebPushBasicHeaderSchema(Schema):
