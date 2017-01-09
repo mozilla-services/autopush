@@ -5,10 +5,6 @@
 
 .. automodule:: autopush.router.interface
 
-.. autoclass:: RouterException
-    :members:
-    :special-members: __init__
-
 .. autoclass:: RouterResponse
     :members:
     :special-members: __init__

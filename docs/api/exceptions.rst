@@ -6,3 +6,8 @@
 .. automodule:: autopush.exceptions
 
 .. autoclass:: AutopushException
+
+.. autoclass:: RouterException
+    :members:
+    :special-members: __init__
+
