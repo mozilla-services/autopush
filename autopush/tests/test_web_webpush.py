@@ -56,6 +56,8 @@ class TestWebpushHandler(unittest.TestCase):
         self.wp.finish = lambda: d.callback(True)
         settings.routers["webpush"] = Mock(spec=IRouter)
         self.wp_router_mock = settings.routers["webpush"]
+        self.message_mock = settings.message = Mock()
+        self.message_mock.all_channels.return_value = (True, [dummy_chid])
 
     def test_router_needs_update(self):
         self.ap_settings.parse_endpoint = Mock(return_value=dict(
@@ -67,6 +69,8 @@ class TestWebpushHandler(unittest.TestCase):
         self.router_mock.get_uaid.return_value = dict(
             router_type="webpush",
             router_data=dict(),
+            uaid=dummy_uaid,
+            current_month=self.ap_settings.current_msg_month,
         )
         self.wp_router_mock.route_notification.return_value = RouterResponse(
             status_code=503,
@@ -96,6 +100,7 @@ class TestWebpushHandler(unittest.TestCase):
             uaid=dummy_uaid,
             router_type="webpush",
             router_data=dict(uaid="uaid"),
+            current_month=self.ap_settings.current_msg_month,
         )
         self.wp_router_mock.route_notification.return_value = RouterResponse(
             status_code=503,
@@ -170,7 +175,7 @@ class TestWebpushHandler(unittest.TestCase):
         self.ap_settings.router.get_uaid.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
-            router_type="webpush"
+            router_type="gcm"
         )
         self.wp.post()
         return self.finish_deferred
@@ -187,7 +192,7 @@ class TestWebpushHandler(unittest.TestCase):
         self.ap_settings.router.get_uaid.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
-            router_type="webpush"
+            router_type="gcm"
         )
         self.wp.post()
         return self.finish_deferred

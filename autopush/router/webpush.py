@@ -9,18 +9,9 @@ import json
 import time
 from StringIO import StringIO
 
-from twisted.internet.defer import (
-    inlineCallbacks,
-    returnValue,
-)
 from twisted.internet.threads import deferToThread
 from twisted.web.client import FileBodyProducer
 
-from autopush.db import (
-    dump_uaid,
-    hasher,
-    normalize_id,
-)
 from autopush.exceptions import RouterException
 from autopush.protocol import IgnoreBody
 from autopush.router.interface import RouterResponse
@@ -48,44 +39,6 @@ class WebPushRouter(SimpleRouter):
                                        "TTL": notification.ttl},
                               logged_status=202)
 
-    @inlineCallbacks
-    def preflight_check(self, uaid_data, channel_id):
-        """Verifies this routing call can be done successfully
-
-        :type uaid_data: dict
-        :type channel_id: uuid.UUID
-
-        """
-        channel_id = normalize_id(channel_id)
-        uaid = uaid_data["uaid"]
-        if 'current_month' not in uaid_data:
-            self.log.info(format="Dropping User", code=102,
-                          uaid_hash=hasher(uaid),
-                          uaid_record=dump_uaid(uaid_data))
-            yield deferToThread(self.ap_settings.router.drop_user, uaid)
-            raise RouterException("No such subscription", status_code=410,
-                                  log_exception=False, errno=106)
-
-        month_table = uaid_data["current_month"]
-        if month_table not in self.ap_settings.message_tables:
-            self.log.info(format="Dropping User", code=103,
-                          uaid_hash=hasher(uaid),
-                          uaid_record=dump_uaid(uaid_data))
-            yield deferToThread(self.ap_settings.router.drop_user, uaid)
-            raise RouterException("No such subscription", status_code=410,
-                                  log_exception=False, errno=106)
-        exists, chans = yield deferToThread(
-            self.ap_settings.message_tables[month_table].all_channels,
-            uaid=uaid)
-
-        if (not exists or channel_id.lower() not
-                in map(lambda x: normalize_id(x), chans)):
-            self.log.info("Unknown subscription: {channel_id}",
-                          channel_id=channel_id)
-            raise RouterException("No such subscription", status_code=410,
-                                  log_exception=False, errno=106)
-        returnValue(month_table)
-
     def _send_notification(self, uaid, node_id, notification):
         """Send a notification to a specific node_id
 
@@ -106,14 +59,17 @@ class WebPushRouter(SimpleRouter):
         d.addCallback(IgnoreBody.ignore)
         return d
 
-    def _save_notification(self, uaid, notification, month_table):
+    def _save_notification(self, uaid_data, notification):
         """Saves a notification, returns a deferred.
 
         This version of the overridden method saves each individual message
         to the message table along with relevant request headers if
         available.
 
+        :type uaid_data: dict
+
         """
+        month_table = uaid_data["current_month"]
         if notification.ttl is None:
             # Note that this URL is temporary, as well as this warning as
             # we will 400 all missing TTL's eventually

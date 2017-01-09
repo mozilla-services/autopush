@@ -53,10 +53,6 @@ class SimpleRouter(object):
     def amend_msg(self, msg, router_data=None):
         return msg
 
-    def preflight_check(self, uaid_data, channel_id):
-        """Verifies this routing call can be done successfully"""
-        return True
-
     def stored_response(self, notification):
         return RouterResponse(202, "Notification Stored")
 
@@ -73,10 +69,6 @@ class SimpleRouter(object):
         uaid = uaid_data["uaid"]
         self.udp = uaid_data.get("udp")
         router = self.ap_settings.router
-
-        # Preflight check, hook used by webpush to verify channel id, extra
-        # stores any additional data to pass to storing the message
-        extra = yield self.preflight_check(uaid_data, notification.channel_id)
 
         # Node_id is present, attempt delivery.
         # - Send Notification to node
@@ -106,7 +98,7 @@ class SimpleRouter(object):
         #   - Success (older version): Done, return 202
         #   - Error (db error): Done, return 503
         try:
-            result = yield self._save_notification(uaid, notification, extra)
+            result = yield self._save_notification(uaid_data, notification)
             if result is False:
                 self.metrics.increment("router.broadcast.miss")
                 returnValue(self.stored_response(notification))
@@ -178,13 +170,14 @@ class SimpleRouter(object):
     #############################################################
     #                    Blocking Helper Functions
     #############################################################
-    def _save_notification(self, uaid, notification, extra):
+    def _save_notification(self, uaid_data, notification):
         """Saves a notification, returns a deferred.
 
         This function is split out for the Webpush-style individual
         message storage to subclass and override.
 
         """
+        uaid = uaid_data["uaid"]
         return deferToThread(self.ap_settings.storage.save_notification,
                              uaid=uaid, chid=notification.channel_id,
                              version=notification.version)
