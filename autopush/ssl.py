@@ -68,7 +68,6 @@ class AutopushSSLContextFactory(ssl.DefaultOpenSSLContextFactory):
                 # RequestHandlers
                 ctx.set_verify(
                     SSL.VERIFY_PEER |
-                    SSL.VERIFY_FAIL_IF_NO_PEER_CERT |
                     SSL.VERIFY_CLIENT_ONCE,
                     self._allow_peer)
 

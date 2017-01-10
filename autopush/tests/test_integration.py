@@ -1548,12 +1548,13 @@ class TestClientCerts(IntegrationBase):
         self.servercert = os.path.join(certs, "server.pem")
         self.auth_client = os.path.join(certs, "client1.pem")
         self.unauth_client = os.path.join(certs, "client2.pem")
+        with open(os.path.join(self.certs, "client1_sha256.txt")) as fp:
+            client1_sha256 = fp.read().strip()
+        self._client_certs = {client1_sha256: 'partner1'}
         IntegrationBase.setUp(self)
 
     def make_client_certs(self):
-        with open(os.path.join(self.certs, "client1_sha256.txt")) as fp:
-            client1_sha256 = fp.read().strip()
-        return {client1_sha256: 'partner1'}
+        return self._client_certs
 
     def endpoint_SSLCF(self):
         """Return an SSLContextFactory for the endpoint.
@@ -1568,7 +1569,7 @@ class TestClientCerts(IntegrationBase):
             self.servercert,
             require_peer_certs=self._settings.enable_tls_auth)
 
-    def _create_unauth_SSLCF(self):
+    def _create_unauth_SSLCF(self, certfile):
         """Return an IPolicyForHTTPS for the unauthorized client"""
         from twisted.internet.ssl import (
             Certificate, PrivateCertificate, optionsForClientTLS)
@@ -1577,8 +1578,11 @@ class TestClientCerts(IntegrationBase):
 
         with open(self.servercert) as fp:
             servercert = Certificate.loadPEM(fp.read())
-        with open(self.unauth_client) as fp:
-            unauth_client = PrivateCertificate.loadPEM(fp.read())
+        if certfile:
+            with open(self.unauth_client) as fp:
+                unauth_client = PrivateCertificate.loadPEM(fp.read())
+        else:
+            unauth_client = None
 
         @implementer(IPolicyForHTTPS)
         class UnauthClientPolicyForHTTPS(object):
@@ -1592,7 +1596,8 @@ class TestClientCerts(IntegrationBase):
         """Return a client SSLContext"""
         import ssl
         context = ssl.create_default_context()
-        context.load_cert_chain(certfile)
+        if certfile:
+            context.load_cert_chain(certfile)
         context.load_verify_locations(self.servercert)
         return context
 
@@ -1610,6 +1615,14 @@ class TestClientCerts(IntegrationBase):
         ok_(result != {})
         eq_(len(result["updates"]), 1)
         eq_(result["updates"][0]["channelID"], chan)
+
+        certs = self._client_certs
+        ok_(self.logs.logged_ci(
+            lambda ci: ('tls_auth' in ci and
+                        certs[ci['tls_auth_sha256']] == ci['tls_auth'] and
+                        ci['tls_auth_cn'] == 'localhost')
+        ))
+
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -1630,45 +1643,82 @@ class TestClientCerts(IntegrationBase):
 
     @inlineCallbacks
     def test_client_cert_unauth(self):
+        yield self._test_unauth(self.unauth_client)
+
+    @inlineCallbacks
+    def test_no_client_cert(self):
+        yield self._test_unauth(None)
+
+    @inlineCallbacks
+    def _test_unauth(self, certfile):
         client = yield self.quick_register(
-            sslcontext=self._create_context(self.unauth_client))
+            sslcontext=self._create_context(certfile))
         yield client.disconnect()
         yield client.send_notification(status=401)
+        ok_(self.logs.logged(
+            lambda e: (e['log_format'] == "Failed TLS auth" and
+                       (not certfile or
+                        e['client_info']['tls_failed_cn'] == 'localhost'))
+        ))
 
         response, body = yield _agent(
             'DELETE',
             "https://localhost:9020/m/foo",
-            contextFactory=self._create_unauth_SSLCF())
+            contextFactory=self._create_unauth_SSLCF(certfile))
         eq_(response.code, 401)
         wwwauth = response.headers.getRawHeaders('www-authenticate')
         eq_(wwwauth, ['Transport mode="tls-client-certificate"'])
 
     @inlineCallbacks
     def test_log_check_skips_auth(self):
+        yield self._test_log_check_skips_auth(self.unauth_client)
+
+    @inlineCallbacks
+    def test_log_check_skips_auth_no_client_cert(self):
+        yield self._test_log_check_skips_auth(None)
+
+    @inlineCallbacks
+    def _test_log_check_skips_auth(self, certfile):
         response, body = yield _agent(
             'GET',
             "https://localhost:9020/v1/err",
-            contextFactory=self._create_unauth_SSLCF())
+            contextFactory=self._create_unauth_SSLCF(certfile))
         eq_(response.code, 418)
         payload = json.loads(body)
         eq_(payload['error'], "Test Error")
 
     @inlineCallbacks
     def test_status_skips_auth(self):
+        yield self._test_status_skips_auth(self.unauth_client)
+
+    @inlineCallbacks
+    def test_status_skips_auth_no_client_cert(self):
+        yield self._test_status_skips_auth(None)
+
+    @inlineCallbacks
+    def _test_status_skips_auth(self, certfile):
         response, body = yield _agent(
             'GET',
             "https://localhost:9020/status",
-            contextFactory=self._create_unauth_SSLCF())
+            contextFactory=self._create_unauth_SSLCF(certfile))
         eq_(response.code, 200)
         payload = json.loads(body)
         eq_(payload, dict(status="OK", version=__version__))
 
     @inlineCallbacks
     def test_health_skips_auth(self):
+        yield self._test_health_skips_auth(self.unauth_client)
+
+    @inlineCallbacks
+    def test_health_skips_auth_no_client_cert(self):
+        yield self._test_health_skips_auth(None)
+
+    @inlineCallbacks
+    def _test_health_skips_auth(self, certfile):
         response, body = yield _agent(
             'GET',
             "https://localhost:9020/health",
-            contextFactory=self._create_unauth_SSLCF())
+            contextFactory=self._create_unauth_SSLCF(certfile))
         eq_(response.code, 200)
         payload = json.loads(body)
         eq_(payload['version'], __version__)

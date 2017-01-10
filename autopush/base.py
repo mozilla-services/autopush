@@ -53,24 +53,21 @@ class BaseHandler(cyclone.web.RequestHandler):
 
         """
         cert = self.request.connection.transport.getPeerCertificate()
-        # VERIFY_FAIL_IF_NO_PEER_CERT ensures this never fails
-        # otherwise something is very broken
-        assert cert, "Expected a TLS peer cert (VERIFY_FAIL_IF_NO_PEER_CERT)"
+        if cert:
+            cert_signature = cert.digest('sha256')
+            cn = cert.get_subject().CN
+            auth = self.ap_settings.client_certs.get(cert_signature)
+            if auth is not None:
+                # TLS authenticated
+                self._client_info.update(tls_auth=auth,
+                                         tls_auth_sha256=cert_signature,
+                                         tls_auth_cn=cn)
+                return
 
-        cert_signature = cert.digest('sha256')
-        cn = cert.get_subject().CN
-        auth = self.ap_settings.client_certs.get(cert_signature)
-        if auth is not None:
-            # TLS authenticated
-            self._client_info['tls_auth'] = auth
-            self._client_info['tls_auth_sha256'] = cert_signature
-            self._client_info['tls_auth_cn'] = cn
-            return
+            self._client_info.update(tls_failed_sha256=cert_signature,
+                                     tls_failed_cn=cn)
 
-        self.log.warn("Failed TLS auth",
-                      tls_failed_sha256=cert_signature,
-                      tls_failed_cn=cn,
-                      client_info=self._client_info)
+        self.log.warn("Failed TLS auth", client_info=self._client_info)
         self.set_status(401)
         # "Transport mode" isn't standard, inspired by:
         # http://www6.ietf.org/mail-archive/web/tls/current/msg05589.html
