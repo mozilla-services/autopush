@@ -1,3 +1,5 @@
+.. _api:
+
 Code Documentation
 ==================
 
@@ -10,7 +12,6 @@ documentation is organized alphabetically by module name.
    api/db
    api/endpoint
    api/exceptions
-   api/health
    api/logging
    api/main
    api/metrics
@@ -23,10 +24,10 @@ documentation is organized alphabetically by module name.
    api/web/base
    api/web/webpush
    api/web/simplepush
+   api/web/logging
    api/web/message
    api/web/registration
    api/web/health
-   api/web/log_check
    api/settings
    api/ssl
    api/utils

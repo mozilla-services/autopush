@@ -14,6 +14,9 @@ This is the third generation of Push server built in Mozilla Services, first
 to handle Push for FirefoxOS clients, then extended for push notifications for
 Firefox (via the `W3C Push spec <http://w3c.github.io/push-api/index.html>`_.)
 
+For how to read and respond to **autopush error codes**, see
+:ref:`Errors <errors>`.
+
 For an overview of the Mozilla Push Service and where autopush fits in, see
 the `Mozilla Push Service architecture diagram`_. This push service uses
 websockets to talk to Firefox, with a Push endpoint that implements the
@@ -66,6 +69,13 @@ Source Code
 
 All source code is available on `github under autopush
 <https://github.com/mozilla-services/autopush>`_.
+
+:ref:`api`
+
+.. toctree::
+    :hidden:
+
+    api
 
 Changelog
 =========
