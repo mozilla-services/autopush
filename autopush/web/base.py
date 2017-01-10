@@ -68,7 +68,7 @@ class ThreadedValidate(object):
             return func(request_handler, *args, **kwargs)
 
     def _track_validation_timing(self, result, request_handler, start_time):
-        # type: (Any, BaseWebHandler, float) -> None
+        # type: (Any, BaseWebHandler, float) -> Any
         """Track the validation timing"""
         request_handler._timings["validation_time"] = time.time() - start_time
         return result

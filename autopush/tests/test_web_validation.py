@@ -326,7 +326,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
         )
         data = self._make_test_data(body="asdfasdf")
 
@@ -422,7 +422,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
         )
         info = self._make_test_data(
             headers={
@@ -445,7 +445,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
         )
         info = self._make_test_data(
             headers={
@@ -471,7 +471,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
         )
         info = self._make_test_data(
             headers={
@@ -495,7 +495,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
         )
         info = self._make_test_data(
             headers={
@@ -519,7 +519,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
         )
         info = self._make_test_data(
             headers={
@@ -634,7 +634,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
         )
 
         padded_value = "asdfjiasljdf==="
@@ -691,7 +691,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             public_key="",
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
-            router_type="webpush",
+            router_type="gcm",
             uaid=dummy_uaid,
         )
 
