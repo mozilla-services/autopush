@@ -98,8 +98,8 @@ Unless otherwise specified, all calls return one the following error statuses:
        - Missing TTL Header - Include the Time To Live header (`IETF WebPush protocol §6.2 <https://tools.ietf.org/html/draft-ietf-webpush-protocol#section-6.2>`_)
        - Missing Crypto Headers - Include the appropriate encryption headers (`WebPush Encryption §3.2 <https://webpush-wg.github.io/webpush-encryption/#rfc.section.3.2>`_ and `WebPush VAPID §4 <https://tools.ietf.org/html/draft-ietf-webpush-vapid-02#section-4>`_)
 
-   - errno 112 - Invalid TTL header value - The Time To Live "TTL" header contains an invalid or unreadble value. Please change to a number of seconds that this message should live, between 0 (message should be dropped immediately if user is unavailable) and 2592000 (hold for delivery within the next approximately 30 days).
-   - errno 113 - Invalid Topic header value - The Topic header contains an invalid or unreadble value. Please use only ASCII alphanumeric values [A-Za-z0-9].
+   - errno 112 - Invalid TTL header value - The Time To Live "TTL" header contains an invalid or unreadable value. Please change to a number of seconds that this message should live, between 0 (message should be dropped immediately if user is unavailable) and 2592000 (hold for delivery within the next approximately 30 days).
+   - errno 113 - Invalid Topic header value - The Topic header contains an invalid or unreadable value. Please use only ASCII alphanumeric values [A-Za-z0-9] and a maximum length of 32 bytes..
 
 -  401 - **Bad Authorization** - `Authorization` header is invalid or missing. See the `VAPID specification <https://datatracker.ietf.org/doc/draft-ietf-webpush-vapid/>`_.
 
@@ -109,7 +109,7 @@ Unless otherwise specified, all calls return one the following error statuses:
 
    - errno 102 - Invalid URL endpoint
 
--  410 - **Endpoint Not Valid** - The URL specified is no longer valid and should no longer be used. A User may have cancelled their subscription or otherwise become unavailable.
+-  410 - **Endpoint Not Valid** - The URL specified is no longer valid and should no longer be used. A User has become permanently unavailable at this URL.
 
    - errno 103 - Expired URL endpoint
    - errno 105 - Endpoint became unavailable during request
