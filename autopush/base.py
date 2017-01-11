@@ -1,3 +1,4 @@
+import sys
 import uuid
 
 import cyclone.web
@@ -25,6 +26,7 @@ class BaseHandler(cyclone.web.RequestHandler):
             authorization=self.request.headers.get('authorization', ""),
             message_ttl=self.request.headers.get('ttl', ""),
             uri=self.request.uri,
+            python_version=sys.version,
         )
 
     def write_error(self, code, **kwargs):

@@ -5,6 +5,7 @@ import os
 import random
 import signal
 import subprocess
+import sys
 import time
 import urlparse
 import uuid
@@ -634,6 +635,15 @@ class TestSimple(IntegrationBase):
                 yield client.sleep(1)
         log.debug("Last connected time: %s", c.get("last_connect", "None"))
         eq_(True, has_connected_this_month(c))
+
+    @inlineCallbacks
+    def test_endpoint_client_info(self):
+        client = yield self.quick_register()
+        result = yield client.send_notification()
+        ok_(result is not None)
+        ok_(self.logs.logged_ci(
+            lambda ci: ci['python_version'] == sys.version))
+        yield self.shut_down(client)
 
 
 class TestData(IntegrationBase):
