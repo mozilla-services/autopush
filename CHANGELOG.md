@@ -1,3 +1,24 @@
+<a name="1.23.0"></a>
+## 1.23.0 (2017-01-11)
+
+
+#### Bug Fixes
+
+*   avoid the new webpush validation in these tests (#781) ([5266bb71](https://github.com/mozilla-services/autopush/commit/5266bb71f26ea60a44ab5e7883828c63c35b6e31))
+
+#### Features
+
+*   allow log_check/status/health API calls w/out certs (#783) ([34dc8842](https://github.com/mozilla-services/autopush/commit/34dc884212429057c60594c587c0d5593c4967b6))
+*   add cache-control header to 410's (#773) ([2d386b8a](https://github.com/mozilla-services/autopush/commit/2d386b8a91b713fe4d84ef8e026e991a609dc5fd), closes [#770](https://github.com/mozilla-services/autopush/issues/770))
+*   log the python version in client_info (#778) ([876c3825](https://github.com/mozilla-services/autopush/commit/876c3825b21d073108ff9d75c53caf5e047d4f4c))
+*   Typos in docs (#782) ([7b25baee](https://github.com/mozilla-services/autopush/commit/7b25baeeb06a61627ace25d9ff986553c2f33d8e))
+*   update docs and clarify error messages (#779) ([37689b33](https://github.com/mozilla-services/autopush/commit/37689b335fed391ea767e560e49bc977ff5ee285))
+*   move preflight logic into webpush validation (#772) ([d963d181](https://github.com/mozilla-services/autopush/commit/d963d181246bfecb645567c85e85fed7e7699347), closes [#765](https://github.com/mozilla-services/autopush/issues/765))
+*   Add request timing w/validation breakdown. ([b2a491cd](https://github.com/mozilla-services/autopush/commit/b2a491cd21bd1b52061300fbdf5f5565e94d0930), closes [#758](https://github.com/mozilla-services/autopush/issues/758))
+*   add a --proxy_protocol for the partner endpoint ([f482e64d](https://github.com/mozilla-services/autopush/commit/f482e64dd63bb88398a318b5b2ddc52c94244f44))
+
+
+
 <a name="1.22.0"></a>
 ## 1.22.0 (2016-11-28)
 
