@@ -45,6 +45,7 @@ from autopush.db import (
     get_month,
     has_connected_this_month
 )
+from autopush.logging import begin_or_register
 from autopush.main import endpoint_paths
 from autopush.settings import AutopushSettings
 from autopush.utils import base64url_encode
@@ -372,7 +373,7 @@ class IntegrationBase(unittest.TestCase):
         )
 
         self.logs = TestingLogObserver()
-        globalLogPublisher.addObserver(self.logs)
+        begin_or_register(self.logs)
 
         router_table = os.environ.get("ROUTER_TABLE", "router_int_test")
         storage_table = os.environ.get("STORAGE_TABLE", "storage_int_test")
