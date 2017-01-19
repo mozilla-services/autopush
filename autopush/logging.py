@@ -8,6 +8,7 @@ import socket
 import sys
 import time
 import threading
+from typing import Any  # noqa
 
 import boto3
 import raven
@@ -17,6 +18,7 @@ from twisted.internet import reactor
 from twisted.logger import (
     formatEvent,
     formatEventAsClassicLogText,
+    globalLogBeginner,
     globalLogPublisher,
     LogLevel,
     ILogObserver
@@ -51,6 +53,25 @@ IGNORED_KEYS = frozenset([
     "type",
     "why",
 ])
+
+
+# whether the global LogBeginner.beginLoggingTo has been called: it
+# should only be called once
+began_logging = False
+
+
+def begin_or_register(observer):
+    """Register observer with the global LogPublisher
+
+    Registers via the global LogBeginner the first time called.
+    """
+    # type: (Any) -> None
+    global began_logging
+    if not began_logging:
+        globalLogBeginner.beginLoggingTo([observer], redirectStandardIO=False)
+        began_logging = True
+    else:
+        globalLogPublisher.addObserver(observer)
 
 
 @implementer(ILogObserver)
@@ -182,7 +203,7 @@ class PushLogger(object):
             self._output = io.open(self._filename, "a", encoding="utf-8")
         if self.firehose:
             self.firehose.start()
-        globalLogPublisher.addObserver(self)
+        begin_or_register(self)
 
     def stop(self):
         globalLogPublisher.removeObserver(self)
