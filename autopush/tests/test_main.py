@@ -300,9 +300,9 @@ class EndpointMainTestCase(unittest.TestCase):
         ], False)
         ok_(not returncode)
 
-    def test_proxy_protocol(self):
+    def test_proxy_protocol_port(self):
         endpoint_main([
-            "--proxy_protocol",
+            "--proxy_protocol_port=8081",
         ], False)
 
     @patch('hyper.tls', spec=hyper.tls)
