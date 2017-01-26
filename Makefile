@@ -23,10 +23,10 @@ BUILD_DIRS = bin build deps include lib lib64 lib_pypy lib-python\
 
 all:	build
 
-travis: $(HERE)/ddb $(BIN)/tox
+travis:
 	pip install coverage nose mock moto codecov tox
 
-$(HERE)/ddb:
+ddb:
 	mkdir $@
 	curl -sSL http://dynamodb-local.s3-website-us-west-2.amazonaws.com/dynamodb_local_latest.tar.gz | tar xzvC $@
 
@@ -58,7 +58,7 @@ build: $(BIN)/pip
 	$(INSTALL) -r $(REQS)
 	$(PYTHON) setup.py develop
 
-test: $(BIN)/tox $(HERE)/ddb
+test: $(BIN)/tox ddb
 	$(BIN)/tox
 
 coverage: $(BIN)/tox

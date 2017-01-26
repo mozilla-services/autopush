@@ -1,18 +1,21 @@
 language: python
+cache: pip
 sudo: required
 dist: precise
-python:
-- '2.7'
+
+matrix:
+  include:
+    - python: 2.7
+      env: TOXENV=py27 DDB=true CODECOV=true
+    - python: pypy-5.4.1
+      env: TOXENV=pypy DDB=true CODECOV=true
+    - env: TOXENV=flake8
+
 install:
-- pip install virtualenv
-- virtualenv pypy
-- cd pypy/bin && ln -s python pypy && cd ../..
-- source pypy/bin/activate
-- python --version
-- make travis
+- make ${DDB:+ddb} travis
 script: tox -- --with-coverage --cover-xml --cover-package=autopush
 after_success:
-- codecov
+- ${CODECOV:+codecov}
 notifications:
   slack:
     secure: LE+1Nelh5PLrb35LU6yJI1EV2LDVm4V90Tb+5LhUpeGrcfqr47HhMLMGXbBSnnjYPRLCiT75xog+oMN5eAF4VnZle4qza6Ue7G+YwRtGo/V0ud0i2zSUT557yXcr2QCYAzTKJVgetnxQNYvru/l1trdNZsRbsPUm1vexAjaX5yo=
