@@ -1,2 +1,2 @@
--r requirements.txt
+-r pypy-requirements.txt
 -r base-test-requirements.txt
