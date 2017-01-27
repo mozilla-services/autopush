@@ -1,3 +1,21 @@
+<a name="1.24.0"></a>
+## 1.24.0 (2017-01-27)
+
+
+#### Features
+
+*   switch proxy_protocol -> proxy_protocol_port (#789) ([81e3af47](https://github.com/mozilla-services/autopush/commit/81e3af47821320a7fddf0408ee50cfd1384b149e))
+
+#### Bug Fixes
+
+*   prefer the LogBeginner observer entry point ([dc64f8a5](https://github.com/mozilla-services/autopush/commit/dc64f8a5ddf444761b6670dc7db1ed7ab90976f7))
+
+#### Test
+
+*   pypy on travis and #560 (#790) ([a38660a0](https://github.com/mozilla-services/autopush/commit/a38660a09fbe710e1f1ca223598ae58665c25471))
+
+
+
 <a name="1.23.0"></a>
 ## 1.23.0 (2017-01-11)
 
