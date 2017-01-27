@@ -350,6 +350,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 class IntegrationBase(unittest.TestCase):
     track_objects = True
     track_objects_excludes = [AutopushSettings, WebSocketServerFactory]
+    proxy_protocol_port = None
 
     def setUp(self):
         import cyclone.web
@@ -441,18 +442,25 @@ class IntegrationBase(unittest.TestCase):
         )
         mount_health_handlers(site, settings)
         self._settings = settings
-        if is_https:
-            ep = SSL4ServerEndpoint(
-                reactor,
-                self.endpoint_port,
-                self.endpoint_SSLCF())
-        else:
-            ep = TCP4ServerEndpoint(reactor, self.endpoint_port)
-        ep = self.wrap_endpoint(ep)
+
+        self.endpoints = []
+        ep = self._create_endpoint(self.endpoint_port, is_https)
         ep.listen(site).addCallback(self._endpoint_listening)
 
+        if self.proxy_protocol_port:
+            from twisted.protocols.haproxy import proxyEndpoint
+            ep = proxyEndpoint(
+                self._create_endpoint(self.proxy_protocol_port, is_https)
+            )
+            ep.listen(site).addCallback(self._endpoint_listening)
+
+    def _create_endpoint(self, port, is_https):
+        if not is_https:
+            return TCP4ServerEndpoint(reactor, port)
+        return SSL4ServerEndpoint(reactor, port, self.endpoint_SSLCF())
+
     def _endpoint_listening(self, port):
-        self.website = port
+        self.endpoints.append(port)
 
     def make_client_certs(self):
         return None
@@ -460,14 +468,10 @@ class IntegrationBase(unittest.TestCase):
     def endpoint_SSLCF(self):
         raise NotImplementedError  # pragma: nocover
 
-    def wrap_endpoint(self, ep):
-        return ep
-
     @inlineCallbacks
     def tearDown(self):
-        dones = [self.websocket.stopListening(), self.website.stopListening(),
-                 self.ws_website.stopListening()]
-        for d in filter(None, dones):
+        sites = [self.websocket, self.ws_website] + self.endpoints
+        for d in filter(None, (site.stopListening() for site in sites)):
             yield d
 
         # Dirty reactor unless we shut down the cached connections
@@ -2005,10 +2009,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
 
 
 class TestProxyProtocol(IntegrationBase):
-
-    def wrap_endpoint(self, ep):
-        from twisted.protocols.haproxy import proxyEndpoint
-        return proxyEndpoint(ep)
+    proxy_protocol_port = 9021
 
     @inlineCallbacks
     def test_proxy_protocol(self):
@@ -2018,12 +2019,22 @@ class TestProxyProtocol(IntegrationBase):
         # it in before the verb
         response, body = yield _agent(
             '{}GET'.format(proto_line),
-            "http://localhost:9020/v1/err",
+            "http://localhost:{}/v1/err".format(self.proxy_protocol_port),
         )
         eq_(response.code, 418)
         payload = json.loads(body)
         eq_(payload['error'], "Test Error")
         ok_(self.logs.logged_ci(lambda ci: ci.get('remote_ip') == ip))
+
+    @inlineCallbacks
+    def test_no_proxy_protocol(self):
+        response, body = yield _agent(
+            'GET',
+            "http://localhost:{}/v1/err".format(self.endpoint_port),
+        )
+        eq_(response.code, 418)
+        payload = json.loads(body)
+        eq_(payload['error'], "Test Error")
 
 
 @inlineCallbacks

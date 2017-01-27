@@ -162,6 +162,7 @@ def obsolete_args(parser):
     parser.add_argument('--max_message_size', type=int, help="OBSOLETE")
     parser.add_argument('--s3_bucket', help='OBSOLETE')
     parser.add_argument('--senderid_expry', help='OBSOLETE')
+    parser.add_argument('--proxy_protocol', help="OBSOLETE")
     # old APNs args
     parser.add_argument('--apns_enabled', help="OBSOLETE")
     parser.add_argument('--apns_sandbox', help="OBSOLETE")
@@ -316,10 +317,11 @@ def _parse_endpoint(sysargs, use_files=True):
     parser.add_argument('--client_certs',
                         help="Allowed TLS client certificates",
                         type=str, env_var='CLIENT_CERTS', default="{}")
-    parser.add_argument('--proxy_protocol',
-                        help="Enable HAProxy Proxy Protocol handling",
-                        action="store_true", default=False,
-                        env_var='PROXY_PROTOCOL')
+    parser.add_argument('--proxy_protocol_port',
+                        help="Enable a secondary Endpoint Port with HAProxy "
+                        "Proxy Protocol handling",
+                        type=int, default=None,
+                        env_var='PROXY_PROTOCOL_PORT')
 
     add_shared_args(parser)
 
@@ -602,20 +604,22 @@ def endpoint_main(sysargs=None, use_files=True):
 
     settings.metrics.start()
 
-    # start the senderIDs refresh timer
-    if args.ssl_key:
+    def create_endpoint(port):
+        if not args.ssl_key:
+            return TCP4ServerEndpoint(reactor, port)
         ssl_cf = AutopushSSLContextFactory(
             args.ssl_key,
             args.ssl_cert,
             dh_file=args.ssl_dh_param,
             require_peer_certs=settings.enable_tls_auth)
-        endpoint = SSL4ServerEndpoint(reactor, args.port, ssl_cf)
-    else:
-        endpoint = TCP4ServerEndpoint(reactor, args.port)
-    if args.proxy_protocol:
-        from twisted.protocols.haproxy import proxyEndpoint
-        endpoint = proxyEndpoint(endpoint)
+        return SSL4ServerEndpoint(reactor, port, ssl_cf)
+
+    endpoint = create_endpoint(args.port)
     endpoint.listen(site)
+    if args.proxy_protocol_port:
+        from twisted.protocols.haproxy import proxyEndpoint
+        pendpoint = proxyEndpoint(create_endpoint(args.proxy_protocol_port))
+        pendpoint.listen(site)
 
     # Start the table rotation checker/updater
     l = task.LoopingCall(settings.update_rotating_tables)
