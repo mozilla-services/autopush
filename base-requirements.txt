@@ -9,7 +9,7 @@ botocore==1.4.50
 cffi==1.7.0
 click==6.6
 contextlib2==0.5.4
-cryptography==1.5
+cryptography==1.7.2
 cyclone==1.1
 datadog==0.13.0
 decorator==4.0.10
@@ -27,7 +27,7 @@ marshmallow_polyfield==3.1
 pyOpenSSL==16.1.0
 pyasn1==0.1.9
 pyasn1-modules==0.0.8
-pycparser==2.14
+pycparser==2.17
 pycrypto==2.6.1
 pyfcm==1.0.4
 python-dateutil==2.5.3
