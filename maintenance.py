@@ -73,7 +73,7 @@ def make_rotating_tablename(prefix, delta=0):
     """Creates a tablename for table rotation based on a prefix with a given
     month delta."""
     date = get_month(delta=delta)
-    return "{}_{}_{}".format(prefix, date.year, date.month)
+    return "{}_{:04d}_{:02d}".format(prefix, date.year, date.month)
 
 
 def table_maintenance(event, context):
