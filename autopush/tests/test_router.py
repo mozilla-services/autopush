@@ -200,9 +200,9 @@ class APNSRouterTestCase(unittest.TestCase):
         ok_(self.mock_connection.request.called)
         body = self.mock_connection.request.call_args[1]
         headers = body['headers']
-        eq_(headers, {'apns-expiration': exp,
+        eq_(headers, {'apns-expiration': str(exp),
                       'apns-topic': 'com.example.SomeApp',
-                      'apns-priority': 5,
+                      'apns-priority': '5',
                       'apns-id': 'apnsid'})
 
     @inlineCallbacks
