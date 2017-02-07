@@ -11,9 +11,14 @@ from autopush.exceptions import RouterException
 SANDBOX = 'api.development.push.apple.com'
 SERVER = 'api.push.apple.com'
 
-APNS_PRIORITY_IMMEDIATE = 10
-APNS_PRIORITY_LOW = 5
 APNS_MAX_CONNECTIONS = 20
+
+# These values are defined by APNs as header values that should be sent.
+# The hyper library requires that all header values be strings.
+# These values should be considered "opaque" to APNs.
+# see https://developer.apple.com/search/?q=%22apns-priority%22
+APNS_PRIORITY_IMMEDIATE = '10'
+APNS_PRIORITY_LOW = '5'
 
 
 class APNSException(Exception):
@@ -101,13 +106,16 @@ class APNSClient(object):
         """
         body = json.dumps(payload)
         priority = APNS_PRIORITY_IMMEDIATE if priority else APNS_PRIORITY_LOW
+        # NOTE: Hyper requires that all header values be strings. 'Priority'
+        # is a integer string, which may be "simplified" and cause an error.
+        # The added str() function safeguards against that.
         headers = {
             'apns-id': apns_id,
-            'apns-priority': priority,
+            'apns-priority': str(priority),
             'apns-topic': topic or self.topic,
         }
         if exp:
-            headers['apns-expiration'] = exp
+            headers['apns-expiration'] = str(exp)
         url = '/3/device/' + router_token
         connection = self._get_connection()
         try:
