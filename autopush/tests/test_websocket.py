@@ -97,16 +97,16 @@ class WebsocketTestCase(unittest.TestCase):
     def setUp(self):
         from twisted.logger import Logger
         twisted.internet.base.DelayedCall.debug = True
-        self.proto = PushServerProtocol()
-        self.proto._log_exc = False
-        self.proto.log = Mock(spec=Logger)
 
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
             env="test",
         )
-        self.proto.ap_settings = settings
+        self.proto = PushServerProtocol(settings)
+        self.proto._log_exc = False
+        self.proto.log = Mock(spec=Logger)
+
         self.proto.sendMessage = self.send_mock = Mock()
         self.orig_close = self.proto.sendClose
         request_mock = Mock()

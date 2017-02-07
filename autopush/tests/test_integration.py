@@ -21,7 +21,6 @@ import ecdsa
 import psutil
 import twisted.internet.base
 import websocket
-from autobahn.twisted.websocket import WebSocketServerFactory
 from jose import jws
 from nose.tools import eq_, ok_
 from typing import Optional  # noqa
@@ -50,6 +49,13 @@ from autopush.main import endpoint_paths
 from autopush.settings import AutopushSettings
 from autopush.utils import base64url_encode
 from autopush.metrics import SinkMetrics
+from autopush.websocket import (
+    DefaultResource,
+    NotificationHandler,
+    PushServerFactory,
+    RouterHandler,
+    StatusResource,
+)
 
 log = logging.getLogger(__name__)
 here_dir = os.path.abspath(os.path.dirname(__file__))
@@ -349,12 +355,11 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 
 class IntegrationBase(unittest.TestCase):
     track_objects = True
-    track_objects_excludes = [AutopushSettings, WebSocketServerFactory]
+    track_objects_excludes = [AutopushSettings, PushServerFactory]
     proxy_protocol_port = None
 
     def setUp(self):
         import cyclone.web
-        from autobahn.twisted.websocket import WebSocketServerFactory
         from autobahn.twisted.resource import WebSocketResource
         from twisted.web.server import Site
 
@@ -365,13 +370,6 @@ class IntegrationBase(unittest.TestCase):
         from autopush.web.registration import RegistrationHandler
         from autopush.web.simplepush import SimplePushHandler
         from autopush.web.webpush import WebPushHandler
-        from autopush.websocket import (
-            PushServerProtocol,
-            RouterHandler,
-            NotificationHandler,
-            DefaultResource,
-            StatusResource,
-        )
 
         self.logs = TestingLogObserver()
         begin_or_register(self.logs)
@@ -399,14 +397,11 @@ class IntegrationBase(unittest.TestCase):
 
         # Websocket server
         self._ws_url = "ws://localhost:9010/"
-        factory = WebSocketServerFactory(self._ws_url)
-        factory.protocol = PushServerProtocol
-        factory.protocol.ap_settings = settings
+        factory = PushServerFactory(settings, self._ws_url)
         factory.setProtocolOptions(
             webStatus=False,
             openHandshakeTimeout=5,
         )
-        settings.factory = factory
         resource = DefaultResource(WebSocketResource(factory))
         resource.putChild("status", StatusResource())
         self.websocket = reactor.listenTCP(9010, Site(resource))

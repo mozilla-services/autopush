@@ -36,7 +36,10 @@ from collections import defaultdict
 from functools import partial, wraps
 from random import randrange
 
-from autobahn.twisted.websocket import WebSocketServerProtocol
+from autobahn.twisted.websocket import (
+    WebSocketServerFactory,
+    WebSocketServerProtocol
+)
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
     ItemNotFound
@@ -276,7 +279,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     _log_exc = True
     sent_notification_count = 0
 
-    ap_settings = None  # type: AutopushSettings
+    def __init__(self, ap_settings):
+        # type: (AutopushSettings) -> None
+        WebSocketServerProtocol.__init__(self)
+        self.ap_settings = ap_settings
 
     # Defer helpers
     def deferToThread(self, func, *args, **kwargs):
@@ -1444,6 +1450,23 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.direct_updates[chid] = version
             msg = {"messageType": "notification", "updates": [update]}
             self.sendJSON(msg)
+
+
+class PushServerFactory(WebSocketServerFactory):
+    """PushServerProtocol factory"""
+
+    protocol = PushServerProtocol
+
+    def __init__(self, ap_settings, *args, **kwargs):
+        # type: (AutopushSettings, *Any, **Any) -> None
+        WebSocketServerFactory.__init__(self, *args, **kwargs)
+        self.ap_settings = ap_settings
+
+    def buildProtocol(self, addr):
+        # type: (Any) -> PushServerProtocol
+        proto = self.protocol(self.ap_settings)
+        proto.factory = self
+        return proto
 
 
 class RouterHandler(BaseHandler):
