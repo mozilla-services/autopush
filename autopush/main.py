@@ -5,7 +5,6 @@ import os
 import configargparse
 import cyclone.web
 from autobahn.twisted.resource import WebSocketResource
-from autobahn.twisted.websocket import WebSocketServerFactory
 from twisted.internet import reactor, task
 from twisted.internet.endpoints import SSL4ServerEndpoint, TCP4ServerEndpoint
 from twisted.logger import Logger
@@ -24,12 +23,12 @@ from autopush.web.simplepush import SimplePushHandler
 from autopush.web.registration import RegistrationHandler
 from autopush.web.webpush import WebPushHandler
 from autopush.websocket import (
-    PushServerProtocol,
-    RouterHandler,
-    NotificationHandler,
-    periodic_reporter,
     DefaultResource,
+    NotificationHandler,
+    PushServerFactory,
+    RouterHandler,
     StatusResource,
+    periodic_reporter,
 )
 
 shared_config_files = [
@@ -501,11 +500,10 @@ def connection_main(sysargs=None, use_files=True):
 
     # Public websocket server
     proto = "wss" if args.ssl_key else "ws"
-    factory = WebSocketServerFactory(
+    factory = PushServerFactory(
+        settings,
         "%s://%s:%s/" % (proto, args.hostname, args.port),
     )
-    factory.protocol = PushServerProtocol
-    factory.protocol.ap_settings = settings
     factory.setProtocolOptions(
         webStatus=False,
         openHandshakeTimeout=5,
@@ -514,7 +512,6 @@ def connection_main(sysargs=None, use_files=True):
         maxConnections=args.max_connections,
         closeHandshakeTimeout=args.close_handshake_timeout,
     )
-    settings.factory = factory
 
     settings.metrics.start()
 
