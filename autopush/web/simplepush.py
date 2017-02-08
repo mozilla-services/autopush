@@ -2,6 +2,7 @@ import time
 import urlparse
 
 from boto.dynamodb2.exceptions import ItemNotFound
+from cryptography.fernet import InvalidToken
 from marshmallow import (
     Schema,
     fields,
@@ -9,6 +10,7 @@ from marshmallow import (
     validates,
     validates_schema,
 )
+
 from twisted.internet.defer import Deferred
 
 from autopush.exceptions import (
@@ -35,7 +37,7 @@ class SimplePushSubscriptionSchema(Schema):
                 token=d["token"],
                 version=d["api_ver"],
             )
-        except InvalidTokenException:
+        except (InvalidTokenException, InvalidToken):
             raise InvalidRequest("invalid token", errno=102)
         return result
 

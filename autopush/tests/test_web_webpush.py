@@ -151,7 +151,7 @@ class TestWebpushHandler(unittest.TestCase):
 
     def test_request_bad_v2_id_missing_pubkey(self):
         def handle_finish(result):
-            self.wp.set_status.assert_called_with(404, reason=None)
+            self.wp.set_status.assert_called_with(401, reason=None)
 
         self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'a' * 64
@@ -199,7 +199,7 @@ class TestWebpushHandler(unittest.TestCase):
 
     def test_request_bad_v2_id_bad_pubkey(self):
         def handle_finish(result):
-            self.wp.set_status.assert_called_with(404, reason=None)
+            self.wp.set_status.assert_called_with(401, reason=None)
 
         self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'a' * 64
