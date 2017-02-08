@@ -5,11 +5,11 @@ import os
 import configargparse
 import cyclone.web
 from autobahn.twisted.resource import WebSocketResource
-from autobahn.twisted.websocket import WebSocketServerFactory
 from twisted.internet import reactor, task
 from twisted.internet.endpoints import SSL4ServerEndpoint, TCP4ServerEndpoint
 from twisted.logger import Logger
 from twisted.web.server import Site
+from typing import Any, Callable  # noqa
 
 import autopush.db as db
 import autopush.utils as utils
@@ -24,12 +24,12 @@ from autopush.web.simplepush import SimplePushHandler
 from autopush.web.registration import RegistrationHandler
 from autopush.web.webpush import WebPushHandler
 from autopush.websocket import (
-    PushServerProtocol,
-    RouterHandler,
-    NotificationHandler,
-    periodic_reporter,
     DefaultResource,
+    NotificationHandler,
+    PushServerFactory,
+    RouterHandler,
     StatusResource,
+    periodic_reporter,
 )
 
 shared_config_files = [
@@ -501,11 +501,10 @@ def connection_main(sysargs=None, use_files=True):
 
     # Public websocket server
     proto = "wss" if args.ssl_key else "ws"
-    factory = WebSocketServerFactory(
+    factory = PushServerFactory(
+        settings,
         "%s://%s:%s/" % (proto, args.hostname, args.port),
     )
-    factory.protocol = PushServerProtocol
-    factory.protocol.ap_settings = settings
     factory.setProtocolOptions(
         webStatus=False,
         openHandshakeTimeout=5,
@@ -514,7 +513,6 @@ def connection_main(sysargs=None, use_files=True):
         maxConnections=args.max_connections,
         closeHandshakeTimeout=args.close_handshake_timeout,
     )
-    settings.factory = factory
 
     settings.metrics.start()
 
@@ -546,13 +544,9 @@ def connection_main(sysargs=None, use_files=True):
         reactor.listenTCP(args.router_port, site)
 
     reactor.suggestThreadPoolSize(50)
-
-    l = task.LoopingCall(periodic_reporter, settings)
-    l.start(1.0)
-
+    start_looping_call(1.0, periodic_reporter, settings, factory)
     # Start the table rotation checker/updater
-    l = task.LoopingCall(settings.update_rotating_tables)
-    l.start(60)
+    start_looping_call(60, settings.update_rotating_tables)
     reactor.run()
 
 
@@ -621,8 +615,17 @@ def endpoint_main(sysargs=None, use_files=True):
         pendpoint = proxyEndpoint(create_endpoint(args.proxy_protocol_port))
         pendpoint.listen(site)
 
-    # Start the table rotation checker/updater
-    l = task.LoopingCall(settings.update_rotating_tables)
-    l.start(60)
     reactor.suggestThreadPoolSize(50)
+    # Start the table rotation checker/updater
+    start_looping_call(60, settings.update_rotating_tables)
     reactor.run()
+
+
+def start_looping_call(interval, func, *args, **kwargs):
+    """Fire off a LoopingCall of interval, logging errors."""
+    # type: (int, Callable[..., Any], *Any, **Any)
+    lc = task.LoopingCall(func, *args, **kwargs)
+    lc.start(interval).addErrback(
+        lambda failure: log.failure(
+            "Error in LoopingCall {name}", name=func.__name__, failure=failure)
+    )

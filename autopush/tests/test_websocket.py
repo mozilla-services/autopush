@@ -25,7 +25,7 @@ from autopush.tests import MockAssist
 from autopush.utils import WebPushNotification
 from autopush.websocket import (
     PushState,
-    PushServerProtocol,
+    PushServerFactory,
     RouterHandler,
     NotificationHandler,
     WebSocketServerProtocol,
@@ -97,16 +97,17 @@ class WebsocketTestCase(unittest.TestCase):
     def setUp(self):
         from twisted.logger import Logger
         twisted.internet.base.DelayedCall.debug = True
-        self.proto = PushServerProtocol()
-        self.proto._log_exc = False
-        self.proto.log = Mock(spec=Logger)
 
-        settings = AutopushSettings(
+        self.ap_settings = settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
             env="test",
         )
-        self.proto.ap_settings = settings
+        self.factory = PushServerFactory(settings, 'ws://localhost:8080')
+        self.proto = self.factory.buildProtocol(('localhost', 8080))
+        self.proto._log_exc = False
+        self.proto.log = Mock(spec=Logger)
+
         self.proto.sendMessage = self.send_mock = Mock()
         self.orig_close = self.proto.sendClose
         request_mock = Mock()
@@ -248,41 +249,38 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_reporter(self):
         from autopush.websocket import periodic_reporter
-        self.proto.ap_settings.factory = Mock()
-        periodic_reporter(self.proto.ap_settings)
+        periodic_reporter(self.ap_settings, self.factory)
 
         # Verify metric increase of nothing
-        calls = self.proto.ap_settings.metrics.method_calls
+        calls = self.ap_settings.metrics.method_calls
         eq_(len(calls), 4)
         name, args, _ = calls[0]
         eq_(name, "gauge")
         eq_(args, ("update.client.writers", 0))
 
-    def test_handeshake_sub(self):
-        self.proto.ap_settings.port = 8080
-        self.proto.factory = Mock(externalPort=80)
+    def test_handshake_sub(self):
+        self.factory.externalPort = 80
 
         def check_subbed(s):
-            eq_(self.proto.factory.externalPort, None)
+            eq_(self.factory.externalPort, None)
             return False
 
         self.proto.parent_class = Mock(**{"processHandshake.side_effect":
                                           check_subbed})
         self.proto.processHandshake()
-        eq_(self.proto.factory.externalPort, 80)
+        eq_(self.factory.externalPort, 80)
 
     def test_handshake_nosub(self):
-        self.proto.ap_settings.port = 80
-        self.proto.factory = Mock(externalPort=80)
+        self.ap_settings.port = self.factory.externalPort = 80
 
         def check_subbed(s):
-            eq_(self.proto.factory.externalPort, 80)
+            eq_(self.factory.externalPort, 80)
             return False
 
         self.proto.parent_class = Mock(**{"processHandshake.side_effect":
                                           check_subbed})
         self.proto.processHandshake()
-        eq_(self.proto.factory.externalPort, 80)
+        eq_(self.factory.externalPort, 80)
 
     def test_handshake_decode_error(self):
         self.proto.factory = Mock(externalPort=80)

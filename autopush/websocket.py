@@ -36,7 +36,10 @@ from collections import defaultdict
 from functools import partial, wraps
 from random import randrange
 
-from autobahn.twisted.websocket import WebSocketServerProtocol
+from autobahn.twisted.websocket import (
+    WebSocketServerFactory,
+    WebSocketServerProtocol
+)
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
     ItemNotFound
@@ -105,7 +108,8 @@ def extract_code(data):
     return code
 
 
-def periodic_reporter(settings):
+def periodic_reporter(settings, factory):
+    # type: (AutopushSettings, PushServerFactory)
     """Twisted Task function that runs every few seconds to emit general
     metrics regarding twisted and client counts"""
     settings.metrics.gauge("update.client.writers",
@@ -115,7 +119,7 @@ def periodic_reporter(settings):
     settings.metrics.gauge("update.client.connections",
                            len(settings.clients))
     settings.metrics.gauge("update.client.ws_connections",
-                           settings.factory.countConnections)
+                           factory.countConnections)
 
 
 def log_exception(func):
@@ -276,7 +280,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     _log_exc = True
     sent_notification_count = 0
 
-    ap_settings = None  # type: AutopushSettings
+    @property
+    def ap_settings(self):
+        return self.factory.ap_settings
 
     # Defer helpers
     def deferToThread(self, func, *args, **kwargs):
@@ -1444,6 +1450,17 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.direct_updates[chid] = version
             msg = {"messageType": "notification", "updates": [update]}
             self.sendJSON(msg)
+
+
+class PushServerFactory(WebSocketServerFactory):
+    """PushServerProtocol factory"""
+
+    protocol = PushServerProtocol
+
+    def __init__(self, ap_settings, *args, **kwargs):
+        # type: (AutopushSettings, *Any, **Any) -> None
+        WebSocketServerFactory.__init__(self, *args, **kwargs)
+        self.ap_settings = ap_settings
 
 
 class RouterHandler(BaseHandler):
