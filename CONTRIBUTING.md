@@ -28,6 +28,7 @@ When submitting a PR:
   ([MPL 2.0](/LICENSE)).
 - Base your branch off the current `master`.
 - Add both your code and new tests if relevant.
+- Sign your git commit.
 - Run the test suite to make sure your code passes linting and tests.
 - Ensure your changes do not reduce code coverage of the test suite.
 - Please do not include merge commits in pull requests; include only commits
