@@ -363,14 +363,14 @@ class AutopushSettings(object):
             if len(token) != 64:
                 raise InvalidTokenException("Corrupted push token")
             if not public_key:
-                raise InvalidTokenException("Invalid key data")
+                raise VapidAuthException("Invalid key data")
             try:
                 decoded_key = base64url_decode(public_key)
             except TypeError:
-                raise InvalidTokenException("Invalid key data")
+                raise VapidAuthException("Invalid key data")
             if not constant_time.bytes_eq(sha256(decoded_key).digest(),
                                           token[32:]):
-                raise InvalidTokenException("Key mismatch")
+                raise VapidAuthException("Key mismatch")
         return dict(uaid=token[:16].encode('hex'),
                     chid=token[16:32].encode('hex'),
                     version=version,
