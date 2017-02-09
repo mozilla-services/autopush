@@ -901,6 +901,70 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         eq_(cm.exception.status_code, 401)
         eq_(cm.exception.errno, 109)
 
+    def test_invalid_too_far_exp_vapid_crypto_header(self):
+        schema = self._make_fut()
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": int(time.time()) + 86400 + 86400,
+                   "sub": "mailto:admin@example.com"}
+
+        token, crypto_key = self._gen_jwt(header, payload)
+        auth = "WebPush %s" % token
+        self.fernet_mock.decrypt.return_value = ('a'*32) + \
+            sha256(utils.base64url_decode(crypto_key)).digest()
+        ckey = 'keyid="a1"; dh="foo";p256ecdsa="%s"' % crypto_key
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            path_kwargs=dict(
+                api_ver="v2",
+                token="asdfasdf",
+            ),
+            headers={
+                "content-encoding": "aesgcm",
+                "encryption": "salt=stuff",
+                "authorization": auth,
+                "crypto-key": ckey
+            }
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 401)
+        eq_(cm.exception.errno, 109)
+
+    def test_invalid_bad_exp_vapid_crypto_header(self):
+        schema = self._make_fut()
+        header = {"typ": "JWT", "alg": "ES256"}
+        payload = {"aud": "https://pusher_origin.example.com",
+                   "exp": "bleh",
+                   "sub": "mailto:admin@example.com"}
+
+        token, crypto_key = self._gen_jwt(header, payload)
+        auth = "WebPush %s" % token
+        self.fernet_mock.decrypt.return_value = ('a'*32) + \
+            sha256(utils.base64url_decode(crypto_key)).digest()
+        ckey = 'keyid="a1"; dh="foo";p256ecdsa="%s"' % crypto_key
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            path_kwargs=dict(
+                api_ver="v2",
+                token="asdfasdf",
+            ),
+            headers={
+                "content-encoding": "aesgcm",
+                "encryption": "salt=stuff",
+                "authorization": auth,
+                "crypto-key": ckey
+            }
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 401)
+        eq_(cm.exception.errno, 109)
+
     @patch("autopush.web.webpush.extract_jwt")
     def test_invalid_encryption_header(self, mock_jwt):
         schema = self._make_fut()

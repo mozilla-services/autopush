@@ -325,8 +325,28 @@ class WebPushRequestSchema(Schema):
             raise InvalidRequest("Invalid Authorization Header",
                                  status_code=401, errno=109,
                                  headers={"www-authenticate": PREF_SCHEME})
-        if jwt.get('exp', 0) < time.time():
+        if "exp" not in jwt:
+            raise InvalidRequest("Invalid bearer token: No expiration",
+                                 status_code=401, errno=109,
+                                 headers={"www-authenticate": PREF_SCHEME})
+
+        try:
+            jwt_expires = int(jwt['exp'])
+        except ValueError:
+            raise InvalidRequest("Invalid bearer token: Invalid expiration",
+                                 status_code=401, errno=109,
+                                 headers={"www-authenticate": PREF_SCHEME})
+
+        now = time.time()
+        jwt_has_expired = now > jwt_expires
+        if jwt_has_expired:
             raise InvalidRequest("Invalid bearer token: Auth expired",
+                                 status_code=401, errno=109,
+                                 headers={"www-authenticate": PREF_SCHEME})
+        jwt_too_far_in_future = (jwt_expires - now) > (60*60*24)
+        if jwt_too_far_in_future:
+            raise InvalidRequest("Invalid bearer token: Auth > 24 hours in "
+                                 "the future",
                                  status_code=401, errno=109,
                                  headers={"www-authenticate": PREF_SCHEME})
         jwt_crypto_key = base64url_encode(public_key)
