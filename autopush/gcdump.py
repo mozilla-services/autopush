@@ -7,17 +7,20 @@ Syntax:  dump.py  <dumpfile>  [<typeids.txt>]
 
 By default, typeids.txt is loaded from the same dir as dumpfile.
 """
-import sys, array, struct, os
+import array
+import os
+import struct
+import sys
 
 
 class Stat(object):
     summary = {}
     typeids = {0: '<GCROOT>'}
 
-    def summarize(self, filename):
+    def summarize(self, filename, stream=None):
         a = self.load_dump_file(filename)
         self.summary = {}     # {typenum: [count, totalsize]}
-        for obj in self.walk(a):
+        for obj in self.walk(a, stream=stream):
             self.add_object_summary(obj[2], obj[3])
 
     def load_typeids(self, filename_or_iter):
@@ -41,15 +44,17 @@ class Stat(object):
     def get_type_name(self, num):
         return self.typeids.get(num, '<typenum %d>' % num)
 
-    def print_summary(self):
+    def print_summary(self, stream):
         items = self.summary.items()
         items.sort(key=lambda (typenum, stat): stat[1])    # sort by totalsize
         totalsize = 0
         for typenum, stat in items:
             totalsize += stat[1]
-            print '%8d %8.2fM  %s' % (stat[0], stat[1] / (1024.0*1024.0),
-                                      self.get_type_name(typenum))
-        print 'total %.1fM' % (totalsize / (1024.0*1024.0),)
+            stream.write('%8d %8.2fM  %s\n' %
+                         (stat[0],
+                          stat[1] / (1024.0*1024.0),
+                          self.get_type_name(typenum)))
+        stream.write('total %.1fM\n' % (totalsize / (1024.0*1024.0)))
 
     def load_dump_file(self, filename):
         f = open(filename, 'rb')
@@ -69,10 +74,11 @@ class Stat(object):
         stat[0] += 1
         stat[1] += sizeobj
 
-    def walk(self, a, start=0, stop=None):
+    def walk(self, a, start=0, stop=None, stream=None):
         assert a[-1] == -1, "invalid or truncated dump file (or 32/64-bit mix)"
         assert a[-2] != -1, "invalid or truncated dump file (or 32/64-bit mix)"
-        print >> sys.stderr, 'walking...',
+        if stream:
+            stream.write('walking...')
         i = start
         if stop is None:
             stop = len(a)
@@ -82,7 +88,8 @@ class Stat(object):
                 j += 1
             yield (i, a[i], a[i+1], a[i+2], a[i+3:j])
             i = j + 1
-        print >> sys.stderr, 'done'
+        if stream:
+            stream.write('done\n')
 
 
 if __name__ == '__main__':
@@ -90,7 +97,7 @@ if __name__ == '__main__':
         print >> sys.stderr, __doc__
         sys.exit(2)
     stat = Stat()
-    stat.summarize(sys.argv[1])
+    stat.summarize(sys.argv[1], stream=sys.stderr)
     #
     if len(sys.argv) > 2:
         typeid_name = sys.argv[2]
@@ -99,7 +106,8 @@ if __name__ == '__main__':
     if os.path.isfile(typeid_name):
         stat.load_typeids(typeid_name)
     else:
-        import zlib, gc
+        import gc
+        import zlib
         stat.load_typeids(zlib.decompress(gc.get_typeids_z()).split("\n"))
     #
-    stat.print_summary()
+    stat.print_summary(sys.stdout)

@@ -2,4 +2,6 @@
 omit =
     *noseplugin*
     autopush/tests/certs/makecerts.py
+    autopush/gcdump.py
+exclude_lines = def dump_rpy_heap
 show_missing = true
