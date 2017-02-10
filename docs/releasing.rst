@@ -74,7 +74,7 @@ i.e. If a new minor version is being released after ``1.21.0``, the
    new release commit.
 #. ``git commit -m "chore: tag {version}"`` to commit the new version and
    record of changes.
-#. ``git tag {version}`` to tag the current HEAD commit for release.
+#. ``git tag -s -m "chore: tag {version}" {version}`` to create a signed tag of the current HEAD commit for release.
 #. ``git push --set-upstream origin release/{major}.{minor}`` to push the
    commits to a new origin release branch.
 #. ``git push --tags origin release/{major}.{minor}`` to push the tags to the
