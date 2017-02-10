@@ -2057,8 +2057,7 @@ class TestMemUsage(IntegrationBase):
         ok_('rusage' in body)
         ok_('Logger' in body)
         if find_executable('pmap'):
-            assert 'RSS' in body, body
-            ok_('RSS' in body)  # pmap -X output
+            ok_('RSS' in body)  # pmap -x output
         if hasattr(sys, 'pypy_version_info'):
             ok_('size: ' in body)
             ok_('rpy_unicode' in body)

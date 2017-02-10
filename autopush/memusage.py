@@ -17,7 +17,7 @@ def memusage():
     def trap_err(func, *args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except Exception as e:
+        except Exception as e:  # pragma: nocover
             # include both __str/repr__, sometimes one's useless
             buf.writelines([func.__name__, ': ', repr(e), ': ', str(e)])
 
