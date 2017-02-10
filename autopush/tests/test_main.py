@@ -194,6 +194,11 @@ class ConnectionMainTestCase(unittest.TestCase):
             "--router_ssl_key=keys/server.key",
         ], False)
 
+    def test_memusage(self):
+        connection_main([
+            "--memusage_port=8083",
+        ], False)
+
     def test_skip_logging(self):
         # Should skip setting up logging on the handler
         mock_handler = Mock()
@@ -303,6 +308,11 @@ class EndpointMainTestCase(unittest.TestCase):
     def test_proxy_protocol_port(self):
         endpoint_main([
             "--proxy_protocol_port=8081",
+        ], False)
+
+    def test_memusage(self):
+        endpoint_main([
+            "--memusage_port=8083",
         ], False)
 
     @patch('hyper.tls', spec=hyper.tls)

@@ -7,6 +7,7 @@ import cyclone.web
 from autobahn.twisted.resource import WebSocketResource
 from twisted.internet import reactor, task
 from twisted.internet.endpoints import SSL4ServerEndpoint, TCP4ServerEndpoint
+from twisted.internet.tcp import Port  # noqa
 from twisted.logger import Logger
 from twisted.web.server import Site
 from typing import Any, Callable  # noqa
@@ -16,7 +17,11 @@ import autopush.utils as utils
 from autopush.logging import PushLogger
 from autopush.settings import AutopushSettings
 from autopush.ssl import AutopushSSLContextFactory
-from autopush.web.health import HealthHandler, StatusHandler
+from autopush.web.health import (
+    HealthHandler,
+    MemUsageHandler,
+    StatusHandler
+)
 from autopush.web.limitedhttpconnection import LimitedHTTPConnection
 from autopush.web.log_check import LogCheckHandler
 from autopush.web.message import MessageHandler
@@ -54,6 +59,7 @@ endpoint_paths = {
     'logcheck': r"/v1/err(?:/(?P<err_type>[^\/]+))?",
     'status': r"^/status",
     'health': r"^/health",
+    'memusage': r"^/_memusage",
 }
 
 
@@ -147,6 +153,10 @@ def add_shared_args(parser):
     parser.add_argument('--msg_limit', help="Max limit for messages per uaid "
                         "before reset", type=int, default="100",
                         env_var="MSG_LIMIT")
+    parser.add_argument('--memusage_port',
+                        help="Enable the debug _memusage API on Port",
+                        type=int, default=None,
+                        env_var='MEMUSAGE_PORT')
     # No ENV because this is for humans
     add_external_router_args(parser)
     obsolete_args(parser)
@@ -547,6 +557,8 @@ def connection_main(sysargs=None, use_files=True):
     start_looping_call(1.0, periodic_reporter, settings, factory)
     # Start the table rotation checker/updater
     start_looping_call(60, settings.update_rotating_tables)
+    if args.memusage_port:
+        create_memusage_site(settings, args.memusage_port, args.debug)
     reactor.run()
 
 
@@ -618,6 +630,8 @@ def endpoint_main(sysargs=None, use_files=True):
     reactor.suggestThreadPoolSize(50)
     # Start the table rotation checker/updater
     start_looping_call(60, settings.update_rotating_tables)
+    if args.memusage_port:
+        create_memusage_site(settings, args.memusage_port, args.debug)
     reactor.run()
 
 
@@ -629,3 +643,16 @@ def start_looping_call(interval, func, *args, **kwargs):
         lambda failure: log.failure(
             "Error in LoopingCall {name}", name=func.__name__, failure=failure)
     )
+
+
+def create_memusage_site(settings, port, debug):
+    """Setup MemUsageHandler on a specific port"""
+    # type: (AutopushSettings, int, bool) -> Port
+    h_kwargs = dict(ap_settings=settings)
+    site = cyclone.web.Application(
+        [(endpoint_paths['memusage'], MemUsageHandler, h_kwargs)],
+        default_host=settings.hostname,
+        debug=debug,
+        log_function=skip_request_logging
+    )
+    return reactor.listenTCP(port, site)

@@ -10,6 +10,7 @@ import time
 import urlparse
 import uuid
 from contextlib import contextmanager
+from distutils.spawn import find_executable
 from StringIO import StringIO
 from httplib import HTTPResponse  # noqa
 from unittest.case import SkipTest
@@ -364,7 +365,11 @@ class IntegrationBase(unittest.TestCase):
         from twisted.web.server import Site
 
         from autopush.web.log_check import LogCheckHandler
-        from autopush.main import mount_health_handlers, skip_request_logging
+        from autopush.main import (
+            create_memusage_site,
+            mount_health_handlers,
+            skip_request_logging
+        )
         from autopush.settings import AutopushSettings
         from autopush.web.message import MessageHandler
         from autopush.web.registration import RegistrationHandler
@@ -383,6 +388,7 @@ class IntegrationBase(unittest.TestCase):
 
         self.endpoint_port = 9020
         self.router_port = 9030
+        self.memusage_port = 9040
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
@@ -449,6 +455,11 @@ class IntegrationBase(unittest.TestCase):
             )
             ep.listen(site).addCallback(self._endpoint_listening)
 
+        self.memusage_site = create_memusage_site(
+            settings,
+            self.memusage_port,
+            False)
+
     def _create_endpoint(self, port, is_https):
         if not is_https:
             return TCP4ServerEndpoint(reactor, port)
@@ -465,7 +476,9 @@ class IntegrationBase(unittest.TestCase):
 
     @inlineCallbacks
     def tearDown(self):
-        sites = [self.websocket, self.ws_website] + self.endpoints
+        sites = [self.websocket,
+                 self.ws_website,
+                 self.memusage_site] + self.endpoints
         for d in filter(None, (site.stopListening() for site in sites)):
             yield d
 
@@ -2030,6 +2043,25 @@ class TestProxyProtocol(IntegrationBase):
         eq_(response.code, 418)
         payload = json.loads(body)
         eq_(payload['error'], "Test Error")
+
+
+class TestMemUsage(IntegrationBase):
+
+    @inlineCallbacks
+    def test_memusage(self):
+        response, body = yield _agent(
+            'GET',
+            "http://localhost:{}/_memusage".format(self.memusage_port),
+        )
+        eq_(response.code, 200)
+        ok_('rusage' in body)
+        ok_('Logger' in body)
+        if find_executable('pmap'):
+            assert 'RSS' in body, body
+            ok_('RSS' in body)  # pmap -X output
+        if hasattr(sys, 'pypy_version_info'):
+            ok_('size: ' in body)
+            ok_('rpy_unicode' in body)
 
 
 @inlineCallbacks

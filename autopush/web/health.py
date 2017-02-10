@@ -93,3 +93,28 @@ class StatusHandler(BaseWebHandler):
             "status": "OK",
             "version": __version__
         })
+
+
+class MemUsageHandler(BaseWebHandler):
+    """Spits out a tarball of some memory stats.
+
+    Should be ran on its own port, not accessible externally.
+
+    """
+
+    def authenticate_peer_cert(self):
+        """skip authentication checks"""
+        pass
+
+    def get(self, *args, **kwargs):
+        """HTTP Get
+
+        Returns that this node is alive, and the version.
+
+        """
+        from autopush.memusage import memusage
+        d = deferToThread(memusage)
+        d.addCallback(self.write)
+        d.addCallback(self.finish)
+        d.addErrback(self._response_err)
+        return d
