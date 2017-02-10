@@ -104,7 +104,7 @@ class MemUsageHandler(BaseWebHandler):
 
     def authenticate_peer_cert(self):
         """skip authentication checks"""
-        pass
+        pass  # pragma: nocover
 
     def get(self, *args, **kwargs):
         """HTTP Get
