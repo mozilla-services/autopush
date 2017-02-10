@@ -1,3 +1,28 @@
+<a name="1.25.0"></a>
+## 1.25.0 (2017-02-10)
+
+
+#### Features
+
+*   add a /_memusage API on a separate (internal port) ([6a9336ce](https://github.com/mozilla-services/autopush/commit/6a9336cee6a1fc420523d561538a7102e71e5283))
+*   add gcdump.py from pypy's tools ([a6360ea1](https://github.com/mozilla-services/autopush/commit/a6360ea13182538b121188ec525ac2778712d317))
+*   add thorough jwt exp validation ([97d42136](https://github.com/mozilla-services/autopush/commit/97d4213655b0b78310a474e8ddb672d4cdb5449c), closes [#794](https://github.com/mozilla-services/autopush/issues/794))
+
+#### Bug Fixes
+
+*   fix coverage ([0bca3d18](https://github.com/mozilla-services/autopush/commit/0bca3d18a3a105aacd007b7a7e32c5acb2dca61d))
+*   VAPID errors should return 401, not 404; handle InvalidToken exception for parse_endpoint ([03c513be](https://github.com/mozilla-services/autopush/commit/03c513bec9e6ae3cdaa58a5223bfb2f1394ca904))
+*   ensure our LoopingCall failures are logged ([ac1e7a78](https://github.com/mozilla-services/autopush/commit/ac1e7a78ab7d4606f1a0c3c2ecbf24305debb53a))
+*   APNs library requires parameters to be strings ([332505e1](https://github.com/mozilla-services/autopush/commit/332505e1827676806478ab36c9f3f5e5bb3f9afe))
+*   zero pad months in table names ([f7d7c1c3](https://github.com/mozilla-services/autopush/commit/f7d7c1c35a72c490057826f39168734e969189ad))
+*   Update to latest cryptography library ([d537fd83](https://github.com/mozilla-services/autopush/commit/d537fd83bd797891e08087a5749dc61af35885de))
+
+#### Doc
+
+*   add git signing note ([dbf52495](https://github.com/mozilla-services/autopush/commit/dbf524953a912b04ecf68c29a4156c8d1419a8aa), closes [#759](https://github.com/mozilla-services/autopush/issues/759))
+
+
+
 <a name="1.24.0"></a>
 ## 1.24.0 (2017-01-27)
 
