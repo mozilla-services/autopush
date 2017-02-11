@@ -636,8 +636,8 @@ def endpoint_main(sysargs=None, use_files=True):
 
 
 def start_looping_call(interval, func, *args, **kwargs):
+    # type: (int, Callable[..., Any], *Any, **Any) -> None
     """Fire off a LoopingCall of interval, logging errors."""
-    # type: (int, Callable[..., Any], *Any, **Any)
     lc = task.LoopingCall(func, *args, **kwargs)
     lc.start(interval).addErrback(
         lambda failure: log.failure(
@@ -646,8 +646,8 @@ def start_looping_call(interval, func, *args, **kwargs):
 
 
 def create_memusage_site(settings, port, debug):
-    """Setup MemUsageHandler on a specific port"""
     # type: (AutopushSettings, int, bool) -> Port
+    """Setup MemUsageHandler on a specific port"""
     h_kwargs = dict(ap_settings=settings)
     site = cyclone.web.Application(
         [(endpoint_paths['memusage'], MemUsageHandler, h_kwargs)],
