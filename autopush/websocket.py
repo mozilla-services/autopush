@@ -109,7 +109,7 @@ def extract_code(data):
 
 
 def periodic_reporter(settings, factory):
-    # type: (AutopushSettings, PushServerFactory)
+    # type: (AutopushSettings, PushServerFactory) -> None
     """Twisted Task function that runs every few seconds to emit general
     metrics regarding twisted and client counts"""
     settings.metrics.gauge("update.client.writers",

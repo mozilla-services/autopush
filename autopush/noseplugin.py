@@ -2,9 +2,9 @@ from collections import defaultdict
 import time
 
 try:
-    from nose.plugins import Plugin
+    from nose.plugins import Plugin  # type: ignore
 except ImportError:
-    class Plugin(object):
+    class Plugin(object):  # type: ignore
         pass
 
 

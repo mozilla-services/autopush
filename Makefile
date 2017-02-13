@@ -19,12 +19,9 @@ BUILD_DIRS = bin build deps include lib lib64 lib_pypy lib-python\
 	src site-packages .tox .eggs .coverage
 
 
-.PHONY: all build test coverage lint clean clean-env travis
+.PHONY: all build test coverage lint clean clean-env
 
 all:	build
-
-travis:
-	pip install coverage nose mock moto codecov tox
 
 ddb:
 	mkdir $@

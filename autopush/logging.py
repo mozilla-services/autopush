@@ -61,11 +61,11 @@ began_logging = False
 
 
 def begin_or_register(observer):
+    # type: (Any) -> None
     """Register observer with the global LogPublisher
 
     Registers via the global LogBeginner the first time called.
     """
-    # type: (Any) -> None
     global began_logging
     if not began_logging:
         globalLogBeginner.beginLoggingTo([observer], redirectStandardIO=False)
