@@ -33,7 +33,7 @@ def memusage():
     return buf.getvalue()
 
 
-def dump_rpy_heap(stream):
+def dump_rpy_heap(stream):  # pragma: nocover
     """Write PyPy's gcdump to the specified stream"""
     if not hasattr(gc, '_dump_rpy_heap'):
         # not PyPy
