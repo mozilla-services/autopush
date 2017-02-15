@@ -5,6 +5,8 @@ HERE = $(shell pwd)
 PTYPE=pypy
 ifneq ($(PTYPE), python)
     REQS=$(PTYPE)-requirements.txt
+    # avoids pycrypto build issues w/ pypy + libgmp-dev or libmpir-dev
+    export with_gmp=no
 else
     REQS=requirements.txt
 endif
