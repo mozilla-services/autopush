@@ -143,7 +143,7 @@ of the Push URL in future provisioned URLs.
 
 **Call:**
 
-.. http:put:: {push_endpoint}
+.. http:post:: {push_endpoint}
 
     If the client is using webpush style data delivery, then the body in its
     entirety will be regarded as the data payload for the message per
