@@ -610,21 +610,24 @@ def endpoint_main(sysargs=None, use_files=True):
 
     settings.metrics.start()
 
-    def create_endpoint(port):
-        if not args.ssl_key:
-            return TCP4ServerEndpoint(reactor, port)
+    if args.ssl_key:
         ssl_cf = AutopushSSLContextFactory(
             args.ssl_key,
             args.ssl_cert,
             dh_file=args.ssl_dh_param,
             require_peer_certs=settings.enable_tls_auth)
-        return SSL4ServerEndpoint(reactor, port, ssl_cf)
-
-    endpoint = create_endpoint(args.port)
+        endpoint = SSL4ServerEndpoint(reactor, args.port, ssl_cf)
+    else:
+        ssl_cf = None
+        endpoint = TCP4ServerEndpoint(reactor, args.port)
     endpoint.listen(site)
+
     if args.proxy_protocol_port:
-        from twisted.protocols.haproxy import proxyEndpoint
-        pendpoint = proxyEndpoint(create_endpoint(args.proxy_protocol_port))
+        from autopush.haproxy import HAProxyServerEndpoint
+        pendpoint = HAProxyServerEndpoint(
+            reactor,
+            args.proxy_protocol_port,
+            ssl_cf)
         pendpoint.listen(site)
 
     reactor.suggestThreadPoolSize(50)
