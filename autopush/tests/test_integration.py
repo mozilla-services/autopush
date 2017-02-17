@@ -358,6 +358,7 @@ class IntegrationBase(unittest.TestCase):
     track_objects = True
     track_objects_excludes = [AutopushSettings, PushServerFactory]
     proxy_protocol_port = None
+    endpoint_scheme = 'http'
 
     def setUp(self):
         import cyclone.web
@@ -383,12 +384,10 @@ class IntegrationBase(unittest.TestCase):
         storage_table = os.environ.get("STORAGE_TABLE", "storage_int_test")
         message_table = os.environ.get("MESSAGE_TABLE", "message_int_test")
 
-        client_certs = self.make_client_certs()
-        is_https = client_certs is not None
-
         self.endpoint_port = 9020
         self.router_port = 9030
         self.memusage_port = 9040
+        client_certs = self.make_client_certs()
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
@@ -398,7 +397,7 @@ class IntegrationBase(unittest.TestCase):
             storage_tablename=storage_table,
             message_tablename=message_table,
             client_certs=client_certs,
-            endpoint_scheme='https' if is_https else 'http',
+            endpoint_scheme=self.endpoint_scheme,
         )
 
         # Websocket server
@@ -445,14 +444,11 @@ class IntegrationBase(unittest.TestCase):
         self._settings = settings
 
         self.endpoints = []
-        ep = self._create_endpoint(self.endpoint_port, is_https)
+        ep = self.create_endpoint(self.endpoint_port)
         ep.listen(site).addCallback(self._endpoint_listening)
 
         if self.proxy_protocol_port:
-            from twisted.protocols.haproxy import proxyEndpoint
-            ep = proxyEndpoint(
-                self._create_endpoint(self.proxy_protocol_port, is_https)
-            )
+            ep = self.create_proxy_endpoint(self.proxy_protocol_port)
             ep.listen(site).addCallback(self._endpoint_listening)
 
         self.memusage_site = create_memusage_site(
@@ -460,10 +456,12 @@ class IntegrationBase(unittest.TestCase):
             self.memusage_port,
             False)
 
-    def _create_endpoint(self, port, is_https):
-        if not is_https:
-            return TCP4ServerEndpoint(reactor, port)
-        return SSL4ServerEndpoint(reactor, port, self.endpoint_SSLCF())
+    def create_endpoint(self, port):
+        return TCP4ServerEndpoint(reactor, port)
+
+    def create_proxy_endpoint(self, port):
+        from autopush.haproxy import HAProxyServerEndpoint
+        return HAProxyServerEndpoint(reactor, self.proxy_protocol_port)
 
     def _endpoint_listening(self, port):
         self.endpoints.append(port)
@@ -506,6 +504,70 @@ class IntegrationBase(unittest.TestCase):
         self._settings._notification_legacy = True
         yield
         self._settings._notification_legacy = False
+
+
+class SSLEndpointMixin(object):
+
+    endpoint_scheme = 'https'
+    certs = os.path.join(os.path.dirname(__file__), "certs")
+    servercert = os.path.join(certs, "server.pem")
+
+    def create_endpoint(self, port):
+        return SSL4ServerEndpoint(reactor, port, self.endpoint_SSLCF())
+
+    def endpoint_SSLCF(self):
+        """Return an SSLContextFactory for the endpoint.
+
+        Configured with the self-signed test server.pem. server.pem is
+        additionally the signer of the client certs in the same dir.
+
+        """
+        from autopush.ssl import AutopushSSLContextFactory
+        return AutopushSSLContextFactory(
+            self.servercert,
+            self.servercert,
+            require_peer_certs=self._settings.enable_tls_auth)
+
+    def client_SSLCF(self, certfile):
+        """Return an IPolicyForHTTPS for verifiying tests' server cert.
+
+        Optionally configures a client cert.
+
+        """
+        from twisted.internet.ssl import (
+            Certificate, PrivateCertificate, optionsForClientTLS)
+        from twisted.web.iweb import IPolicyForHTTPS
+        from zope.interface import implementer
+
+        with open(self.servercert) as fp:
+            servercert = Certificate.loadPEM(fp.read())
+        if certfile:
+            with open(self.unauth_client) as fp:
+                unauth_client = PrivateCertificate.loadPEM(fp.read())
+        else:
+            unauth_client = None
+
+        @implementer(IPolicyForHTTPS)
+        class UnauthClientPolicyForHTTPS(object):
+            def creatorForNetloc(self, hostname, port):
+                return optionsForClientTLS(
+                    hostname.decode('ascii'),
+                    trustRoot=servercert,
+                    clientCertificate=unauth_client)
+        return UnauthClientPolicyForHTTPS()
+
+    def _create_context(self, certfile):
+        """Return a client SSLContext
+
+        Optionally configures a client cert.
+
+        """
+        import ssl
+        context = ssl.create_default_context()
+        if certfile:
+            context.load_cert_chain(certfile)
+        context.load_verify_locations(self.servercert)
+        return context
 
 
 class TestSimple(IntegrationBase):
@@ -1573,65 +1635,19 @@ class TestWebPush(IntegrationBase):
         yield self.shut_down(client)
 
 
-class TestClientCerts(IntegrationBase):
+class TestClientCerts(SSLEndpointMixin, IntegrationBase):
 
     def setUp(self):
-        self.certs = certs = os.path.join(os.path.dirname(__file__), "certs")
-        self.servercert = os.path.join(certs, "server.pem")
+        certs = self.certs
         self.auth_client = os.path.join(certs, "client1.pem")
         self.unauth_client = os.path.join(certs, "client2.pem")
-        with open(os.path.join(self.certs, "client1_sha256.txt")) as fp:
+        with open(os.path.join(certs, "client1_sha256.txt")) as fp:
             client1_sha256 = fp.read().strip()
         self._client_certs = {client1_sha256: 'partner1'}
         IntegrationBase.setUp(self)
 
     def make_client_certs(self):
         return self._client_certs
-
-    def endpoint_SSLCF(self):
-        """Return an SSLContextFactory for the endpoint.
-
-        Configured with the self-signed test server.pem. server.pem is
-        additionally the signer of the client certs.
-
-        """
-        from autopush.ssl import AutopushSSLContextFactory
-        return AutopushSSLContextFactory(
-            self.servercert,
-            self.servercert,
-            require_peer_certs=self._settings.enable_tls_auth)
-
-    def _create_unauth_SSLCF(self, certfile):
-        """Return an IPolicyForHTTPS for the unauthorized client"""
-        from twisted.internet.ssl import (
-            Certificate, PrivateCertificate, optionsForClientTLS)
-        from twisted.web.iweb import IPolicyForHTTPS
-        from zope.interface import implementer
-
-        with open(self.servercert) as fp:
-            servercert = Certificate.loadPEM(fp.read())
-        if certfile:
-            with open(self.unauth_client) as fp:
-                unauth_client = PrivateCertificate.loadPEM(fp.read())
-        else:
-            unauth_client = None
-
-        @implementer(IPolicyForHTTPS)
-        class UnauthClientPolicyForHTTPS(object):
-            def creatorForNetloc(self, hostname, port):
-                return optionsForClientTLS(hostname.decode('ascii'),
-                                           trustRoot=servercert,
-                                           clientCertificate=unauth_client)
-        return UnauthClientPolicyForHTTPS()
-
-    def _create_context(self, certfile):
-        """Return a client SSLContext"""
-        import ssl
-        context = ssl.create_default_context()
-        if certfile:
-            context.load_cert_chain(certfile)
-        context.load_verify_locations(self.servercert)
-        return context
 
     @inlineCallbacks
     def test_client_cert_simple(self):
@@ -1696,7 +1712,7 @@ class TestClientCerts(IntegrationBase):
         response, body = yield _agent(
             'DELETE',
             "https://localhost:9020/m/foo",
-            contextFactory=self._create_unauth_SSLCF(certfile))
+            contextFactory=self.client_SSLCF(certfile))
         eq_(response.code, 401)
         wwwauth = response.headers.getRawHeaders('www-authenticate')
         eq_(wwwauth, ['Transport mode="tls-client-certificate"'])
@@ -1714,7 +1730,7 @@ class TestClientCerts(IntegrationBase):
         response, body = yield _agent(
             'GET',
             "https://localhost:9020/v1/err",
-            contextFactory=self._create_unauth_SSLCF(certfile))
+            contextFactory=self.client_SSLCF(certfile))
         eq_(response.code, 418)
         payload = json.loads(body)
         eq_(payload['error'], "Test Error")
@@ -1732,7 +1748,7 @@ class TestClientCerts(IntegrationBase):
         response, body = yield _agent(
             'GET',
             "https://localhost:9020/status",
-            contextFactory=self._create_unauth_SSLCF(certfile))
+            contextFactory=self.client_SSLCF(certfile))
         eq_(response.code, 200)
         payload = json.loads(body)
         eq_(payload, dict(status="OK", version=__version__))
@@ -1750,7 +1766,7 @@ class TestClientCerts(IntegrationBase):
         response, body = yield _agent(
             'GET',
             "https://localhost:9020/health",
-            contextFactory=self._create_unauth_SSLCF(certfile))
+            contextFactory=self.client_SSLCF(certfile))
         eq_(response.code, 200)
         payload = json.loads(body)
         eq_(payload['version'], __version__)
@@ -2043,6 +2059,54 @@ class TestProxyProtocol(IntegrationBase):
         eq_(response.code, 418)
         payload = json.loads(body)
         eq_(payload['error'], "Test Error")
+
+
+class TestProxyProtocolSSL(SSLEndpointMixin, IntegrationBase):
+    proxy_protocol_port = 9021
+
+    def create_proxy_endpoint(self, port):
+        from autopush.haproxy import HAProxyServerEndpoint
+        return HAProxyServerEndpoint(
+            reactor,
+            self.proxy_protocol_port,
+            self.endpoint_SSLCF())
+
+    @inlineCallbacks
+    def test_proxy_protocol_ssl(self):
+        ip = '198.51.100.22'
+
+        def proxy_request():
+            # like TestProxyProtocol.test_proxy_protocol, we prepend
+            # the proxy proto. line before the payload (which is
+            # encrypted in this case). HACK: sneak around httplib's
+            # wrapped ssl sock by hooking into SSLContext.wrap_socket
+            proto_line = 'PROXY TCP4 {} 203.0.113.7 35646 80\r\n'.format(ip)
+
+            class SSLContextWrapper(object):
+                def __init__(self, context):
+                    self.context = context
+
+                def wrap_socket(self, sock, *args, **kwargs):
+                    # send proto_line over the raw, unencrypted sock
+                    sock.send(proto_line)
+                    # now do the handshake/encrypt sock
+                    return self.context.wrap_socket(sock, *args, **kwargs)
+
+            http = httplib.HTTPSConnection(
+                "localhost:{}".format(self.proxy_protocol_port),
+                context=SSLContextWrapper(self._create_context(None)))
+            try:
+                http.request('GET', '/v1/err')
+                response = http.getresponse()
+                return response, response.read()
+            finally:
+                http.close()
+
+        response, body = yield deferToThread(proxy_request)
+        eq_(response.status, 418)
+        payload = json.loads(body)
+        eq_(payload['error'], "Test Error")
+        ok_(self.logs.logged_ci(lambda ci: ci.get('remote_ip') == ip))
 
 
 class TestMemUsage(IntegrationBase):

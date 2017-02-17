@@ -70,7 +70,7 @@ from typing import (  # noqa
     Optional,
     Tuple,
 )
-from zope.interface import implements
+from zope.interface import implementer
 
 from autopush import __version__
 from autopush.base import BaseHandler
@@ -136,8 +136,8 @@ def log_exception(func):
     return wrapper
 
 
+@implementer(IProducer)
 class PushState(object):
-    implements(IProducer)
 
     __slots__ = [
         '_callbacks',
