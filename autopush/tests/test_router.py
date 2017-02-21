@@ -532,9 +532,14 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_router_notification_gcm_failed_items(self):
         self.mock_result.failed = dict(connect_data=True)
         self.router.gcm['test123'] = self.gcm
+        self.router.metrics = Mock()
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
+            ok_(self.router.metrics.increment.called)
+            eq_(self.router.metrics.increment.call_args[0][0],
+                'updates.client.bridge.gcm.failed.failure')
+            eq_(fail.value.message, 'GCM unable to deliver')
             self._check_error_call(fail.value, 410)
         d.addBoth(check_results)
         return d
@@ -542,9 +547,14 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_router_notification_gcm_needs_retry(self):
         self.mock_result.needs_retry.return_value = True
         self.router.gcm['test123'] = self.gcm
+        self.router.metrics = Mock()
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
+            ok_(self.router.metrics.increment.called)
+            eq_(self.router.metrics.increment.call_args[0][0],
+                'updates.client.bridge.gcm.failed.retry')
+            eq_(fail.value.message, 'GCM failure to deliver, retry')
             self._check_error_call(fail.value, 503)
         d.addBoth(check_results)
         return d

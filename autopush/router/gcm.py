@@ -7,7 +7,6 @@ from twisted.logger import Logger
 
 from autopush.exceptions import RouterException
 from autopush.router.interface import RouterResponse
-from autopush.utils import ms_time
 
 
 class GCMRouter(object):
@@ -173,14 +172,6 @@ class GCMRouter(object):
                                    self._base_tags)
             self.log.info("GCM failures: {failed()}",
                           failed=lambda: repr(reply.failed.items()))
-            self.router_table.register_user(
-                {"uaid": uaid_data.get('uaid'),
-                 "router_type": uaid_data.get("router_type", "gcm"),
-                 "connected_at": ms_time(),
-                 "critical_failure": "Client is unreachable due to a "
-                                     "configuration error. Unable to "
-                                     "send message.",
-                 })
             raise RouterException("GCM unable to deliver", status_code=410,
                                   response_body="GCM recipient not available.",
                                   log_exception=False,
@@ -188,10 +179,10 @@ class GCMRouter(object):
 
         # retries:
         if reply.needs_retry():
-            self.log.warn("GCM retry requested: {failed()}",
-                          failed=lambda: repr(reply.failed.items()))
             self.metrics.increment("updates.client.bridge.gcm.failed.retry",
                                    self._base_tags)
+            self.log.warn("GCM retry requested: {failed()}",
+                          failed=lambda: repr(reply.failed.items()))
             raise RouterException("GCM failure to deliver, retry",
                                   status_code=503,
                                   response_body="Please try request later.",
