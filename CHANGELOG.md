@@ -1,3 +1,21 @@
+<a name="1.25.1"></a>
+## 1.25.1 (2017-02-17)
+
+
+#### Doc
+
+*   git tag needs an explicit signing flag (and msg) ([e8b47821](https://github.com/mozilla-services/autopush/commit/e8b47821299cd91fc772eb200ee24b037d37af4d))
+
+#### Bug Fixes
+
+*   impl. a haproxy endpoint that actually wraps SSL ([f39886dd](https://github.com/mozilla-services/autopush/commit/f39886dd41e8bc0abb7a9d0fb6c54207dd9ff64b))
+*   Correct docs to use correct HTTP method for subscription updates ([7b07c87f](https://github.com/mozilla-services/autopush/commit/7b07c87f48b5037de8bb5675f56abddfeaf7567d))
+*   try to avoid build failures on pypy w/ with_gmp=no ([ebaeeb34](https://github.com/mozilla-services/autopush/commit/ebaeeb34245dc66d86a0f791c774842e94904762))
+*   really fix coverage ([da614eb9](https://github.com/mozilla-services/autopush/commit/da614eb9b49f52517c205121c691f128b6d2a7f0))
+*   a few minor type sig changes ([f8929dff](https://github.com/mozilla-services/autopush/commit/f8929dff686db101885ab48f5ceca7f852559c22))
+
+
+
 <a name="1.25.0"></a>
 ## 1.25.0 (2017-02-10)
 
