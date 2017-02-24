@@ -579,8 +579,15 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.uaid
         )
         d.addCallback(self._notify_node)
+        d.addErrback(self._trap_uaid_not_found)
         d.addErrback(self.log_failure,
                      extra="Failed to get UAID for redeliver")
+
+    def _trap_uaid_not_found(self, fail):
+        # type: (Failure) -> None
+        """Traps UAID not found error"""
+        fail.trap(ItemNotFound)
+        self.ps.metrics.increment("error.lookup_uaid_failure")
 
     def _notify_node(self, result):
         """Checks the result of lookup node to send the notify if the client is
