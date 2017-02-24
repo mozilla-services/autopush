@@ -132,7 +132,8 @@ class APNSClient(object):
                                                        reason),
                     status_code=502,
                     response_body="APNS could not process "
-                                  "your message {}".format(reason)
+                                  "your message {}".format(reason),
+                    log_exception=False
                 )
         except HTTP20Error:
             connection.close()

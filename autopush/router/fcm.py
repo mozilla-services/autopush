@@ -248,7 +248,8 @@ class FCMRouter(object):
                 raise RouterException("FCM failure to deliver",
                                       status_code=err['err'],
                                       response_body="Please try request "
-                                                    "later.")
+                                                    "later.",
+                                      log_exception=False)
             creds = router_data["creds"]
             self.log.info("{msg} : {info}",
                           msg=err['msg'],
