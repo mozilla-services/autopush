@@ -2125,6 +2125,7 @@ class TestMemUsage(IntegrationBase):
         if hasattr(sys, 'pypy_version_info'):  # pragma: nocover
             ok_('size: ' in body)
             ok_('rpy_unicode' in body)
+            ok_('get_stats_asmmemmgr: (' in body)
 
 
 @inlineCallbacks
