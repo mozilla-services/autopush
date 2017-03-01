@@ -12,7 +12,7 @@ from twisted.internet.defer import (
     returnValue,
 )
 from twisted.internet.threads import deferToThread
-from twisted.web.client import Agent, HTTPConnectionPool
+from twisted.web.client import Agent, HTTPConnectionPool, _HTTP11ClientFactory
 
 from autopush.db import (
     get_router_table,
@@ -42,6 +42,11 @@ from autopush.utils import (
     base64url_decode
 )
 from autopush.crypto_key import (CryptoKey, CryptoKeyException)
+
+
+class QuietClientFactory(_HTTP11ClientFactory):
+    """Silence the start/stop factory messages."""
+    noisy = False
 
 
 class AutopushSettings(object):
@@ -86,6 +91,7 @@ class AutopushSettings(object):
                  ami_id=None,
                  client_certs=None,
                  msg_limit=100,
+                 debug=False,
                  ):
         """Initialize the Settings object
 
@@ -96,6 +102,9 @@ class AutopushSettings(object):
         """
         # Use a persistent connection pool for HTTP requests.
         pool = HTTPConnectionPool(reactor)
+        if not debug:
+            pool._factory = QuietClientFactory
+
         self.agent = Agent(reactor, connectTimeout=5, pool=pool)
 
         if not crypto_key:

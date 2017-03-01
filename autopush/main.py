@@ -494,6 +494,7 @@ def connection_main(sysargs=None, use_files=True):
         env=args.env,
         hello_timeout=args.hello_timeout,
         preflight_uaid="deadbeef000000000deadbeef" + postfix,
+        debug=args.debug,
     )
     if not settings:
         return 1  # pragma: nocover
@@ -507,6 +508,7 @@ def connection_main(sysargs=None, use_files=True):
         default_host=settings.router_hostname, debug=args.debug,
         log_function=skip_request_logging
     )
+    site.noisy = args.debug
     mount_health_handlers(site, settings)
 
     # Public websocket server
@@ -532,6 +534,9 @@ def connection_main(sysargs=None, use_files=True):
     resource = DefaultResource(WebSocketResource(factory))
     resource.putChild("status", StatusResource())
     site_factory = Site(resource)
+    # Silence starting/stopping messages
+    site_factory.noisy = args.debug
+    site.noisy = args.debug
 
     # Start the WebSocket listener.
     if args.ssl_key:
@@ -588,6 +593,7 @@ def endpoint_main(sysargs=None, use_files=True):
         enable_cors=not args.no_cors,
         bear_hash_key=args.auth_key,
         preflight_uaid="deadbeef000000000deadbeef" + postfix,
+        debug=args.debug
     )
     if not settings:
         return 1
@@ -607,6 +613,7 @@ def endpoint_main(sysargs=None, use_files=True):
     site.protocol = LimitedHTTPConnection
     site.protocol.maxData = settings.max_data
     mount_health_handlers(site, settings)
+    site.noisy = args.debug
 
     settings.metrics.start()
 
@@ -658,4 +665,5 @@ def create_memusage_site(settings, port, debug):
         debug=debug,
         log_function=skip_request_logging
     )
+    site.noisy = debug
     return reactor.listenTCP(port, site)
