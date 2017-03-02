@@ -7,7 +7,10 @@ from collections import defaultdict
 
 import twisted.internet.base
 from autopush.tests.test_db import make_webpush_notification
-from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
+from boto.dynamodb2.exceptions import (
+    ProvisionedThroughputExceededException,
+    ItemNotFound
+)
 from boto.exception import JSONResponseError
 from cyclone.web import Application
 from mock import Mock, patch
@@ -434,7 +437,7 @@ class WebsocketTestCase(unittest.TestCase):
         reactor.callLater(0.1, wait_for_agent_call)
         return d
 
-    def test_close_with_delivery_cleanup_and_no_get_result(self):
+    def test_close_with_delivery_cleanup_and_get_no_result(self):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ap_settings.clients["asdf"] = self.proto
@@ -459,7 +462,41 @@ class WebsocketTestCase(unittest.TestCase):
                 reactor.callLater(0.1, wait_for_agent_call)
 
             mock_metrics.increment.assert_called_with(
-                "error.notify_uaid_failure", tags=None)
+                "client.notify_uaid_failure", tags=None)
+            d.callback(True)
+        reactor.callLater(0.1, wait_for_agent_call)
+        return d
+
+    def test_close_with_delivery_cleanup_and_get_uaid_error(self):
+        self._connect()
+        self.proto.ps.uaid = uuid.uuid4().hex
+        self.proto.ap_settings.clients["asdf"] = self.proto
+        chid = str(uuid.uuid4())
+
+        # Stick an un-acked direct notification in
+        self.proto.ps.direct_updates[chid] = 12
+
+        # Apply some mocks
+        self.proto.ap_settings.storage.save_notification = Mock()
+        self.proto.ap_settings.router.get_uaid = mock_get = Mock()
+        self.proto.ps.metrics = mock_metrics = Mock()
+
+        def raise_item(*args, **kwargs):
+            raise ItemNotFound()
+
+        mock_get.side_effect = raise_item
+
+        # Close the connection
+        self.proto.onClose(True, None, None)
+
+        d = Deferred()
+
+        def wait_for_agent_call():  # pragma: nocover
+            if not mock_metrics.mock_calls:
+                reactor.callLater(0.1, wait_for_agent_call)
+
+            mock_metrics.increment.assert_called_with(
+                "client.lookup_uaid_failure", tags=None)
             d.callback(True)
         reactor.callLater(0.1, wait_for_agent_call)
         return d
