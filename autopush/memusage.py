@@ -30,6 +30,7 @@ def memusage():
                     stderr=subprocess.STDOUT)
     buf.writelines([pmap, '\n\n'])
     trap_err(dump_rpy_heap, buf)
+    trap_err(get_stats_asmmemmgr, buf)
     return buf.getvalue()
 
 
@@ -41,9 +42,31 @@ def dump_rpy_heap(stream):  # pragma: nocover
 
     with tempfile.NamedTemporaryFile('wb') as fp:
         gc._dump_rpy_heap(fp.fileno())
-        stream.write("{} size: {}\n".format(fp.name, os.stat(fp.name).st_size))
+        try:
+            fpsize = os.stat(fp.name).st_size
+        except OSError:
+            pass
+        else:
+            stream.write("{} size: {}\n".format(fp.name, fpsize))
         stat = Stat()
         stat.summarize(fp.name, stream=None)
     stat.load_typeids(zlib.decompress(gc.get_typeids_z()).split("\n"))
     stream.write('\n\n')
     stat.print_summary(stream)
+
+
+def get_stats_asmmemmgr(stream):  # pragma: nocover
+    """Write PyPy's get_stats_asmmemmgr to the specified stream
+
+    (The raw memory currently used by the JIT backend)
+
+    """
+    try:
+        import pypyjit
+    except ImportError:
+        # not PyPy or no jit?
+        return
+
+    stream.write('\n\nget_stats_asmmemmgr: ')
+    stream.write(repr(pypyjit.get_stats_asmmemmgr()))
+    stream.write('\n')
