@@ -24,4 +24,4 @@ after_success:
 - ${CODECOV:+codecov}
 notifications:
   slack:
-    secure: LE+1Nelh5PLrb35LU6yJI1EV2LDVm4V90Tb+5LhUpeGrcfqr47HhMLMGXbBSnnjYPRLCiT75xog+oMN5eAF4VnZle4qza6Ue7G+YwRtGo/V0ud0i2zSUT557yXcr2QCYAzTKJVgetnxQNYvru/l1trdNZsRbsPUm1vexAjaX5yo=
+    secure: vT9sWtUuxk28g6xYKAsQmiPZllErOYVfx5lcL+/jo1eRFrmbpYnyndT6s+FxGI1547oizZ0IqZbHVvB7BUoSJixXJyQJYXW2MchwN1UeHrey8mYpF1GNEaJT7FMfqSkxUU9gvAZ3IU7zstNeTLbfG1GkLuzybp0WAiHl/ocUTz8=
