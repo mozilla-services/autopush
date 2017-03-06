@@ -18,6 +18,7 @@ from twisted.internet.threads import deferToThread
 from twisted.internet.defer import (
     inlineCallbacks,
     returnValue,
+    CancelledError,
 )
 from twisted.internet.error import (
     ConnectError,
@@ -81,13 +82,14 @@ class SimpleRouter(object):
             try:
                 result = yield self._send_notification(uaid, node_id,
                                                        notification)
-            except (ConnectError, ConnectionClosed, ResponseFailed) as exc:
+            except (ConnectError, ConnectionClosed, ResponseFailed,
+                    CancelledError) as exc:
                 self.metrics.increment("updates.client.host_gone")
                 yield deferToThread(router.clear_node,
                                     uaid_data).addErrback(self._eat_db_err)
                 if isinstance(exc, ConnectionRefusedError):
                     # Occurs if an IP record is now used by some other node
-                    # in AWS.
+                    # in AWS or if the connection timesout.
                     self.log.debug("Could not route message: {exc}", exc=exc)
             if result and result.code == 200:
                 self.metrics.increment("router.broadcast.hit")

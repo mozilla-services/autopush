@@ -20,7 +20,8 @@ class IgnoreBody(Protocol):
     def ignore(cls, response):
         """Class method helper for ignoring the response"""
         d = Deferred()
-        response.deliverBody(cls(response, d))
+        if response is not None:
+            response.deliverBody(cls(response, d))
         return d
 
     def dataReceived(self, data):

@@ -255,6 +255,7 @@ class EndpointMainTestCase(unittest.TestCase):
                              partner2=["2B:"*31 + "E8",
                                        "3C:"*31 + "D7"])
         client_certs = json.dumps(_client_certs)
+        connection_timeout = 1
 
     def setUp(self):
         patchers = [
