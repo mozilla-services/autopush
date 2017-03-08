@@ -35,7 +35,7 @@ class TwistedMetricsTestCase(unittest.TestCase):
     @patch("autopush.metrics.reactor")
     def test_basic(self, mock_reactor):
         twisted.internet.base.DelayedCall.debug = True
-        m = TwistedMetrics()
+        m = TwistedMetrics('127.0.0.1')
         m.start()
         ok_(len(mock_reactor.mock_calls) > 0)
         m._metric = Mock()
