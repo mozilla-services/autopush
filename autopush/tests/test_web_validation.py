@@ -229,6 +229,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="webpush",
+            uaid=dummy_uaid,
         )
 
         with assert_raises(InvalidRequest) as cm:
@@ -312,6 +313,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            uaid=dummy_uaid,
         )
         result, errors = schema.load(self._make_test_data())
         eq_(errors, {})
@@ -327,6 +329,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            uaid=dummy_uaid,
         )
         data = self._make_test_data(body="asdfasdf")
 
@@ -346,6 +349,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="simplepush",
+            uaid=dummy_uaid,
         )
 
         with assert_raises(InvalidRequest) as cm:
@@ -423,6 +427,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            uaid=dummy_uaid,
         )
         info = self._make_test_data(
             headers={
@@ -446,6 +451,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            uaid=dummy_uaid,
         )
         info = self._make_test_data(
             headers={
@@ -472,6 +478,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            uaid=dummy_uaid,
         )
         info = self._make_test_data(
             headers={
@@ -496,6 +503,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            uaid=dummy_uaid,
         )
         info = self._make_test_data(
             headers={
@@ -520,6 +528,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            uaid=dummy_uaid,
         )
         info = self._make_test_data(
             headers={
@@ -592,6 +601,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            uaid=dummy_uaid,
         )
 
         with assert_raises(InvalidRequest) as cm:
@@ -608,6 +618,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            uaid=dummy_uaid,
         )
 
         padded_value = "asdfjiasljdf==="
@@ -626,6 +637,107 @@ class TestWebPushRequestSchema(unittest.TestCase):
         eq_(errors, {})
         eq_(result["headers"]["encryption"], "salt=asdfjiasljdf")
 
+    def test_valid_data_crypto_draft06(self):
+        schema = self._make_fut()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        mmtable = Mock()
+        mmtable.all_channels.return_value = (True, [dummy_chid])
+        schema.context["settings"].message_tables = dict(
+            message_2014_01=mmtable)
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="gcm",
+            uaid=dummy_uaid,
+            current_month="message_2014_01",
+        )
+
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            headers={
+                "authorization": "not vapid",
+                "content-encoding": "aes128gcm",
+                # No salt
+                "crypto-key": "dh=asdfasdfasdf",
+            }
+        )
+        result, errors = schema.load(info)
+        eq_(errors, {})
+
+    def test_invalid_dh_value_crypto_draft06(self):
+        schema = self._make_fut()
+        schema.context["settings"].parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        mmtable = Mock()
+        mmtable.all_channels.return_value = (True, [dummy_chid])
+        schema.context["settings"].message_tables = dict(
+            message_2014_01=mmtable)
+        schema.context["settings"].router.get_uaid.return_value = dict(
+            router_type="webpush",
+            uaid=dummy_uaid,
+            current_month="message_2014_01",
+        )
+
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            headers={
+                "authorization": "not vapid",
+                "content-encoding": "aes128gcm",
+                "crypto-key": "foo=asdfasdfasdf",
+            }
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 400)
+        eq_(cm.exception.errno, 110)
+
+    def test_invalid_header_crypto_draft06(self):
+        schema = self._make_fut()
+        settings = schema.context["settings"]
+        settings.parse_endpoint.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+            public_key="",
+        )
+        settings.current_msg_month = "message_2014_01"
+        mmtable = Mock()
+        mmtable.all_channels.return_value = (True, [dummy_chid])
+        schema.context["settings"].message_tables = dict(
+            message_2014_01=mmtable)
+        settings.router.get_uaid.return_value = dict(
+            router_type="gcm",
+            uaid=dummy_uaid,
+            current_month=settings.current_msg_month,
+        )
+
+        settings.message_tables[settings.current_msg_month].register_channel(
+            uaid=dummy_uaid,
+            channel_id=dummy_chid,
+        )
+
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            headers={
+                "authorization": "not vapid",
+                "content-encoding": "aes128gcm",
+                "crypto-key": "dh=asdfasdfasdf",
+                "encryption-key": "dh=asdfasdfasdf",
+            }
+        )
+
+        with assert_raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        eq_(cm.exception.status_code, 400)
+        eq_(cm.exception.errno, 110)
+
     def test_invalid_dh_value_for_01_crypto(self):
         schema = self._make_fut()
         schema.context["settings"].parse_endpoint.return_value = dict(
@@ -635,6 +747,8 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            uaid=dummy_uaid,
+            current_month="message_2014_01",
         )
 
         padded_value = "asdfjiasljdf==="
@@ -782,6 +896,12 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         settings.router.get_uaid.return_value = dict(
             router_type="gcm",
             uaid=dummy_uaid,
+            current_month=settings.current_msg_month,
+        )
+
+        settings.message_tables[settings.current_msg_month].register_channel(
+            uaid=dummy_uaid,
+            channel_id=dummy_chid,
         )
         settings.fernet = self.fernet_mock = Mock()
         return schema

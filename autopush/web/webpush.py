@@ -13,7 +13,7 @@ from marshmallow import (
     validates_schema,
 )
 from marshmallow_polyfield import PolyField
-from marshmallow.validate import OneOf
+from marshmallow.validate import Equal
 from twisted.logger import Logger  # noqa
 from twisted.internet.defer import Deferred
 from twisted.internet.threads import deferToThread
@@ -156,7 +156,7 @@ class WebPushCrypto01HeaderSchema(Schema):
     content_encoding = fields.String(
         required=True,
         load_from="content-encoding",
-        validate=OneOf(["aesgcm128"])
+        validate=Equal("aesgcm128")
     )
     encryption = fields.String(required=True)
     encryption_key = fields.String(
@@ -205,7 +205,7 @@ class WebPushCrypto04HeaderSchema(Schema):
     content_encoding = fields.String(
         required=True,
         load_from="content-encoding",
-        validate=OneOf(["aesgcm"])
+        validate=Equal("aesgcm")
     )
     encryption = fields.String(required=True)
     crypto_key = fields.String(
@@ -231,7 +231,49 @@ class WebPushCrypto04HeaderSchema(Schema):
                                  status_code=400,
                                  errno=110)
 
-    @validates_schema(pass_original=True)
+    @validates_schema(pass_original=True, skip_on_field_errors=True)
+    def reject_encryption_key(self, data, original_data):
+        if "encryption-key" in original_data:
+            raise InvalidRequest(
+                "Encryption-Key header not valid for 02 or later "
+                "webpush-encryption",
+                status_code=400,
+                errno=110,
+            )
+
+
+class WebPushCrypto06HeaderSchema(Schema):
+    """Validate webpush Message Encryption
+
+    Uses draft-ietf-webpush-encryption-06 rules for validation
+
+    """
+    content_encoding = fields.String(
+        required=True,
+        load_from="content-encoding",
+        validate=Equal("aes128gcm")
+    )
+    crypto_key = fields.String(
+        required=True,
+        load_from="crypto-key",
+    )
+
+    @validates("crypto_key")
+    def validate_crypto_key(self, value):
+        """Must contain a dh value
+
+        This draft ignores the salt and keyid that may be in
+        the header for values that are specified in the content
+        text.
+
+        """
+        dh = CryptoKey.parse_and_get_label(value, "dh")
+        if not dh or not VALID_BASE64_URL.match("dh"):
+            raise InvalidRequest("Invalid dh value in Encryption-Key header",
+                                 status_code=400,
+                                 errno=110)
+
+    @validates_schema(pass_original=True, skip_on_field_errors=True)
     def reject_encryption_key(self, data, original_data):
         if "encryption-key" in original_data:
             raise InvalidRequest(
@@ -262,6 +304,8 @@ def conditional_crypto_deserialize(object_dict, parent_object_dict):
             return WebPushCrypto01HeaderSchema()
         elif encoding == "aesgcm":
             return WebPushCrypto04HeaderSchema()
+        elif encoding == "aes128gcm":
+            return WebPushCrypto06HeaderSchema()
         else:
             return WebPushInvalidContentEncodingSchema()
     else:
