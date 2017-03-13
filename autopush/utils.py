@@ -7,7 +7,6 @@ import socket
 import time
 import uuid
 
-import ecdsa
 import requests
 from attr import (
     Factory,
@@ -155,33 +154,6 @@ def get_amid():
         return "Unknown"
 
 
-def decipher_public_key(key_data):
-    # type: (str) -> str
-    """A public key may come in several flavors. Attempt to extract the
-    valid key bits from keys doing minimal validation checks.
-
-    This is mostly a result of libs like WebCrypto prefixing data to "raw"
-    keys, and the ecdsa library not really providing helpful errors.
-
-    :param key_data: the raw-ish key we're going to try and process
-    :returns: the raw key data.
-    :raises: ValueError for unknown or poorly formatted keys.
-
-    """
-    # key data is actually a raw coordinate pair
-    key_data = base64url_decode(key_data)
-    key_len = len(key_data)
-    if key_len == 64:
-        return key_data
-    # Key format is "raw"
-    if key_len == 65 and key_data[0] == '\x04':
-        return key_data[-64:]
-    # key format is "spki"
-    if key_len == 88 and key_data[:3] == '0V0':
-        return key_data[-64:]
-    raise ValueError("Unknown public key format specified")
-
-
 def extract_jwt(token, crypto_key):
     # type: (str, str) -> Dict[str, str]
     """Extract the claims from the validated JWT. """
@@ -189,13 +161,11 @@ def extract_jwt(token, crypto_key):
     if not token or not crypto_key:
         return {}
 
-    key = decipher_public_key(crypto_key)
-    vk = ecdsa.VerifyingKey.from_string(key, curve=ecdsa.NIST256p)
     # jose offers jwt.decode(token, vk, ...) which does a full check
     # on the JWT object. Vapid is a bit more creative in how it
     # stores data into a JWT and breaks expectations. We would have to
     # turn off most of the validation in order for it to be useful.
-    return jwt.decode(token, dict(keys=[vk]), options=dict(
+    return jwt.decode(token, crypto_key, options=dict(
         verify_aud=False,
         verify_sub=False,
         verify_exp=False,

@@ -32,7 +32,10 @@ pycparser==2.17
 pycrypto==2.6.1
 pyfcm==1.0.4
 python-dateutil==2.5.3
-python-jose==1.3.2
+# use the following until https://github.com/mpdavis/python-jose/pull/39 lands
+-e git+https://github.com/jrconlin/python-jose.git#egg=python-jose
+-e git+https://github.com/jrconlin/pyelliptic.git@648ddf2b7eae196c5fc81c25bf13d858e1a048e7#egg=pyelliptic
+#python-jose==1.3.2
 raven==5.25.0
 requests==2.11.0
 service-identity==16.0.0

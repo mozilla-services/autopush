@@ -799,7 +799,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
     def _gen_jwt(self, header, payload):
         sk256p = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
         vk = sk256p.get_verifying_key()
-        sig = jws.sign(payload, sk256p, algorithm="ES256").strip('=')
+        sig = jws.sign(payload, sk256p.to_pem(), algorithm="ES256").strip('=')
         crypto_key = utils.base64url_encode(vk.to_string()).strip('=')
         return sig, crypto_key
 
