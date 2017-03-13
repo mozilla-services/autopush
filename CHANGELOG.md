@@ -1,3 +1,22 @@
+<a name="1.26.0"></a>
+## 1.26.0 (2017-03-10)
+
+
+#### Bug Fixes
+
+*   prefer the create method ([e7b34c30](https://github.com/mozilla-services/autopush/commit/e7b34c30055245f42eb2458b1964b166448a304b))
+*   Don't send non-priority messages to sentry ([94465295](https://github.com/mozilla-services/autopush/commit/9446529575efa14021731a4c8a115096e0300f93))
+*   Do not attempt to register failed GCM registrations ([896b3df1](https://github.com/mozilla-services/autopush/commit/896b3df17f2c35fec708dd9c8e275a1f01ad3754))
+*   Do not attempt to register failed GCM registrations ([39bae0b8](https://github.com/mozilla-services/autopush/commit/39bae0b82f971b75c4f5944cbf9e90dff2bf200d))
+
+#### Features
+
+*   new slack channel ([569ae32f](https://github.com/mozilla-services/autopush/commit/569ae32f7cef3a289e392839c172f3c3affb917a))
+*   also include pypyjit's get_stats_asmmemmgr ([fcf5b8b5](https://github.com/mozilla-services/autopush/commit/fcf5b8b5a0db92e27c04de8c3dc1715cb7e66454))
+*   capture and metric item not found instead of log ([73e084f2](https://github.com/mozilla-services/autopush/commit/73e084f2be4bf4aef140f8f1127566d6a7ccaee2), closes [#811](https://github.com/mozilla-services/autopush/issues/811))
+
+
+
 <a name="1.25.1"></a>
 ## 1.25.1 (2017-02-17)
 
