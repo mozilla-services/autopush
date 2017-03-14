@@ -51,13 +51,13 @@ class WebPushRouter(SimpleRouter):
         payload = notification.serialize()
         payload["timestamp"] = int(time.time())
         url = node_id + "/push/" + uaid
-        d = self.ap_settings.agent.request(
+        request = self.ap_settings.agent.request(
             "PUT",
             url.encode("utf8"),
             bodyProducer=FileBodyProducer(StringIO(json.dumps(payload))),
         )
-        d.addCallback(IgnoreBody.ignore)
-        return d
+        request.addCallback(IgnoreBody.ignore)
+        return request
 
     def _save_notification(self, uaid_data, notification):
         """Saves a notification, returns a deferred.

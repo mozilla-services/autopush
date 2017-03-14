@@ -134,6 +134,9 @@ def add_shared_args(parser):
     parser.add_argument('--router_write_throughput',
                         help="DynamoDB router write throughput",
                         type=int, default=5, env_var="ROUTER_WRITE_THROUGHPUT")
+    parser.add_argument('--connection_timeout',
+                        help="Seconds to wait for connection timeout",
+                        type=int, default=1, env_var="CONNECTION_TIMEOUT")
     parser.add_argument('--max_data', help="Max data segment length in bytes",
                         default=4096, env_var='MAX_DATA')
     parser.add_argument('--env',
@@ -448,6 +451,7 @@ def make_settings(args, **kwargs):
         ami_id=ami_id,
         client_certs=client_certs,
         msg_limit=args.msg_limit,
+        connect_timeout=args.connection_timeout,
         **kwargs
     )
 

@@ -92,6 +92,7 @@ class AutopushSettings(object):
                  client_certs=None,
                  msg_limit=100,
                  debug=False,
+                 connect_timeout=0.5,
                  ):
         """Initialize the Settings object
 
@@ -105,7 +106,8 @@ class AutopushSettings(object):
         if not debug:
             pool._factory = QuietClientFactory
 
-        self.agent = Agent(reactor, connectTimeout=5, pool=pool)
+        self.agent = Agent(reactor, connectTimeout=connect_timeout,
+                           pool=pool)
 
         if not crypto_key:
             crypto_key = [Fernet.generate_key()]
