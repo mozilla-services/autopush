@@ -194,7 +194,7 @@ After Identification:
    clients router table entry, proceed to step 2.
 2. Read notifications from prior month and send to client.
 
-   Once all acks are received for all the notifications for that month proceed
+   Once all ACKs are received for all the notifications for that month proceed
    to step 3.
 3. Copy the blank message entry of valid channels to the new month message
    table.
@@ -220,7 +220,7 @@ Push Characteristics
   notifications will be accepted for delivery (except in one edge case).
   In this state, the Push server will reply to the Endpoint with a 503 to
   indicate it cannot currently deliver the notification. Once the Push
-  server has received ack's for all sent notifications, new notifications
+  server has received ACKs for all sent notifications, new notifications
   can flow again, and a check of storage will be done if the Push server had
   to reply with a 503. The Endpoint will put the Notification in storage in
   this case.
@@ -259,7 +259,7 @@ Push Endpoint Length
 The Endpoint URL may seem excessively long. This may seem needless and
 confusing since the URL consists of the unique User Agent Identifier (UAID)
 and the Subscription Channel Identifier (CHID). Both of these are class 4
-Universially Unique Identifiers (UUID) meaning that an endpoint contains
+Universally Unique Identifiers (UUID) meaning that an endpoint contains
 256 bits of entropy (2 * 128 bits). When used in string format, these UUIDs
 are always in lower case, dashed format (e.g.
 "01234567-0123-abcd-0123-0123456789ab").

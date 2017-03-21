@@ -10,7 +10,6 @@ documentation is organized alphabetically by module name.
    :maxdepth: 1
 
    api/db
-   api/endpoint
    api/exceptions
    api/logging
    api/main

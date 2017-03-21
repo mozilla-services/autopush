@@ -65,5 +65,5 @@ On Android, you can set ``dom.push.debug`` to enable debug logging of Push
 via ``adb logcat``.
 
 For desktop use, you can set ``dom.push.loglevel`` to ``"debug"``. This will
-log all push messagesto the Browser Console (Tools > Web Developer > Browser
+log all push messages to the Browser Console (Tools > Web Developer > Browser
 Console).

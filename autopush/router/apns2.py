@@ -34,7 +34,7 @@ class APNSClient(object):
         """Create the APNS client connector.
 
         The cert_file and key_file can be derived from the exported `.p12`
-        **Apple Push Services: *bundleID*** key contained in the **Keychain
+        **Apple Push Services: *bundleID* ** key contained in the **Keychain
         Access** application. To extract the proper PEM formatted data, you
         can use the following commands:
 

@@ -44,7 +44,7 @@ Glossary
        also be referred to as a :term:`Channel`
 
     UAID
-       The Push User Agent Regisration ID. Push assigns each remote recipient
+       The Push User Agent Registration ID. Push assigns each remote recipient
        (Firefox client) a unique identifier. These may occasionally be reset
        by the Push Service or the client.
 

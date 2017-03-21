@@ -14,7 +14,7 @@ Versions
 Autopush uses a ``{major}.{minor}.{patch}`` version scheme, new ``{major}``
 versions are only issued if backwards compatibility is affected. Patch
 versions are used if a critical bug occurs after production deployment that
-requires a bugfix immediately.
+requires a bug fix immediately.
 
 Dev Releases
 ============
