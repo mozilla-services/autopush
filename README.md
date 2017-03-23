@@ -8,4 +8,4 @@ Mozilla Push server and Push Endpoint utilizing built with:
 - twisted
 - DynamoDB
 
-[Autopush Documentation on ReadThedocs](https://autopush.readthedocs.io/>)
+[Autopush Documentation on ReadThedocs](https://autopush.readthedocs.io/)
