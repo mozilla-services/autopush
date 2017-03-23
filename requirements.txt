@@ -1,2 +1,0 @@
--r base-requirements.txt
-wsaccel==0.6.2
