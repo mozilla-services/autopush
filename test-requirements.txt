@@ -1,3 +1,4 @@
+-r requirements.txt
 nose
 coverage
 mock>=1.0.1
