@@ -1,3 +1,25 @@
+<a name="1.27.0"></a>
+## 1.27.0 (2017-03-24)
+
+
+#### Doc
+
+*   Update docs ([9520e50d](https://github.com/mozilla-services/autopush/commit/9520e50dd5756422d415a746ab7784bfd185b92a))
+
+#### Chore
+
+*   utilize PEP 426 env markers ([b0a5983e](https://github.com/mozilla-services/autopush/commit/b0a5983ef9678849bac53bb3c600b955b0df296b))
+*   kill the base requirements ([edf927b6](https://github.com/mozilla-services/autopush/commit/edf927b63be9959f182d7dafd0a327b3c893501e))
+*   kill these to preserve history ([5242b3f1](https://github.com/mozilla-services/autopush/commit/5242b3f15d7dd359ccb067a818c64f78a58d9eaa))
+*   peg the pypy version ([aa729dc6](https://github.com/mozilla-services/autopush/commit/aa729dc692e4da94a4a60a798b9f34231bad2b1c))
+
+#### Features
+
+*   Add ChannelID report for UAID ([71035fa0](https://github.com/mozilla-services/autopush/commit/71035fa0e95825c1058d1c3d8debade519c50c2a))
+*   Add timeout for internally routed messages. ([44d02853](https://github.com/mozilla-services/autopush/commit/44d02853ca42d21f0c709951926353aa2a672b86))
+
+
+
 <a name="1.26.0"></a>
 ## 1.26.0 (2017-03-10)
 
