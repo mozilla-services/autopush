@@ -22,8 +22,8 @@ the `Mozilla Push Service architecture diagram`_. This push service uses
 websockets to talk to Firefox, with a Push endpoint that implements the
 :term:`WebPush` standard for its :ref:`http` API.
 
-Autopush API's
-==============
+Autopush APIs
+=============
 
 For developers writing mobile applications in Mozilla, or web developers using
 Push on the web with Firefox.
@@ -135,7 +135,7 @@ Reference
 License
 =======
 
-``autopush`` is offered under the Apache License 2.0.
+``autopush`` is offered under the Mozilla Public License 2.0.
 
 .. _\#push: irc://irc.mozilla.org/push
 .. _Mozilla Push Service architecture diagram: http://mozilla-push-service.readthedocs.io/en/latest/#architecture

@@ -69,7 +69,7 @@ run both of the Autopush daemons. To generate one with the docker image:
 
 .. code-block:: bash
 
-    $ docker run -t -i bbangert/autopush autokey
+    $ docker run -t -i ~/autopush autokey
     Key = hkclU1V37Dnp-0DMF9HLe_40Nnr8kDTYVbo2yxuylzk=
 
 Store the key for later use (including the trailing ``=``).
@@ -91,7 +91,7 @@ By default, the following services will be exposed:
 
 ``ws://localhost:8080/`` - websocket server
 
-``http://localhost:8082/`` - HTTP Endoint Server (See :ref:`the HTTP API <http>`)
+``http://localhost:8082/`` - HTTP Endpoint Server (See :ref:`the HTTP API <http>`)
 
 You could set the ``CRYPTO_KEY`` as an environment variable, or setup a more
 thorough configuration using config files as documented below.
@@ -133,14 +133,14 @@ Configuration files can be located in:
 The three configuration files are:
 
 * *autopush_connection.ini* - contains options for use by the websocket handler.
-  This file's path can be specifed by the ``--config-connection`` option.
+  This file's path can be specified by the ``--config-connection`` option.
 
 * *autopush_shared.ini* - contains options shared between the connection and
   endpoint handler. This file's path can be specified by the ``--config-shared``
   option.
 
 * *autopush_endpoint.ini* - contains options for the HTTP handlers This file's
-  path can be specifed by the ``--config-endpoint`` option.
+  path can be specified by the ``--config-endpoint`` option.
 
 Sample Configurations
 ---------------------

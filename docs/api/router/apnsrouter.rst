@@ -10,3 +10,11 @@
     :special-members: __init__
     :private-members:
     :member-order: bysource
+
+.. automodule:: autopush.router.apns2
+
+.. autoclass:: APNSClient
+    :members:
+    :special-members: __init__
+    :private-members:
+    :member-order: bysource

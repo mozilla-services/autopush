@@ -40,7 +40,8 @@ Lexicon
    :{UAID}: The Push User Agent Registration ID
 
 Push assigns each remote recipient a unique identifier. {UAID}s are UUIDs in
-lower case, dashed format. (e.g. '01234567-abcd-abcd-abcd-012345678abc') This value is assigned during **Registration**
+lower case, dashed format. (e.g. '01234567-abcd-abcd-abcd-01234567abcd') This
+value is assigned during **Registration**
 
    :{CHID}: The :term:`Channel` Subscription ID
 
@@ -225,7 +226,7 @@ Update the message at the given `{message_id}`.
 
     .. note::
 
-        In the rare condition that the client is online, and has recieved
+        In the rare condition that the client is online, and has received
         the message but has not acknowledged it yet; then it is possible that
         the client will not get the updated message until reconnect. This
         should be considered a rare edge-case.
@@ -326,7 +327,7 @@ This call requires no Authorization header for first time use.
     .. note::
 
         If additional information is required for the bridge, it may be
-        included in the paramters as JSON elements. Currently, no additional
+        included in the parameters as JSON elements. Currently, no additional
         information is required.
 
 **Reply:**
@@ -380,7 +381,7 @@ we are updating existing information.
     .. note::
 
         If additional information is required for the bridge, it may be
-        included in the paramters as JSON elements. Currently, no additional
+        included in the parameters as JSON elements. Currently, no additional
         information is required.
 
 **Reply:**

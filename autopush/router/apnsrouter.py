@@ -24,6 +24,8 @@ class APNSRouter(object):
 
         :param rel_channel: Release channel name (e.g. Firefox. FirefoxBeta,..)
         :type rel_channel: str
+        :param load_connections: (used for testing)
+        :type load_connections: bool
 
         :returns: APNs to be stored under the proper release channel name.
         :rtype: apns.APNs
@@ -43,7 +45,16 @@ class APNSRouter(object):
             load_connections=load_connections)
 
     def __init__(self, ap_settings, router_conf, load_connections=True):
-        """Create a new APNS router and connect to APNS"""
+        """Create a new APNS router and connect to APNS
+
+        :param ap_settings: Configuration settings
+        :type ap_settings: autopush.settings.AutopushSettings
+        :param router_conf: Router specific configuration
+        :type router_conf: dict
+        :param load_connections: (used for testing)
+        :type load_connections: bool
+
+        """
         self.ap_settings = ap_settings
         self._base_tags = []
         self.apns = dict()
@@ -58,7 +69,7 @@ class APNSRouter(object):
         """Register an endpoint for APNS, on the `app_id` release channel.
 
         This will validate that an APNs instance token is in the
-        ``router_data``,
+        `router_data`,
 
         :param uaid: User Agent Identifier
         :type uaid: str
