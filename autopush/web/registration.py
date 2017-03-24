@@ -51,16 +51,27 @@ class RegistrationSchema(Schema):
         chid = req['path_kwargs'].get('chid', params.get("channelID"))
         if uaid:
             try:
-                uuid.UUID(uaid)
+                u_uuid = uuid.UUID(uaid)
             except (ValueError, TypeError):
                 raise InvalidRequest("Invalid Request UAID",
                                      status_code=401, errno=109)
+            # Check if the UAID has a 'critical error' which means that it's
+            # probably invalid and should be reset/re-registered
+            try:
+                record = self.context['settings'].router.get_uaid(u_uuid.hex)
+                if record.get('critical_failure'):
+                    raise InvalidRequest("Invalid Request UAID",
+                                         status_code=410, errno=105)
+            except ItemNotFound:
+                pass
+
         if chid:
             try:
                 uuid.UUID(chid)
             except (ValueError, TypeError):
                 raise InvalidRequest("Invalid Request Channel_id",
                                      status_code=410, errno=106)
+
         return dict(
             auth=req.get('headers', {}).get("Authorization"),
             params=params,
@@ -121,7 +132,7 @@ class RegistrationSchema(Schema):
 
 class RegistrationHandler(BaseWebHandler):
     """Handle the Bridge services endpoints"""
-    cors_methods = "POST,PUT,DELETE"
+    cors_methods = "GET,POST,PUT,DELETE"
 
     #############################################################
     #                    Cyclone HTTP Methods
@@ -216,6 +227,22 @@ class RegistrationHandler(BaseWebHandler):
         return endpoint, router_data
 
     @threaded_validate(RegistrationSchema)
+    def get(self, *args, **kwargs):
+        """HTTP GET
+
+        Return a list of known channelIDs for a given UAID
+
+        """
+        self.uaid = self.valid_input['uaid']
+        self.add_header("Content-Type", "application/json")
+        d = deferToThread(self.ap_settings.message.all_channels,
+                          str(self.uaid))
+        d.addCallback(self._write_channels)
+        d.addErrback(self._response_err)
+        d.addErrback(self._uaid_not_found_err)
+        return d
+
+    @threaded_validate(RegistrationSchema)
     def delete(self, *args, **kwargs):
         """HTTP DELETE
 
@@ -305,6 +332,15 @@ class RegistrationHandler(BaseWebHandler):
         self.write(json.dumps(msg))
         self.log.debug(format="Endpoint registered via HTTP",
                        client_info=self._client_info)
+        self.finish()
+
+    def _write_channels(self, channel_info, *args, **kwargs):
+        # channel_info is a tuple containing a flag and the list of channels
+        dashed = [str(uuid.UUID(x)) for x in channel_info[1]]
+        self.write(json.dumps(
+            {"uaid": self.uaid.hex,
+             "channelIDs": dashed}
+        ))
         self.finish()
 
     def _success(self, result):

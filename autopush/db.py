@@ -495,7 +495,8 @@ class Message(object):
         # Functions that call store_message() would be required to
         # update that list as well using register_channel()
         try:
-            result = self.table.get_item(consistent=True, uaid=hasher(uaid),
+            result = self.table.get_item(consistent=True,
+                                         uaid=hasher(uaid),
                                          chidmessageid=" ")
             return (True, result["chids"] or set([]))
         except ItemNotFound:

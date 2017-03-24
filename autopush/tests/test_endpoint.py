@@ -207,7 +207,7 @@ class MessageTestCase(unittest.TestCase):
         return self.finish_deferred
 
 
-CORS_HEAD = "POST,PUT,DELETE"
+CORS_HEAD = "GET,POST,PUT,DELETE"
 
 
 class RegistrationTestCase(unittest.TestCase):
@@ -591,6 +591,31 @@ class RegistrationTestCase(unittest.TestCase):
                                      chid=str(dummy_chid)))
         return self.finish_deferred
 
+    def test_post_uaid_critical_failure(self, *args):
+        self.reg.request.body = json.dumps(dict(
+            type="webpush",
+            channelID=str(dummy_chid),
+            data={},
+        ))
+        self.settings.router.get_uaid = Mock()
+        self.settings.router.get_uaid.return_value = {
+            "critical_failure": "Client is unreachable due to a configuration "
+                                "error."
+        }
+        self.fernet_mock.configure_mock(**{
+            'encrypt.return_value': 'abcd123',
+        })
+
+        def handle_finish(value):
+            self._check_error(410, 105, "")
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
+        self.reg.post(self._make_req(router_type="simplepush",
+                                     uaid=dummy_uaid.hex,
+                                     chid=str(dummy_chid)))
+        return self.finish_deferred
+
     def test_post_nochid(self):
         self.reg.request.body = json.dumps(dict(
             type="simplepush",
@@ -833,4 +858,24 @@ class RegistrationTestCase(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.delete(self._make_req("invalid", "test", dummy_uaid.hex))
+        return self.finish_deferred
+
+    def test_get(self):
+        self.reg.request.headers['Authorization'] = self.auth
+        chids = [str(dummy_chid), str(dummy_uaid)]
+
+        def handle_finish(value):
+            call_args = json.loads(
+                self.reg.write.call_args[0][0]
+            )
+            eq_(chids, call_args['channelIDs'])
+            eq_(dummy_uaid.hex, call_args['uaid'])
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.settings.message.all_channels = Mock()
+        self.settings.message.all_channels.return_value = (True, chids)
+        self.reg.get(self._make_req(
+            router_type="test",
+            router_token="test",
+            uaid=dummy_uaid.hex))
         return self.finish_deferred

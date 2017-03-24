@@ -510,3 +510,44 @@ Remove a given ChannelID subscription from a UAID.
 **Return Codes:**
 
 See :ref:`errors`.
+
+Get Known Channels for a UAID
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Fetch the known ChannelIDs for a given bridged endpoint. This is useful to check link status.
+If no channelIDs are present for a given UAID, an empty set of channelIDs will be returned.
+
+**Call:**
+
+.. http:get:: /v1/{type}/{app_id}/registration/{UAID}/
+
+    Authorization: Bearer {secret}
+
+**Parameters:**
+
+  {}
+
+**Reply:**
+
+.. code-block:: json
+
+    {"uaid": {UAID}, "channelIDs": [{ChannelID}, ...]}
+
+example:
+
+.. code-block:: http
+
+    > GET /v1/gcm/33clienttoken33/registration/abcdef012345/
+    > Authorization: Bearer 00secret00
+    >
+    > {}
+
+.. code-block:: json
+
+    < {"uaid": "abcdef012345",
+    < "channelIDS": ["01234567-0000-1111-2222-0123456789ab", "76543210-0000-1111-2222-0123456789ab"]}
+
+**Return Codes:**
+
+
+See :ref:`errors`.
