@@ -1,11 +1,10 @@
 import json
 import uuid
 
-import jose
 import twisted.internet.base
 from cryptography.fernet import Fernet, InvalidToken
 from cyclone.web import Application
-from mock import Mock, patch
+from mock import Mock
 from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.internet.defer import Deferred
@@ -534,28 +533,6 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = "WebPush Invalid"
         self.reg.post(self._make_req(router_type="simplepush",
-                                     uaid=dummy_uaid.hex,
-                                     chid=str(dummy_chid)))
-        return self.finish_deferred
-
-    @patch('jose.jws.verify', side_effect=jose.exceptions.JWTError)
-    def test_post_bad_jwt(self, *args):
-        self.reg.request.body = json.dumps(dict(
-            channelID=str(dummy_chid),
-        ))
-
-        def handle_finish(value):
-            self._check_error(401, 109, 'Unauthorized')
-
-        def restore(*args, **kwargs):
-            uuid.uuid4 = old_func
-
-        old_func = uuid.uuid4
-        uuid.uuid4 = lambda: dummy_uaid
-        self.finish_deferred.addBoth(restore)
-        self.finish_deferred.addCallback(handle_finish)
-        self.reg.request.headers["Authorization"] = "WebPush Dummy"
-        self.reg.post(self._make_req(router_type="webpush",
                                      uaid=dummy_uaid.hex,
                                      chid=str(dummy_chid)))
         return self.finish_deferred
