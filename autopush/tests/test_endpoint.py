@@ -80,18 +80,6 @@ class MessageTestCase(unittest.TestCase):
         d = self.finish_deferred = Deferred()
         self.message.finish = lambda: d.callback(True)
 
-    def _make_req(self, id=None, headers=None, body='',
-                  rargs=None, *args, **kwargs):
-        if headers is None:
-            headers = {}
-        self.request_mock.body = body
-        self.request_mock.headers.update(headers)
-        self.message.path_kwargs = {}
-        self.message.path_args = rargs or args or []
-        if id is not None:
-            self.message.path_kwargs = {"message_id": id}
-        return dict()
-
     def test_delete_token_invalid(self):
         self.fernet_mock.configure_mock(**{
             "decrypt.side_effect": InvalidToken})
@@ -100,7 +88,7 @@ class MessageTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(400, reason=None)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.message.delete(self._make_req(id=''))
+        self.message.delete(message_id='')
         return self.finish_deferred
 
     def test_delete_token_wrong_components(self):
@@ -110,7 +98,7 @@ class MessageTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(400, reason=None)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.message.delete(self._make_req("ignored"))
+        self.message.delete(message_id="ignored")
         return self.finish_deferred
 
     def test_delete_token_wrong_kind(self):
@@ -121,7 +109,7 @@ class MessageTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(400, reason=None)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.message.delete(self._make_req('ignored'))
+        self.message.delete(message_id='ignored')
         return self.finish_deferred
 
     def test_delete_invalid_timestamp_token(self):
@@ -132,7 +120,7 @@ class MessageTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(400, reason=None)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.message.delete(self._make_req('ignored'))
+        self.message.delete(message_id='ignored')
         return self.finish_deferred
 
     def test_delete_success(self):
@@ -146,7 +134,7 @@ class MessageTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(204)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.message.delete(self._make_req("123-456"))
+        self.message.delete(message_id="123-456")
         return self.finish_deferred
 
     def test_delete_topic_success(self):
@@ -160,22 +148,7 @@ class MessageTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(204)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.message.delete(self._make_req("123-456"))
-        return self.finish_deferred
-
-    def test_delete_topic_success2(self):
-        tok = ":".join(["01", dummy_uaid.hex, str(dummy_chid), "Inbox"])
-        self.fernet_mock.decrypt.return_value = tok
-        self.message_mock.configure_mock(**{
-            "delete_message.return_value": True})
-
-        def handle_finish(result):
-            self.message_mock.delete_message.assert_called()
-            self.status_mock.assert_called_with(204)
-        self.finish_deferred.addCallback(handle_finish)
-
-        self.message.delete(self._make_req(id=None,
-                                           rargs=["123-456"]))
+        self.message.delete(message_id="123-456")
         return self.finish_deferred
 
     def test_delete_topic_error_parts(self):
@@ -188,7 +161,7 @@ class MessageTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(400, reason=None)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.message.delete(self._make_req("123-456"))
+        self.message.delete(message_id="123-456")
         return self.finish_deferred
 
     def test_delete_db_error(self):
@@ -203,7 +176,7 @@ class MessageTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(503, reason=None)
         self.finish_deferred.addCallback(handle_finish)
 
-        self.message.delete(self._make_req("ignored"))
+        self.message.delete(message_id="ignored")
         return self.finish_deferred
 
 
@@ -246,17 +219,25 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.finish = lambda: d.callback(True)
         self.settings = settings
 
-    def _make_req(self, router_type="", router_token="", uaid=None,
-                  chid=None, body="", headers=None):
-        if headers is None:
-            headers = {}
-        self.request_mock.body = body or self.request_mock.body
-        self.request_mock.headers.update(headers)
-        self.reg.path_kwargs = {"router_type": router_type,
-                                "router_token": router_token,
-                                "uaid": uaid,
-                                "chid": chid}
-        return dict()
+    def _req(self, meth, router_type="", router_token="", uaid=None,
+             chid=None):
+        return meth(
+            router_type=router_type,
+            router_token=router_token,
+            uaid=uaid,
+            chid=chid)
+
+    def _post(self, **kwargs):
+        return self._req(self.reg.post, **kwargs)
+
+    def _put(self, **kwargs):
+        return self._req(self.reg.put, **kwargs)
+
+    def _delete(self, **kwargs):
+        return self._req(self.reg.delete, **kwargs)
+
+    def _get(self, **kwargs):
+        return self._req(self.reg.get, **kwargs)
 
     def test_base_tags(self):
         self.reg._base_tags = []
@@ -356,8 +337,7 @@ class RegistrationTestCase(unittest.TestCase):
             ok_("secret" in call_arg)
 
         self.finish_deferred.addBoth(handle_finish)
-        self.reg.post(self._make_req("simplepush", "",
-                                     body=self.reg.request.body))
+        self._post(router_type="simplepush")
         return self.finish_deferred
 
     def test_post_gcm(self, *args):
@@ -396,7 +376,7 @@ class RegistrationTestCase(unittest.TestCase):
         old_func = uuid.uuid4
         ids = [dummy_uaid, dummy_chid]
         uuid.uuid4 = lambda: ids.pop()
-        self.reg.post(self._make_req("gcm", "182931248179192"))
+        self._post(router_type="gcm", router_token="182931248179192")
         return self.finish_deferred
 
     def test_post_invalid_args(self, *args):
@@ -410,7 +390,7 @@ class RegistrationTestCase(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
-        self.reg.post(self._make_req())
+        self._post()
         return self.finish_deferred
 
     def test_post_bad_router_type(self, *args):
@@ -431,7 +411,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addBoth(restore)
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
-        self.reg.post(self._make_req())
+        self._post()
         return self.finish_deferred
 
     def test_post_bad_router_register(self, *args):
@@ -452,8 +432,7 @@ class RegistrationTestCase(unittest.TestCase):
             self._check_error(rexc.status_code, rexc.errno, "")
 
         self.finish_deferred.addBoth(handle_finish)
-        self.reg.post(self._make_req("simplepush", "",
-                                     body=self.reg.request.body))
+        self._post(router_type="simplepush")
         return self.finish_deferred
 
     def test_post_existing_uaid(self, *args):
@@ -480,7 +459,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addBoth(restore)
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
-        self.reg.post(self._make_req(router_type="test", uaid=dummy_uaid.hex))
+        self._post(router_type="test", uaid=dummy_uaid.hex)
         return self.finish_deferred
 
     def test_post_bad_uaid(self, *args):
@@ -501,8 +480,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addBoth(restore)
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
-        self.reg.post(self._make_req(router_type="simplepush",
-                                     uaid='invalid'))
+        self._post(router_type="simplepush", uaid='invalid')
         return self.finish_deferred
 
     def test_no_uaid(self):
@@ -512,9 +490,9 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         self.settings.router.get_uaid = Mock()
         self.settings.router.get_uaid.side_effect = ItemNotFound
-        self.reg.post(self._make_req(router_type="webpush",
-                                     uaid=dummy_uaid.hex,
-                                     chid=str(dummy_chid)))
+        self._post(router_type="webpush",
+                   uaid=dummy_uaid.hex,
+                   chid=str(dummy_chid))
         return self.finish_deferred
 
     def test_no_auth(self):
@@ -522,21 +500,22 @@ class RegistrationTestCase(unittest.TestCase):
             self._check_error(401, 109, "Unauthorized")
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.post(self._make_req(router_type="webpush",
-                                     uaid=dummy_uaid.hex,
-                                     chid=str(dummy_chid)))
+        self._post(router_type="webpush",
+                   uaid=dummy_uaid.hex,
+                   chid=str(dummy_chid))
 
         return self.finish_deferred
 
     def test_bad_body(self):
+        self.reg.request.body = "{invalid"
+
         def handle_finish(value):
             self._check_error(401, 108, "Unauthorized")
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.post(self._make_req(router_type="webpush",
-                                     uaid=dummy_uaid.hex,
-                                     chid=str(dummy_chid),
-                                     body="{invalid"))
+        self._post(router_type="webpush",
+                   uaid=dummy_uaid.hex,
+                   chid=str(dummy_chid))
         return self.finish_deferred
 
     def test_post_bad_params(self, *args):
@@ -555,9 +534,9 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addBoth(restore)
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = "WebPush Invalid"
-        self.reg.post(self._make_req(router_type="simplepush",
-                                     uaid=dummy_uaid.hex,
-                                     chid=str(dummy_chid)))
+        self._post(router_type="simplepush",
+                   uaid=dummy_uaid.hex,
+                   chid=str(dummy_chid))
         return self.finish_deferred
 
     def test_post_uaid_chid(self, *args):
@@ -586,9 +565,9 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addBoth(restore)
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
-        self.reg.post(self._make_req(router_type="simplepush",
-                                     uaid=dummy_uaid.hex,
-                                     chid=str(dummy_chid)))
+        self._post(router_type="simplepush",
+                   uaid=dummy_uaid.hex,
+                   chid=str(dummy_chid))
         return self.finish_deferred
 
     def test_post_uaid_critical_failure(self, *args):
@@ -611,9 +590,9 @@ class RegistrationTestCase(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
-        self.reg.post(self._make_req(router_type="simplepush",
-                                     uaid=dummy_uaid.hex,
-                                     chid=str(dummy_chid)))
+        self._post(router_type="simplepush",
+                   uaid=dummy_uaid.hex,
+                   chid=str(dummy_chid))
         return self.finish_deferred
 
     def test_post_nochid(self):
@@ -642,8 +621,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addBoth(restore)
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
-        self.reg.post(self._make_req(router_type="simplepush",
-                                     uaid=dummy_uaid.hex))
+        self._post(router_type="simplepush", uaid=dummy_uaid.hex)
         return self.finish_deferred
 
     def test_post_with_app_server_key(self):
@@ -688,8 +666,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addBoth(restore)
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
-        self.reg.post(self._make_req(router_type="simplepush",
-                                     uaid=dummy_uaid.hex))
+        self._post(router_type="simplepush", uaid=dummy_uaid.hex)
         return self.finish_deferred
 
     def test_put(self):
@@ -716,7 +693,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addBoth(restore)
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
-        self.reg.put(self._make_req(router_type='test', uaid=dummy_uaid.hex))
+        self._put(router_type='test', uaid=dummy_uaid.hex)
         return self.finish_deferred
 
     def test_put_bad_auth(self):
@@ -732,8 +709,7 @@ class RegistrationTestCase(unittest.TestCase):
         uuid.uuid4 = lambda: dummy_uaid
         self.finish_deferred.addBoth(restore)
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.put(self._make_req(router_type="test",
-                                    uaid=dummy_uaid.hex))
+        self._put(router_type="test", uaid=dummy_uaid.hex)
         return self.finish_deferred
 
     def test_put_bad_arguments(self, *args):
@@ -754,7 +730,7 @@ class RegistrationTestCase(unittest.TestCase):
         uuid.uuid4 = lambda: dummy_chid
         self.finish_deferred.addBoth(restore)
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.put(self._make_req(uaid=dummy_uaid.hex))
+        self._put(uaid=dummy_uaid.hex)
         return self.finish_deferred
 
     def test_put_bad_router_register(self):
@@ -767,7 +743,7 @@ class RegistrationTestCase(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
         self.reg.request.headers["Authorization"] = self.auth
-        self.reg.put(self._make_req(router_type='test', uaid=dummy_uaid.hex))
+        self._put(router_type='test', uaid=dummy_uaid.hex)
         return self.finish_deferred
 
     def test_delete_bad_chid_value(self):
@@ -781,8 +757,10 @@ class RegistrationTestCase(unittest.TestCase):
             self._check_error(410, 106, "")
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete(self._make_req("test", "test", dummy_uaid.hex,
-                                       "invalid"))
+        self._delete(router_type="test",
+                     router_token="test",
+                     uaid=dummy_uaid.hex,
+                     chid="invalid")
         return self.finish_deferred
 
     def test_delete_no_such_chid(self):
@@ -805,8 +783,10 @@ class RegistrationTestCase(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
         self.finish_deferred.addBoth(fixup_messages)
-        self.reg.delete(self._make_req("test", "test",
-                                       dummy_uaid.hex, str(uuid.uuid4())))
+        self.reg.delete(router_type="test",
+                        router_token="test",
+                        uaid=dummy_uaid.hex,
+                        chid=str(uuid.uuid4()))
         return self.finish_deferred
 
     def test_delete_uaid(self):
@@ -828,7 +808,9 @@ class RegistrationTestCase(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish, chid2)
         self.reg.request.headers["Authorization"] = self.auth
-        self.reg.delete(self._make_req("simplepush", "test", dummy_uaid.hex))
+        self._delete(router_type="simplepush",
+                     router_token="test",
+                     uaid=dummy_uaid.hex)
         return self.finish_deferred
 
     def test_delete_bad_uaid(self):
@@ -838,7 +820,9 @@ class RegistrationTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(401, reason=None)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete(self._make_req("test", "test", "invalid"))
+        self._delete(router_type="test",
+                     router_token="test",
+                     uaid="invalid")
         return self.finish_deferred
 
     def test_delete_orphans(self):
@@ -850,7 +834,9 @@ class RegistrationTestCase(unittest.TestCase):
         self.router_mock.drop_user = Mock()
         self.router_mock.drop_user.return_value = False
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete(self._make_req("test", "test", dummy_uaid.hex))
+        self._delete(router_type="test",
+                     router_token="test",
+                     uaid=dummy_uaid.hex)
         return self.finish_deferred
 
     def test_delete_bad_auth(self, *args):
@@ -860,7 +846,9 @@ class RegistrationTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(401, reason=None)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete(self._make_req("test", "test", dummy_uaid.hex))
+        self._delete(router_type="test",
+                     router_token="test",
+                     uaid=dummy_uaid.hex)
         return self.finish_deferred
 
     def test_delete_bad_router(self):
@@ -870,7 +858,9 @@ class RegistrationTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(400, reason=None)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.delete(self._make_req("invalid", "test", dummy_uaid.hex))
+        self._delete(router_type="invalid",
+                     router_token="test",
+                     uaid=dummy_uaid.hex)
         return self.finish_deferred
 
     def test_get(self):
@@ -889,10 +879,10 @@ class RegistrationTestCase(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         self.settings.message.all_channels = Mock()
         self.settings.message.all_channels.return_value = (True, chids)
-        self.reg.get(self._make_req(
+        self._get(
             router_type="test",
             router_token="test",
-            uaid=dummy_uaid.hex))
+            uaid=dummy_uaid.hex)
         return self.finish_deferred
 
     def test_get_no_uaid(self):
@@ -902,7 +892,7 @@ class RegistrationTestCase(unittest.TestCase):
             self.status_mock.assert_called_with(410, reason=None)
 
         self.finish_deferred.addCallback(handle_finish)
-        self.reg.get(self._make_req(
+        self._get(
             router_type="test",
-            router_token="test"))
+            router_token="test")
         return self.finish_deferred

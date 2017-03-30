@@ -1,4 +1,5 @@
 from marshmallow import Schema, fields, pre_load
+from typing import Optional  # noqa
 
 from autopush.exceptions import LogCheckError
 from autopush.web.base import threaded_validate, BaseWebHandler
@@ -6,12 +7,11 @@ from autopush.web.base import threaded_validate, BaseWebHandler
 
 class LogCheckSchema(Schema):
     """Empty schema for log check"""
-    fields.err_type = fields.Str(allow_none=True)
+    err_type = fields.Str(allow_none=True)
 
     @pre_load
     def extract_data(self, req):
-        # req['path_kwargs'] could be set to None, which would be returned
-        return dict(err_type=(req.get('path_kwargs') or {}).get('err_type'))
+        return dict(err_type=req['path_kwargs'].get('err_type'))
 
 
 class LogCheckHandler(BaseWebHandler):
@@ -21,7 +21,8 @@ class LogCheckHandler(BaseWebHandler):
         pass
 
     @threaded_validate(LogCheckSchema)
-    def get(self, err_type=None, *args, **kwargs):
+    def get(self, err_type=None):
+        # type: (Optional[str]) -> None
         """HTTP GET
 
         Generate a dummy error message for logging

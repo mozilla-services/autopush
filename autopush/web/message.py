@@ -1,6 +1,7 @@
 from cryptography.fernet import InvalidToken
 from marshmallow import Schema, fields, pre_load
 from twisted.internet.threads import deferToThread
+from twisted.internet.defer import Deferred  # noqa
 
 from autopush.exceptions import InvalidRequest, InvalidTokenException
 from autopush.utils import WebPushNotification
@@ -12,12 +13,7 @@ class MessageSchema(Schema):
 
     @pre_load
     def extract_data(self, req):
-        message_id = None
-        if req['path_args']:
-            message_id = req['path_args'][0]
-        message_id = req['path_kwargs'].get(
-            'message_id',
-            message_id)
+        message_id = req['path_kwargs'].get('message_id')
         if not message_id:
             raise InvalidRequest("Missing Token",
                                  status_code=400)
@@ -37,7 +33,8 @@ class MessageHandler(BaseWebHandler):
     cors_response_headers = ("location",)
 
     @threaded_validate(MessageSchema)
-    def delete(self, *args, **kwargs):
+    def delete(self, notification):
+        # type: (WebPushNotification) -> Deferred
         """Drops a pending message.
 
         The message will only be removed from DynamoDB. Messages that were
@@ -46,9 +43,8 @@ class MessageHandler(BaseWebHandler):
 
 
         """
-        notif = self.valid_input['notification']
         d = deferToThread(self.ap_settings.message.delete_message,
-                          notif)
+                          notification)
         d.addCallback(self._delete_completed)
         self._db_error_handling(d)
         return d

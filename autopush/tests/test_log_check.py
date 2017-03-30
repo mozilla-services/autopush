@@ -71,5 +71,5 @@ class LogCheckTestCase(unittest.TestCase):
             eq_(write_args.get('error'), 'Test Failure')
 
         self.finish_deferred.addCallback(handle_finish)
-        self.lch.get('CRIT')
+        self.lch.get(err_type='CRIT')
         return self.finish_deferred
