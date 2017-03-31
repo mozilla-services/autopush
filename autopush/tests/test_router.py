@@ -161,6 +161,7 @@ class APNSRouterTestCase(unittest.TestCase):
         eq_(e.exception.response_body, 'APNS returned an error '
                                        'processing request')
         eq_(e.exception.status_code, 502)
+        self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_route_notification(self):
@@ -230,6 +231,7 @@ class APNSRouterTestCase(unittest.TestCase):
         eq_(ex.exception.message, "Server error")
         eq_(ex.exception.response_body, 'APNS returned an error processing '
                                         'request')
+        self.flushLoggedErrors()
 
     def test_too_many_connections(self):
         rr = self.router.apns['firefox']

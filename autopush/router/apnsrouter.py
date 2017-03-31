@@ -4,6 +4,7 @@ import uuid
 from hyper.http20.exceptions import ConnectionError, HTTP20Error
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
+from twisted.python.failure import Failure
 
 from autopush.exceptions import RouterException
 from autopush.router.apns2 import (
@@ -146,18 +147,22 @@ class APNSRouter(object):
         try:
             apns_client.send(router_token=router_token, payload=payload,
                              apns_id=apns_id)
-        except ConnectionError:
+        except ConnectionError as ex:
             self.ap_settings.metrics.increment(
                 "updates.client.bridge.apns.connection_err",
                 self._base_tags
             )
+            self.log.error("Connection Error sending to APNS",
+                           log_failure=Failure(ex))
             raise RouterException(
                 "Server error",
                 status_code=502,
                 response_body="APNS returned an error processing request",
                 log_exception=False,
             )
-        except HTTP20Error:
+        except HTTP20Error as ex:
+            self.log.error("HTTP2 Error sending to APNS",
+                           log_failure=Failure(ex))
             raise RouterException(
                 "Server error",
                 status_code=502,
