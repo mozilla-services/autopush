@@ -226,6 +226,11 @@ class RegistrationHandler(BaseWebHandler):
                                                   self.app_server_key)
         return endpoint, router_data
 
+    def _check_uaid(self, uaid):
+        if not uaid or uaid == 'None':
+            raise ItemNotFound("UAID not found")
+        return uaid
+
     @threaded_validate(RegistrationSchema)
     def get(self, *args, **kwargs):
         """HTTP GET
@@ -235,11 +240,11 @@ class RegistrationHandler(BaseWebHandler):
         """
         self.uaid = self.valid_input['uaid']
         self.add_header("Content-Type", "application/json")
-        d = deferToThread(self.ap_settings.message.all_channels,
-                          str(self.uaid))
+        d = deferToThread(self._check_uaid, str(self.uaid))
+        d.addCallback(self.ap_settings.message.all_channels)
         d.addCallback(self._write_channels)
-        d.addErrback(self._response_err)
         d.addErrback(self._uaid_not_found_err)
+        d.addErrback(self._response_err)
         return d
 
     @threaded_validate(RegistrationSchema)

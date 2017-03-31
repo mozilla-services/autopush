@@ -239,7 +239,8 @@ class BaseWebHandler(BaseHandler):
 
     def _router_response(self, response):
         for name, val in response.headers.items():
-            self.set_header(name, val)
+            if val is not None:
+                self.set_header(name, val)
 
         if 200 <= response.status_code < 300:
             self.set_status(response.status_code, reason=None)

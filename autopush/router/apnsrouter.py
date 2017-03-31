@@ -89,7 +89,7 @@ class APNSRouter(object):
                                   status_code=400,
                                   response_body="Unknown release channel")
         if not router_data.get("token"):
-            raise RouterException("No token registered", status_code=500,
+            raise RouterException("No token registered", status_code=400,
                                   response_body="No token registered")
         router_data["rel_channel"] = app_id
         return router_data

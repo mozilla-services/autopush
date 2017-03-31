@@ -879,3 +879,15 @@ class RegistrationTestCase(unittest.TestCase):
             router_token="test",
             uaid=dummy_uaid.hex))
         return self.finish_deferred
+
+    def test_get_no_uaid(self):
+        self.reg.request.headers['Authorization'] = self.auth
+
+        def handle_finish(value):
+            self.status_mock.assert_called_with(410, reason=None)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.get(self._make_req(
+            router_type="test",
+            router_token="test"))
+        return self.finish_deferred
