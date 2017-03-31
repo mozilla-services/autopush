@@ -98,19 +98,17 @@ class TestThreadedValidate(unittest.TestCase):
         eq_(d, {})
 
     def test_call_func_no_error(self):
-        start_time = time.time()
         mock_func = Mock()
         tv, rh = self._make_full()
         result = tv._validate_request(rh)
-        tv._call_func(result, mock_func, rh, start_time)
+        tv._call_func(result, mock_func, rh)
         mock_func.assert_called()
 
     def test_call_func_error(self):
-        start_time = time.time()
         mock_func = Mock()
         tv, rh = self._make_full(schema=InvalidSchema)
         result = tv._validate_request(rh)
-        tv._call_func(result, mock_func, rh, start_time)
+        tv._call_func(result, mock_func, rh)
         self._mock_errors.assert_called()
         eq_(len(mock_func.mock_calls), 0)
 

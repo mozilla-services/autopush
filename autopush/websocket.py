@@ -584,7 +584,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                      extra="Failed to get UAID for redeliver")
 
     def _trap_uaid_not_found(self, fail):
-        # type: (Failure) -> None
+        # type: (failure.Failure) -> None
         """Traps UAID not found error"""
         fail.trap(ItemNotFound)
         self.ps.metrics.increment("client.lookup_uaid_failure",

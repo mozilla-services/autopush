@@ -70,6 +70,7 @@ from autopush.utils import (
 
 # Typing
 T = TypeVar('T')  # noqa
+ItemLike = Union[Item, Dict[str, Any]]
 
 key_hash = ""
 TRACK_DB_CALLS = False
@@ -105,7 +106,7 @@ def hasher(uaid):
 
 
 def dump_uaid(uaid_data):
-    # type: (Union[Dict[str, Any], Item]) -> str
+    # type: (ItemLike) -> str
     """Return a dict for a uaid.
 
     This is utilized instead of repr since some db methods return a
@@ -303,7 +304,7 @@ def track_provisioned(func):
 
 
 def has_connected_this_month(item):
-    # type: (Dict[str, Any]) -> bool
+    # type: (ItemLike) -> bool
     """Whether or not a router item has connected this month"""
     last_connect = item.get("last_connect")
     if not last_connect:
@@ -678,7 +679,7 @@ class Router(object):
 
     @track_provisioned
     def register_user(self, data):
-        # type: (Dict[str, Any]) -> Tuple[bool, Dict[str, Any], Dict[str, Any]]
+        # type: (ItemLike) -> Tuple[bool, Dict[str, Any], Dict[str, Any]]
         """Register this user
 
         If a record exists with a newer ``connected_at``, then the user will

@@ -1,6 +1,5 @@
 import json
 import re
-import time
 import uuid
 
 from boto.dynamodb2.exceptions import ItemNotFound
@@ -28,19 +27,17 @@ from autopush.web.base import (
 class RegistrationSchema(Schema):
     uaid = fields.UUID(allow_none=True)
     chid = fields.Str(allow_none=True)
-    body = fields.Dict(allow_none=True)
     router_type = fields.Str()
     router_token = fields.Str()
-    params = fields.Dict()
+    router_data = fields.Dict()
     auth = fields.Str(allow_none=True)
-    vapid_info = fields.Dict(allow_none=True)
 
     @pre_load
     def extract_data(self, req):
-        params = {}
+        router_data = {}
         if req['body']:
             try:
-                params = json.loads(req['body'])
+                router_data = json.loads(req['body'])
             except ValueError:
                 raise InvalidRequest("Invalid Request body",
                                      status_code=401,
@@ -48,7 +45,7 @@ class RegistrationSchema(Schema):
         # UAID and CHID may be empty. This can trigger different behaviors
         # in the handlers, so we can't set default values here.
         uaid = req['path_kwargs'].get('uaid')
-        chid = req['path_kwargs'].get('chid', params.get("channelID"))
+        chid = req['path_kwargs'].get('chid', router_data.get("channelID"))
         if uaid:
             try:
                 u_uuid = uuid.UUID(uaid)
@@ -74,7 +71,7 @@ class RegistrationSchema(Schema):
 
         return dict(
             auth=req.get('headers', {}).get("Authorization"),
-            params=params,
+            router_data=router_data,
             router_type=req['path_kwargs'].get('router_type'),
             router_token=req['path_kwargs'].get('router_token'),
             uaid=uaid,
@@ -145,15 +142,14 @@ class RegistrationHandler(BaseWebHandler):
 
 
         """
-        self.start_time = time.time()
         self.add_header("Content-Type", "application/json")
-        params = self.valid_input['params']
+        router_data = self.valid_input['router_data']
         # If the client didn't provide a CHID, make one up.
         # Note, valid_input may explicitly set "chid" to None
         # THIS VALUE MUST MATCH WHAT'S SPECIFIED IN THE BRIDGE CONNECTIONS.
         # currently hex formatted.
-        self.chid = params["channelID"] = (self.valid_input["chid"] or
-                                           uuid.uuid4().hex)
+        self.chid = router_data["channelID"] = (self.valid_input["chid"] or
+                                                uuid.uuid4().hex)
         self.ap_settings.metrics.increment("updates.client.register",
                                            tags=self.base_tags())
         # If there's a UAID, ensure its valid, otherwise we ensure the hash
@@ -167,10 +163,11 @@ class RegistrationHandler(BaseWebHandler):
             self.valid_input['uaid'] = uuid.uuid4()
             new_uaid = True
         self.uaid = self.valid_input['uaid']
-        self.app_server_key = params.get("key")
+        self.app_server_key = router_data.get("key")
         if new_uaid:
             d = Deferred()
-            d.addCallback(router.register, router_data=params,
+            d.addCallback(router.register,
+                          router_data=router_data,
                           app_id=self.valid_input.get("router_token"),
                           uri=self.request.uri)
             d.addCallback(self._save_router_data,
@@ -192,13 +189,12 @@ class RegistrationHandler(BaseWebHandler):
         Update router type/data for a UAID.
 
         """
-        self.start_time = time.time()
-
         self.uaid = self.valid_input['uaid']
         router = self.valid_input['router']
         self.add_header("Content-Type", "application/json")
         d = Deferred()
-        d.addCallback(router.register, router_data=self.valid_input['params'],
+        d.addCallback(router.register,
+                      router_data=self.valid_input['router_data'],
                       app_id=self.valid_input['router_token'],
                       uri=self.request.uri)
         d.addCallback(self._save_router_data, self.valid_input['router_type'])

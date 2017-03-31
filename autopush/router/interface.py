@@ -1,4 +1,5 @@
 """Router interface"""
+from typing import Any, Optional  # noqa
 
 
 class RouterResponse(object):
@@ -26,20 +27,16 @@ class IRouter(object):
         the given settings and router conf."""
         raise NotImplementedError("__init__ must be implemented")
 
-    def register(self, uaid, routing_data, app_id, *args, **kwargs):
-        """Register the uaid with the connect dict however is preferred and
-        return a dict that will be stored as routing_data for this user in the
-        future.
+    def register(self, uaid, router_data, app_id, *args, **kwargs):
+        # type: (str, dict, str, *Any, **Any) -> dict
+        """Register the uaid with the router_data dict however is preferred
+        and return a dict that will be stored as router_data for this
+        user in the future.
 
         :param uaid: User Agent Identifier
-        :type uaid: str
-        :param routing_data: Route specific configuration info
-        :type routing_data: dict
+        :param router_data: Route specific configuration info
         :param app_id: Application identifier from URI
-        :type app_id: str
 
-        :returns: A response object
-        :rtype: :class:`RouterResponse`
         :raises:
             :exc:`RouterException` if data supplied is invalid.
 
@@ -47,6 +44,7 @@ class IRouter(object):
         raise NotImplementedError("register must be implemented")
 
     def amend_msg(self, msg, router_data=None):
+        # type: (dict, Optional[dict]) -> dict
         """Modify an outbound response message to include router info
 
         :param msg: A dict of the response data to be sent to the client
