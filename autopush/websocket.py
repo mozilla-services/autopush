@@ -817,7 +817,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         needed"""
         self.transport.resumeProducing()
 
-        registered, previous, _ = result
+        registered, previous = result
         if not registered:
             # Registration failed
             msg = {"messageType": "hello", "reason": "already_connected",

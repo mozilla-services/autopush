@@ -57,11 +57,11 @@ from typing import (  # noqa
     Set,
     TypeVar,
     Tuple,
-    Union,
 )
 
 from autopush.exceptions import AutopushException
 from autopush.metrics import IMetrics  # noqa
+from autopush.types import ItemLike  # noqa
 from autopush.utils import (
     generate_hash,
     normalize_id,
@@ -70,7 +70,6 @@ from autopush.utils import (
 
 # Typing
 T = TypeVar('T')  # noqa
-ItemLike = Union[Item, Dict[str, Any]]
 
 key_hash = ""
 TRACK_DB_CALLS = False
@@ -679,7 +678,7 @@ class Router(object):
 
     @track_provisioned
     def register_user(self, data):
-        # type: (ItemLike) -> Tuple[bool, Dict[str, Any], Dict[str, Any]]
+        # type: (ItemLike) -> Tuple[bool, Dict[str, Any]]
         """Register this user
 
         If a record exists with a newer ``connected_at``, then the user will
@@ -728,9 +727,9 @@ class Router(object):
                         # this not work
                         r[key] = value
                 result = r
-            return (True, result, data)
+            return (True, result)
         except ConditionalCheckFailedException:
-            return (False, {}, data)
+            return (False, {})
 
     @track_provisioned
     def drop_user(self, uaid):

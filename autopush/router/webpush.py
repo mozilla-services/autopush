@@ -92,6 +92,3 @@ class WebPushRouter(SimpleRouter):
             self.ap_settings.message_tables[month_table].store_message,
             notification=notification,
         )
-
-    def amend_msg(self, msg, router_data=None):
-        return msg

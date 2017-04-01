@@ -1,6 +1,12 @@
 import json
 import re
 import uuid
+from typing import (  # noqa
+    Any,
+    Optional,
+    Set,
+    Tuple
+)
 
 from boto.dynamodb2.exceptions import ItemNotFound
 from cryptography.hazmat.primitives import constant_time
@@ -10,11 +16,12 @@ from marshmallow import (
     pre_load,
     validates_schema
 )
-from twisted.internet.defer import Deferred
+from twisted.internet import defer
 from twisted.internet.threads import deferToThread
 
 from autopush.db import generate_last_connect, hasher
 from autopush.exceptions import InvalidRequest
+from autopush.types import JSONDict  # noqa
 from autopush.utils import generate_hash, ms_time
 from autopush.web.base import (
     threaded_validate,
@@ -70,12 +77,12 @@ class RegistrationSchema(Schema):
                                      status_code=410, errno=106)
 
         return dict(
-            auth=req.get('headers', {}).get("Authorization"),
-            router_data=router_data,
-            router_type=req['path_kwargs'].get('router_type'),
-            router_token=req['path_kwargs'].get('router_token'),
             uaid=uaid,
             chid=chid,
+            router_type=req['path_kwargs'].get('router_type'),
+            router_token=req['path_kwargs'].get('router_token'),
+            router_data=router_data,
+            auth=req.get('headers', {}).get("Authorization"),
         )
 
     @validates_schema(skip_on_field_errors=True)
@@ -143,44 +150,43 @@ class RegistrationHandler(BaseWebHandler):
 
         """
         self.add_header("Content-Type", "application/json")
+
+        uaid = self.valid_input['uaid']
+        router = self.valid_input["router"]
+        router_type = self.valid_input["router_type"]
+        router_token = self.valid_input.get("router_token")
         router_data = self.valid_input['router_data']
+
         # If the client didn't provide a CHID, make one up.
         # Note, valid_input may explicitly set "chid" to None
         # THIS VALUE MUST MATCH WHAT'S SPECIFIED IN THE BRIDGE CONNECTIONS.
         # currently hex formatted.
-        self.chid = router_data["channelID"] = (self.valid_input["chid"] or
-                                                uuid.uuid4().hex)
+        chid = router_data["channelID"] = (self.valid_input["chid"] or
+                                           uuid.uuid4().hex)
         self.ap_settings.metrics.increment("updates.client.register",
                                            tags=self.base_tags())
-        # If there's a UAID, ensure its valid, otherwise we ensure the hash
-        # matches up
-        new_uaid = False
 
-        # normalize the path vars into parameters
-        router = self.ap_settings.routers[self.valid_input['router_type']]
-
-        if not self.valid_input['uaid']:
-            self.valid_input['uaid'] = uuid.uuid4()
-            new_uaid = True
-        self.uaid = self.valid_input['uaid']
-        self.app_server_key = router_data.get("key")
-        if new_uaid:
-            d = Deferred()
-            d.addCallback(router.register,
-                          router_data=router_data,
-                          app_id=self.valid_input.get("router_token"),
-                          uri=self.request.uri)
-            d.addCallback(self._save_router_data,
-                          self.valid_input["router_type"])
-            d.addCallback(self._create_endpoint)
-            d.addCallback(self._return_endpoint, new_uaid, router)
+        if not uaid:
+            uaid = uuid.uuid4()
+            d = defer.execute(
+                router.register,
+                uaid.hex, router_data=router_data, app_id=router_token,
+                uri=self.request.uri)
+            d.addCallback(
+                lambda _:
+                deferToThread(self._register_user_and_channel,
+                              uaid, chid, router, router_type, router_data)
+            )
+            d.addCallback(self._write_endpoint,
+                          uaid, chid, router, router_data)
             d.addErrback(self._router_fail_err)
             d.addErrback(self._response_err)
-            d.callback(self.valid_input['uaid'].hex)
         else:
-            d = self._create_endpoint()
-            d.addCallback(self._return_endpoint, new_uaid)
+            d = deferToThread(self._register_channel,
+                              uaid, chid, router_data.get("key"))
+            d.addCallback(self._write_endpoint, uaid, chid)
             d.addErrback(self._response_err)
+        return d
 
     @threaded_validate(RegistrationSchema)
     def put(self, *args, **kwargs):
@@ -189,19 +195,24 @@ class RegistrationHandler(BaseWebHandler):
         Update router type/data for a UAID.
 
         """
-        self.uaid = self.valid_input['uaid']
+        uaid = self.valid_input['uaid']
         router = self.valid_input['router']
+        router_type = self.valid_input['router_type']
+        router_token = self.valid_input['router_token']
+        router_data = self.valid_input['router_data']
         self.add_header("Content-Type", "application/json")
-        d = Deferred()
-        d.addCallback(router.register,
-                      router_data=self.valid_input['router_data'],
-                      app_id=self.valid_input['router_token'],
-                      uri=self.request.uri)
-        d.addCallback(self._save_router_data, self.valid_input['router_type'])
+        d = defer.execute(
+            router.register,
+            uaid.hex, router_data=router_data, app_id=router_token,
+            uri=self.request.uri)
+        d.addCallback(
+            lambda _:
+            deferToThread(self._register_user, uaid, router_data, router_type)
+        )
         d.addCallback(self._success)
         d.addErrback(self._router_fail_err)
         d.addErrback(self._response_err)
-        d.callback(self.valid_input['uaid'].hex)
+        return d
 
     def _delete_channel(self, uaid, chid):
         message = self.ap_settings.message
@@ -214,18 +225,9 @@ class RegistrationHandler(BaseWebHandler):
         if not router.drop_user(uaid.hex):
             raise ItemNotFound("UAID not found")
 
-    def _register_channel(self, router_data=None):
-        self.ap_settings.message.register_channel(self.uaid.hex,
-                                                  self.chid)
-        endpoint = self.ap_settings.make_endpoint(self.uaid.hex,
-                                                  self.chid,
-                                                  self.app_server_key)
-        return endpoint, router_data
-
     def _check_uaid(self, uaid):
-        if not uaid or uaid == 'None':
+        if not uaid:
             raise ItemNotFound("UAID not found")
-        return uaid
 
     @threaded_validate(RegistrationSchema)
     def get(self, *args, **kwargs):
@@ -234,11 +236,14 @@ class RegistrationHandler(BaseWebHandler):
         Return a list of known channelIDs for a given UAID
 
         """
-        self.uaid = self.valid_input['uaid']
+        uaid = self.valid_input['uaid']
         self.add_header("Content-Type", "application/json")
-        d = deferToThread(self._check_uaid, str(self.uaid))
-        d.addCallback(self.ap_settings.message.all_channels)
-        d.addCallback(self._write_channels)
+        d = defer.execute(self._check_uaid, uaid)
+        d.addCallback(
+            lambda _:
+            deferToThread(self.ap_settings.message.all_channels, str(uaid))
+        )
+        d.addCallback(self._write_channels, uaid)
         d.addErrback(self._uaid_not_found_err)
         d.addErrback(self._response_err)
         return d
@@ -290,58 +295,66 @@ class RegistrationHandler(BaseWebHandler):
     #############################################################
     #                    Callbacks
     #############################################################
-    def _save_router_data(self, router_data, router_type):
-        """Called when new data needs to be saved to a user-record"""
-        user_item = dict(
-            uaid=self.uaid.hex,
+    def _register_user_and_channel(self,
+                                   uaid,         # type: uuid.UUID
+                                   chid,         # type: str
+                                   router,       # type: Any
+                                   router_type,  # type: str
+                                   router_data   # type: JSONDict
+                                   ):
+        # type: (...) -> str
+        """Register a new user/channel, return its endpoint"""
+        self._register_user(uaid, router_type, router_data)
+        return self._register_channel(uaid, chid, router_data.get("key"))
+
+    def _register_user(self, uaid, router_type, router_data):
+        # type: (uuid.UUID, str, JSONDict) -> None
+        """Save a new user record"""
+        self.ap_settings.router.register_user(dict(
+            uaid=uaid.hex,
             router_type=router_type,
             router_data=router_data,
             connected_at=ms_time(),
             last_connect=generate_last_connect(),
-        )
-        return deferToThread(self.ap_settings.router.register_user, user_item)
+        ))
 
-    def _create_endpoint(self, result=None):
-        """Called to register a new channel and create its endpoint."""
-        router_data = None
-        try:
-            router_data = result[2]
-        except (IndexError, TypeError):
-            pass
-        return deferToThread(self._register_channel, router_data)
+    def _register_channel(self, uaid, chid, app_server_key):
+        # type(uuid.UUID, str, str) -> str
+        """Register a new channel and create/return its endpoint"""
+        self.ap_settings.message.register_channel(uaid.hex, chid)
+        return self.ap_settings.make_endpoint(uaid.hex, chid, app_server_key)
 
-    def _return_endpoint(self, endpoint_data, new_uaid, router=None):
-        """Called after the endpoint was made and should be returned to the
-        requestor"""
-        hashed = None
-        if new_uaid:
+    def _write_endpoint(self,
+                        endpoint,         # type: str
+                        uaid,             # type: uuid.UUID
+                        chid,             # type: str
+                        router=None,      # type: Optional[Any]
+                        router_data=None  # type: Optional[JSONDict]
+                        ):
+        # type: (...) -> None
+        """Write the JSON response of the created endpoint"""
+        response = dict(channelID=chid, endpoint=endpoint)
+        if router_data is not None:
+            # a new uaid
+            secret = None
             if self.ap_settings.bear_hash_key:
-                hashed = generate_hash(self.ap_settings.bear_hash_key[0],
-                                       self.uaid.hex)
-            msg = dict(
-                uaid=self.uaid.hex,
-                secret=hashed,
-                channelID=self.chid,
-                endpoint=endpoint_data[0],
-            )
+                secret = generate_hash(
+                    self.ap_settings.bear_hash_key[0], uaid.hex)
+            response.update(uaid=uaid.hex, secret=secret)
             # Apply any router specific fixes to the outbound response.
-            if router is not None:
-                msg = router.amend_msg(msg,
-                                       endpoint_data[1].get('router_data'))
-        else:
-            msg = dict(channelID=self.chid, endpoint=endpoint_data[0])
-        self.write(json.dumps(msg))
-        self.log.debug(format="Endpoint registered via HTTP",
+            router.amend_endpoint_response(response, router_data)
+        self.write(json.dumps(response))
+        self.log.debug("Endpoint registered via HTTP",
                        client_info=self._client_info)
         self.finish()
 
-    def _write_channels(self, channel_info, *args, **kwargs):
-        # channel_info is a tuple containing a flag and the list of channels
-        dashed = [str(uuid.UUID(x)) for x in channel_info[1]]
-        self.write(json.dumps(
-            {"uaid": self.uaid.hex,
-             "channelIDs": dashed}
-        ))
+    def _write_channels(self, channel_info, uaid):
+        # type: (Tuple[bool, Set[str]], uuid.UUID) -> None
+        response = dict(
+            uaid=uaid.hex,
+            channelIDs=[str(uuid.UUID(x)) for x in channel_info[1]]
+        )
+        self.write(json.dumps(response))
         self.finish()
 
     def _success(self, result):

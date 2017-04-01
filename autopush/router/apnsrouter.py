@@ -1,5 +1,6 @@
 """APNS Router"""
 import uuid
+from typing import Any  # noqa
 
 from hyper.http20.exceptions import ConnectionError, HTTP20Error
 from twisted.internet.threads import deferToThread
@@ -12,6 +13,7 @@ from autopush.router.apns2 import (
     APNS_MAX_CONNECTIONS,
 )
 from autopush.router.interface import RouterResponse
+from autopush.types import JSONDict  # noqa
 
 
 # https://github.com/djacobs/PyAPNs
@@ -67,21 +69,15 @@ class APNSRouter(object):
         self.log.debug("Starting APNS router...")
 
     def register(self, uaid, router_data, app_id, *args, **kwargs):
+        # type: (str, JSONDict, str, *Any, **Any) -> None
         """Register an endpoint for APNS, on the `app_id` release channel.
 
         This will validate that an APNs instance token is in the
         `router_data`,
 
         :param uaid: User Agent Identifier
-        :type uaid: str
         :param router_data: Dict containing router specific configuration info
-        :type router_data: dict
         :param app_id: The release channel identifier for cert info lookup
-        :type app_id: str
-
-        :returns: a modified router_data for the user agent record.
-        :rtype: dict
-
 
         """
         if app_id not in self.apns:
@@ -92,11 +88,10 @@ class APNSRouter(object):
             raise RouterException("No token registered", status_code=400,
                                   response_body="No token registered")
         router_data["rel_channel"] = app_id
-        return router_data
 
-    def amend_msg(self, msg, router_data=None):
-        """This function is stubbed out for this router"""
-        return msg
+    def amend_endpoint_response(self, response, router_data):
+        # type: (JSONDict, JSONDict) -> None
+        """Stubbed out for this router"""
 
     def route_notification(self, notification, uaid_data):
         """Start the APNS notification routing, returns a deferred

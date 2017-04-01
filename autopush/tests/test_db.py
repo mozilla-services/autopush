@@ -501,7 +501,7 @@ class RouterTestCase(unittest.TestCase):
         router_data = dict(uaid=dummy_uaid, node_id="asdf", connected_at=1234,
                            router_type="simplepush")
         result = router.register_user(router_data)
-        eq_(result, (False, {}, router_data))
+        eq_(result, (False, {}))
 
     def test_node_clear(self):
         r = get_router_table()

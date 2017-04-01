@@ -22,6 +22,7 @@ from autopush.db import (
     create_rotating_message_table,
     has_connected_this_month,
 )
+from autopush.exceptions import RouterException
 from autopush.settings import AutopushSettings
 from autopush.router.interface import IRouter
 from autopush.tests.test_db import make_webpush_notification
@@ -433,6 +434,28 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.post(self._make_req())
         return self.finish_deferred
 
+    def test_post_bad_router_register(self, *args):
+        frouter = Mock(spec=IRouter)
+        self.reg.ap_settings.routers["simplepush"] = frouter
+        rexc = RouterException("invalid", status_code=402, errno=107)
+        frouter.register = Mock(side_effect=rexc)
+
+        self.reg.request.body = json.dumps(dict(
+            type="simplepush",
+            channelID=str(dummy_chid),
+            data={},
+        ))
+        self.reg.request.uri = "/v1/xxx/yyy/register"
+        self.reg.request.headers["Authorization"] = self.auth
+
+        def handle_finish(value):
+            self._check_error(rexc.status_code, rexc.errno, "")
+
+        self.finish_deferred.addBoth(handle_finish)
+        self.reg.post(self._make_req("simplepush", "",
+                                     body=self.reg.request.body))
+        return self.finish_deferred
+
     def test_post_existing_uaid(self, *args):
         self.reg.request.body = json.dumps(dict(
             channelID=str(dummy_chid),
@@ -734,6 +757,19 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.put(self._make_req(uaid=dummy_uaid.hex))
         return self.finish_deferred
 
+    def test_put_bad_router_register(self):
+        frouter = self.reg.ap_settings.routers["test"]
+        rexc = RouterException("invalid", status_code=402, errno=107)
+        frouter.register = Mock(side_effect=rexc)
+
+        def handle_finish(value):
+            self._check_error(rexc.status_code, rexc.errno, "")
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.reg.request.headers["Authorization"] = self.auth
+        self.reg.put(self._make_req(router_type='test', uaid=dummy_uaid.hex))
+        return self.finish_deferred
+
     def test_delete_bad_chid_value(self):
         notif = make_webpush_notification(dummy_uaid.hex, str(dummy_chid))
         messages = self.reg.ap_settings.message
@@ -842,6 +878,8 @@ class RegistrationTestCase(unittest.TestCase):
         chids = [str(dummy_chid), str(dummy_uaid)]
 
         def handle_finish(value):
+            self.settings.message.all_channels.assert_called_with(
+                str(dummy_uaid))
             call_args = json.loads(
                 self.reg.write.call_args[0][0]
             )

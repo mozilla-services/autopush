@@ -8,6 +8,7 @@ based channel ID's (only newest version is stored, no data stored).
 import json
 from urllib import urlencode
 from StringIO import StringIO
+from typing import Any  # noqa
 
 import requests
 from boto.dynamodb2.exceptions import (
@@ -32,6 +33,7 @@ from twisted.web.client import FileBodyProducer
 from autopush.exceptions import RouterException
 from autopush.protocol import IgnoreBody
 from autopush.router.interface import RouterResponse
+from autopush.types import JSONDict  # noqa
 
 
 class SimpleRouter(object):
@@ -47,12 +49,13 @@ class SimpleRouter(object):
         self.conf = router_conf
         self.waker = None
 
-    def register(self, uaid, *args, **kwargs):
-        """Return no additional routing data"""
-        return {}
+    def register(self, uaid, router_data, app_id, *args, **kwargs):
+        # type: (str, JSONDict, str, *Any, **Any) -> None
+        """No additional routing data"""
 
-    def amend_msg(self, msg, router_data=None):
-        return msg
+    def amend_endpoint_response(self, response, router_data):
+        # type: (JSONDict, JSONDict) -> None
+        """Stubbed out for this router"""
 
     def stored_response(self, notification):
         return RouterResponse(202, "Notification Stored")
