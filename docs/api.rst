@@ -31,3 +31,4 @@ documentation is organized alphabetically by module name.
    api/ssl
    api/utils
    api/websocket
+   api/jwt

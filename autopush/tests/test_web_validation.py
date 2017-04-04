@@ -8,8 +8,8 @@ from boto.dynamodb2.exceptions import (
     ItemNotFound,
 )
 from cryptography.fernet import InvalidToken
+from cryptography.exceptions import InvalidSignature
 from jose import jws
-from jose.exceptions import JWTClaimsError
 from marshmallow import Schema, fields
 from mock import Mock, patch
 from moto import mock_dynamodb2
@@ -1005,7 +1005,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
     def test_invalid_encryption_jwt(self, mock_jwt):
         schema = self._make_fut()
         # use a deeply superclassed error to make sure that it gets picked up.
-        mock_jwt.side_effect = JWTClaimsError("invalid claim")
+        mock_jwt.side_effect = InvalidSignature("invalid signature")
 
         header = {"typ": "JWT", "alg": "ES256"}
         payload = {"aud": "https://push.example.com",

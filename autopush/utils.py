@@ -7,7 +7,6 @@ import socket
 import time
 import uuid
 
-import ecdsa
 import requests
 from attr import (
     Factory,
@@ -16,7 +15,6 @@ from attr import (
 )
 from boto.dynamodb2.items import Item  # noqa
 from cryptography.fernet import Fernet  # noqa
-from jose import jwt
 from typing import (  # noqa
     Any,
     Dict,
@@ -27,6 +25,7 @@ from typing import (  # noqa
 from ua_parser import user_agent_parser
 
 from autopush.exceptions import InvalidTokenException
+from autopush.jwt import repad, VerifyJWT as jwt
 
 
 # Remove trailing padding characters from complex header items like
@@ -122,14 +121,6 @@ def base64url_encode(string):
     return base64.urlsafe_b64encode(string).strip('=')
 
 
-def repad(string):
-    # type: (str) -> str
-    """Adds padding to strings for base64 decoding"""
-    if len(string) % 4:
-        string += '===='[len(string) % 4:]
-    return string
-
-
 def base64url_decode(string):
     # type: (str) -> str
     """Decodes a Base64 URL-encoded string per RFC 7515.
@@ -171,11 +162,11 @@ def decipher_public_key(key_data):
     # key data is actually a raw coordinate pair
     key_data = base64url_decode(key_data)
     key_len = len(key_data)
-    if key_len == 64:
+    if key_len == 65 and key_data[0] == '\x04':
         return key_data
     # Key format is "raw"
-    if key_len == 65 and key_data[0] == '\x04':
-        return key_data[-64:]
+    if key_len == 64:
+        return '\04' + key_data
     # key format is "spki"
     if key_len == 88 and key_data[:3] == '0V0':
         return key_data[-64:]
@@ -188,18 +179,7 @@ def extract_jwt(token, crypto_key):
     # first split and convert the jwt.
     if not token or not crypto_key:
         return {}
-
-    key = decipher_public_key(crypto_key)
-    vk = ecdsa.VerifyingKey.from_string(key, curve=ecdsa.NIST256p)
-    # jose offers jwt.decode(token, vk, ...) which does a full check
-    # on the JWT object. Vapid is a bit more creative in how it
-    # stores data into a JWT and breaks expectations. We would have to
-    # turn off most of the validation in order for it to be useful.
-    return jwt.decode(token, dict(keys=[vk]), options=dict(
-        verify_aud=False,
-        verify_sub=False,
-        verify_exp=False,
-    ))
+    return jwt.decode(token, decipher_public_key(crypto_key))
 
 
 def parse_user_agent(agent_string):
