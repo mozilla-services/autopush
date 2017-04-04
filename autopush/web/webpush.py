@@ -321,7 +321,7 @@ class WebPushRequestSchema(Schema):
 
         try:
             jwt = extract_jwt(token, public_key)
-        except (ValueError, InvalidSignature, Exception):
+        except (ValueError, InvalidSignature, TypeError):
             raise InvalidRequest("Invalid Authorization Header",
                                  status_code=401, errno=109,
                                  headers={"www-authenticate": PREF_SCHEME})
