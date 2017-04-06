@@ -62,7 +62,7 @@ class RouterInterfaceTestCase(TestCase):
         ir = IRouter(None, None)
         assert_raises(NotImplementedError, ir.register, "uaid", {}, "")
         assert_raises(NotImplementedError, ir.route_notification, "uaid", {})
-        assert_raises(NotImplementedError, ir.amend_msg, {})
+        assert_raises(NotImplementedError, ir.amend_endpoint_response, {}, {})
 
 
 # FOR LEGACY REASONS, CHANNELID MUST BE IN HEX FORMAT FOR BRIDGE PUBLICATION
@@ -129,10 +129,9 @@ class APNSRouterTestCase(unittest.TestCase):
                                                  rel_channel="firefox"))
 
     def test_register(self):
-        result = self.router.register("uaid",
-                                      router_data={"token": "connect_data"},
-                                      app_id="firefox")
-        eq_(result, {"rel_channel": "firefox", "token": "connect_data"})
+        router_data = {"token": "connect_data"}
+        self.router.register("uaid", router_data=router_data, app_id="firefox")
+        eq_(router_data, {"rel_channel": "firefox", "token": "connect_data"})
 
     def test_register_bad(self):
         with assert_raises(RouterException):
@@ -247,7 +246,9 @@ class APNSRouterTestCase(unittest.TestCase):
 
     def test_amend(self):
         resp = {"key": "value"}
-        eq_(resp, self.router.amend_msg(resp))
+        expected = resp.copy()
+        self.router.amend_endpoint_response(resp, {})
+        eq_(resp, expected)
 
     def test_route_crypto_key(self):
         headers = {"content-encoding": "aesgcm",
@@ -331,13 +332,12 @@ class GCMRouterTestCase(unittest.TestCase):
             GCMRouter(settings, {"senderIDs": {}})
 
     def test_register(self):
-        result = self.router.register("uaid",
-                                      router_data={"token": "test123"},
-                                      app_id="test123")
+        router_data = {"token": "test123"}
+        self.router.register("uaid", router_data=router_data, app_id="test123")
         # Check the information that will be recorded for this user
-        eq_(result, {"token": "test123",
-                     "creds": {"senderID": "test123",
-                               "auth": "12345678abcdefg"}})
+        eq_(router_data, {"token": "test123",
+                          "creds": {"senderID": "test123",
+                                    "auth": "12345678abcdefg"}})
 
     def test_register_bad(self):
         with assert_raises(RouterException):
@@ -571,14 +571,12 @@ class GCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_amend(self):
-        self.router.register("uaid",
-                             router_data={"token": "test123"},
-                             app_id="test123")
+        router_data = {"token": "test123"}
+        self.router.register("uaid", router_data=router_data, app_id="test123")
         resp = {"key": "value"}
-        result = self.router.amend_msg(resp,
-                                       self.router_data.get('router_data'))
-        eq_({"key": "value", "senderid": "test123"},
-            result)
+        self.router.amend_endpoint_response(
+            resp, self.router_data.get('router_data'))
+        eq_({"key": "value", "senderid": "test123"}, resp)
 
     def test_register_invalid_token(self):
         with assert_raises(RouterException):
@@ -649,17 +647,16 @@ class FCMRouterTestCase(unittest.TestCase):
             FCMRouter(settings, {})
 
     def test_register(self):
-        result = self.router.register("uaid",
-                                      router_data={"token": "test123"},
-                                      app_id="test123")
+        router_data = {"token": "test123"}
+        self.router.register("uaid", router_data=router_data, app_id="test123")
         # Check the information that will be recorded for this user
-        eq_(result, {"token": "test123",
-                     "creds": {"senderID": "test123",
-                               "auth": "12345678abcdefg"}})
+        eq_(router_data, {"token": "test123",
+                          "creds": {"senderID": "test123",
+                                    "auth": "12345678abcdefg"}})
 
     def test_register_bad(self):
         with assert_raises(RouterException):
-            self.router.register("uaid", router_data={})
+            self.router.register("uaid", router_data={}, app_id="invalid123")
 
     def test_route_notification(self):
         self.router.fcm = self.fcm
@@ -862,10 +859,9 @@ class FCMRouterTestCase(unittest.TestCase):
                              router_data={"token": "test123"},
                              app_id="test123")
         resp = {"key": "value"}
-        result = self.router.amend_msg(resp,
-                                       self.router_data.get('router_data'))
-        eq_({"key": "value", "senderid": "test123"},
-            result)
+        self.router.amend_endpoint_response(
+            resp, self.router_data.get('router_data'))
+        eq_({"key": "value", "senderid": "test123"}, resp)
 
     def test_register_invalid_token(self):
         with assert_raises(RouterException):
@@ -910,8 +906,9 @@ class SimplePushRouterTestCase(unittest.TestCase):
         raise ItemNotFound()
 
     def test_register(self):
-        r = self.router.register("uaid", router_data={})
-        eq_(r, {})
+        router_data = {}
+        self.router.register("uaid", router_data=router_data, app_id="test123")
+        eq_(router_data, {})
 
     def test_route_to_connected(self):
         self.agent_mock.request.return_value = response_mock = Mock()
@@ -1109,9 +1106,11 @@ class SimplePushRouterTestCase(unittest.TestCase):
         eq_(self.router.udp, udp_data)
         return d
 
-    def test_ammend(self):
+    def test_amend(self):
         resp = {"key": "value"}
-        eq_(resp, self.router.amend_msg(resp))
+        expected = resp.copy()
+        self.router.amend_endpoint_response(resp, {})
+        eq_(resp, expected)
 
 
 class WebPushRouterTestCase(unittest.TestCase):
@@ -1210,6 +1209,8 @@ class WebPushRouterTestCase(unittest.TestCase):
         d.addBoth(verify_deliver)
         return d
 
-    def test_ammend(self):
+    def test_amend(self):
         resp = {"key": "value"}
-        eq_(resp, self.router.amend_msg(resp))
+        expected = resp.copy()
+        self.router.amend_endpoint_response(resp, {})
+        eq_(resp, expected)

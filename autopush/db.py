@@ -57,11 +57,11 @@ from typing import (  # noqa
     Set,
     TypeVar,
     Tuple,
-    Union,
 )
 
 from autopush.exceptions import AutopushException
 from autopush.metrics import IMetrics  # noqa
+from autopush.types import ItemLike  # noqa
 from autopush.utils import (
     generate_hash,
     normalize_id,
@@ -105,7 +105,7 @@ def hasher(uaid):
 
 
 def dump_uaid(uaid_data):
-    # type: (Union[Dict[str, Any], Item]) -> str
+    # type: (ItemLike) -> str
     """Return a dict for a uaid.
 
     This is utilized instead of repr since some db methods return a
@@ -303,7 +303,7 @@ def track_provisioned(func):
 
 
 def has_connected_this_month(item):
-    # type: (Dict[str, Any]) -> bool
+    # type: (ItemLike) -> bool
     """Whether or not a router item has connected this month"""
     last_connect = item.get("last_connect")
     if not last_connect:
@@ -678,7 +678,7 @@ class Router(object):
 
     @track_provisioned
     def register_user(self, data):
-        # type: (Dict[str, Any]) -> Tuple[bool, Dict[str, Any], Dict[str, Any]]
+        # type: (ItemLike) -> Tuple[bool, Dict[str, Any]]
         """Register this user
 
         If a record exists with a newer ``connected_at``, then the user will
@@ -727,9 +727,9 @@ class Router(object):
                         # this not work
                         r[key] = value
                 result = r
-            return (True, result, data)
+            return (True, result)
         except ConditionalCheckFailedException:
-            return (False, {}, data)
+            return (False, {})
 
     @track_provisioned
     def drop_user(self, uaid):

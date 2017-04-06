@@ -554,7 +554,7 @@ class WebsocketTestCase(unittest.TestCase):
         ))
 
         def fake_msg(data):
-            return (True, msg_data, data)
+            return (True, msg_data)
 
         mock_msg = Mock(wraps=db.Message)
         mock_msg.fetch_messages.return_value = []
@@ -616,7 +616,7 @@ class WebsocketTestCase(unittest.TestCase):
         }
 
         def fake_msg(data):
-            return (True, msg_data, data)
+            return (True, msg_data)
 
         mock_msg = Mock(wraps=db.Message)
         mock_msg.fetch_messages.return_value = "01;", []
@@ -690,7 +690,7 @@ class WebsocketTestCase(unittest.TestCase):
         }
 
         def fake_msg(data):
-            return (True, msg_data, data)
+            return (True, msg_data)
 
         mock_msg = Mock(wraps=db.Message)
         mock_msg.fetch_messages.return_value = "01;", []
@@ -960,7 +960,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Fail out the register_user call
         self.proto.ap_settings.router.register_user = \
-            Mock(return_value=(False, {}, {}))
+            Mock(return_value=(False, {}))
 
         self._send_message(dict(messageType="hello", channelIDs=[]))
 
@@ -1386,7 +1386,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = uaid
         connected = int(time.time())
         res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
-        self.proto._check_other_nodes((True, res, None))
+        self.proto._check_other_nodes((True, res))
         mock_agent.request.assert_called_with(
             "DELETE",
             "%s/notif/%s/%s" % (node_id, uaid, connected))
@@ -1401,7 +1401,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = uaid
         connected = int(time.time())
         res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
-        self.proto._check_other_nodes((True, res, None))
+        self.proto._check_other_nodes((True, res))
         d.errback(ConnectError())
         return d
 
@@ -1448,7 +1448,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.sendClose = Mock()
         self.proto.ps.uaid = uaid
         res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
-        self.proto._check_other_nodes((True, res, None))
+        self.proto._check_other_nodes((True, res))
         # the current one should be dropped.
         eq_(ff.sendClose.call_count, 0)
         eq_(self.proto.sendClose.call_count, 1)
@@ -1468,7 +1468,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.sendClose = Mock()
         self.proto.ps.uaid = uaid
         res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
-        self.proto._check_other_nodes((True, res, None))
+        self.proto._check_other_nodes((True, res))
         # the existing one should be dropped.
         eq_(ff.sendClose.call_count, 1)
         eq_(self.proto.sendClose.call_count, 0)

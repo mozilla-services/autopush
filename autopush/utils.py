@@ -13,7 +13,6 @@ from attr import (
     attrs,
     attrib
 )
-from boto.dynamodb2.items import Item  # noqa
 from cryptography.fernet import Fernet  # noqa
 from typing import (  # noqa
     Any,
@@ -26,6 +25,7 @@ from ua_parser import user_agent_parser
 
 from autopush.exceptions import InvalidTokenException
 from autopush.jwt import repad, VerifyJWT as jwt
+from autopush.types import ItemLike  # noqa
 
 
 # Remove trailing padding characters from complex header items like
@@ -429,7 +429,7 @@ class WebPushNotification(object):
 
     @classmethod
     def from_message_table(cls, uaid, item):
-        # type: (uuid.UUID, Union[Dict[str, Any], Item]) -> WebPushNotification
+        # type: (uuid.UUID, ItemLike) -> WebPushNotification
         """Create a WebPushNotification from a message table item"""
         key_info = cls.parse_sort_key(item["chidmessageid"])
         if key_info["api_ver"] in ["01", "02"]:

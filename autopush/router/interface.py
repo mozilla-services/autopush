@@ -1,4 +1,7 @@
 """Router interface"""
+from typing import Any  # noqa
+
+from autopush.types import JSONDict  # noqa
 
 
 class RouterResponse(object):
@@ -26,37 +29,35 @@ class IRouter(object):
         the given settings and router conf."""
         raise NotImplementedError("__init__ must be implemented")
 
-    def register(self, uaid, routing_data, app_id, *args, **kwargs):
-        """Register the uaid with the connect dict however is preferred and
-        return a dict that will be stored as routing_data for this user in the
-        future.
+    def register(self, uaid, router_data, app_id, *args, **kwargs):
+        # type: (str, JSONDict, str, *Any, **Any) -> None
+        """Register the uaid with router_data however is preferred prior to
+        storing router_data for this user.
 
         :param uaid: User Agent Identifier
-        :type uaid: str
-        :param routing_data: Route specific configuration info
-        :type routing_data: dict
+        :param router_data: Route specific configuration info
         :param app_id: Application identifier from URI
-        :type app_id: str
 
-        :returns: A response object
-        :rtype: :class:`RouterResponse`
         :raises:
             :exc:`RouterException` if data supplied is invalid.
 
         """
         raise NotImplementedError("register must be implemented")
 
-    def amend_msg(self, msg, router_data=None):
-        """Modify an outbound response message to include router info
+    def amend_endpoint_response(self, response, router_data):
+        # type: (JSONDict, JSONDict) -> None
+        """Modify an outbound Endpoint registration response to
+        include router info.
 
-        :param msg: A dict of the response data to be sent to the client
-        :param router_data: a dictionary of router data
-        :returns: A potentially modified dict to return to the client
+        Some routers require additional info to be returned to
+        clients.
 
-        Some routers may require additional info to be returned to clients.
+        :param response: The response data to be sent to the client
+        :param router_data: Route specific configuration info
 
         """
-        raise NotImplementedError("amend_msg must be implemented")
+        raise NotImplementedError(
+            "amend_endpoint_response must be implemented")
 
     def route_notification(self, notification, uaid_data):
         """Route a notification
