@@ -6,10 +6,10 @@ autobahn[twisted]==0.16.0
 boto==2.42.0
 boto3==1.4.0
 botocore==1.4.50
-cffi==1.7.0
+cffi==1.10.0
 click==6.6
 contextlib2==0.5.4
-cryptography==1.7.2
+cryptography==1.8.1
 cyclone==1.1
 datadog==0.13.0
 decorator==4.0.10
@@ -17,9 +17,9 @@ enum34==1.1.6
 future==0.15.2
 futures==3.0.5
 gcm-client==0.1.4
-hyper==0.6.2
-idna==2.1
-ipaddress==1.0.16
+hyper==0.7.0
+idna==2.5
+ipaddress==1.0.18
 jmespath==0.9.0
 marshmallow==2.10.2
 marshmallow_polyfield==3.1
@@ -32,7 +32,7 @@ pycrypto==2.6.1
 pyfcm==1.0.4
 python-dateutil==2.5.3
 raven==5.25.0
-requests==2.11.0
+requests==2.13.0
 service-identity==16.0.0
 simplejson==3.8.2
 six==1.10.0

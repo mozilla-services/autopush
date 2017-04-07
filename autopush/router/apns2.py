@@ -124,6 +124,9 @@ class APNSClient(object):
             # re-established.
             stream_id = connection.request(
                 'POST', url=url, body=body, headers=headers)
+            # get_response() may return an AttributeError. Not really sure
+            # how it happens, but the connected socket may get set to None.
+            # We'll treat that as a premature socket closure.
             response = connection.get_response(stream_id)
             if response.status != 200:
                 reason = json.loads(response.read().decode('utf-8'))['reason']
@@ -135,7 +138,7 @@ class APNSClient(object):
                                   "your message {}".format(reason),
                     log_exception=False
                 )
-        except HTTP20Error:
+        except (HTTP20Error, AttributeError):
             connection.close()
             raise
         finally:

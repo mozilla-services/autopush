@@ -142,7 +142,7 @@ class APNSRouter(object):
         try:
             apns_client.send(router_token=router_token, payload=payload,
                              apns_id=apns_id)
-        except ConnectionError as ex:
+        except (ConnectionError, AttributeError) as ex:
             self.ap_settings.metrics.increment(
                 "updates.client.bridge.apns.connection_err",
                 self._base_tags
