@@ -2040,7 +2040,8 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         eq_(ca_data['con'], content_encoding)
         eq_(ca_data['cryptokey'], crypto_key)
         eq_(ca_data['enc'], salt)
-        eq_(ca_data['aps']['content_available'], 1)
+        ok_('alert' not in ca_data['aps'])
+        eq_(ca_data['aps']['content-available'], 1)
         eq_(ca_data['body'], base64url_encode(data))
 
 
