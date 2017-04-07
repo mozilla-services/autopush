@@ -74,8 +74,7 @@ The APNS post message contains JSON formatted data similar to the following:
 
     {
         "aps": {
-            "alert": "notification title",
-            "content_available": 1
+            "content-available": 1
         },
         "key": "value",
         ...

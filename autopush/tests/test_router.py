@@ -181,8 +181,7 @@ class APNSRouterTestCase(unittest.TestCase):
             "enc": "test",
             "ver": 10,
             "aps": {
-                "content_available": 1,
-                "alert": "Mozilla Push",
+                "content-available": 1,
             },
             "enckey": "test",
             "con": "aesgcm",
