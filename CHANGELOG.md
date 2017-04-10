@@ -1,3 +1,26 @@
+<a name="1.28.0"></a>
+## 1.28.0 (2017-04-07)
+
+
+#### Refactor
+
+*   cleanup some deferred arg bookkeeping ([55e91c59](https://github.com/mozilla-services/autopush/commit/55e91c59d449c57b1a3d19d803656b8d4323818d))
+*   various cleanup ([013db1ca](https://github.com/mozilla-services/autopush/commit/013db1ca1c2d904d78ecca9adb243eb5462d69e2))
+
+#### Features
+
+*   Use cryptography based JWT parser for increased speed ([fe9b7766](https://github.com/mozilla-services/autopush/commit/fe9b7766e4af50452a2cb69fd982bf5c89f74523))
+
+#### Bug Fixes
+
+*   APNS may close a socket prematurely, resulting in an AttributeError ([ed86e267](https://github.com/mozilla-services/autopush/commit/ed86e26706fe0d07bc8849c8dae3e44a72ae0675))
+*   Hyphenate `content-available`; don't send `alert` for APNs. ([103e0945](https://github.com/mozilla-services/autopush/commit/103e094508d06700e2d90d05f8a2b442438bbd97))
+*   Limit exception trapping to known types when processing crypto-key ([3576d207](https://github.com/mozilla-services/autopush/commit/3576d2075b590861950b984160243de35bf982d5))
+*   Fixes for missing UAID and header values ([defb331b](https://github.com/mozilla-services/autopush/commit/defb331b3f8df001a18ee2c58d8363d0929304d0))
+*   Use log.error() to better track exceptions in APNS ([8aa510d7](https://github.com/mozilla-services/autopush/commit/8aa510d7c30d4d2748cf3d2d9330e8d3ffb85a78))
+
+
+
 <a name="1.27.0"></a>
 ## 1.27.0 (2017-03-24)
 
