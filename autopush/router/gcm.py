@@ -111,13 +111,11 @@ class GCMRouter(object):
             dry_run=self.dryRun or ("dryrun" in router_data),
             data=data,
         )
-        creds = router_data.get("creds", {"senderID": "missing id"})
         try:
-            gcm = self.gcm[creds['senderID']]
+            gcm = self.gcm[router_data['creds']['senderID']]
             result = gcm.send(payload)
         except KeyError:
-            self.log.critical("Missing GCM bridge credentials for : %s" %
-                              creds.get("senderID"))
+            self.log.critical("Missing GCM bridge credentials")
             raise RouterException("Server error", status_code=500)
         except gcmclient.GCMAuthenticationError as e:
             self.log.error("GCM Authentication Error: %s" % e)

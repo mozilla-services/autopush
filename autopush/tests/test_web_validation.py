@@ -310,6 +310,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            router_data=dict(creds=dict(senderID="bogus")),
         )
         result, errors = schema.load(self._make_test_data())
         eq_(errors, {})
@@ -325,6 +326,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            router_data=dict(creds=dict(senderID="bogus")),
         )
         data = self._make_test_data(body="asdfasdf")
 
@@ -421,6 +423,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            router_data=dict(creds=dict(senderID="bogus")),
         )
         info = self._make_test_data(
             headers={
@@ -444,6 +447,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            router_data=dict(creds=dict(senderID="bogus")),
         )
         info = self._make_test_data(
             headers={
@@ -470,6 +474,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            router_data=dict(creds=dict(senderID="bogus")),
         )
         info = self._make_test_data(
             headers={
@@ -494,6 +499,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            router_data=dict(creds=dict(senderID="bogus")),
         )
         info = self._make_test_data(
             headers={
@@ -518,6 +524,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            router_data=dict(creds=dict(senderID="bogus")),
         )
         info = self._make_test_data(
             headers={
@@ -543,6 +550,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
             uaid=dummy_uaid,
+            router_data=dict(creds=dict(senderID="bogus")),
         )
         info = self._make_test_data(
             headers={
@@ -568,6 +576,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
             uaid=dummy_uaid,
+            router_data=dict(creds=dict(senderID="bogus")),
         )
         schema.context["settings"].max_data = 1
 
@@ -590,6 +599,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            router_data=dict(creds=dict(senderID="bogus")),
         )
 
         with assert_raises(InvalidRequest) as cm:
@@ -606,6 +616,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            router_data=dict(creds=dict(senderID="bogus")),
         )
 
         padded_value = "asdfjiasljdf==="
@@ -633,6 +644,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
+            router_data=dict(creds=dict(senderID="bogus")),
         )
 
         padded_value = "asdfjiasljdf==="
@@ -664,6 +676,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
             uaid=dummy_uaid,
+            router_data=dict(creds=dict(senderID="bogus")),
         )
 
         info = self._make_test_data(
@@ -691,6 +704,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         schema.context["settings"].router.get_uaid.return_value = dict(
             router_type="gcm",
             uaid=dummy_uaid,
+            router_data=dict(creds=dict(senderID="bogus")),
         )
 
         info = self._make_test_data(
@@ -780,6 +794,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         settings.router.get_uaid.return_value = dict(
             router_type="gcm",
             uaid=dummy_uaid,
+            router_data=dict(creds=dict(senderID="bogus")),
         )
         settings.fernet = self.fernet_mock = Mock()
         return schema
