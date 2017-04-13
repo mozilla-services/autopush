@@ -78,6 +78,14 @@ class WebPushSubscriptionSchema(Schema):
         if result.get("router_type") not in ["webpush", "gcm", "apns", "fcm"]:
             raise InvalidRequest("Wrong URL for user", errno=108)
 
+        if (result.get("router_type") in ["gcm", "fcm"]
+            and 'senderID' not in result.get('router_data',
+                                             {}).get("creds", {})):
+                # Make sure we note that this record is bad.
+                result['critical_failure'] = \
+                    result.get('critical_failure', "Missing SenderID")
+                settings.router.register_user(result)
+
         if result.get("critical_failure"):
             raise InvalidRequest("Critical Failure: %s" %
                                  result.get("critical_failure"),

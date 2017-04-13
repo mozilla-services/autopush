@@ -175,7 +175,8 @@ class TestWebpushHandler(unittest.TestCase):
         self.ap_settings.router.get_uaid.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
-            router_type="gcm"
+            router_type="gcm",
+            router_data=dict(creds=dict(senderID="bogus")),
         )
         self.wp.post()
         return self.finish_deferred
@@ -192,7 +193,8 @@ class TestWebpushHandler(unittest.TestCase):
         self.ap_settings.router.get_uaid.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
-            router_type="gcm"
+            router_type="gcm",
+            router_data=dict(creds=dict(senderID="bogus")),
         )
         self.wp.post()
         return self.finish_deferred
