@@ -23,9 +23,10 @@ from typing import (  # noqa
 )
 from ua_parser import user_agent_parser
 
-from autopush.exceptions import InvalidTokenException
+from autopush.exceptions import (InvalidTokenException, VapidAuthException)
 from autopush.jwt import repad, VerifyJWT as jwt
 from autopush.types import ItemLike  # noqa
+from autopush.web.base import AUTH_SCHEMES
 
 
 # Remove trailing padding characters from complex header items like
@@ -179,7 +180,7 @@ def extract_jwt(token, crypto_key):
     # first split and convert the jwt.
     if not token or not crypto_key:
         return {}
-    return jwt.decode(token, decipher_public_key(crypto_key))
+    return jwt.decode(token, decipher_public_key(crypto_key.encode('utf8')))
 
 
 def parse_user_agent(agent_string):
@@ -560,6 +561,27 @@ class WebPushNotification(object):
                 k.replace("-", "_"): v for k, v in self.headers.items()
             }
         return payload
+
+
+def parse_auth_header(header):
+    vapid_auth = {}
+    scheme_bits = header.split(' ', 1)
+    scheme = scheme_bits[0].lower()
+    if scheme not in AUTH_SCHEMES:
+        return vapid_auth
+    vapid_auth['scheme'] = scheme
+    if scheme == 'vapid':  # VAPID Draft 02
+        vapid_auth['version'] = 2
+        try:
+            bits = scheme_bits[1].replace(' ', '').split(',')
+            for bit in bits:
+                k, v = bit.split('=', 1)
+                vapid_auth[k] = v
+        except (KeyError, ValueError):
+            raise VapidAuthException("Invalid Auth Token")
+    else:  # VAPID Draft 01
+        vapid_auth.update({'version': 1, 't': scheme_bits[1]})
+    return vapid_auth
 
 
 def ms_time():

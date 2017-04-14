@@ -959,6 +959,21 @@ class TestWebPush(IntegrationBase):
         yield self.shut_down(client)
 
     @inlineCallbacks
+    def test_basic_delivery_with_invalid_vapid_exp(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        vapid_info = _get_vapid(
+            payload={"aud": "https://pusher_origin.example.com",
+                     "exp": '@',
+                     "sub": "mailto:admin@example.com"})
+        vapid_info['crypto-key'] = "invalid"
+        yield client.send_notification(
+            data=data,
+            vapid=vapid_info,
+            status=401)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
     def test_basic_delivery_with_invalid_vapid_ckey(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
