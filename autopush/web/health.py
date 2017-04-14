@@ -13,8 +13,12 @@ from autopush.web.base import BaseWebHandler
 class HealthHandler(BaseWebHandler):
     """HTTP Health Handler"""
 
+    def authenticate_peer_cert(self):
+        """Skip authentication checks"""
+        pass
+
     @cyclone.web.asynchronous
-    def get(self, *args, **kwargs):
+    def get(self):
         """HTTP Get
 
         Returns basic information about the version and how many clients are
@@ -32,10 +36,6 @@ class HealthHandler(BaseWebHandler):
             self._check_table(self.ap_settings.storage.table)
         ])
         dl.addBoth(self._finish_response)
-
-    def authenticate_peer_cert(self):
-        """Skip authentication checks"""
-        pass
 
     def _check_table(self, table):
         """Checks the tables known about in DynamoDB"""
@@ -83,7 +83,7 @@ class StatusHandler(BaseWebHandler):
         """skip authentication checks"""
         pass
 
-    def get(self, *args, **kwargs):
+    def get(self):
         """HTTP Get
 
         Returns that this node is alive, and the version.
@@ -106,7 +106,7 @@ class MemUsageHandler(BaseWebHandler):
         """skip authentication checks"""
         pass  # pragma: nocover
 
-    def get(self, *args, **kwargs):
+    def get(self):
         """HTTP Get
 
         Returns that this node is alive, and the version.

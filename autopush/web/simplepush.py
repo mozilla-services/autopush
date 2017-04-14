@@ -11,7 +11,9 @@ from marshmallow import (
     validates_schema,
 )
 
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import Deferred  # noqa
+from twisted.internet.defer import maybeDeferred
+from typing import Any, Dict  # noqa
 
 from autopush.exceptions import (
     InvalidRequest,
@@ -101,29 +103,27 @@ class SimplePushHandler(BaseWebHandler):
     cors_methods = "PUT"
 
     @threaded_validate(SimplePushRequestSchema)
-    def put(self, *args, **kwargs):
-        sub = self.valid_input["subscription"]
-        user_data = sub["user_data"]
-        router = self.ap_settings.routers[user_data["router_type"]]
-        self._client_info["uaid"] = hasher(user_data.get("uaid"))
-        self._client_info["channel_id"] = user_data.get("chid")
-        self._client_info["message_id"] = self.valid_input["version"]
-        self._client_info["router_key"] = user_data["router_type"]
-
+    def put(self, subscription, version, data):
+        # type: (Dict[str, Any], str, str) -> Deferred
+        user_data = subscription["user_data"]
+        self._client_info.update(
+            uaid=hasher(user_data.get("uaid")),
+            channel_id=user_data.get("chid"),
+            message_id=version,
+            router_key=user_data["router_type"]
+        )
         notification = Notification(
-            version=self.valid_input["version"],
-            data=self.valid_input["data"],
-            channel_id=str(sub["chid"]),
+            version=version,
+            data=data,
+            channel_id=str(subscription["chid"]),
         )
 
-        d = Deferred()
-        d.addCallback(router.route_notification, user_data)
+        router = self.ap_settings.routers[user_data["router_type"]]
+        d = maybeDeferred(router.route_notification, notification, user_data)
         d.addCallback(self._router_completed, user_data, "")
         d.addErrback(self._router_fail_err)
         d.addErrback(self._response_err)
-
-        # Call the prepared router
-        d.callback(notification)
+        return d
 
     def _router_completed(self, response, uaid_data, warning=""):
         """Called after router has completed successfully"""

@@ -8,6 +8,9 @@ from cryptography.hazmat.primitives.asymmetric import ec, utils
 from cryptography.hazmat.primitives import hashes
 from pyasn1.error import PyAsn1Error
 from twisted.logger import Logger
+from typing import Tuple  # noqa
+
+from autopush.types import JSONDict  # noqa
 
 
 def repad(string):
@@ -34,7 +37,7 @@ class VerifyJWT(object):
 
     @staticmethod
     def extract_signature(auth):
-        # type: (str) -> tuple()
+        # type: (str) -> Tuple[str, str]
         """Fix the JWT auth token.
 
         The JWA spec defines the signature to be a pair of 32octet encoded
@@ -62,7 +65,7 @@ class VerifyJWT(object):
 
     @staticmethod
     def decode(token, key):
-        # type (str, str) -> dict()
+        # type (str, str) -> JSONDict
         """Decode a web token into a assertion dictionary.
 
         This attempts to rectify both ecdsa and openssl generated

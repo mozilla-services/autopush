@@ -15,8 +15,14 @@ from marshmallow import (
 from marshmallow_polyfield import PolyField
 from marshmallow.validate import OneOf
 from twisted.logger import Logger  # noqa
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import Deferred  # noqa
+from twisted.internet.defer import maybeDeferred
 from twisted.internet.threads import deferToThread
+from typing import (  # noqa
+    Any,
+    Dict,
+    Optional
+)
 
 from autopush.crypto_key import CryptoKey
 from autopush.db import dump_uaid, hasher
@@ -396,33 +402,37 @@ class WebPushHandler(BaseWebHandler):
     cors_response_headers = ("location", "www-authenticate")
 
     @threaded_validate(WebPushRequestSchema)
-    def post(self, *args, **kwargs):
+    def post(self,
+             subscription,  # type: Dict[str, Any]
+             notification,  # type: WebPushNotification
+             jwt=None,      # type: Optional[Dict[str, str]]
+             **kwargs       # type: Any
+             ):
+        # type: (...) -> Deferred
         # Store Vapid info if present
-        jwt = self.valid_input.get("jwt")
         if jwt:
             self._client_info["jwt_crypto_key"] = jwt["jwt_crypto_key"]
             for i in jwt["jwt_data"]:
                 self._client_info["jwt_" + i] = jwt["jwt_data"][i]
 
-        user_data = self.valid_input["subscription"]["user_data"]
+        user_data = subscription["user_data"]
+        self._client_info.update(
+            message_id=notification.message_id,
+            uaid=hasher(user_data.get("uaid")),
+            channel_id=user_data.get("chid"),
+            router_key=user_data["router_type"],
+            message_size=len(notification.data or ""),
+            ttl=notification.ttl,
+            version=notification.version
+        )
+
         router = self.ap_settings.routers[user_data["router_type"]]
-        notification = self.valid_input["notification"]
-        self._client_info["message_id"] = notification.message_id
-        self._client_info["uaid"] = hasher(user_data.get("uaid"))
-        self._client_info["channel_id"] = user_data.get("chid")
-        self._client_info["router_key"] = user_data["router_type"]
-        self._client_info["message_size"] = len(notification.data or "")
-        self._client_info["ttl"] = notification.ttl
-        self._client_info["version"] = notification.version
         self._router_time = time.time()
-        d = Deferred()
-        d.addCallback(router.route_notification, user_data)
+        d = maybeDeferred(router.route_notification, notification, user_data)
         d.addCallback(self._router_completed, user_data, "")
         d.addErrback(self._router_fail_err)
         d.addErrback(self._response_err)
-
-        # Call the prepared router
-        d.callback(notification)
+        return d
 
     def _router_completed(self, response, uaid_data, warning=""):
         """Called after router has completed successfully"""

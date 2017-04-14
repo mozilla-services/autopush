@@ -48,7 +48,6 @@ class TestWebpushHandler(unittest.TestCase):
         self.wp = WebPushHandler(Application(),
                                  self.request_mock,
                                  ap_settings=settings)
-        self.wp.path_kwargs = {}
         self.status_mock = self.wp.set_status = Mock()
         self.write_mock = self.wp.write = Mock()
         self.wp.log = Mock(spec=Logger)
@@ -86,7 +85,7 @@ class TestWebpushHandler(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
 
-        self.wp.post("v1", dummy_token)
+        self.wp.post(api_ver="v1", token=dummy_token)
         return self.finish_deferred
 
     def test_router_returns_data_without_detail(self):
@@ -124,8 +123,7 @@ class TestWebpushHandler(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'invalid key'
         self.request_mock.headers['crypto-key'] = 'dummy_key'
-        self.wp.path_kwargs = dict(token='ignored', api_ver='v1')
-        self.wp.post()
+        self.wp.post(token='ignored', api_ver='v1')
         return self.finish_deferred
 
     def test_request_bad_v1_id(self):
@@ -134,8 +132,7 @@ class TestWebpushHandler(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'tooshort'
-        self.wp.path_kwargs = dict(token='ignored', api_ver='v1')
-        self.wp.post()
+        self.wp.post(token='ignored', api_ver='v1')
         return self.finish_deferred
 
     def test_request_bad_v2_id_short(self):
@@ -145,8 +142,7 @@ class TestWebpushHandler(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'tooshort'
         self.request_mock.headers['authorization'] = 'dummy_key'
-        self.wp.path_kwargs = dict(token='ignored', api_ver='v2')
-        self.wp.post()
+        self.wp.post(token='ignored', api_ver='v2')
         return self.finish_deferred
 
     def test_request_bad_v2_id_missing_pubkey(self):
@@ -157,8 +153,7 @@ class TestWebpushHandler(unittest.TestCase):
         self.fernet_mock.decrypt.return_value = 'a' * 64
         self.request_mock.headers['crypto-key'] = 'key_id=dummy_key'
         self.request_mock.headers['authorization'] = 'dummy_key'
-        self.wp.path_kwargs = dict(token='ignored', api_ver='v2')
-        self.wp.post()
+        self.wp.post(token='ignored', api_ver='v2')
         return self.finish_deferred
 
     def test_request_v2_id_variant_pubkey(self):
@@ -170,7 +165,6 @@ class TestWebpushHandler(unittest.TestCase):
         variant_key = base64.urlsafe_b64encode("0V0" + ('a' * 85))
         self.request_mock.headers['crypto-key'] = 'p256ecdsa=' + variant_key
         self.request_mock.headers['authorization'] = 'webpush dummy.key'
-        self.wp.path_kwargs = dict(token='ignored', api_ver='v1')
         self.ap_settings.router.get_uaid = Mock()
         self.ap_settings.router.get_uaid.return_value = dict(
             uaid=dummy_uaid,
@@ -178,7 +172,7 @@ class TestWebpushHandler(unittest.TestCase):
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
-        self.wp.post()
+        self.wp.post(token='ignored', api_ver='v1')
         return self.finish_deferred
 
     def test_request_v2_id_no_crypt_auth(self):
@@ -188,7 +182,6 @@ class TestWebpushHandler(unittest.TestCase):
         self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'a' * 32
         self.request_mock.headers['authorization'] = 'webpush dummy.key'
-        self.wp.path_kwargs = dict(token='ignored', api_ver='v1')
         self.ap_settings.router.get_uaid = Mock()
         self.ap_settings.router.get_uaid.return_value = dict(
             uaid=dummy_uaid,
@@ -196,7 +189,7 @@ class TestWebpushHandler(unittest.TestCase):
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
-        self.wp.post()
+        self.wp.post(token='ignored', api_ver='v1')
         return self.finish_deferred
 
     def test_request_bad_v2_id_bad_pubkey(self):
@@ -207,6 +200,5 @@ class TestWebpushHandler(unittest.TestCase):
         self.fernet_mock.decrypt.return_value = 'a' * 64
         self.request_mock.headers['crypto-key'] = 'p256ecdsa=Invalid!'
         self.request_mock.headers['authorization'] = 'dummy_key'
-        self.wp.path_kwargs = dict(token='ignored', api_ver='v2')
-        self.wp.post()
+        self.wp.post(token='ignored', api_ver='v2')
         return self.finish_deferred

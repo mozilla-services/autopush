@@ -6,7 +6,7 @@ from attr import attrs, attrib
 from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from boto.exception import BotoServerError
 from marshmallow.schema import UnmarshalResult  # noqa
-from typing import Any  # noqa
+from typing import Any, Callable  # noqa
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
@@ -44,14 +44,14 @@ class ThreadedValidate(object):
     def __init__(self, schema):
         self.schema = schema
 
-    def _validate_request(self, request_handler):
-        # type: (BaseWebHandler) -> UnmarshalResult
+    def _validate_request(self, request_handler, *args, **kwargs):
+        # type: (BaseWebHandler, *Any, **Any) -> UnmarshalResult
         """Validates a schema_class against a cyclone request"""
         data = {
             "headers": request_handler.request.headers,
             "body": request_handler.request.body,
-            "path_args": request_handler.path_args,
-            "path_kwargs": request_handler.path_kwargs,
+            "path_args": args,
+            "path_kwargs": kwargs,
             "arguments": request_handler.request.arguments,
         }
         schema = self.schema()
@@ -59,13 +59,13 @@ class ThreadedValidate(object):
         schema.context["log"] = self.log
         return schema.load(data)
 
-    def _call_func(self, result, func, request_handler, *args, **kwargs):
-        output, errors = result
+    def _call_func(self, result, func, request_handler):
+        # type: (UnmarshalResult, Callable, BaseWebHandler) -> Any
+        output_kwargs, errors = result
         if errors:
             request_handler._write_validation_err(errors)
         else:
-            request_handler.valid_input = output
-            return func(request_handler, *args, **kwargs)
+            return func(request_handler, **output_kwargs)
 
     def _track_validation_timing(self, result, request_handler, start_time):
         # type: (Any, BaseWebHandler, float) -> Any
@@ -79,11 +79,11 @@ class ThreadedValidate(object):
             start_time = time.time()
             # Wrap the handler in @cyclone.web.synchronous
             request_handler._auto_finish = False
-            d = deferToThread(self._validate_request, request_handler)
+            d = deferToThread(
+                self._validate_request, request_handler, *args, **kwargs)
             d.addBoth(self._track_validation_timing, request_handler,
                       start_time)
-            d.addCallback(self._call_func, func, request_handler, *args,
-                          **kwargs)
+            d.addCallback(self._call_func, func, request_handler)
             d.addErrback(request_handler._overload_err)
             d.addErrback(request_handler._boto_err)
             d.addErrback(request_handler._validation_err)
@@ -101,11 +101,17 @@ class ThreadedValidate(object):
         will attach equivilant functionality to the method handler. Calling
         `self.finish()` is needed on decorated handlers.
 
+        Validated requests are deserialized into the **kwargs of the wrapped
+        request handler method.
+
         .. code-block:: python
+
+            class MySchema(Schema):
+                uaid = fields.UUID(allow_none=True)
 
             class MyHandler(cyclone.web.RequestHandler):
                 @threaded_validate(MySchema())
-                def post(self):
+                def post(self, uaid=None):
                     ...
 
         """
