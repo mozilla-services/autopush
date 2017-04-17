@@ -55,8 +55,13 @@ class ThreadedValidate(object):
             "arguments": request_handler.request.arguments,
         }
         schema = self.schema()
-        schema.context["settings"] = request_handler.ap_settings
-        schema.context["log"] = self.log
+        schema.context.update(
+            settings=request_handler.ap_settings,
+            metrics=request_handler.metrics,
+            db=request_handler.db,
+            routers=request_handler.routers,
+            log=self.log
+        )
         return schema.load(data)
 
     def _call_func(self, result, func, request_handler):
@@ -139,13 +144,16 @@ class BaseWebHandler(BaseHandler):
     #############################################################
     #                    Cyclone API Methods
     #############################################################
-    def initialize(self, ap_settings):
+    def initialize(self):
         """Setup basic aliases and attributes"""
-        super(BaseWebHandler, self).initialize(ap_settings)
-        self.metrics = ap_settings.metrics
+        super(BaseWebHandler, self).initialize()
         self._base_tags = {}
         self._start_time = time.time()
         self._timings = {}
+
+    @property
+    def routers(self):
+        return self.application.routers
 
     def prepare(self):
         """Common request preparation"""

@@ -20,14 +20,13 @@ import pyfcm
 from hyper.http20.exceptions import HTTP20Error
 
 from autopush.db import (
-    Router,
-    Storage,
     Message,
     ProvisionedThroughputExceededException,
     ItemNotFound,
     create_rotating_message_table,
 )
 from autopush.exceptions import RouterException
+from autopush.metrics import SinkMetrics
 from autopush.router import (
     APNSRouter,
     GCMRouter,
@@ -38,6 +37,7 @@ from autopush.router import (
 from autopush.router.interface import RouterResponse, IRouter
 from autopush.settings import AutopushSettings
 from autopush.tests import MockAssist
+from autopush.tests.support import test_db
 from autopush.web.base import Notification
 
 
@@ -101,7 +101,7 @@ class APNSRouterTestCase(unittest.TestCase):
         }
         self.mock_connection = mc
         mc.return_value = mc
-        self.router = APNSRouter(settings, apns_config)
+        self.router = APNSRouter(settings, apns_config, SinkMetrics())
         self.mock_response = Mock()
         self.mock_response.status = 200
         mc.get_response.return_value = self.mock_response
@@ -317,7 +317,7 @@ class GCMRouterTestCase(unittest.TestCase):
                            'senderIDs': {'test123':
                                          {"auth": "12345678abcdefg"}}}
         self.gcm = fgcm
-        self.router = GCMRouter(settings, self.gcm_config)
+        self.router = GCMRouter(settings, self.gcm_config, SinkMetrics())
         self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
@@ -357,7 +357,7 @@ class GCMRouterTestCase(unittest.TestCase):
             statsd_host=None,
         )
         with assert_raises(IOError):
-            GCMRouter(settings, {"senderIDs": {}})
+            GCMRouter(settings, {"senderIDs": {}}, SinkMetrics())
 
     def test_register(self):
         router_data = {"token": "test123"}
@@ -386,7 +386,11 @@ class GCMRouterTestCase(unittest.TestCase):
             statsd_host=None,
         )
         with assert_raises(IOError):
-            GCMRouter(settings, {"senderIDs": {"test123": {"auth": "abcd"}}})
+            GCMRouter(
+                settings,
+                {"senderIDs": {"test123": {"auth": "abcd"}}},
+                SinkMetrics()
+            )
 
     def test_route_notification(self):
         self.router.gcm['test123'] = self.gcm
@@ -627,7 +631,7 @@ class FCMRouterTestCase(unittest.TestCase):
                            'senderID': 'test123',
                            "auth": "12345678abcdefg"}
         self.fcm = ffcm
-        self.router = FCMRouter(settings, self.fcm_config)
+        self.router = FCMRouter(settings, self.fcm_config, SinkMetrics())
         self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
@@ -672,7 +676,7 @@ class FCMRouterTestCase(unittest.TestCase):
 
         ffcm.side_effect = throw_auth
         with assert_raises(IOError):
-            FCMRouter(settings, {})
+            FCMRouter(settings, {}, SinkMetrics())
 
     def test_register(self):
         router_data = {"token": "test123"}
@@ -906,8 +910,10 @@ class SimplePushRouterTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
+        self.metrics = metrics = Mock(spec=SinkMetrics)
+        db = test_db(metrics=metrics)
 
-        self.router = SimpleRouter(settings, {})
+        self.router = SimpleRouter(settings, {}, db)
         self.router.log = Mock(spec=Logger)
         self.notif = Notification(10, "data", dummy_chid)
         mock_result = Mock(spec=gcmclient.gcm.Result)
@@ -915,11 +921,10 @@ class SimplePushRouterTestCase(unittest.TestCase):
         mock_result.failed = dict()
         mock_result.not_registered = dict()
         mock_result.needs_retry.return_value = False
-        self.router_mock = settings.router = Mock(spec=Router)
-        self.storage_mock = settings.storage = Mock(spec=Storage)
+        self.router_mock = db.router
+        self.storage_mock = db.storage
         self.agent_mock = Mock(spec=settings.agent)
         settings.agent = self.agent_mock
-        self.router.metrics = Mock()
 
     def _raise_connect_error(self):
         raise ConnectError()
@@ -1108,7 +1113,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         def verify_deliver(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 200)
-            self.router.metrics.increment.assert_called_with(
+            self.metrics.increment.assert_called_with(
                 "router.broadcast.save_hit"
             )
         d.addBoth(verify_deliver)
@@ -1147,13 +1152,15 @@ class WebPushRouterTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
+        self.metrics = metrics = Mock(spec=SinkMetrics)
+        self.db = db = test_db(metrics=metrics)
 
         self.headers = headers = {
             "content-encoding": "aes128",
             "encryption": "awesomecrypto",
             "crypto-key": "niftykey"
         }
-        self.router = WebPushRouter(settings, {})
+        self.router = WebPushRouter(settings, {}, db)
         self.notif = WebPushNotification(
             uaid=uuid.UUID(dummy_uaid),
             channel_id=uuid.UUID(dummy_chid),
@@ -1168,11 +1175,10 @@ class WebPushRouterTestCase(unittest.TestCase):
         mock_result.failed = dict()
         mock_result.not_registered = dict()
         mock_result.needs_retry.return_value = False
-        self.router_mock = settings.router = Mock(spec=Router)
-        self.message_mock = settings.message = Mock(spec=Message)
+        self.router_mock = db.router
+        self.message_mock = db.message = Mock(spec=Message)
         self.agent_mock = Mock(spec=settings.agent)
         settings.agent = self.agent_mock
-        self.router.metrics = Mock()
         self.settings = settings
 
     def test_route_to_busy_node_saves_looks_up_and_sends_check_201(self):
@@ -1183,7 +1189,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         self.message_mock.store_message.return_value = True
         self.message_mock.all_channels.return_value = (True, [dummy_chid])
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
-                           current_month=self.settings.current_msg_month)
+                           current_month=self.db.current_msg_month)
         self.router_mock.get_uaid.return_value = router_data
         self.router.message_id = uuid.uuid4().hex
 
@@ -1197,7 +1203,7 @@ class WebPushRouterTestCase(unittest.TestCase):
             eq_(t_h.get('encryption'), self.headers.get('encryption'))
             eq_(t_h.get('crypto_key'), self.headers.get('crypto-key'))
             eq_(t_h.get('encoding'), self.headers.get('content-encoding'))
-            self.router.metrics.increment.assert_called_with(
+            self.metrics.increment.assert_called_with(
                 "router.broadcast.save_hit"
             )
             ok_("Location" in result.headers)
@@ -1222,7 +1228,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         self.message_mock.store_message.return_value = True
         self.message_mock.all_channels.return_value = (True, [dummy_chid])
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
-                           current_month=self.settings.current_msg_month)
+                           current_month=self.db.current_msg_month)
         self.router_mock.get_uaid.return_value = router_data
         self.router.message_id = uuid.uuid4().hex
 
@@ -1232,7 +1238,7 @@ class WebPushRouterTestCase(unittest.TestCase):
             exc = fail.value
             ok_(exc, RouterResponse)
             eq_(exc.status_code, 201)
-            eq_(len(self.router.metrics.increment.mock_calls), 0)
+            eq_(len(self.metrics.increment.mock_calls), 0)
             ok_("Location" in exc.headers)
         d.addBoth(verify_deliver)
         return d

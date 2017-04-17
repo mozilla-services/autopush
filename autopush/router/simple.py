@@ -40,12 +40,16 @@ class SimpleRouter(object):
     """
     log = Logger()
 
-    def __init__(self, ap_settings, router_conf):
+    def __init__(self, ap_settings, router_conf, db):
         """Create a new SimpleRouter"""
         self.ap_settings = ap_settings
-        self.metrics = ap_settings.metrics
         self.conf = router_conf
+        self.db = db
         self.waker = None
+
+    @property
+    def metrics(self):
+        return self.db.metrics
 
     def register(self, uaid, router_data, app_id, *args, **kwargs):
         # type: (str, JSONDict, str, *Any, **Any) -> None
@@ -70,7 +74,7 @@ class SimpleRouter(object):
         node_id = uaid_data.get("node_id")
         uaid = uaid_data["uaid"]
         self.udp = uaid_data.get("udp")
-        router = self.ap_settings.router
+        router = self.db.router
 
         # Node_id is present, attempt delivery.
         # - Send Notification to node
@@ -181,7 +185,7 @@ class SimpleRouter(object):
 
         """
         uaid = uaid_data["uaid"]
-        return deferToThread(self.ap_settings.storage.save_notification,
+        return deferToThread(self.db.storage.save_notification,
                              uaid=uaid, chid=notification.channel_id,
                              version=notification.version)
 

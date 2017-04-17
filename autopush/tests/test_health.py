@@ -2,7 +2,6 @@ import json
 
 import twisted.internet.base
 from boto.dynamodb2.exceptions import InternalServerError
-from cyclone.web import Application
 from mock import Mock
 from moto import mock_dynamodb2
 from nose.tools import eq_
@@ -33,8 +32,6 @@ class HealthTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
-        self.router_table = settings.router.table
-        self.storage_table = settings.storage.table
 
         # ignore logging
         logs = TestingLogObserver()
@@ -42,6 +39,8 @@ class HealthTestCase(unittest.TestCase):
         self.addCleanup(globalLogPublisher.removeObserver, logs)
 
         app = EndpointHTTPFactory.for_handler(HealthHandler, settings)
+        self.router_table = app.db.router.table
+        self.storage_table = app.db.storage.table
         self.client = Client(app)
 
     @inlineCallbacks
@@ -138,8 +137,10 @@ class StatusTestCase(unittest.TestCase):
             statsd_host=None,
         )
         self.request_mock = Mock()
-        self.status = StatusHandler(Application(), self.request_mock,
-                                    ap_settings=settings)
+        self.status = StatusHandler(
+            EndpointHTTPFactory(settings, db=None, routers=None),
+            self.request_mock
+        )
         self.write_mock = self.status.write = Mock()
 
     def test_status(self):

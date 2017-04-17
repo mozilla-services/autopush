@@ -25,13 +25,13 @@ from typing import (  # noqa
 )
 
 from autopush.crypto_key import CryptoKey
+from autopush.db import DatabaseManager  # noqa
 from autopush.db import dump_uaid, hasher
 from autopush.exceptions import (
     InvalidRequest,
     InvalidTokenException,
     VapidAuthException,
 )
-from autopush.settings import AutopushSettings  # noqa
 from autopush.utils import (
     base64url_encode,
     extract_jwt,
@@ -61,6 +61,7 @@ class WebPushSubscriptionSchema(Schema):
     def extract_subscription(self, d):
         try:
             result = self.context["settings"].parse_endpoint(
+                self.context["metrics"],
                 token=d["token"],
                 version=d["api_ver"],
                 ckey_header=d["ckey_header"],
@@ -75,9 +76,10 @@ class WebPushSubscriptionSchema(Schema):
 
     @validates_schema(skip_on_field_errors=True)
     def validate_uaid_month_and_chid(self, d):
-        settings = self.context["settings"]  # type: AutopushSettings
+        db = self.context["db"]  # type: DatabaseManager
+
         try:
-            result = settings.router.get_uaid(d["uaid"].hex)
+            result = db.router.get_uaid(d["uaid"].hex)
         except ItemNotFound:
             raise InvalidRequest("UAID not found", status_code=410, errno=103)
 
@@ -90,7 +92,7 @@ class WebPushSubscriptionSchema(Schema):
                 # Make sure we note that this record is bad.
                 result['critical_failure'] = \
                     result.get('critical_failure', "Missing SenderID")
-                settings.router.register_user(result)
+                db.router.register_user(result)
 
         if result.get("critical_failure"):
             raise InvalidRequest("Critical Failure: %s" %
@@ -105,7 +107,7 @@ class WebPushSubscriptionSchema(Schema):
         d["user_data"] = result
 
     def _validate_webpush(self, d, result):
-        settings = self.context["settings"]  # type: AutopushSettings
+        db = self.context["db"]  # type: DatabaseManager
         log = self.context["log"]  # type: Logger
         channel_id = normalize_id(d["chid"])
         uaid = result["uaid"]
@@ -113,20 +115,19 @@ class WebPushSubscriptionSchema(Schema):
             log.info(format="Dropping User", code=102,
                      uaid_hash=hasher(uaid),
                      uaid_record=dump_uaid(result))
-            settings.router.drop_user(uaid)
+            db.router.drop_user(uaid)
             raise InvalidRequest("No such subscription", status_code=410,
                                  errno=106)
 
         month_table = result["current_month"]
-        if month_table not in settings.message_tables:
+        if month_table not in db.message_tables:
             log.info(format="Dropping User", code=103,
                      uaid_hash=hasher(uaid),
                      uaid_record=dump_uaid(result))
-            settings.router.drop_user(uaid)
+            db.router.drop_user(uaid)
             raise InvalidRequest("No such subscription", status_code=410,
                                  errno=106)
-        exists, chans = settings.message_tables[month_table].all_channels(
-            uaid=uaid)
+        exists, chans = db.message_tables[month_table].all_channels(uaid=uaid)
 
         if (not exists or channel_id.lower() not
                 in map(lambda x: normalize_id(x), chans)):
@@ -461,7 +462,7 @@ class WebPushHandler(BaseWebHandler):
             version=notification.version,
             encoding=encoding,
         )
-        router = self.ap_settings.routers[user_data["router_type"]]
+        router = self.routers[user_data["router_type"]]
         self._router_time = time.time()
         d = maybeDeferred(router.route_notification, notification, user_data)
         d.addCallback(self._router_completed, user_data, "")
@@ -484,8 +485,7 @@ class WebPushHandler(BaseWebHandler):
                               uaid_hash=hasher(uaid_data["uaid"]),
                               uaid_record=dump_uaid(uaid_data),
                               client_info=self._client_info)
-                d = deferToThread(self.ap_settings.router.drop_user,
-                                  uaid_data["uaid"])
+                d = deferToThread(self.db.router.drop_user, uaid_data["uaid"])
                 d.addCallback(lambda x: self._router_response(response))
                 return d
             # The router data needs to be updated to include any changes
@@ -493,8 +493,7 @@ class WebPushHandler(BaseWebHandler):
             uaid_data["router_data"] = response.router_data
             # set the AWS mandatory data
             uaid_data["connected_at"] = ms_time()
-            d = deferToThread(self.ap_settings.router.register_user,
-                              uaid_data)
+            d = deferToThread(self.db.router.register_user, uaid_data)
             response.router_data = None
             d.addCallback(lambda x: self._router_completed(
                 response,

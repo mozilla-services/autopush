@@ -18,7 +18,9 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.trial import unittest
 
 from autopush.db import create_rotating_message_table
+from autopush.metrics import SinkMetrics
 from autopush.exceptions import InvalidRequest, InvalidTokenException
+from autopush.tests.support import test_db
 import autopush.utils as utils
 
 
@@ -74,6 +76,9 @@ class TestThreadedValidate(unittest.TestCase):
         vr = ValidateRequest(app, request)
         vr._timings = dict()
         vr.ap_settings = Mock()
+        vr.metrics = Mock()
+        vr.db = Mock()
+        vr.routers = Mock()
         return vr
 
     def _make_full(self, schema=None):
@@ -114,7 +119,7 @@ class TestThreadedValidate(unittest.TestCase):
 
     @inlineCallbacks
     def test_decorator(self):
-        from cyclone.web import Application
+        from autopush.http import EndpointHTTPFactory
         from autopush.web.base import BaseWebHandler, threaded_validate
         from autopush.tests.client import Client
         schema = self._make_basic_schema()
@@ -128,7 +133,12 @@ class TestThreadedValidate(unittest.TestCase):
                 self.write("done")
                 self.finish()
 
-        app = Application([('/test', AHandler, dict(ap_settings=Mock()))])
+        app = EndpointHTTPFactory(
+            Mock(),
+            db=test_db(),
+            routers=None,
+            handlers=[('/test', AHandler)]
+        )
         client = Client(app)
         resp = yield client.get('/test')
         eq_(resp.content, "done")
@@ -138,8 +148,13 @@ class TestSimplePushRequestSchema(unittest.TestCase):
     def _make_fut(self):
         from autopush.web.simplepush import SimplePushRequestSchema
         schema = SimplePushRequestSchema()
-        schema.context["settings"] = Mock()
-        schema.context["log"] = Mock()
+        schema.context.update(
+            settings=Mock(),
+            metrics=SinkMetrics(),
+            db=test_db(),
+            routers=Mock(),
+            log=Mock()
+        )
         return schema
 
     def _make_test_data(self, headers=None, body="", path_args=None,
@@ -159,7 +174,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="simplepush",
         )
         result, errors = schema.load(self._make_test_data())
@@ -174,7 +189,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="simplepush",
         )
         result, errors = schema.load(
@@ -191,7 +206,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="simplepush",
         )
         result, errors = schema.load(
@@ -209,7 +224,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="webpush",
         )
 
@@ -229,7 +244,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
         def throw_item(*args, **kwargs):
             raise ItemNotFound("Not found")
 
-        schema.context["settings"].router.get_uaid.side_effect = throw_item
+        schema.context["db"].router.get_uaid.side_effect = throw_item
 
         with assert_raises(InvalidRequest) as cm:
             schema.load(self._make_test_data())
@@ -256,7 +271,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="simplepush",
         )
         schema.context["settings"].max_data = 1
@@ -271,8 +286,13 @@ class TestWebPushRequestSchema(unittest.TestCase):
     def _make_fut(self):
         from autopush.web.webpush import WebPushRequestSchema
         schema = WebPushRequestSchema()
-        schema.context["settings"] = Mock()
-        schema.context["log"] = Mock()
+        schema.context.update(
+            settings=Mock(),
+            metrics=SinkMetrics(),
+            db=test_db(),
+            routers=Mock(),
+            log=Mock()
+        )
         return schema
 
     def _make_test_data(self, headers=None, body="", path_args=None,
@@ -292,7 +312,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
@@ -308,7 +328,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
@@ -328,7 +348,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="simplepush",
         )
 
@@ -374,7 +394,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         def throw_item(*args, **kwargs):
             raise ItemNotFound("Not found")
 
-        schema.context["settings"].router.get_uaid.side_effect = throw_item
+        schema.context["db"].router.get_uaid.side_effect = throw_item
 
         with assert_raises(InvalidRequest) as cm:
             schema.load(self._make_test_data())
@@ -388,7 +408,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="fcm",
             critical_failure="Bad SenderID",
         )
@@ -405,7 +425,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
@@ -429,7 +449,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
@@ -456,7 +476,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
@@ -481,7 +501,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
@@ -506,7 +526,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
@@ -531,7 +551,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             uaid=dummy_uaid,
             router_data=dict(creds=dict(senderID="bogus")),
@@ -557,7 +577,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             uaid=dummy_uaid,
             router_data=dict(creds=dict(senderID="bogus")),
@@ -581,7 +601,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
@@ -598,7 +618,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
@@ -625,7 +645,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
@@ -656,7 +676,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             uaid=dummy_uaid,
             router_data=dict(creds=dict(senderID="bogus")),
@@ -684,7 +704,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="gcm",
             uaid=dummy_uaid,
             router_data=dict(creds=dict(senderID="bogus")),
@@ -725,7 +745,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="webpush",
             uaid=dummy_uaid,
         )
@@ -741,13 +761,13 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_old_current_month(self):
         schema = self._make_fut()
-        schema.context["settings"].message_tables = dict()
+        schema.context["db"].message_tables = dict()
         schema.context["settings"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
         )
-        schema.context["settings"].router.get_uaid.return_value = dict(
+        schema.context["db"].router.get_uaid.return_value = dict(
             router_type="webpush",
             uaid=dummy_uaid,
             current_month="message_2014_01",
@@ -767,14 +787,20 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
     def _make_fut(self):
         from autopush.web.webpush import WebPushRequestSchema
         from autopush.settings import AutopushSettings
-        schema = WebPushRequestSchema()
-        schema.context["log"] = Mock()
-        schema.context["settings"] = settings = AutopushSettings(
+        settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
-        settings.router = Mock()
-        settings.router.get_uaid.return_value = dict(
+        db = test_db()
+        schema = WebPushRequestSchema()
+        schema.context.update(
+            settings=settings,
+            metrics=SinkMetrics(),
+            db=db,
+            routers=Mock(),
+            log=Mock()
+        )
+        db.router.get_uaid.return_value = dict(
             router_type="gcm",
             uaid=dummy_uaid,
             router_data=dict(creds=dict(senderID="bogus")),

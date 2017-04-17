@@ -30,7 +30,7 @@ class DiagnosticCLITestCase(unittest.TestCase):
             "--router_tablename=fred",
             "http://someendpoint",
         ])
-        eq_(cli._settings.router_table.table_name, "fred")
+        eq_(cli.db.router.table.table_name, "fred")
 
     def test_bad_endpoint(self):
         cli = self._makeFUT([
@@ -41,16 +41,19 @@ class DiagnosticCLITestCase(unittest.TestCase):
         ok_(returncode not in (None, 0))
 
     @patch("autopush.diagnostic_cli.AutopushSettings")
-    def test_successfull_lookup(self, mock_settings_class):
+    @patch("autopush.diagnostic_cli.DatabaseManager.from_settings")
+    def test_successfull_lookup(self, mock_db_cstr, mock_settings_class):
         from autopush.diagnostic_cli import run_endpoint_diagnostic_cli
         mock_settings_class.return_value = mock_settings = Mock()
         mock_settings.parse_endpoint.return_value = dict(
             uaid="asdf", chid="asdf")
-        mock_settings.router.get_uaid.return_value = mock_item = FakeDict()
+
+        mock_db_cstr.return_value = mock_db = Mock()
+        mock_db.router.get_uaid.return_value = mock_item = FakeDict()
         mock_item._data = {}
         mock_item["current_month"] = "201608120002"
         mock_message_table = Mock()
-        mock_settings.message_tables = {"201608120002": mock_message_table}
+        mock_db.message_tables = {"201608120002": mock_message_table}
 
         run_endpoint_diagnostic_cli([
             "--router_tablename=fred",

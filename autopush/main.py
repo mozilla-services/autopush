@@ -1,5 +1,4 @@
 """autopush/autoendpoint daemon scripts"""
-import json
 import os
 from argparse import Namespace  # noqa
 
@@ -17,20 +16,19 @@ from typing import (  # noqa
     Any,
     Optional,
     Sequence,
-    Union
 )
 
-import autopush.db as db
 from autopush.http import (
     InternalRouterHTTPFactory,
     EndpointHTTPFactory,
     MemUsageHTTPFactory
 )
-import autopush.utils as utils
 from autopush.exceptions import InvalidSettings
+from autopush.db import DatabaseManager
 from autopush.haproxy import HAProxyServerEndpoint
 from autopush.logging import PushLogger
 from autopush.main_argparse import parse_connection, parse_endpoint
+from autopush.router import routers_from_settings
 from autopush.settings import AutopushSettings
 from autopush.websocket import (
     ConnectionWSSite,
@@ -39,115 +37,6 @@ from autopush.websocket import (
 )
 
 log = Logger()
-
-
-def make_settings(args, **kwargs):
-    """Helper function to make a :class:`AutopushSettings` object"""
-    router_conf = {}
-    if args.key_hash:
-        db.key_hash = args.key_hash
-    # Some routers require a websocket to timeout on idle (e.g. UDP)
-    if args.wake_pem is not None and args.wake_timeout != 0:
-        router_conf["simplepush"] = {"idle": args.wake_timeout,
-                                     "server": args.wake_server,
-                                     "cert": args.wake_pem}
-    if args.apns_creds:
-        # if you have the critical elements for each external router, create it
-        try:
-            router_conf["apns"] = json.loads(args.apns_creds)
-        except (ValueError, TypeError):
-            raise InvalidSettings(
-                "Invalid JSON specified for APNS config options")
-    if args.gcm_enabled:
-        # Create a common gcmclient
-        try:
-            sender_ids = json.loads(args.senderid_list)
-        except (ValueError, TypeError):
-            raise InvalidSettings("Invalid JSON specified for senderid_list")
-        try:
-            # This is an init check to verify that things are configured
-            # correctly. Otherwise errors may creep in later that go
-            # unaccounted.
-            sender_ids[sender_ids.keys()[0]]
-        except (IndexError, TypeError):
-            raise InvalidSettings("No GCM SenderIDs specified or found.")
-        router_conf["gcm"] = {"ttl": args.gcm_ttl,
-                              "dryrun": args.gcm_dryrun,
-                              "max_data": args.max_data,
-                              "collapsekey": args.gcm_collapsekey,
-                              "senderIDs": sender_ids}
-
-    client_certs = None
-    # endpoint only
-    if getattr(args, 'client_certs', None):
-        try:
-            client_certs_arg = json.loads(args.client_certs)
-        except (ValueError, TypeError):
-            raise InvalidSettings("Invalid JSON specified for client_certs")
-        if client_certs_arg:
-            if not args.ssl_key:
-                raise InvalidSettings("client_certs specified without SSL "
-                                      "enabled (no ssl_key specified)")
-            client_certs = {}
-            for name, sigs in client_certs_arg.iteritems():
-                if not isinstance(sigs, list):
-                    raise InvalidSettings(
-                        "Invalid JSON specified for client_certs")
-                for sig in sigs:
-                    sig = sig.upper()
-                    if (not name or not utils.CLIENT_SHA256_RE.match(sig) or
-                            sig in client_certs):
-                        raise InvalidSettings("Invalid client_certs argument")
-                    client_certs[sig] = name
-
-    if args.fcm_enabled:
-        # Create a common gcmclient
-        if not args.fcm_auth:
-            raise InvalidSettings("No Authorization Key found for FCM")
-        if not args.fcm_senderid:
-            raise InvalidSettings("No SenderID found for FCM")
-        router_conf["fcm"] = {"ttl": args.fcm_ttl,
-                              "dryrun": args.fcm_dryrun,
-                              "max_data": args.max_data,
-                              "collapsekey": args.fcm_collapsekey,
-                              "auth": args.fcm_auth,
-                              "senderid": args.fcm_senderid}
-
-    ami_id = None
-    # Not a fan of double negatives, but this makes more understandable args
-    if not args.no_aws:
-        ami_id = utils.get_amid()
-
-    return AutopushSettings(
-        crypto_key=args.crypto_key,
-        datadog_api_key=args.datadog_api_key,
-        datadog_app_key=args.datadog_app_key,
-        datadog_flush_interval=args.datadog_flush_interval,
-        hostname=args.hostname,
-        statsd_host=args.statsd_host,
-        statsd_port=args.statsd_port,
-        router_conf=router_conf,
-        router_tablename=args.router_tablename,
-        storage_tablename=args.storage_tablename,
-        storage_read_throughput=args.storage_read_throughput,
-        storage_write_throughput=args.storage_write_throughput,
-        message_tablename=args.message_tablename,
-        message_read_throughput=args.message_read_throughput,
-        message_write_throughput=args.message_write_throughput,
-        router_read_throughput=args.router_read_throughput,
-        router_write_throughput=args.router_write_throughput,
-        resolve_hostname=args.resolve_hostname,
-        wake_timeout=args.wake_timeout,
-        ami_id=ami_id,
-        client_certs=client_certs,
-        msg_limit=args.msg_limit,
-        connect_timeout=args.connection_timeout,
-        memusage_port=args.memusage_port,
-        ssl_key=args.ssl_key,
-        ssl_cert=args.ssl_cert,
-        ssl_dh_param=args.ssl_dh_param,
-        **kwargs
-    )
 
 
 class AutopushMultiService(MultiService):
@@ -168,6 +57,7 @@ class AutopushMultiService(MultiService):
         # type: (AutopushSettings) -> None
         super(AutopushMultiService, self).__init__()
         self.settings = settings
+        self.db = DatabaseManager.from_settings(settings)
 
     @staticmethod
     def parse_args(config_files, args):
@@ -195,7 +85,7 @@ class AutopushMultiService(MultiService):
 
     def add_memusage(self):
         """Add the memusage Service"""
-        factory = MemUsageHTTPFactory(self.settings)
+        factory = MemUsageHTTPFactory(self.settings, None, None)
         self.addService(
             TCPServer(self.settings.memusage_port, factory, reactor=reactor))
 
@@ -211,7 +101,7 @@ class AutopushMultiService(MultiService):
         """Create an instance from argparse/additional kwargs"""
         # Add some entropy to prevent potential conflicts.
         postfix = os.urandom(4).encode('hex').ljust(8, '0')
-        settings = make_settings(
+        settings = AutopushSettings.from_argparse(
             ns,
             debug=ns.debug,
             preflight_uaid="deadbeef000000000deadbeef" + postfix,
@@ -261,8 +151,12 @@ class EndpointApplication(AutopushMultiService):
 
     endpoint_factory = EndpointHTTPFactory
 
+    def __init__(self, *args, **kwargs):
+        super(EndpointApplication, self).__init__(*args, **kwargs)
+        self.routers = routers_from_settings(self.settings, self.db)
+
     def setup(self, rotate_tables=True):
-        self.settings.metrics.start()
+        self.db.setup(self.settings.preflight_uaid)
 
         self.add_endpoint()
         if self.settings.memusage_port:
@@ -270,13 +164,13 @@ class EndpointApplication(AutopushMultiService):
 
         # Start the table rotation checker/updater
         if rotate_tables:
-            self.add_timer(60, self.settings.update_rotating_tables)
+            self.add_timer(60, self.db.update_rotating_tables)
 
     def add_endpoint(self):
         """Start the Endpoint HTTP router"""
         settings = self.settings
 
-        factory = self.endpoint_factory(settings)
+        factory = self.endpoint_factory(settings, self.db, self.routers)
         factory.protocol.maxData = settings.max_data
         factory.add_health_handlers()
         ssl_cf = factory.ssl_cf()
@@ -323,7 +217,7 @@ class ConnectionApplication(AutopushMultiService):
     websocket_site_factory = ConnectionWSSite
 
     def setup(self, rotate_tables=True):
-        self.settings.metrics.start()
+        self.db.setup(self.settings.preflight_uaid)
 
         self.add_internal_router()
         if self.settings.memusage_port:
@@ -333,11 +227,11 @@ class ConnectionApplication(AutopushMultiService):
 
         # Start the table rotation checker/updater
         if rotate_tables:
-            self.add_timer(60, self.settings.update_rotating_tables)
+            self.add_timer(60, self.db.update_rotating_tables)
 
     def add_internal_router(self):
         """Start the internal HTTP notification router"""
-        factory = self.internal_router_factory(self.settings)
+        factory = self.internal_router_factory(self.settings, self.db, None)
         factory.add_health_handlers()
         self.add_maybe_ssl(self.settings.router_port, factory,
                            factory.ssl_cf())
@@ -345,10 +239,11 @@ class ConnectionApplication(AutopushMultiService):
     def add_websocket(self):
         """Start the public WebSocket server"""
         settings = self.settings
-        ws_factory = self.websocket_factory(settings)
+        ws_factory = self.websocket_factory(settings, self.db)
         site_factory = self.websocket_site_factory(settings, ws_factory)
         self.add_maybe_ssl(settings.port, site_factory, site_factory.ssl_cf())
-        self.add_timer(1.0, periodic_reporter, settings, ws_factory)
+        self.add_timer(1.0, periodic_reporter, settings, self.db.metrics,
+                       ws_factory)
 
     @classmethod
     def from_argparse(cls, ns):

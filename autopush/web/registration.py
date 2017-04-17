@@ -102,7 +102,7 @@ class TypeAppSchema(Schema):
 
     @validates("router_type")
     def validate_router_type(self, value):
-        if value not in self.context['settings'].routers:
+        if value not in self.context['routers']:
             raise InvalidRequest("Invalid router",
                                  status_code=400,
                                  errno=108)
@@ -115,7 +115,7 @@ class TypeAppUaidSchema(TypeAppSchema):
     @validates("uaid")
     def validate_uaid(self, value):
         try:
-            self.context['settings'].router.get_uaid(value.hex)
+            self.context['db'].router.get_uaid(value.hex)
         except ItemNotFound:
             raise InvalidRequest("UAID not found", status_code=410, errno=103)
 
@@ -191,7 +191,7 @@ class RouterDataSchema(Schema):
     @validates_schema(skip_on_field_errors=True)
     def register_router(self, data):
         router_type = data["path_kwargs"]["router_type"]
-        router = self.context["settings"].routers[router_type]
+        router = self.context["routers"][router_type]
         try:
             router.register(uaid="", router_data=data["router_data"],
                             app_id=data["path_kwargs"]["app_id"])
@@ -284,13 +284,13 @@ class BaseRegistrationHandler(BaseWebHandler):
     def _register_channel(self, uaid, chid, app_server_key):
         # type: (uuid.UUID, str, Optional[str]) -> str
         """Register a new channel and create/return its endpoint"""
-        self.ap_settings.message.register_channel(uaid.hex, chid)
+        self.db.message.register_channel(uaid.hex, chid)
         return self.ap_settings.make_endpoint(uaid.hex, chid, app_server_key)
 
     def _register_user(self, uaid, router_type, router_data):
         # type: (uuid.UUID, str, JSONDict) -> None
         """Save a new user record"""
-        self.ap_settings.router.register_user(dict(
+        self.db.router.register_user(dict(
             uaid=uaid.hex,
             router_type=router_type,
             router_data=router_data,
@@ -310,7 +310,7 @@ class BaseRegistrationHandler(BaseWebHandler):
                     self.ap_settings.bear_hash_key[0], uaid.hex)
             response.update(uaid=uaid.hex, secret=secret)
             # Apply any router specific fixes to the outbound response.
-            router = self.ap_settings.routers[router_type]
+            router = self.routers[router_type]
             router.amend_endpoint_response(response, router_data)
         self.set_header("Content-Type", "application/json")
         self.write(json.dumps(response))
@@ -337,8 +337,8 @@ class NewRegistrationHandler(BaseRegistrationHandler):
         Router type/data registration.
 
         """
-        self.ap_settings.metrics.increment("updates.client.register",
-                                           tags=self.base_tags())
+        self.metrics.increment("updates.client.register",
+                               tags=self.base_tags())
 
         uaid = uuid.uuid4()
 
@@ -372,7 +372,7 @@ class UaidRegistrationHandler(BaseRegistrationHandler):
         Return a list of known channelIDs for a given UAID
 
         """
-        d = deferToThread(self.ap_settings.message.all_channels, str(uaid))
+        d = deferToThread(self.db.message.all_channels, str(uaid))
         d.addCallback(self._write_channels, uaid)
         d.addErrback(self._uaid_not_found_err)
         d.addErrback(self._response_err)
@@ -411,7 +411,7 @@ class UaidRegistrationHandler(BaseRegistrationHandler):
     def _delete_uaid(self, uaid):
         self.log.info(format="Dropping User", code=101,
                       uaid_hash=hasher(uaid.hex))
-        if not self.ap_settings.router.drop_user(uaid.hex):
+        if not self.db.router.drop_user(uaid.hex):
             raise ItemNotFound("UAID not found")
 
     def _uaid_not_found_err(self, fail):
@@ -455,8 +455,8 @@ class ChannelRegistrationHandler(BaseRegistrationHandler):
     @threaded_validate(UnregisterChidSchema)
     def delete(self, uaid, chid):
         # type: (uuid.UUID, str) -> Deferred
-        self.ap_settings.metrics.increment("updates.client.unregister",
-                                           tags=self.base_tags())
+        self.metrics.increment("updates.client.unregister",
+                               tags=self.base_tags())
         d = deferToThread(self._delete_channel, uaid, chid)
         d.addCallback(self._success)
         d.addErrback(self._chid_not_found_err)
@@ -464,7 +464,7 @@ class ChannelRegistrationHandler(BaseRegistrationHandler):
         return d
 
     def _delete_channel(self, uaid, chid):
-        if not self.ap_settings.message.unregister_channel(uaid.hex, chid):
+        if not self.db.message.unregister_channel(uaid.hex, chid):
             raise ItemNotFound("ChannelID not found")
 
     def _chid_not_found_err(self, fail):

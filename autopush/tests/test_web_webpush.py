@@ -8,11 +8,12 @@ from nose.tools import eq_, ok_
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial import unittest
 
-from autopush.db import Router, create_rotating_message_table
+from autopush.db import Message, create_rotating_message_table
 from autopush.http import EndpointHTTPFactory
 from autopush.router.interface import IRouter, RouterResponse
 from autopush.settings import AutopushSettings
 from autopush.tests.client import Client
+from autopush.tests.support import test_db
 
 dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
 dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
@@ -38,14 +39,13 @@ class TestWebpushHandler(unittest.TestCase):
             statsd_host=None,
         )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
-        self.router_mock = settings.router = Mock(spec=Router)
-        settings.routers["webpush"] = Mock(spec=IRouter)
-        self.wp_router_mock = settings.routers["webpush"]
 
-        self.message_mock = settings.message = Mock()
+        self.db = db = test_db()
+        self.message_mock = db.message = Mock(spec=Message)
         self.message_mock.all_channels.return_value = (True, [dummy_chid])
 
-        app = EndpointHTTPFactory.for_handler(WebPushHandler, settings)
+        app = EndpointHTTPFactory.for_handler(WebPushHandler, settings, db=db)
+        self.wp_router_mock = app.routers["webpush"] = Mock(spec=IRouter)
         self.client = Client(app)
 
     def url(self, **kwargs):
@@ -59,11 +59,11 @@ class TestWebpushHandler(unittest.TestCase):
             public_key="asdfasdf",
         ))
         self.fernet_mock.decrypt.return_value = dummy_token
-        self.router_mock.get_uaid.return_value = dict(
+        self.db.router.get_uaid.return_value = dict(
             router_type="webpush",
             router_data=dict(),
             uaid=dummy_uaid,
-            current_month=self.ap_settings.current_msg_month,
+            current_month=self.db.current_msg_month,
         )
         self.wp_router_mock.route_notification.return_value = RouterResponse(
             status_code=503,
@@ -74,7 +74,7 @@ class TestWebpushHandler(unittest.TestCase):
             self.url(api_ver="v1", token=dummy_token),
         )
         eq_(resp.get_status(), 503)
-        ru = self.router_mock.register_user
+        ru = self.db.router.register_user
         ok_(ru.called)
         eq_('webpush', ru.call_args[0][0].get('router_type'))
 
@@ -86,11 +86,11 @@ class TestWebpushHandler(unittest.TestCase):
             public_key="asdfasdf",
         ))
         self.fernet_mock.decrypt.return_value = dummy_token
-        self.router_mock.get_uaid.return_value = dict(
+        self.db.router.get_uaid.return_value = dict(
             uaid=dummy_uaid,
             router_type="webpush",
             router_data=dict(uaid="uaid"),
-            current_month=self.ap_settings.current_msg_month,
+            current_month=self.db.current_msg_month,
         )
         self.wp_router_mock.route_notification.return_value = RouterResponse(
             status_code=503,
@@ -101,7 +101,7 @@ class TestWebpushHandler(unittest.TestCase):
             self.url(api_ver="v1", token=dummy_token),
         )
         eq_(resp.get_status(), 503)
-        ok_(self.router_mock.drop_user.called)
+        ok_(self.db.router.drop_user.called)
 
     @inlineCallbacks
     def test_request_bad_ckey(self):
@@ -169,8 +169,7 @@ class TestWebpushHandler(unittest.TestCase):
     def test_request_v2_id_variant_pubkey(self):
         self.fernet_mock.decrypt.return_value = 'a' * 32
         variant_key = base64.urlsafe_b64encode("0V0" + ('a' * 85))
-        self.ap_settings.router.get_uaid = Mock()
-        self.ap_settings.router.get_uaid.return_value = dict(
+        self.db.router.get_uaid.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             router_type="gcm",
@@ -186,8 +185,7 @@ class TestWebpushHandler(unittest.TestCase):
     @inlineCallbacks
     def test_request_v2_id_no_crypt_auth(self):
         self.fernet_mock.decrypt.return_value = 'a' * 32
-        self.ap_settings.router.get_uaid = Mock()
-        self.ap_settings.router.get_uaid.return_value = dict(
+        self.db.router.get_uaid.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             router_type="gcm",

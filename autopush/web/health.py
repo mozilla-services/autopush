@@ -32,8 +32,8 @@ class HealthHandler(BaseWebHandler):
         }
 
         dl = DeferredList([
-            self._check_table(self.ap_settings.router.table),
-            self._check_table(self.ap_settings.storage.table)
+            self._check_table(self.db.router.table),
+            self._check_table(self.db.storage.table)
         ])
         dl.addBoth(self._finish_response)
 

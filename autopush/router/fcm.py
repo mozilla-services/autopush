@@ -100,15 +100,16 @@ class FCMRouter(object):
         }
     }
 
-    def __init__(self, ap_settings, router_conf):
+    def __init__(self, ap_settings, router_conf, metrics):
         """Create a new FCM router and connect to FCM"""
+        self.ap_settings = ap_settings
         self.config = router_conf
+        self.metrics = metrics
         self.min_ttl = router_conf.get("ttl", 60)
         self.dryRun = router_conf.get("dryrun", False)
         self.collapseKey = router_conf.get("collapseKey", "webpush")
         self.senderID = router_conf.get("senderID")
         self.auth = router_conf.get("auth")
-        self.metrics = ap_settings.metrics
         self._base_tags = []
         try:
             self.fcm = pyfcm.FCMNotification(api_key=self.auth)
@@ -117,7 +118,6 @@ class FCMRouter(object):
                            ex=e)
             raise IOError("FCM Bridge not initiated in main")
         self.log.debug("Starting FCM router...")
-        self.ap_settings = ap_settings
 
     def amend_endpoint_response(self, response, router_data):
         # type: (JSONDict, JSONDict) -> None

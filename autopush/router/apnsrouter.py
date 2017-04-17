@@ -44,10 +44,11 @@ class APNSRouter(object):
                                           APNS_MAX_CONNECTIONS),
             topic=cert_info.get("topic", default_topic),
             logger=self.log,
-            metrics=self.ap_settings.metrics,
+            metrics=self.metrics,
             load_connections=load_connections)
 
-    def __init__(self, ap_settings, router_conf, load_connections=True):
+    def __init__(self, ap_settings, router_conf, metrics,
+                 load_connections=True):
         """Create a new APNS router and connect to APNS
 
         :param ap_settings: Configuration settings
@@ -59,9 +60,10 @@ class APNSRouter(object):
 
         """
         self.ap_settings = ap_settings
+        self._config = router_conf
+        self.metrics = metrics
         self._base_tags = []
         self.apns = dict()
-        self._config = router_conf
         for rel_channel in self._config:
             self.apns[rel_channel] = self._connect(rel_channel,
                                                    load_connections)
@@ -142,10 +144,8 @@ class APNSRouter(object):
             apns_client.send(router_token=router_token, payload=payload,
                              apns_id=apns_id)
         except (ConnectionError, AttributeError) as ex:
-            self.ap_settings.metrics.increment(
-                "updates.client.bridge.apns.connection_err",
-                self._base_tags
-            )
+            self.metrics.increment("updates.client.bridge.apns.connection_err",
+                                   self._base_tags)
             self.log.error("Connection Error sending to APNS",
                            log_failure=Failure(ex))
             raise RouterException(
@@ -165,10 +165,11 @@ class APNSRouter(object):
 
         location = "%s/m/%s" % (self.ap_settings.endpoint_url,
                                 notification.version)
-        self.ap_settings.metrics.increment(
+        self.metrics.increment(
             "updates.client.bridge.apns.%s.sent" %
             router_data["rel_channel"],
-            self._base_tags)
+            self._base_tags
+        )
         return RouterResponse(status_code=201, response_body="",
                               headers={"TTL": notification.ttl,
                                        "Location": location},
