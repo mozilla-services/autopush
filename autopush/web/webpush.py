@@ -38,9 +38,9 @@ from autopush.utils import (
     ms_time,
     WebPushNotification,
     normalize_id,
+    parse_auth_header,
 )
 from autopush.web.base import (
-    AUTH_SCHEMES,
     threaded_validate,
     BaseWebHandler,
     PREF_SCHEME,
@@ -223,7 +223,6 @@ class WebPushCrypto04HeaderSchema(Schema):
     )
     encryption = fields.String(required=True)
     crypto_key = fields.String(
-        required=True,
         load_from="crypto-key",
     )
 
@@ -292,6 +291,7 @@ class WebPushRequestSchema(Schema):
     )
     body = fields.Raw()
     token_info = fields.Raw()
+    vapid_version = fields.String(required=False, missing=None)
 
     @validates('body')
     def validate_data(self, value):
@@ -315,27 +315,19 @@ class WebPushRequestSchema(Schema):
     def validate_auth(self, d):
         auth = d["headers"].get("authorization")
         needs_auth = d["token_info"]["api_ver"] == "v2"
-        if not auth and not needs_auth:
+        if not needs_auth and not auth:
             return
-
-        public_key = d["subscription"].get("public_key")
         try:
-            auth_type, token = auth.split(' ', 1)
-        except ValueError:
-            raise InvalidRequest("Invalid Authorization Header",
-                                 status_code=401, errno=109,
-                                 headers={"www-authenticate": PREF_SCHEME})
-
-        # If its not a bearer token containing what may be JWT, stop
-        if auth_type.lower() not in AUTH_SCHEMES or '.' not in token:
-            if needs_auth:
-                raise InvalidRequest("Missing Authorization Header",
-                                     status_code=401, errno=109)
-            return
-
-        try:
+            vapid_auth = parse_auth_header(auth)
+            token = vapid_auth['t']
+            d["vapid_version"] = "draft{:0>2}".format(
+                vapid_auth['version'])
+            if vapid_auth['version'] == 2:
+                public_key = vapid_auth['k']
+            else:
+                public_key = d["subscription"].get("public_key")
             jwt = extract_jwt(token, public_key)
-        except (ValueError, InvalidSignature, TypeError):
+        except (KeyError, ValueError, InvalidSignature, TypeError):
             raise InvalidRequest("Invalid Authorization Header",
                                  status_code=401, errno=109,
                                  headers={"www-authenticate": PREF_SCHEME})
@@ -411,6 +403,9 @@ class WebPushHandler(BaseWebHandler):
         # type: (...) -> Deferred
         # Store Vapid info if present
         if jwt:
+            self.metrics.increment("updates.vapid.{}".format(
+                kwargs.get('vapid_version'))
+            )
             self._client_info["jwt_crypto_key"] = jwt["jwt_crypto_key"]
             for i in jwt["jwt_data"]:
                 self._client_info["jwt_" + i] = jwt["jwt_data"][i]

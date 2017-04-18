@@ -141,7 +141,38 @@ class TestWebpushHandler(unittest.TestCase):
 
         self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'tooshort'
-        self.request_mock.headers['authorization'] = 'dummy_key'
+        self.request_mock.headers['authorization'] = 'vapid t=dummy_key,k=aaa'
+        self.wp.post(token='ignored', api_ver='v2')
+        return self.finish_deferred
+
+    def test_request_bad_draft02_auth(self):
+        def handle_finish(result):
+            self.wp.set_status.assert_called_with(401, reason=None)
+
+        self.finish_deferred.addCallback(handle_finish)
+        self.request_mock.headers['authorization'] = 'vapid foo'
+        self.wp.post(token='ignored', api_ver='v2')
+        return self.finish_deferred
+
+    def test_request_bad_draft02_missing_key(self):
+        def handle_finish(result):
+            self.wp.set_status.assert_called_with(401, reason=None)
+
+        self.fernet_mock.decrypt.return_value = 'a' * 64
+        self.finish_deferred.addCallback(handle_finish)
+        self.request_mock.headers['authorization'] = (
+            'vapid t=dummy.key.value,k=')
+        self.wp.post(token='ignored', api_ver='v2')
+        return self.finish_deferred
+
+    def test_request_bad_draft02_bad_pubkey(self):
+        def handle_finish(result):
+            self.wp.set_status.assert_called_with(401, reason=None)
+
+        self.fernet_mock.decrypt.return_value = 'a' * 64
+        self.finish_deferred.addCallback(handle_finish)
+        self.request_mock.headers['authorization'] = (
+            'vapid t=dummy.key.value,k=!aaa')
         self.wp.post(token='ignored', api_ver='v2')
         return self.finish_deferred
 

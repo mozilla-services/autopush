@@ -26,7 +26,7 @@ status_codes = {
     503: "Service Unavailable",
 }
 # Older versions used "bearer", newer specification requires "webpush"
-AUTH_SCHEMES = ["bearer", "webpush"]
+AUTH_SCHEMES = ["bearer", "webpush", "vapid"]
 PREF_SCHEME = "webpush"
 DEFAULT_ERR_URL = ("http://autopush.readthedocs.io/en/latest/http.html"
                    "#error-codes")

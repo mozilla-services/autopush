@@ -39,7 +39,8 @@ from autopush.utils import (
     canonical_url,
     resolve_ip,
     repad,
-    base64url_decode
+    base64url_decode,
+    parse_auth_header,
 )
 from autopush.crypto_key import (CryptoKey, CryptoKeyException)
 
@@ -365,7 +366,19 @@ class AutopushSettings(object):
             except CryptoKeyException:
                 raise InvalidTokenException("Invalid key data")
             public_key = crypto_key.get_label('p256ecdsa')
-
+        if auth_header:
+            vapid_auth = parse_auth_header(auth_header)
+            if not vapid_auth:
+                raise VapidAuthException("Invalid Auth token")
+            self.metrics.increment("updates.notification.auth.{}".format(
+                vapid_auth['scheme']
+            ))
+            # pull the public key from the VAPID auth header if needed
+            try:
+                if vapid_auth['version'] != 1:
+                    public_key = vapid_auth['k']
+            except KeyError:
+                raise VapidAuthException("Missing Public Key")
         if version == 'v1' and len(token) != 32:
             raise InvalidTokenException("Corrupted push token")
         if version == 'v2':
