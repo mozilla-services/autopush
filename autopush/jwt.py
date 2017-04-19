@@ -103,6 +103,8 @@ class VerifyJWT(object):
             return json.loads(
                 base64.urlsafe_b64decode(
                     repad(sig_material.split('.')[1]).encode('utf8')))
+        except InvalidSignature:
+            raise
         except (ValueError, TypeError, binascii.Error, PyAsn1Error):
             raise InvalidSignature()
         except Exception:  # pragma: no cover
