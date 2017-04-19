@@ -751,6 +751,9 @@ class TestData(IntegrationBase):
         eq_(result["data"], "wyigoeIooQ")
         ok_(self.logs.logged_ci(lambda ci: 'message_size' in ci),
             "message_size not logged")
+        ok_(self.logs.logged_ci(
+            lambda ci: ci['encoding'] == "aesgcm"
+        ))
         yield self.shut_down(client)
 
     @inlineCallbacks

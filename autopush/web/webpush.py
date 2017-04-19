@@ -416,6 +416,9 @@ class WebPushHandler(BaseWebHandler):
                 self._client_info["jwt_" + i] = jwt["jwt_data"][i]
 
         user_data = subscription["user_data"]
+        encoding = ''
+        if notification.data and notification.headers:
+            encoding = notification.headers.get('encoding', '')
         self._client_info.update(
             message_id=notification.message_id,
             uaid=hasher(user_data.get("uaid")),
@@ -423,9 +426,9 @@ class WebPushHandler(BaseWebHandler):
             router_key=user_data["router_type"],
             message_size=len(notification.data or ""),
             ttl=notification.ttl,
-            version=notification.version
+            version=notification.version,
+            encoding=encoding,
         )
-
         router = self.ap_settings.routers[user_data["router_type"]]
         self._router_time = time.time()
         d = maybeDeferred(router.route_notification, notification, user_data)
