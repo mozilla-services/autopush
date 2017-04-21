@@ -60,3 +60,7 @@ class RouterException(AutopushException):
 class LogCheckError(Exception):
     """Exception raised on purpose to check logging functions"""
     pass
+
+
+class InvalidSettings(Exception):
+    """Error in initialization of AutopushSettings"""

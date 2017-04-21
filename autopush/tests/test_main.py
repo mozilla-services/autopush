@@ -4,23 +4,30 @@ import json
 
 from mock import Mock, patch
 from moto import mock_dynamodb2
-from nose.tools import eq_, ok_
+from nose.tools import (
+    assert_raises,
+    eq_,
+    ok_
+)
 from twisted.internet.defer import Deferred
 from twisted.trial import unittest as trialtest
 import hyper
 import hyper.tls
 
 from autopush.db import get_rotating_message_table
+from autopush.exceptions import InvalidSettings
+from autopush.http import skip_request_logging
 from autopush.main import (
-    connection_main,
-    endpoint_main,
+    ConnectionApplication,
+    EndpointApplication,
     make_settings,
-    skip_request_logging,
 )
 from autopush.settings import AutopushSettings
 from autopush.utils import resolve_ip
 
 
+connection_main = ConnectionApplication.main
+endpoint_main = EndpointApplication.main
 mock_dynamodb2 = mock_dynamodb2()
 
 
@@ -169,7 +176,7 @@ class SettingsAsyncTestCase(trialtest.TestCase):
 class ConnectionMainTestCase(unittest.TestCase):
     def setUp(self):
         patchers = [
-            "autopush.main.task",
+            "autopush.main.TimerService.startService",
             "autopush.main.reactor",
             "autopush.settings.TwistedMetrics",
         ]
@@ -250,6 +257,7 @@ class EndpointMainTestCase(unittest.TestCase):
         fcm_auth = 'abcde'
         ssl_key = "keys/server.crt"
         ssl_cert = "keys/server.key"
+        ssl_dh_param = None
         msg_limit = 1000
         _client_certs = dict(partner1=["1A:"*31 + "F9"],
                              partner2=["2B:"*31 + "E8",
@@ -257,9 +265,12 @@ class EndpointMainTestCase(unittest.TestCase):
         client_certs = json.dumps(_client_certs)
         connection_timeout = 1
 
+        proxy_protocol_port = None
+        memusage_port = None
+
     def setUp(self):
         patchers = [
-            "autopush.main.task",
+            "autopush.main.TimerService.startService",
             "autopush.main.reactor",
             "autopush.settings.TwistedMetrics",
             "autopush.settings.preflight_check",
@@ -355,20 +366,20 @@ class EndpointMainTestCase(unittest.TestCase):
     def test_bad_senders(self):
         old_list = self.TestArg.senderid_list
         self.TestArg.senderid_list = "{}"
-        ap = make_settings(self.TestArg)
-        eq_(ap, None)
+        with assert_raises(InvalidSettings):
+            make_settings(self.TestArg)
         self.TestArg.senderid_list = old_list
 
     def test_bad_fcm_senders(self):
         old_auth = self.TestArg.fcm_auth
         old_senderid = self.TestArg.fcm_senderid
         self.TestArg.fcm_auth = ""
-        ap = make_settings(self.TestArg)
-        eq_(ap, None)
+        with assert_raises(InvalidSettings):
+            make_settings(self.TestArg)
         self.TestArg.fcm_auth = old_auth
         self.TestArg.fcm_senderid = ""
-        ap = make_settings(self.TestArg)
-        eq_(ap, None)
+        with assert_raises(InvalidSettings):
+            make_settings(self.TestArg)
         self.TestArg.fcm_senderid = old_senderid
 
     def test_gcm_start(self):

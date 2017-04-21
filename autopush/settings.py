@@ -68,6 +68,8 @@ class AutopushSettings(object):
                  endpoint_scheme=None,
                  endpoint_hostname=None,
                  endpoint_port=None,
+                 proxy_protocol_port=None,
+                 memusage_port=None,
                  router_conf=None,
                  router_tablename="router",
                  router_read_throughput=5,
@@ -90,10 +92,19 @@ class AutopushSettings(object):
                  bear_hash_key=None,
                  preflight_uaid="deadbeef00000000deadbeef00000000",
                  ami_id=None,
-                 client_certs=None,
                  msg_limit=100,
                  debug=False,
                  connect_timeout=0.5,
+                 ssl_key=None,
+                 ssl_cert=None,
+                 ssl_dh_param=None,
+                 router_ssl_key=None,
+                 router_ssl_cert=None,
+                 client_certs=None,
+                 auto_ping_interval=None,
+                 auto_ping_timeout=None,
+                 max_connections=None,
+                 close_handshake_timeout=None,
                  ):
         """Initialize the Settings object
 
@@ -102,6 +113,7 @@ class AutopushSettings(object):
         will have a preflight check done.
 
         """
+        self.debug = debug
         # Use a persistent connection pool for HTTP requests.
         pool = HTTPConnectionPool(reactor)
         if not debug:
@@ -146,6 +158,9 @@ class AutopushSettings(object):
             self.metrics = SinkMetrics()
 
         self.port = port
+        self.router_port = router_port
+        self.proxy_protocol_port = proxy_protocol_port
+        self.memusage_port = memusage_port
         self.endpoint_hostname = endpoint_hostname or self.hostname
         self.router_hostname = router_hostname or self.hostname
 
@@ -163,8 +178,27 @@ class AutopushSettings(object):
             self.endpoint_hostname,
             endpoint_port
         )
+
+        # not accurate under autoendpoint (like router_url)
+        self.ws_url = "{}://{}:{}/".format(
+            "wss" if ssl_key else "ws",
+            self.hostname,
+            self.port
+        )
+
+        self.ssl_key = ssl_key
+        self.ssl_cert = ssl_cert
+        self.ssl_dh_param = ssl_dh_param
+        self.router_ssl_key = router_ssl_key
+        self.router_ssl_cert = router_ssl_cert
+
         self.enable_tls_auth = client_certs is not None
         self.client_certs = client_certs
+
+        self.auto_ping_interval = auto_ping_interval
+        self.auto_ping_timeout = auto_ping_timeout
+        self.max_connections = max_connections
+        self.close_handshake_timeout = close_handshake_timeout
 
         # Database objects
         self.router_table = get_router_table(router_tablename,
