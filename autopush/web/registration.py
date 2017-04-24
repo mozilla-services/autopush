@@ -59,20 +59,10 @@ class RegistrationSchema(Schema):
         chid = req['path_kwargs'].get('chid', router_data.get("channelID"))
         if uaid:
             try:
-                u_uuid = uuid.UUID(uaid)
+                uuid.UUID(uaid)
             except (ValueError, TypeError):
                 raise InvalidRequest("Invalid Request UAID",
                                      status_code=401, errno=109)
-            # Check if the UAID has a 'critical error' which means that it's
-            # probably invalid and should be reset/re-registered
-            try:
-                record = self.context['settings'].router.get_uaid(u_uuid.hex)
-                if record.get('critical_failure'):
-                    raise InvalidRequest("Invalid Request UAID",
-                                         status_code=410, errno=105)
-            except ItemNotFound:
-                pass
-
         if chid:
             try:
                 uuid.UUID(chid)
