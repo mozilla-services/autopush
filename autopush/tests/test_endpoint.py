@@ -570,31 +570,6 @@ class RegistrationTestCase(unittest.TestCase):
                    chid=str(dummy_chid))
         return self.finish_deferred
 
-    def test_post_uaid_critical_failure(self, *args):
-        self.reg.request.body = json.dumps(dict(
-            type="webpush",
-            channelID=str(dummy_chid),
-            data={},
-        ))
-        self.settings.router.get_uaid = Mock()
-        self.settings.router.get_uaid.return_value = {
-            "critical_failure": "Client is unreachable due to a configuration "
-                                "error."
-        }
-        self.fernet_mock.configure_mock(**{
-            'encrypt.return_value': 'abcd123',
-        })
-
-        def handle_finish(value):
-            self._check_error(410, 105, "")
-
-        self.finish_deferred.addCallback(handle_finish)
-        self.reg.request.headers["Authorization"] = self.auth
-        self._post(router_type="simplepush",
-                   uaid=dummy_uaid.hex,
-                   chid=str(dummy_chid))
-        return self.finish_deferred
-
     def test_post_nochid(self):
         self.reg.request.body = json.dumps(dict(
             type="simplepush",
@@ -684,6 +659,10 @@ class RegistrationTestCase(unittest.TestCase):
                 app_id='',
                 uri=self.reg.request.uri
             )
+            user_data = self.router_mock.register_user.call_args[0][0]
+            eq_(user_data['uaid'], dummy_uaid.hex)
+            eq_(user_data['router_type'], 'test')
+            eq_(user_data['router_data']['token'], 'some_token')
 
         def restore(*args, **kwargs):
             uuid.uuid4 = old_func
