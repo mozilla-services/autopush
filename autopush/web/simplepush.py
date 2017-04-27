@@ -107,7 +107,7 @@ class SimplePushHandler(BaseWebHandler):
         # type: (Dict[str, Any], str, str) -> Deferred
         user_data = subscription["user_data"]
         self._client_info.update(
-            uaid=hasher(user_data.get("uaid")),
+            uaid_hash=hasher(user_data.get("uaid")),
             channel_id=user_data.get("chid"),
             message_id=version,
             router_key=user_data["router_type"]

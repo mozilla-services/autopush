@@ -416,11 +416,11 @@ class WebPushHandler(BaseWebHandler):
             encoding = notification.headers.get('encoding', '')
         self._client_info.update(
             message_id=notification.message_id,
-            uaid=hasher(user_data.get("uaid")),
+            uaid_hash=hasher(user_data.get("uaid")),
             channel_id=user_data.get("chid"),
             router_key=user_data["router_type"],
             message_size=len(notification.data or ""),
-            ttl=notification.ttl,
+            message_ttl=notification.ttl,
             version=notification.version,
             encoding=encoding,
         )
