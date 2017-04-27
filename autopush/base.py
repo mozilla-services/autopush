@@ -24,7 +24,7 @@ class BaseHandler(cyclone.web.RequestHandler):
             remote_ip=self.request.headers.get('x-forwarded-for',
                                                self.request.remote_ip),
             authorization=self.request.headers.get('authorization', ""),
-            message_ttl=self.request.headers.get('ttl', ""),
+            message_ttl=self.request.headers.get('ttl', None),
             uri=self.request.uri,
             python_version=sys.version,
         )

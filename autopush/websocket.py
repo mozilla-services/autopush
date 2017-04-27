@@ -1199,7 +1199,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.sendJSON(msg)
         self.ps.metrics.increment("updates.client.register",
                                   tags=self.base_tags)
-        self.log.info(format="Register", channelID=chid,
+        self.log.info(format="Register", channel_id=chid,
                       endpoint=endpoint,
                       uaid_hash=self.ps.uaid_hash,
                       user_agent=self.ps.user_agent,
@@ -1279,7 +1279,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if found:
             msg = found[0]
             size = len(msg.data) if msg.data else 0
-            self.log.info(format="Ack", router_key="webpush", channelID=chid,
+            self.log.info(format="Ack", router_key="webpush", channel_id=chid,
                           message_id=version, message_source="direct",
                           message_size=size, uaid_hash=self.ps.uaid_hash,
                           user_agent=self.ps.user_agent, code=code,
@@ -1293,7 +1293,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if found:
             msg = found[0]
             size = len(msg.data) if msg.data else 0
-            self.log.info(format="Ack", router_key="webpush", channelID=chid,
+            self.log.info(format="Ack", router_key="webpush", channel_id=chid,
                           message_id=version, message_source="stored",
                           message_size=size, uaid_hash=self.ps.uaid_hash,
                           user_agent=self.ps.user_agent, code=code,
@@ -1348,13 +1348,13 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
            self.ps.direct_updates[chid] <= version:
             del self.ps.direct_updates[chid]
             self.log.info(format="Ack", router_key="simplepush",
-                          channelID=chid, message_id=version,
+                          channel_id=chid, message_id=version,
                           message_source="direct",
                           uaid_hash=self.ps.uaid_hash,
                           user_agent=self.ps.user_agent, code=code,
                           **self.ps.raw_agent)
             return
-        self.log.info(format="Ack", router_key="simplepush", channelID=chid,
+        self.log.info(format="Ack", router_key="simplepush", channel_id=chid,
                       message_id=version, message_source="stored",
                       uaid_hash=self.ps.uaid_hash,
                       user_agent=self.ps.user_agent, code=code,
