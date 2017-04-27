@@ -1,0 +1,30 @@
+-- vim:ft=lua
+message_matcher = message_matcher .. " && (Fields[Fields.router_key] != 'simplepush'"
+message_matcher = message_matcher .. " && Fields[Fields.router_key] != 'webpush'"
+message_matcher = message_matcher .. " || Fields[Fields.remote_ip] == NIL)"
+
+s3_path_dimensions = {
+	{name="log", source="Type"},
+	{name="fallback", source="Type"},
+	{name="date", source="Fields[Date]"},
+	{name="hour", source="Fields[Hour]"},
+}
+
+-- default mozlog schema
+parquet_schema = [=[
+message Log {
+    required int64 Timestamp;
+    optional binary Type (UTF8);
+    optional binary Hostname (UTF8);
+    optional binary Logger (UTF8);
+    optional binary EnvVersion (UTF8);
+    optional int64 Severity;
+    optional int64 Pid;
+    optional group Fields (MAP) {
+        repeated group key_value {
+            required binary key (UTF8);
+            required binary value (UTF8);
+        }
+    }
+}
+]=]
