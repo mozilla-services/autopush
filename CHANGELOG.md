@@ -1,3 +1,25 @@
+<a name="1.29.0"></a>
+## 1.29.0 (2017-04-28)
+
+
+#### Refactor
+
+*   refine the Handler validation ([b1312db7](https://github.com/mozilla-services/autopush/commit/b1312db7e2e9932daf997c5ade72e9353aaa9bd0))
+
+#### Bug Fixes
+
+*   revert registration's strict critical failure check ([caf2ed8d](https://github.com/mozilla-services/autopush/commit/caf2ed8d12372918475b619c391c39a62eb1d9c3))
+*   Do not report InvalidSignature as unhandled ([0d243556](https://github.com/mozilla-services/autopush/commit/0d2435566598af35d3583467a26d82016259fe53))
+*   enforce `senderID` for gcm/fcm ([569dd1ff](https://github.com/mozilla-services/autopush/commit/569dd1ff6baeead93b98abe5996de3208771dfc9))
+
+#### Features
+
+*   add parquet unified schema and cleanup logging messages ([63d2981c](https://github.com/mozilla-services/autopush/commit/63d2981c3e804adc84877ccb643515f139ce7787), closes [#882](https://github.com/mozilla-services/autopush/issues/882))
+*   add tracking for content-encoding ([c236f725](https://github.com/mozilla-services/autopush/commit/c236f72505344261c530e13ea61f42aaffd06bbd))
+*   Add VAPID Draft 02 support ([e17129db](https://github.com/mozilla-services/autopush/commit/e17129dbc2022ae6d3c856e7c94354bd4151df89))
+
+
+
 <a name="1.28.0"></a>
 ## 1.28.0 (2017-04-07)
 
