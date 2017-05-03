@@ -22,12 +22,12 @@ import ecdsa
 import psutil
 import twisted.internet.base
 import websocket
+from cryptography.fernet import Fernet
 from jose import jws
 from nose.tools import eq_, ok_
 from typing import Optional  # noqa
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
-from twisted.internet.endpoints import SSL4ServerEndpoint, TCP4ServerEndpoint
 from twisted.internet.threads import deferToThread
 from twisted.logger import (
     globalLogPublisher,
@@ -46,17 +46,11 @@ from autopush.db import (
     has_connected_this_month
 )
 from autopush.logging import begin_or_register
-from autopush.main import endpoint_paths
+from autopush.main import ConnectionApplication, EndpointApplication
 from autopush.settings import AutopushSettings
 from autopush.utils import base64url_encode
 from autopush.metrics import SinkMetrics
-from autopush.websocket import (
-    DefaultResource,
-    NotificationHandler,
-    PushServerFactory,
-    RouterHandler,
-    StatusResource,
-)
+from autopush.websocket import PushServerFactory
 
 log = logging.getLogger(__name__)
 here_dir = os.path.abspath(os.path.dirname(__file__))
@@ -354,135 +348,75 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                 break
 
 
+ROUTER_TABLE = os.environ.get("ROUTER_TABLE", "router_int_test")
+STORAGE_TABLE = os.environ.get("STORAGE_TABLE", "storage_int_test")
+MESSAGE_TABLE = os.environ.get("MESSAGE_TABLE", "message_int_test")
+
+
 class IntegrationBase(unittest.TestCase):
     track_objects = True
     track_objects_excludes = [AutopushSettings, PushServerFactory]
-    proxy_protocol_port = None
-    endpoint_scheme = 'http'
+
+    endpoint_port = 9020
+
+    _endpoint_defaults = dict(
+        hostname='localhost',
+        port=endpoint_port,
+        endpoint_port=endpoint_port,
+        endpoint_scheme='http',
+        statsd_host=None,
+        router_tablename=ROUTER_TABLE,
+        storage_tablename=STORAGE_TABLE,
+        message_tablename=MESSAGE_TABLE,
+    )
+
+    _conn_defaults = dict(
+        hostname='localhost',
+        port=9010,
+        endpoint_port=endpoint_port,
+        router_port=9030,
+        endpoint_scheme='http',
+        statsd_host=None,
+        router_tablename=ROUTER_TABLE,
+        storage_tablename=STORAGE_TABLE,
+        message_tablename=MESSAGE_TABLE,
+    )
 
     def setUp(self):
-        import cyclone.web
-        from autobahn.twisted.resource import WebSocketResource
-        from twisted.web.server import Site
-
-        from autopush.web.log_check import LogCheckHandler
-        from autopush.main import (
-            create_memusage_site,
-            mount_health_handlers,
-            skip_request_logging
-        )
-        from autopush.settings import AutopushSettings
-        from autopush.web.message import MessageHandler
-        from autopush.web.registration import RegistrationHandler
-        from autopush.web.simplepush import SimplePushHandler
-        from autopush.web.webpush import WebPushHandler
-
         self.logs = TestingLogObserver()
         begin_or_register(self.logs)
+        self.addCleanup(globalLogPublisher.removeObserver, self.logs)
 
-        router_table = os.environ.get("ROUTER_TABLE", "router_int_test")
-        storage_table = os.environ.get("STORAGE_TABLE", "storage_int_test")
-        message_table = os.environ.get("MESSAGE_TABLE", "message_int_test")
-
-        self.endpoint_port = 9020
-        self.router_port = 9030
-        self.memusage_port = 9040
-        client_certs = self.make_client_certs()
-        settings = AutopushSettings(
-            hostname="localhost",
-            statsd_host=None,
-            endpoint_port=str(self.endpoint_port),
-            router_port=str(self.router_port),
-            router_tablename=router_table,
-            storage_tablename=storage_table,
-            message_tablename=message_table,
-            client_certs=client_certs,
-            endpoint_scheme=self.endpoint_scheme,
+        crypto_key = Fernet.generate_key()
+        ep_settings = AutopushSettings(
+            crypto_key=crypto_key,
+            **self.endpoint_kwargs()
         )
-
-        # Websocket server
-        self._ws_url = "ws://localhost:9010/"
-        factory = PushServerFactory(settings, self._ws_url)
-        factory.setProtocolOptions(
-            webStatus=False,
-            openHandshakeTimeout=5,
+        conn_settings = AutopushSettings(
+            crypto_key=crypto_key,
+            **self.conn_kwargs()
         )
-        resource = DefaultResource(WebSocketResource(factory))
-        resource.putChild("status", StatusResource())
-        self.websocket = reactor.listenTCP(9010, Site(resource))
-
-        # Websocket HTTP router
-        # Internal HTTP notification router
-        h_kwargs = dict(ap_settings=settings)
-        ws_site = cyclone.web.Application([
-            (endpoint_paths['route'], RouterHandler, h_kwargs),
-            (endpoint_paths['notification'], NotificationHandler, h_kwargs),
-        ],
-            default_host=settings.router_hostname,
-            log_function=skip_request_logging,
-            debug=False,
-        )
-        self.ws_website = reactor.listenTCP(self.router_port, ws_site)
+        # Dirty reactor unless we shut down the cached connections
+        self.addCleanup(ep_settings.agent._pool.closeCachedConnections)
+        self.addCleanup(conn_settings.agent._pool.closeCachedConnections)
 
         # Endpoint HTTP router
-        site = cyclone.web.Application([
-            (endpoint_paths['simple'], SimplePushHandler, h_kwargs),
-            (endpoint_paths['message'], MessageHandler, h_kwargs),
-            (endpoint_paths['webpush'], WebPushHandler, h_kwargs),
+        self.ep = ep = EndpointApplication(ep_settings)
+        ep.setup(rotate_tables=False)
+        ep.startService()
+        self.addCleanup(ep.stopService)
 
-            # PUT /register/ => connect info
-            # GET /register/uaid => chid + endpoint
-            (endpoint_paths['registration'], RegistrationHandler, h_kwargs),
-            (endpoint_paths['logcheck'], LogCheckHandler, h_kwargs),
-        ],
-            default_host=settings.hostname,
-            log_function=skip_request_logging,
-            debug=False,
-            client_certs=settings.client_certs,
-        )
-        mount_health_handlers(site, settings)
-        self._settings = settings
+        # Websocket server
+        self.conn = conn = ConnectionApplication(conn_settings)
+        conn.setup(rotate_tables=False)
+        conn.startService()
+        self.addCleanup(conn.stopService)
 
-        self.endpoints = []
-        ep = self.create_endpoint(self.endpoint_port)
-        ep.listen(site).addCallback(self._endpoint_listening)
+    def endpoint_kwargs(self):
+        return self._endpoint_defaults
 
-        if self.proxy_protocol_port:
-            ep = self.create_proxy_endpoint(self.proxy_protocol_port)
-            ep.listen(site).addCallback(self._endpoint_listening)
-
-        self.memusage_site = create_memusage_site(
-            settings,
-            self.memusage_port,
-            False)
-
-    def create_endpoint(self, port):
-        return TCP4ServerEndpoint(reactor, port)
-
-    def create_proxy_endpoint(self, port):
-        from autopush.haproxy import HAProxyServerEndpoint
-        return HAProxyServerEndpoint(reactor, self.proxy_protocol_port)
-
-    def _endpoint_listening(self, port):
-        self.endpoints.append(port)
-
-    def make_client_certs(self):
-        return None
-
-    def endpoint_SSLCF(self):
-        raise NotImplementedError  # pragma: nocover
-
-    @inlineCallbacks
-    def tearDown(self):
-        sites = [self.websocket,
-                 self.ws_website,
-                 self.memusage_site] + self.endpoints
-        for d in filter(None, (site.stopListening() for site in sites)):
-            yield d
-
-        # Dirty reactor unless we shut down the cached connections
-        yield self._settings.agent._pool.closeCachedConnections()
-        globalLogPublisher.removeObserver(self.logs)
+    def conn_kwargs(self):
+        return self._conn_defaults
 
     @inlineCallbacks
     def quick_register(self, use_webpush=False, sslcontext=None):
@@ -501,32 +435,29 @@ class IntegrationBase(unittest.TestCase):
 
     @contextmanager
     def legacy_endpoint(self):
-        self._settings._notification_legacy = True
+        self.ep.settings._notification_legacy = True
         yield
-        self._settings._notification_legacy = False
+        self.ep.settings._notification_legacy = False
 
 
 class SSLEndpointMixin(object):
 
-    endpoint_scheme = 'https'
     certs = os.path.join(os.path.dirname(__file__), "certs")
     servercert = os.path.join(certs, "server.pem")
 
-    def create_endpoint(self, port):
-        return SSL4ServerEndpoint(reactor, port, self.endpoint_SSLCF())
+    def endpoint_kwargs(self):
+        return dict(
+            super(SSLEndpointMixin, self).endpoint_kwargs(),
+            ssl_key=self.servercert,
+            ssl_cert=self.servercert,
+            endpoint_scheme='https'
+        )
 
-    def endpoint_SSLCF(self):
-        """Return an SSLContextFactory for the endpoint.
-
-        Configured with the self-signed test server.pem. server.pem is
-        additionally the signer of the client certs in the same dir.
-
-        """
-        from autopush.ssl import AutopushSSLContextFactory
-        return AutopushSSLContextFactory(
-            self.servercert,
-            self.servercert,
-            require_peer_certs=self._settings.enable_tls_auth)
+    def conn_kwargs(self):
+        return dict(
+            super(SSLEndpointMixin, self).conn_kwargs(),
+            endpoint_scheme='https'
+        )
 
     def client_SSLCF(self, certfile):
         """Return an IPolicyForHTTPS for verifiying tests' server cert.
@@ -690,7 +621,8 @@ class TestSimple(IntegrationBase):
         yield client.disconnect()
 
         # Verify the last_connect is there and the current month
-        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
+        c = yield deferToThread(
+            self.conn.settings.router.get_uaid, client.uaid)
         eq_(True, has_connected_this_month(c))
 
         # Move it back
@@ -706,8 +638,8 @@ class TestSimple(IntegrationBase):
         yield client.disconnect()
         times = 0
         while times < 10:
-            c = yield deferToThread(self._settings.router.get_uaid,
-                                    client.uaid)
+            c = yield deferToThread(
+                self.conn.settings.router.get_uaid, client.uaid)
             if has_connected_this_month(c):
                 break
             else:  # pragma: nocover
@@ -838,6 +770,10 @@ class TestLoop(IntegrationBase):
 
 
 class TestWebPush(IntegrationBase):
+
+    @property
+    def _ws_url(self):
+        return self.conn.settings.ws_url
 
     @inlineCallbacks
     def test_hello_only_has_three_calls(self):
@@ -1317,10 +1253,10 @@ class TestWebPush(IntegrationBase):
     def test_message_with_topic(self):
         from mock import Mock, call
         data = str(uuid.uuid4())
-        self._settings.metrics = Mock(spec=SinkMetrics)
+        self.conn.settings.metrics = Mock(spec=SinkMetrics)
         client = yield self.quick_register(use_webpush=True)
         yield client.send_notification(data=data, topic="topicname")
-        self._settings.metrics.increment.assert_has_calls([
+        self.conn.settings.metrics.increment.assert_has_calls([
             call('updates.notification.topic',
                  tags=['host:localhost', 'use_webpush:True'])
         ])
@@ -1401,16 +1337,17 @@ class TestWebPush(IntegrationBase):
 
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
-            prefix=self._settings._message_prefix, delta=-1)
-        lm_message = self._settings.message_tables[last_month]
+            prefix=self.conn.settings._message_prefix, delta=-1)
+        lm_message = self.conn.settings.message_tables[last_month]
         yield deferToThread(
-            self._settings.router.update_message_month,
+            self.conn.settings.router.update_message_month,
             client.uaid,
             last_month
         )
 
         # Verify the move
-        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
+        c = yield deferToThread(
+            self.conn.settings.router.get_uaid, client.uaid)
         eq_(c["current_month"], last_month)
 
         # Verify last_connect is current, then move that back
@@ -1423,7 +1360,7 @@ class TestWebPush(IntegrationBase):
 
         # Move the clients channels back one month
         exists, chans = yield deferToThread(
-            self._settings.message.all_channels, client.uaid
+            self.conn.settings.message.all_channels, client.uaid
         )
         eq_(exists, True)
         eq_(len(chans), 1)
@@ -1434,14 +1371,14 @@ class TestWebPush(IntegrationBase):
         )
 
         # Remove the channels entry entirely from this month
-        yield deferToThread(self._settings.message.table.delete_item,
+        yield deferToThread(self.conn.settings.message.table.delete_item,
                             uaid=client.uaid,
                             chidmessageid=" "
                             )
 
         # Verify the channel is gone
         exists, chans = yield deferToThread(
-            self._settings.message.all_channels,
+            self.conn.settings.message.all_channels,
             client.uaid
         )
         eq_(exists, False)
@@ -1468,7 +1405,7 @@ class TestWebPush(IntegrationBase):
         eq_(chan, result["channelID"])
 
         # Check that the client is going to rotate the month
-        server_client = self._settings.clients[client.uaid]
+        server_client = self.conn.settings.clients[client.uaid]
         eq_(server_client.ps.rotate_message_table, True)
 
         # Acknowledge the notification, which triggers the migration
@@ -1477,16 +1414,17 @@ class TestWebPush(IntegrationBase):
         # Wait up to 2 seconds for the table rotation to occur
         start = time.time()
         while time.time()-start < 2:
-            c = yield deferToThread(self._settings.router.get_uaid,
-                                    client.uaid)
-            if c["current_month"] == self._settings.current_msg_month:
+            c = yield deferToThread(
+                self.conn.settings.router.get_uaid, client.uaid)
+            if c["current_month"] == self.conn.settings.current_msg_month:
                 break
             else:
                 yield deferToThread(time.sleep, 0.2)
 
         # Verify the month update in the router table
-        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
-        eq_(c["current_month"], self._settings.current_msg_month)
+        c = yield deferToThread(
+            self.conn.settings.router.get_uaid, client.uaid)
+        eq_(c["current_month"], self.conn.settings.current_msg_month)
         eq_(server_client.ps.rotate_message_table, False)
 
         # Verify the client moved last_connect
@@ -1494,7 +1432,7 @@ class TestWebPush(IntegrationBase):
 
         # Verify the channels were moved
         exists, chans = yield deferToThread(
-            self._settings.message.all_channels,
+            self.conn.settings.message.all_channels,
             client.uaid
         )
         eq_(exists, True)
@@ -1510,16 +1448,17 @@ class TestWebPush(IntegrationBase):
 
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
-            prefix=self._settings._message_prefix, delta=-1)
-        lm_message = self._settings.message_tables[last_month]
+            prefix=self.conn.settings._message_prefix, delta=-1)
+        lm_message = self.conn.settings.message_tables[last_month]
         yield deferToThread(
-            self._settings.router.update_message_month,
+            self.conn.settings.router.update_message_month,
             client.uaid,
             last_month
         )
 
         # Verify the move
-        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
+        c = yield deferToThread(
+            self.conn.settings.router.get_uaid, client.uaid)
         eq_(c["current_month"], last_month)
 
         # Verify last_connect is current, then move that back
@@ -1532,7 +1471,7 @@ class TestWebPush(IntegrationBase):
 
         # Move the clients channels back one month
         exists, chans = yield deferToThread(
-            self._settings.message.all_channels, client.uaid
+            self.conn.settings.message.all_channels, client.uaid
         )
         eq_(exists, True)
         eq_(len(chans), 1)
@@ -1563,7 +1502,7 @@ class TestWebPush(IntegrationBase):
         eq_(chan, result["channelID"])
 
         # Check that the client is going to rotate the month
-        server_client = self._settings.clients[client.uaid]
+        server_client = self.conn.settings.clients[client.uaid]
         eq_(server_client.ps.rotate_message_table, True)
 
         # Acknowledge the notification, which triggers the migration
@@ -1572,16 +1511,17 @@ class TestWebPush(IntegrationBase):
         # Wait up to 2 seconds for the table rotation to occur
         start = time.time()
         while time.time()-start < 2:
-            c = yield deferToThread(self._settings.router.get_uaid,
-                                    client.uaid)
-            if c["current_month"] == self._settings.current_msg_month:
+            c = yield deferToThread(
+                self.conn.settings.router.get_uaid, client.uaid)
+            if c["current_month"] == self.conn.settings.current_msg_month:
                 break
             else:
                 yield deferToThread(time.sleep, 0.2)
 
         # Verify the month update in the router table
-        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
-        eq_(c["current_month"], self._settings.current_msg_month)
+        c = yield deferToThread(
+            self.conn.settings.router.get_uaid, client.uaid)
+        eq_(c["current_month"], self.conn.settings.current_msg_month)
         eq_(server_client.ps.rotate_message_table, False)
 
         # Verify the client moved last_connect
@@ -1589,7 +1529,7 @@ class TestWebPush(IntegrationBase):
 
         # Verify the channels were moved
         exists, chans = yield deferToThread(
-            self._settings.message.all_channels,
+            self.conn.settings.message.all_channels,
             client.uaid
         )
         eq_(exists, True)
@@ -1607,20 +1547,21 @@ class TestWebPush(IntegrationBase):
 
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
-            prefix=self._settings._message_prefix, delta=-1)
+            prefix=self.conn.settings._message_prefix, delta=-1)
         yield deferToThread(
-            self._settings.router.update_message_month,
+            self.conn.settings.router.update_message_month,
             client.uaid,
             last_month
         )
 
         # Verify the move
-        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
+        c = yield deferToThread(
+            self.conn.settings.router.get_uaid, client.uaid)
         eq_(c["current_month"], last_month)
 
         # Verify there's no channels
         exists, chans = yield deferToThread(
-            self._settings.message.all_channels,
+            self.conn.settings.message.all_channels,
             client.uaid
         )
         eq_(exists, False)
@@ -1631,22 +1572,23 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
 
         # Check that the client is going to rotate the month
-        server_client = self._settings.clients[client.uaid]
+        server_client = self.conn.settings.clients[client.uaid]
         eq_(server_client.ps.rotate_message_table, True)
 
         # Wait up to 2 seconds for the table rotation to occur
         start = time.time()
         while time.time()-start < 2:
-            c = yield deferToThread(self._settings.router.get_uaid,
-                                    client.uaid)
-            if c["current_month"] == self._settings.current_msg_month:
+            c = yield deferToThread(
+                self.conn.settings.router.get_uaid, client.uaid)
+            if c["current_month"] == self.conn.settings.current_msg_month:
                 break
             else:
                 yield deferToThread(time.sleep, 0.2)
 
         # Verify the month update in the router table
-        c = yield deferToThread(self._settings.router.get_uaid, client.uaid)
-        eq_(c["current_month"], self._settings.current_msg_month)
+        c = yield deferToThread(
+            self.conn.settings.router.get_uaid, client.uaid)
+        eq_(c["current_month"], self.conn.settings.current_msg_month)
         eq_(server_client.ps.rotate_message_table, False)
 
         yield self.shut_down(client)
@@ -1690,8 +1632,11 @@ class TestClientCerts(SSLEndpointMixin, IntegrationBase):
         self._client_certs = {client1_sha256: 'partner1'}
         IntegrationBase.setUp(self)
 
-    def make_client_certs(self):
-        return self._client_certs
+    def endpoint_kwargs(self):
+        return dict(
+            super(TestClientCerts, self).endpoint_kwargs(),
+            client_certs=self._client_certs
+        )
 
     @inlineCallbacks
     def test_client_cert_simple(self):
@@ -1845,7 +1790,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
         from autopush.router.gcm import GCMRouter
         from mock import Mock
         gcm = GCMRouter(
-            self._settings,
+            self.ep.settings,
             {
                 "ttl": 0,
                 "dryrun": True,
@@ -1856,7 +1801,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
                                        "Jamz0D2N0uaCgRGiI"}}
             }
         )
-        self._settings.routers["gcm"] = gcm
+        self.ep.settings.routers["gcm"] = gcm
         # Set up the mock call to avoid calling the live system.
         # The problem with calling the live system (even sandboxed) is that
         # you need a valid credential set from a mobile device, which can be
@@ -1871,7 +1816,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
-            self._settings.endpoint_url,
+            self.ep.settings.endpoint_url,
             "gcm",
             self.senderID,
         )
@@ -1923,7 +1868,7 @@ class TestFCMBridgeIntegration(IntegrationBase):
         from autopush.router.fcm import FCMRouter
         from mock import Mock
         fcm = FCMRouter(
-            self._settings,
+            self.ep.settings,
             {
                 "ttl": 0,
                 "dryrun": True,
@@ -1933,7 +1878,7 @@ class TestFCMBridgeIntegration(IntegrationBase):
                 "auth": "AIzaSyCx9PRtH8ByaJR3CfJamz0D2N0uaCgRGiI",
             }
         )
-        self._settings.routers["fcm"] = fcm
+        self.ep.settings.routers["fcm"] = fcm
         # Set up the mock call to avoid calling the live system.
         # The problem with calling the live system (even sandboxed) is that
         # you need a valid credential set from a mobile device, which can be
@@ -1952,7 +1897,7 @@ class TestFCMBridgeIntegration(IntegrationBase):
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
-            self._settings.endpoint_url,
+            self.ep.settings.endpoint_url,
             "fcm",
             self.senderID,
         )
@@ -2006,7 +1951,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         from autopush.router.apnsrouter import APNSRouter
         from mock import Mock
         apns = APNSRouter(
-            self._settings, {
+            self.ep.settings, {
                 "firefox": {
                     "cert": "/home/user/certs/SimplePushDemo.p12_cert.pem",
                     "key": "/home/user/certs/SimplePushDemo.p12_key.pem",
@@ -2014,7 +1959,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
                 }
             },
             load_connections=False,)
-        self._settings.routers["apns"] = apns
+        self.ep.settings.routers["apns"] = apns
         # Set up the mock call to avoid calling the live system.
         # The problem with calling the live system (even sandboxed) is that
         # you need a valid credential set from a mobile device, which can be
@@ -2030,7 +1975,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
-            self._settings.endpoint_url,
+            self.ep.settings.endpoint_url,
             "apns",
             "firefox",
         )
@@ -2078,17 +2023,23 @@ class TestAPNSBridgeIntegration(IntegrationBase):
 
 
 class TestProxyProtocol(IntegrationBase):
-    proxy_protocol_port = 9021
+
+    def endpoint_kwargs(self):
+        return dict(
+            super(TestProxyProtocol, self).endpoint_kwargs(),
+            proxy_protocol_port=9021
+        )
 
     @inlineCallbacks
     def test_proxy_protocol(self):
+        port = self.ep.settings.proxy_protocol_port
         ip = '198.51.100.22'
         proto_line = 'PROXY TCP4 {} 203.0.113.7 35646 80\r\n'.format(ip)
         # the proxy proto. line comes before the request: we can sneak
         # it in before the verb
         response, body = yield _agent(
             '{}GET'.format(proto_line),
-            "http://localhost:{}/v1/err".format(self.proxy_protocol_port),
+            "http://localhost:{}/v1/err".format(port),
         )
         eq_(response.code, 418)
         payload = json.loads(body)
@@ -2099,7 +2050,7 @@ class TestProxyProtocol(IntegrationBase):
     def test_no_proxy_protocol(self):
         response, body = yield _agent(
             'GET',
-            "http://localhost:{}/v1/err".format(self.endpoint_port),
+            "http://localhost:{}/v1/err".format(self.ep.settings.port),
         )
         eq_(response.code, 418)
         payload = json.loads(body)
@@ -2107,14 +2058,12 @@ class TestProxyProtocol(IntegrationBase):
 
 
 class TestProxyProtocolSSL(SSLEndpointMixin, IntegrationBase):
-    proxy_protocol_port = 9021
 
-    def create_proxy_endpoint(self, port):
-        from autopush.haproxy import HAProxyServerEndpoint
-        return HAProxyServerEndpoint(
-            reactor,
-            self.proxy_protocol_port,
-            self.endpoint_SSLCF())
+    def endpoint_kwargs(self):
+        return dict(
+            super(TestProxyProtocolSSL, self).endpoint_kwargs(),
+            proxy_protocol_port=9021
+        )
 
     @inlineCallbacks
     def test_proxy_protocol_ssl(self):
@@ -2138,7 +2087,7 @@ class TestProxyProtocolSSL(SSLEndpointMixin, IntegrationBase):
                     return self.context.wrap_socket(sock, *args, **kwargs)
 
             http = httplib.HTTPSConnection(
-                "localhost:{}".format(self.proxy_protocol_port),
+                "localhost:{}".format(self.ep.settings.proxy_protocol_port),
                 context=SSLContextWrapper(self._create_context(None)))
             try:
                 http.request('GET', '/v1/err')
@@ -2156,11 +2105,18 @@ class TestProxyProtocolSSL(SSLEndpointMixin, IntegrationBase):
 
 class TestMemUsage(IntegrationBase):
 
+    def endpoint_kwargs(self):
+        return dict(
+            super(TestMemUsage, self).endpoint_kwargs(),
+            memusage_port=9040
+        )
+
     @inlineCallbacks
     def test_memusage(self):
+        port = self.ep.settings.memusage_port
         response, body = yield _agent(
             'GET',
-            "http://localhost:{}/_memusage".format(self.memusage_port),
+            "http://localhost:{}/_memusage".format(port),
         )
         eq_(response.code, 200)
         ok_('rusage' in body)

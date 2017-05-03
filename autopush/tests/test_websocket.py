@@ -103,10 +103,11 @@ class WebsocketTestCase(unittest.TestCase):
 
         self.ap_settings = settings = AutopushSettings(
             hostname="localhost",
+            port=8080,
             statsd_host=None,
             env="test",
         )
-        self.factory = PushServerFactory(settings, 'ws://localhost:8080')
+        self.factory = PushServerFactory(settings)
         self.proto = self.factory.buildProtocol(('localhost', 8080))
         self.proto._log_exc = False
         self.proto.log = Mock(spec=Logger)

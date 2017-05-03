@@ -6,10 +6,8 @@ import re
 import configargparse
 from twisted.logger import Logger
 
-from autopush.main import (
-    add_shared_args,
-    shared_config_files,
-)
+from autopush.main import AutopushMultiService
+from autopush.main_argparse import add_shared_args
 from autopush.settings import AutopushSettings
 
 
@@ -31,6 +29,7 @@ class EndpointDiagnosticCLI(object):
         self._pp = pprint.PrettyPrinter(indent=4)
 
     def _load_args(self, sysargs, use_files):
+        shared_config_files = AutopushMultiService.shared_config_files
         if use_files:
             config_files = shared_config_files + [  # pragma: nocover
                 '/etc/autopush_endpoint.ini',

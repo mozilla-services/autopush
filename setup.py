@@ -36,8 +36,8 @@ setup(name="AutoPush",
       tests_require=['nose', 'coverage', 'mock>=1.0.1', 'moto>=0.4.1'],
       entry_points="""
       [console_scripts]
-      autopush = autopush.main:connection_main
-      autoendpoint = autopush.main:endpoint_main
+      autopush = autopush.main:ConnectionApplication.main
+      autoendpoint = autopush.main:EndpointApplication.main
       autokey = autokey:main
       endpoint_diagnostic = autopush.diagnostic_cli:run_endpoint_diagnostic_cli
       drop_users = autopush.scripts.drop_user:drop_users

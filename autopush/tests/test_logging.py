@@ -27,7 +27,7 @@ class LocalSentryChomper(cyclone.web.RequestHandler):
 
 class SentryLogTestCase(twisted.trial.unittest.TestCase):
     def setUp(self):
-        from autopush.main import skip_request_logging
+        from autopush.http import skip_request_logging
         twisted.internet.base.DelayedCall.debug = True
         sentry = LocalSentryChomper
         sentry.logged = []

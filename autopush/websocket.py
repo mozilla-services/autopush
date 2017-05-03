@@ -36,6 +36,7 @@ from collections import defaultdict
 from functools import partial, wraps
 from random import randrange
 
+from autobahn.twisted.resource import WebSocketResource
 from autobahn.twisted.websocket import (
     WebSocketServerFactory,
     WebSocketServerProtocol
@@ -62,6 +63,7 @@ from twisted.protocols import policies
 from twisted.python import failure
 from twisted.web._newclient import ResponseFailed
 from twisted.web.resource import Resource
+from twisted.web.server import Site
 from typing import (  # noqa
     Any,
     Callable,
@@ -85,6 +87,7 @@ from autopush.exceptions import MessageOverloadException
 from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
 from autopush.settings import AutopushSettings  # noqa
+from autopush.ssl import AutopushSSLContextFactory
 from autopush.utils import (
     parse_user_agent,
     validate_uaid,
@@ -1465,10 +1468,18 @@ class PushServerFactory(WebSocketServerFactory):
 
     protocol = PushServerProtocol
 
-    def __init__(self, ap_settings, *args, **kwargs):
-        # type: (AutopushSettings, *Any, **Any) -> None
-        WebSocketServerFactory.__init__(self, *args, **kwargs)
+    def __init__(self, ap_settings):
+        # type: (AutopushSettings) -> None
+        WebSocketServerFactory.__init__(self, ap_settings.ws_url)
         self.ap_settings = ap_settings
+        self.setProtocolOptions(
+            webStatus=False,
+            openHandshakeTimeout=5,
+            autoPingInterval=ap_settings.auto_ping_interval,
+            autoPingTimeout=ap_settings.auto_ping_timeout,
+            maxConnections=ap_settings.max_connections,
+            closeHandshakeTimeout=ap_settings.close_handshake_timeout,
+        )
 
 
 class RouterHandler(BaseHandler):
@@ -1545,6 +1556,36 @@ class NotificationHandler(BaseHandler):
         if client and client.ps.connected_at == int(connectionTime):
             client.sendClose()
             self.write("Terminated duplicate")
+
+
+class ConnectionWSSite(Site):
+
+    """The Websocket Site"""
+
+    def __init__(self, ap_settings, ws_factory):
+        # type: (AutopushSettings, PushServerFactory) -> None
+        self.ap_settings = ap_settings
+        self.noisy = ap_settings.debug
+
+        resource = DefaultResource(WebSocketResource(ws_factory))
+        resource.putChild("status", StatusResource())
+        Site.__init__(self, resource)
+
+    def ssl_cf(self):
+        # type: () -> Optional[AutopushSSLContextFactory]
+        """Build our SSL Factory (if configured).
+
+        Configured from the ssl_key/cert/dh_param values.
+
+        """
+        settings = self.ap_settings
+        if not settings.ssl_key:
+            return None
+        return AutopushSSLContextFactory(
+            settings.ssl_key,
+            settings.ssl_cert,
+            dh_file=settings.ssl_dh_param
+        )
 
 
 class DefaultResource(Resource):
