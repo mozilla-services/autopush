@@ -1,3 +1,13 @@
+<a name="1.29.1"></a>
+## 1.29.1 (2017-05-05)
+
+
+#### Features
+
+*   update parquet schema for unified parquet logging ([2aeefce7](https://github.com/mozilla-services/autopush/commit/2aeefce732d44281c25f0b07cd3c650d837de2ba), closes [#888](https://github.com/mozilla-services/autopush/issues/888))
+
+
+
 <a name="1.29.0"></a>
 ## 1.29.0 (2017-04-28)
 
