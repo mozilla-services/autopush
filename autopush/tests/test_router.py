@@ -133,6 +133,14 @@ class APNSRouterTestCase(unittest.TestCase):
         self.router.register("uaid", router_data=router_data, app_id="firefox")
         eq_(router_data, {"rel_channel": "firefox", "token": "connect_data"})
 
+    def test_extended_register(self):
+        router_data = {"token": "connect_data",
+                       "aps": {"foo": "bar",
+                               "gorp": "baz"}}
+        self.router.register("uaid", router_data=router_data, app_id="firefox")
+        eq_(router_data, {"rel_channel": "firefox", "token": "connect_data",
+                          "aps": {"foo": "bar", "gorp": "baz"}})
+
     def test_register_bad(self):
         with assert_raises(RouterException):
             self.router.register("uaid", router_data={}, app_id="firefox")
