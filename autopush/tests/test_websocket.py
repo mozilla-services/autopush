@@ -59,6 +59,7 @@ dummy_headers = {
 dummy_chid = uuid.uuid4()
 dummy_chid_str = str(dummy_chid)
 dummy_uaid = uuid.uuid4()
+dummy_uaid_str = dummy_uaid.hex
 
 
 def dummy_notif(**kwargs):
@@ -340,7 +341,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_no_messagetype_after_hello(self):
         self._connect()
-        self.proto.ps.uaid = "asdf"
+        self.proto.ps.uaid = dummy_uaid_str
         self._send_message(dict(data="wassup"))
 
         def check_result(close_args):
@@ -353,7 +354,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_unknown_messagetype(self):
         self._connect()
-        self.proto.ps.uaid = "asdf"
+        self.proto.ps.uaid = dummy_uaid_str
         self._send_message(dict(messageType="wassup"))
 
         def check_result(close_args):
@@ -366,8 +367,8 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_close_with_cleanup(self):
         self._connect()
-        self.proto.ps.uaid = "asdf"
-        self.proto.ap_settings.clients["asdf"] = self.proto
+        self.proto.ps.uaid = dummy_uaid_str
+        self.proto.ap_settings.clients[dummy_uaid_str] = self.proto
 
         # Stick a mock on
         notif_mock = Mock()
@@ -380,8 +381,8 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_close_with_delivery_cleanup(self):
         self._connect()
-        self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.ap_settings.clients["asdf"] = self.proto
+        self.proto.ps.uaid = dummy_uaid_str
+        self.proto.ap_settings.clients[dummy_uaid_str] = self.proto
         chid = str(uuid.uuid4())
 
         # Stick an un-acked direct notification in

@@ -82,6 +82,11 @@ class TestingLogObserver(object):
         return self.logged(
             lambda e: 'client_info' in e and predicate(e['client_info']))
 
+    def logged_session(self):
+        """Extract the last logged session"""
+        return filter(lambda e: e["log_format"] == "Session",
+                      self._events)[-1]
+
 
 def setUp():
     logging.getLogger('boto').setLevel(logging.CRITICAL)
@@ -516,6 +521,9 @@ class TestSimple(IntegrationBase):
         eq_(len(result["updates"]), 1)
         eq_(result["updates"][0]["channelID"], chan)
         yield self.shut_down(client)
+        log_event = self.logs.logged_session()
+        eq_(log_event["connection_type"], "simplepush")
+        eq_(log_event["direct_acked"], 0)
 
     @inlineCallbacks
     def test_delivery_repeat_without_ack(self):
@@ -546,6 +554,10 @@ class TestSimple(IntegrationBase):
         result = yield client.send_notification()
         ok_(result != {})
         yield client.disconnect()
+        log_event = self.logs.logged_session()
+        eq_(log_event["direct_acked"], 0)
+        eq_(log_event["direct_storage"], 1)
+
         yield client.connect()
         yield client.hello()
         result2 = yield client.get_notification(timeout=5)
@@ -571,12 +583,19 @@ class TestSimple(IntegrationBase):
         eq_(update["channelID"], chan)
         yield client.ack(chan, update["version"])
         yield client.disconnect()
+        log_event = self.logs.logged_session()
+        eq_(log_event["connection_type"], "simplepush")
+        eq_(log_event["stored_acked"], 1)
+
         time.sleep(0.2)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
         eq_(result, None)
         yield self.shut_down(client)
+        log_event = self.logs.logged_session()
+        eq_(log_event["connection_type"], "simplepush")
+        eq_(log_event["stored_acked"], 0)
 
     @inlineCallbacks
     def test_no_delivery_to_unregistered(self):
@@ -820,6 +839,9 @@ class TestWebPush(IntegrationBase):
         eq_(result["data"], base64url_encode(data))
         eq_(result["messageType"], "notification")
         yield self.shut_down(client)
+        log_event = self.logs.logged_session()
+        eq_(log_event["connection_type"], "webpush")
+        eq_(log_event["direct_storage"], 1)
 
     @inlineCallbacks
     def test_topic_basic_delivery(self):
