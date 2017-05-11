@@ -11,10 +11,8 @@ from StringIO import StringIO
 from typing import Any  # noqa
 
 import requests
-from boto.dynamodb2.exceptions import (
-    ItemNotFound,
-    ProvisionedThroughputExceededException,
-)
+from boto.dynamodb2.exceptions import ItemNotFound
+from boto.exception import JSONResponseError
 from twisted.internet.threads import deferToThread
 from twisted.internet.defer import (
     inlineCallbacks,
@@ -107,8 +105,8 @@ class SimpleRouter(object):
             if result is False:
                 self.metrics.increment("router.broadcast.miss")
                 returnValue(self.stored_response(notification))
-        except ProvisionedThroughputExceededException:
-            raise RouterException("Provisioned throughput error",
+        except JSONResponseError:
+            raise RouterException("Error saving to database",
                                   status_code=503,
                                   response_body="Retry Request",
                                   errno=201)
@@ -124,7 +122,7 @@ class SimpleRouter(object):
         #   - Error (no client) : Done, return 404
         try:
             uaid_data = yield deferToThread(router.get_uaid, uaid)
-        except ProvisionedThroughputExceededException:
+        except JSONResponseError:
             self.metrics.increment("router.broadcast.miss")
             returnValue(self.stored_response(notification))
         except ItemNotFound:
@@ -214,4 +212,4 @@ class SimpleRouter(object):
     #############################################################
     def _eat_db_err(self, fail):
         """errBack for ignoring provisioned throughput errors"""
-        fail.trap(ProvisionedThroughputExceededException)
+        fail.trap(JSONResponseError)
