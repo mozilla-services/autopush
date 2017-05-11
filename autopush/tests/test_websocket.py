@@ -937,8 +937,11 @@ class WebsocketTestCase(unittest.TestCase):
 
         return self._check_response(check_result)
 
-    def test_hello_jsonresponseerror_logged(self):
+    def test_hello_jsonresponseerror(self):
         self._connect()
+
+        self.proto.randrange = Mock()
+        self.proto.randrange.return_value = 0.1
 
         def throw_error(*args, **kwargs):
             raise JSONResponseError(None, None)
@@ -950,9 +953,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         def check_result(msg):
             eq_(msg["status"], 503)
-            eq_(msg["reason"], "error")
-            self.proto.log.info.assert_called()
-            self.proto.log.failure.assert_not_called()
+            eq_(msg["reason"], "error - overloaded")
             self.flushLoggedErrors()
 
         return self._check_response(check_result)

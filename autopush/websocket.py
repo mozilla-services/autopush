@@ -445,12 +445,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def log_failure(self, failure, **kwargs):
         """Log a twisted failure out through twisted's log.failure"""
-        exc = failure.value
-        if isinstance(exc, JSONResponseError):
-            self.log.info("JSONResponseError: {exc}", exc=exc, **kwargs)
-        else:
-            self.log.failure(format="Unexpected error", failure=failure,
-                             **kwargs)
+        self.log.failure(format="Unexpected error", failure=failure,
+                         **kwargs)
 
     @property
     def paused(self):
@@ -724,7 +720,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.sendClose()
 
     def err_overload(self, failure, message_type, disconnect=True):
-        """Handle database overloads
+        """Handle database overloads and errors
 
         If ``disconnect`` is False, the an overload error is returned and the
         client is not disconnected.
@@ -738,7 +734,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         :param disconnect: Whether the client should be disconnected or not.
 
         """
-        failure.trap(ProvisionedThroughputExceededException)
+        failure.trap(JSONResponseError)
 
         if disconnect:
             self.transport.pauseProducing()
