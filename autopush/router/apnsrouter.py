@@ -133,7 +133,7 @@ class APNSRouter(object):
                 payload["cryptokey"] = notification.headers["crypto_key"]
             elif "encryption_key" in notification.headers:
                 payload["enckey"] = notification.headers["encryption_key"]
-            payload['aps'] = {"content-available": 1}
+            payload['aps'] = router_data.get('aps', {"content-available": 1})
         apns_id = str(uuid.uuid4()).lower()
         try:
             apns_client.send(router_token=router_token, payload=payload,
