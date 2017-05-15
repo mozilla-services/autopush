@@ -14,9 +14,6 @@ class MessageSchema(Schema):
     @pre_load
     def extract_data(self, req):
         message_id = req['path_kwargs'].get('message_id')
-        if not message_id:
-            raise InvalidRequest("Missing Token",
-                                 status_code=400)
         try:
             notif = WebPushNotification.from_message_id(
                 bytes(message_id),

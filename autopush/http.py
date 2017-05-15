@@ -83,6 +83,21 @@ class BaseHTTPFactory(cyclone.web.Application):
     def _hostname(self):
         return self.ap_settings.hostname
 
+    @classmethod
+    def for_handler(cls, handler_cls, *args, **kwargs):
+        # type: (Type[BaseHandler], *Any, **Any) -> BaseHTTPFactory
+        """Create a cyclone app around a specific handler_cls.
+
+        handler_cls must be included in ap_handlers or a ValueError is
+        thrown.
+
+        """
+        for pattern, handler in cls.ap_handlers:
+            if handler is handler_cls:
+                return cls(handlers=[(pattern, handler)], *args, **kwargs)
+        raise ValueError("{!r} not in ap_handlers".format(
+            handler_cls))  # pragma: nocover
+
 
 class EndpointHTTPFactory(BaseHTTPFactory):
 
