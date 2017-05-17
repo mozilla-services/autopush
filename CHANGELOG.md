@@ -1,3 +1,20 @@
+<a name="1.30.0"></a>
+## 1.30.0 (2017-05-17)
+
+
+#### Refactor
+
+*   rearrange main around app (MultiService) objects ([67742632](https://github.com/mozilla-services/autopush/commit/677426327df9651000c34b01c4be9641e573cbd2))
+
+#### Features
+
+*   handle JSONResponse errors like provisioned errors ([b70a47fe](https://github.com/mozilla-services/autopush/commit/b70a47fe709e8d6ebc60bd68f3f01e414ed0ff20), closes [#744](https://github.com/mozilla-services/autopush/issues/744))
+*   add session log summary on connection close ([b18ce53e](https://github.com/mozilla-services/autopush/commit/b18ce53e1566cb53d05954c5465fe0e539139e52), closes [#448](https://github.com/mozilla-services/autopush/issues/448))
+*   update parquet schema for unified parquet logging ([c3047e13](https://github.com/mozilla-services/autopush/commit/c3047e1331748a91323faee256c738e91e34cd3a), closes [#888](https://github.com/mozilla-services/autopush/issues/888))
+*   temporarily allow aps data via registration message ([4d60b071](https://github.com/mozilla-services/autopush/commit/4d60b071629155649c5f4dd5e13da8659e12d1d1))
+
+
+
 <a name="1.29.1"></a>
 ## 1.29.1 (2017-05-05)
 
