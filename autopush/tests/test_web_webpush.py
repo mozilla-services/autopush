@@ -2,17 +2,17 @@ import base64
 import uuid
 
 from cryptography.fernet import Fernet
-from cyclone.web import Application
 from mock import Mock
 from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
-from twisted.internet.defer import Deferred
-from twisted.logger import Logger
+from twisted.internet.defer import inlineCallbacks
 from twisted.trial import unittest
 
 from autopush.db import Router, create_rotating_message_table
+from autopush.http import EndpointHTTPFactory
 from autopush.router.interface import IRouter, RouterResponse
 from autopush.settings import AutopushSettings
+from autopush.tests.client import Client
 
 dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
 dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
@@ -33,31 +33,25 @@ class TestWebpushHandler(unittest.TestCase):
     def setUp(self):
         from autopush.web.webpush import WebPushHandler
 
-        settings = AutopushSettings(
+        self.ap_settings = settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
-        self.ap_settings = settings
-
         self.router_mock = settings.router = Mock(spec=Router)
-        self.request_mock = Mock(body=b'', arguments={},
-                                 headers={"ttl": "0"},
-                                 host='example.com:8080')
-
-        self.wp = WebPushHandler(Application(),
-                                 self.request_mock,
-                                 ap_settings=settings)
-        self.status_mock = self.wp.set_status = Mock()
-        self.write_mock = self.wp.write = Mock()
-        self.wp.log = Mock(spec=Logger)
-        d = self.finish_deferred = Deferred()
-        self.wp.finish = lambda: d.callback(True)
         settings.routers["webpush"] = Mock(spec=IRouter)
         self.wp_router_mock = settings.routers["webpush"]
+
         self.message_mock = settings.message = Mock()
         self.message_mock.all_channels.return_value = (True, [dummy_chid])
 
+        app = EndpointHTTPFactory.for_handler(WebPushHandler, settings)
+        self.client = Client(app)
+
+    def url(self, **kwargs):
+        return '/wpush/{api_ver}/{token}'.format(**kwargs)
+
+    @inlineCallbacks
     def test_router_needs_update(self):
         self.ap_settings.parse_endpoint = Mock(return_value=dict(
             uaid=dummy_uaid,
@@ -76,18 +70,15 @@ class TestWebpushHandler(unittest.TestCase):
             router_data=dict(token="new_connect"),
         )
 
-        def handle_finish(result):
-            eq_(result, True)
-            self.wp.set_status.assert_called_with(503, reason=None)
-            ru = self.router_mock.register_user
-            ok_(ru.called)
-            eq_('webpush', ru.call_args[0][0].get('router_type'))
+        resp = yield self.client.post(
+            self.url(api_ver="v1", token=dummy_token),
+        )
+        eq_(resp.get_status(), 503)
+        ru = self.router_mock.register_user
+        ok_(ru.called)
+        eq_('webpush', ru.call_args[0][0].get('router_type'))
 
-        self.finish_deferred.addCallback(handle_finish)
-
-        self.wp.post(api_ver="v1", token=dummy_token)
-        return self.finish_deferred
-
+    @inlineCallbacks
     def test_router_returns_data_without_detail(self):
         self.ap_settings.parse_endpoint = Mock(return_value=dict(
             uaid=dummy_uaid,
@@ -106,96 +97,78 @@ class TestWebpushHandler(unittest.TestCase):
             router_data=dict(),
         )
 
-        def handle_finish(result):
-            eq_(result, True)
-            self.wp.set_status.assert_called_with(503, reason=None)
-            ok_(self.router_mock.drop_user.called)
+        resp = yield self.client.post(
+            self.url(api_ver="v1", token=dummy_token),
+        )
+        eq_(resp.get_status(), 503)
+        ok_(self.router_mock.drop_user.called)
 
-        self.finish_deferred.addCallback(handle_finish)
-
-        self.wp.post("v1", dummy_token)
-        return self.finish_deferred
-
+    @inlineCallbacks
     def test_request_bad_ckey(self):
-        def handle_finish(result):
-            self.wp.set_status.assert_called_with(404, reason=None)
-
-        self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'invalid key'
-        self.request_mock.headers['crypto-key'] = 'dummy_key'
-        self.wp.post(token='ignored', api_ver='v1')
-        return self.finish_deferred
+        resp = yield self.client.post(
+            self.url(api_ver="v1", token='ignored'),
+            headers={'crypto-key': 'dummy_key'}
+        )
+        eq_(resp.get_status(), 404)
 
+    @inlineCallbacks
     def test_request_bad_v1_id(self):
-        def handle_finish(result):
-            self.wp.set_status.assert_called_with(404, reason=None)
-
-        self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'tooshort'
-        self.wp.post(token='ignored', api_ver='v1')
-        return self.finish_deferred
+        resp = yield self.client.post(
+            self.url(api_ver="v1", token='ignored'),
+        )
+        eq_(resp.get_status(), 404)
 
+    @inlineCallbacks
     def test_request_bad_v2_id_short(self):
-        def handle_finish(result):
-            self.wp.set_status.assert_called_with(404, reason=None)
-
-        self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'tooshort'
-        self.request_mock.headers['authorization'] = 'vapid t=dummy_key,k=aaa'
-        self.wp.post(token='ignored', api_ver='v2')
-        return self.finish_deferred
+        resp = yield self.client.post(
+            self.url(api_ver='v2', token='ignored'),
+            headers={'authorization': 'vapid t=dummy_key,k=aaa'}
+        )
+        eq_(resp.get_status(), 404)
 
+    @inlineCallbacks
     def test_request_bad_draft02_auth(self):
-        def handle_finish(result):
-            self.wp.set_status.assert_called_with(401, reason=None)
+        resp = yield self.client.post(
+            self.url(api_ver='v2', token='ignored'),
+            headers={'authorization': 'vapid foo'}
+        )
+        eq_(resp.get_status(), 401)
 
-        self.finish_deferred.addCallback(handle_finish)
-        self.request_mock.headers['authorization'] = 'vapid foo'
-        self.wp.post(token='ignored', api_ver='v2')
-        return self.finish_deferred
-
+    @inlineCallbacks
     def test_request_bad_draft02_missing_key(self):
-        def handle_finish(result):
-            self.wp.set_status.assert_called_with(401, reason=None)
-
         self.fernet_mock.decrypt.return_value = 'a' * 64
-        self.finish_deferred.addCallback(handle_finish)
-        self.request_mock.headers['authorization'] = (
-            'vapid t=dummy.key.value,k=')
-        self.wp.post(token='ignored', api_ver='v2')
-        return self.finish_deferred
+        resp = yield self.client.post(
+            self.url(api_ver='v2', token='ignored'),
+            headers={'authorization': 'vapid t=dummy.key.value,k='}
+        )
+        eq_(resp.get_status(), 401)
 
+    @inlineCallbacks
     def test_request_bad_draft02_bad_pubkey(self):
-        def handle_finish(result):
-            self.wp.set_status.assert_called_with(401, reason=None)
-
         self.fernet_mock.decrypt.return_value = 'a' * 64
-        self.finish_deferred.addCallback(handle_finish)
-        self.request_mock.headers['authorization'] = (
-            'vapid t=dummy.key.value,k=!aaa')
-        self.wp.post(token='ignored', api_ver='v2')
-        return self.finish_deferred
+        resp = yield self.client.post(
+            self.url(api_ver='v2', token='ignored'),
+            headers={'authorization': 'vapid t=dummy.key.value,k=!aaa'}
+        )
+        eq_(resp.get_status(), 401)
 
+    @inlineCallbacks
     def test_request_bad_v2_id_missing_pubkey(self):
-        def handle_finish(result):
-            self.wp.set_status.assert_called_with(401, reason=None)
-
-        self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'a' * 64
-        self.request_mock.headers['crypto-key'] = 'key_id=dummy_key'
-        self.request_mock.headers['authorization'] = 'dummy_key'
-        self.wp.post(token='ignored', api_ver='v2')
-        return self.finish_deferred
+        resp = yield self.client.post(
+            self.url(api_ver='v2', token='ignored'),
+            headers={'crypto-key': 'key_id=dummy_key',
+                     'authorization': 'dummy_key'}
+        )
+        eq_(resp.get_status(), 401)
 
+    @inlineCallbacks
     def test_request_v2_id_variant_pubkey(self):
-        def handle_finish(result):
-            self.wp.set_status.assert_called_with(401, reason=None)
-
-        self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'a' * 32
         variant_key = base64.urlsafe_b64encode("0V0" + ('a' * 85))
-        self.request_mock.headers['crypto-key'] = 'p256ecdsa=' + variant_key
-        self.request_mock.headers['authorization'] = 'webpush dummy.key'
         self.ap_settings.router.get_uaid = Mock()
         self.ap_settings.router.get_uaid.return_value = dict(
             uaid=dummy_uaid,
@@ -203,16 +176,16 @@ class TestWebpushHandler(unittest.TestCase):
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
-        self.wp.post(token='ignored', api_ver='v1')
-        return self.finish_deferred
+        resp = yield self.client.post(
+            self.url(api_ver='v1', token='ignored'),
+            headers={'crypto-key': 'p256ecdsa=' + variant_key,
+                     'authorization': 'webpush dummy.key'}
+        )
+        eq_(resp.get_status(), 401)
 
+    @inlineCallbacks
     def test_request_v2_id_no_crypt_auth(self):
-        def handle_finish(result):
-            self.wp.set_status.assert_called_with(401, reason=None)
-
-        self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'a' * 32
-        self.request_mock.headers['authorization'] = 'webpush dummy.key'
         self.ap_settings.router.get_uaid = Mock()
         self.ap_settings.router.get_uaid.return_value = dict(
             uaid=dummy_uaid,
@@ -220,16 +193,18 @@ class TestWebpushHandler(unittest.TestCase):
             router_type="gcm",
             router_data=dict(creds=dict(senderID="bogus")),
         )
-        self.wp.post(token='ignored', api_ver='v1')
-        return self.finish_deferred
+        resp = yield self.client.post(
+            self.url(api_ver='v1', token='ignored'),
+            headers={'authorization': 'webpush dummy.key'}
+        )
+        eq_(resp.get_status(), 401)
 
+    @inlineCallbacks
     def test_request_bad_v2_id_bad_pubkey(self):
-        def handle_finish(result):
-            self.wp.set_status.assert_called_with(401, reason=None)
-
-        self.finish_deferred.addCallback(handle_finish)
         self.fernet_mock.decrypt.return_value = 'a' * 64
-        self.request_mock.headers['crypto-key'] = 'p256ecdsa=Invalid!'
-        self.request_mock.headers['authorization'] = 'dummy_key'
-        self.wp.post(token='ignored', api_ver='v2')
-        return self.finish_deferred
+        resp = yield self.client.post(
+            self.url(api_ver='v2', token='ignored'),
+            headers={'crypto-key': 'p256ecdsa=Invalid!',
+                     'authorization': 'dummy_key'}
+        )
+        eq_(resp.get_status(), 401)

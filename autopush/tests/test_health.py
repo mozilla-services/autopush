@@ -1,25 +1,33 @@
+import json
+
 import twisted.internet.base
 from boto.dynamodb2.exceptions import InternalServerError
 from cyclone.web import Application
 from mock import Mock
 from moto import mock_dynamodb2
-from twisted.internet.defer import Deferred
+from nose.tools import eq_
+from twisted.internet.defer import inlineCallbacks
+from twisted.logger import globalLogPublisher
 from twisted.trial import unittest
 
 from autopush import __version__
 from autopush.exceptions import MissingTableException
+from autopush.http import EndpointHTTPFactory
+from autopush.logging import begin_or_register
 from autopush.settings import AutopushSettings
+from autopush.tests.client import Client
+from autopush.tests.support import TestingLogObserver
 from autopush.web.health import HealthHandler, StatusHandler
 
 
 class HealthTestCase(unittest.TestCase):
     def setUp(self):
-        from twisted.logger import Logger
         self.timeout = 0.5
         twisted.internet.base.DelayedCall.debug = True
 
         self.mock_dynamodb2 = mock_dynamodb2()
         self.mock_dynamodb2.start()
+        self.addCleanup(self.mock_dynamodb2.stop)
 
         settings = AutopushSettings(
             hostname="localhost",
@@ -28,22 +36,17 @@ class HealthTestCase(unittest.TestCase):
         self.router_table = settings.router.table
         self.storage_table = settings.storage.table
 
-        self.request_mock = Mock()
-        self.health = HealthHandler(Application(),
-                                    self.request_mock,
-                                    ap_settings=settings)
-        self.health.log = self.log_mock = Mock(spec=Logger)
-        self.status_mock = self.health.set_status = Mock()
-        self.write_mock = self.health.write = Mock()
+        # ignore logging
+        logs = TestingLogObserver()
+        begin_or_register(logs)
+        self.addCleanup(globalLogPublisher.removeObserver, logs)
 
-        d = self.finish_deferred = Deferred()
-        self.health.finish = lambda: d.callback(True)
+        app = EndpointHTTPFactory.for_handler(HealthHandler, settings)
+        self.client = Client(app)
 
-    def tearDown(self):
-        self.mock_dynamodb2.stop()
-
+    @inlineCallbacks
     def test_healthy(self):
-        return self._assert_reply({
+        yield self._assert_reply({
             "status": "OK",
             "version": __version__,
             "clients": 0,
@@ -51,6 +54,7 @@ class HealthTestCase(unittest.TestCase):
             "router": {"status": "OK"}
         })
 
+    @inlineCallbacks
     def test_aws_error(self):
         def raise_error(*args, **kwargs):
             raise InternalServerError(None, None)
@@ -59,7 +63,7 @@ class HealthTestCase(unittest.TestCase):
         self.storage_table.connection.list_tables = Mock(
             return_value={"TableNames": ["storage"]})
 
-        return self._assert_reply({
+        yield self._assert_reply({
             "status": "NOT OK",
             "version": __version__,
             "clients": 0,
@@ -70,12 +74,13 @@ class HealthTestCase(unittest.TestCase):
             }
         }, InternalServerError)
 
+    @inlineCallbacks
     def test_nonexistent_table(self):
         no_tables = Mock(return_value={"TableNames": []})
         self.storage_table.connection.list_tables = no_tables
         self.router_table.connection.list_tables = no_tables
 
-        return self._assert_reply({
+        yield self._assert_reply({
             "status": "NOT OK",
             "version": __version__,
             "clients": 0,
@@ -89,6 +94,7 @@ class HealthTestCase(unittest.TestCase):
             }
         }, MissingTableException)
 
+    @inlineCallbacks
     def test_internal_error(self):
         def raise_error(*args, **kwargs):
             raise Exception("synergies not aligned")
@@ -97,7 +103,7 @@ class HealthTestCase(unittest.TestCase):
         self.storage_table.connection.list_tables = Mock(
             side_effect=raise_error)
 
-        return self._assert_reply({
+        yield self._assert_reply({
             "status": "NOT OK",
             "version": __version__,
             "clients": 0,
@@ -108,16 +114,14 @@ class HealthTestCase(unittest.TestCase):
             "router": {"status": "OK"}
         }, Exception)
 
+    @inlineCallbacks
     def _assert_reply(self, reply, exception=None):
-        def handle_finish(result):
-            if exception:
-                self.status_mock.assert_called_with(503, reason=None)
-                self.flushLoggedErrors(exception)
-            self.write_mock.assert_called_with(reply)
-        self.finish_deferred.addCallback(handle_finish)
-
-        self.health.get()
-        return self.finish_deferred
+        resp = yield self.client.get('/health')
+        if exception:
+            eq_(resp.get_status(), 503)
+            self.flushLoggedErrors(exception)
+        payload = json.loads(resp.content)
+        eq_(payload, reply)
 
 
 class StatusTestCase(unittest.TestCase):
@@ -127,6 +131,7 @@ class StatusTestCase(unittest.TestCase):
 
         self.mock_dynamodb2 = mock_dynamodb2()
         self.mock_dynamodb2.start()
+        self.addCleanup(self.mock_dynamodb2.stop)
 
         settings = AutopushSettings(
             hostname="localhost",
@@ -136,9 +141,6 @@ class StatusTestCase(unittest.TestCase):
         self.status = StatusHandler(Application(), self.request_mock,
                                     ap_settings=settings)
         self.write_mock = self.status.write = Mock()
-
-    def tearDown(self):
-        self.mock_dynamodb2.stop()
 
     def test_status(self):
         self.status.get()

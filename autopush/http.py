@@ -92,7 +92,9 @@ class BaseHTTPFactory(cyclone.web.Application):
         thrown.
 
         """
-        for pattern, handler in cls.ap_handlers:
+        if 'handlers' in kwargs:  # pragma: nocover
+            raise ValueError("handler_cls incompatibile with handlers kwarg")
+        for pattern, handler in cls.ap_handlers + cls.health_ap_handlers:
             if handler is handler_cls:
                 return cls(handlers=[(pattern, handler)], *args, **kwargs)
         raise ValueError("{!r} not in ap_handlers".format(
