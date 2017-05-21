@@ -3,6 +3,7 @@ from unittest import TestCase
 import uuid
 import time
 import json
+import decimal
 
 from autopush.utils import WebPushNotification
 from mock import Mock, PropertyMock, patch
@@ -194,6 +195,25 @@ class APNSRouterTestCase(unittest.TestCase):
             "enckey": "test",
             "con": "aesgcm",
         })
+
+    @inlineCallbacks
+    def test_route_notification_complex(self):
+        router_data = dict(
+            router_data=dict(token="connect_data",
+                             rel_channel="firefox",
+                             aps=dict(string="String",
+                                      array=['a', 'b', 'c'],
+                                      number=decimal.Decimal(4))))
+        result = yield self.router.route_notification(self.notif,
+                                                      router_data)
+        yield self._waitfor(lambda:
+                            self.mock_connection.request.called is True)
+        ok_(isinstance(result, RouterResponse))
+        ok_(self.mock_connection.request.called)
+        body = self.mock_connection.request.call_args[1]
+        body_json = json.loads(body['body'])
+        eq_(body_json['aps']['number'], 4)
+        eq_(body_json['aps']['string'], 'String')
 
     @inlineCallbacks
     def test_route_low_priority_notification(self):

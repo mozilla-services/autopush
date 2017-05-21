@@ -1,5 +1,6 @@
 import json
 from collections import deque
+from decimal import Decimal
 
 import hyper.tls
 from hyper import HTTP20Connection
@@ -19,6 +20,16 @@ APNS_MAX_CONNECTIONS = 20
 # see https://developer.apple.com/search/?q=%22apns-priority%22
 APNS_PRIORITY_IMMEDIATE = '10'
 APNS_PRIORITY_LOW = '5'
+
+
+class ComplexEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            return int(obj.to_integral_value())
+        # for most data types, this function isn't called.
+        # the following is added for safety, but should not
+        # be required.
+        return json.JSONEncoder.default(self, obj)  # pragma nocover
 
 
 class APNSException(Exception):
@@ -104,7 +115,7 @@ class APNSClient(object):
         :type exp: timestamp
 
         """
-        body = json.dumps(payload)
+        body = json.dumps(payload, cls=ComplexEncoder)
         priority = APNS_PRIORITY_IMMEDIATE if priority else APNS_PRIORITY_LOW
         # NOTE: Hyper requires that all header values be strings. 'Priority'
         # is a integer string, which may be "simplified" and cause an error.
