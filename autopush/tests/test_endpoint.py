@@ -423,10 +423,10 @@ class RegistrationTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_bad_body(self):
         resp = yield self.client.post(
-                self.url(router_type="webpush",
-                         uaid=dummy_uaid.hex,
-                         chid=str(dummy_chid)),
-                body="{invalid"
+            self.url(router_type="webpush",
+                     uaid=dummy_uaid.hex,
+                     chid=str(dummy_chid)),
+            body="{invalid"
         )
         self._check_error(resp, 401, 108, "Unauthorized")
 
@@ -534,9 +534,9 @@ class RegistrationTestCase(unittest.TestCase):
 
         uri = self.url(router_type='test', uaid=dummy_uaid.hex)
         resp = yield self.client.put(
-                uri,
-                headers={"Authorization": self.auth},
-                body=json.dumps(data),
+            uri,
+            headers={"Authorization": self.auth},
+            body=json.dumps(data),
         )
         payload = json.loads(resp.content)
         eq_(payload, {})
@@ -556,8 +556,8 @@ class RegistrationTestCase(unittest.TestCase):
         self.patch('uuid.uuid4', return_value=dummy_uaid)
 
         resp = yield self.client.put(
-                self.url(router_type="test", uaid=dummy_uaid.hex),
-                headers={"Authorization": "Fred Smith"}
+            self.url(router_type="test", uaid=dummy_uaid.hex),
+            headers={"Authorization": "Fred Smith"}
         )
         self._check_error(resp, 401, 109, "Unauthorized")
 
@@ -566,12 +566,12 @@ class RegistrationTestCase(unittest.TestCase):
         self.patch('uuid.uuid4', return_value=dummy_chid)
 
         resp = yield self.client.put(
-                self.url(router_type='foo', uaid=dummy_uaid.hex),
-                headers={"Authorization": self.auth},
-                body=json.dumps(dict(
-                    type="test",
-                    data=dict(token="some_token"),
-                ))
+            self.url(router_type='foo', uaid=dummy_uaid.hex),
+            headers={"Authorization": self.auth},
+            body=json.dumps(dict(
+                type="test",
+                data=dict(token="some_token"),
+            ))
         )
         self._check_error(resp, 400, 108, "Bad Request")
 
@@ -693,10 +693,10 @@ class RegistrationTestCase(unittest.TestCase):
         self.settings.message.all_channels = Mock()
         self.settings.message.all_channels.return_value = (True, chids)
         resp = yield self.client.get(
-                self.url(router_type="test",
-                         router_token="test",
-                         uaid=dummy_uaid.hex),
-                headers={"Authorization": self.auth}
+            self.url(router_type="test",
+                     router_token="test",
+                     uaid=dummy_uaid.hex),
+            headers={"Authorization": self.auth}
         )
         self.settings.message.all_channels.assert_called_with(str(dummy_uaid))
         payload = json.loads(resp.content)
@@ -706,7 +706,7 @@ class RegistrationTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_get_no_uaid(self):
         resp = yield self.client.get(
-                self.url(router_type="test", router_token="test"),
-                headers={"Authorization": self.auth}
+            self.url(router_type="test", router_token="test"),
+            headers={"Authorization": self.auth}
         )
         eq_(resp.get_status(), 410)

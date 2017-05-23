@@ -327,7 +327,8 @@ class WebPushRequestSchema(Schema):
             else:
                 public_key = d["subscription"].get("public_key")
             jwt = extract_jwt(token, public_key)
-        except (KeyError, ValueError, InvalidSignature, TypeError):
+        except (KeyError, ValueError, InvalidSignature, TypeError,
+                VapidAuthException):
             raise InvalidRequest("Invalid Authorization Header",
                                  status_code=401, errno=109,
                                  headers={"www-authenticate": PREF_SCHEME})
