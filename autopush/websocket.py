@@ -499,7 +499,13 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         # Setup ourself to handle producing the data
         self.transport.bufferSize = 2 * 1024
-        self.transport.registerProducer(self.ps, True)
+        try:
+            self.transport.registerProducer(self.ps, True)
+        except RuntimeError:
+            # HACK: Autobahn/twisted/h2 hacks mess this up, ensure we can
+            # register the producer
+            self.transport.unregisterProducer()
+            self.transport.registerProducer(self.ps, True)
 
         if self.ap_settings.hello_timeout > 0:
             self.setTimeout(self.ap_settings.hello_timeout)

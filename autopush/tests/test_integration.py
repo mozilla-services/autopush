@@ -1917,14 +1917,14 @@ class TestFCMBridgeIntegration(IntegrationBase):
         # The problem with calling the live system (even sandboxed) is that
         # you need a valid credential set from a mobile device, which can be
         # subject to change.
-        self._mock_send = Mock()
-        self._mock_reply = dict(
+        reply = dict(
             canonical_ids=0,
             failure=0,
             results=[{}],
         )
-        self._mock_send.return_value = self._mock_reply
+        self._mock_send = Mock()
         fcm.fcm.send_request = self._mock_send
+        fcm.fcm.parse_responses = Mock(return_value=[reply])
 
     @inlineCallbacks
     def test_registration(self):
