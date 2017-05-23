@@ -566,6 +566,8 @@ class WebPushNotification(object):
 def parse_auth_header(header):
     vapid_auth = {}
     scheme_bits = header.split(' ', 1)
+    if len(scheme_bits) < 2:
+        raise VapidAuthException("Missing Auth Token")
     scheme = scheme_bits[0].lower()
     if scheme not in AUTH_SCHEMES:
         return vapid_auth

@@ -935,6 +935,18 @@ class TestWebPush(IntegrationBase):
         yield self.shut_down(client)
 
     @inlineCallbacks
+    def test_basic_delivery_with_invalid_vapid_auth(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(use_webpush=True)
+        vapid_info = _get_vapid()
+        vapid_info['auth'] = ""
+        yield client.send_notification(
+            data=data,
+            vapid=vapid_info,
+            status=401)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
     def test_basic_delivery_with_invalid_signature(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register(use_webpush=True)
