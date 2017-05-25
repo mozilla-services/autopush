@@ -29,10 +29,7 @@ from typing import Optional  # noqa
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
 from twisted.internet.threads import deferToThread
-from twisted.logger import (
-    globalLogPublisher,
-    ILogObserver
-)
+from twisted.logger import globalLogPublisher
 from twisted.test.proto_helpers import AccumulatingProtocol
 from twisted.trial import unittest
 from twisted.web.client import Agent, FileBodyProducer
@@ -50,6 +47,7 @@ from autopush.main import ConnectionApplication, EndpointApplication
 from autopush.settings import AutopushSettings
 from autopush.utils import base64url_encode
 from autopush.metrics import SinkMetrics
+from autopush.tests.support import TestingLogObserver
 from autopush.websocket import PushServerFactory
 
 log = logging.getLogger(__name__)
@@ -61,31 +59,6 @@ ddb_jar = os.path.join(ddb_dir, "DynamoDBLocal.jar")
 ddb_process = None
 
 twisted.internet.base.DelayedCall.debug = True
-
-
-@implementer(ILogObserver)
-class TestingLogObserver(object):
-    def __init__(self):
-        self._events = []
-
-    def __call__(self, event):
-        self._events.append(event)
-
-    def logged(self, predicate):
-        """Determine if any log events satisfy the callable"""
-        assert callable(predicate)
-        return any(predicate(e) for e in self._events)
-
-    def logged_ci(self, predicate):
-        """Determine if any log client_infos satisfy the callable"""
-        assert callable(predicate)
-        return self.logged(
-            lambda e: 'client_info' in e and predicate(e['client_info']))
-
-    def logged_session(self):
-        """Extract the last logged session"""
-        return filter(lambda e: e["log_format"] == "Session",
-                      self._events)[-1]
 
 
 def setUp():
@@ -473,7 +446,6 @@ class SSLEndpointMixin(object):
         from twisted.internet.ssl import (
             Certificate, PrivateCertificate, optionsForClientTLS)
         from twisted.web.iweb import IPolicyForHTTPS
-        from zope.interface import implementer
 
         with open(self.servercert) as fp:
             servercert = Certificate.loadPEM(fp.read())

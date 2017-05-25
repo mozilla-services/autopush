@@ -60,15 +60,19 @@ IGNORED_KEYS = frozenset([
 began_logging = False
 
 
-def begin_or_register(observer):
-    # type: (Any) -> None
+def begin_or_register(observer, redirectStandardIO=False, **kwargs):
+    # type: (Any, bool, **Any) -> None
     """Register observer with the global LogPublisher
 
     Registers via the global LogBeginner the first time called.
     """
     global began_logging
     if not began_logging:
-        globalLogBeginner.beginLoggingTo([observer], redirectStandardIO=False)
+        globalLogBeginner.beginLoggingTo(
+            [observer],
+            redirectStandardIO=redirectStandardIO,
+            **kwargs
+        )
         began_logging = True
     else:
         globalLogPublisher.addObserver(observer)

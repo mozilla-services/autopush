@@ -14,7 +14,7 @@ from marshmallow import Schema, fields
 from mock import Mock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_, ok_, assert_raises
-from twisted.internet.defer import Deferred
+from twisted.internet.defer import inlineCallbacks
 from twisted.trial import unittest
 
 from autopush.db import create_rotating_message_table
@@ -112,42 +112,26 @@ class TestThreadedValidate(unittest.TestCase):
         self._mock_errors.assert_called()
         eq_(len(mock_func.mock_calls), 0)
 
+    @inlineCallbacks
     def test_decorator(self):
-        from cyclone.web import RequestHandler
-        from autopush.web.base import threaded_validate
+        from cyclone.web import Application
+        from autopush.web.base import BaseWebHandler, threaded_validate
+        from autopush.tests.client import Client
         schema = self._make_basic_schema()
 
-        class AHandler(RequestHandler):
+        class AHandler(BaseWebHandler):
+            def authenticate_peer_cert(self):
+                pass
+
             @threaded_validate(schema)
             def get(self):
                 self.write("done")
                 self.finish()
 
-        req = self._make_dummy_request()
-        app = Mock()
-        app.ui_modules = dict()
-        app.ui_methods = dict()
-        vr = AHandler(app, req)
-        vr._timings = dict()
-        d = Deferred()
-        vr.finish = lambda: d.callback(True)
-        vr.write = Mock()
-        vr._overload_err = Mock()
-        vr._boto_err = Mock()
-        vr._validation_err = Mock()
-        vr._response_err = Mock()
-        vr.ap_settings = Mock()
-
-        e = Deferred()
-
-        def check_result(result):
-            vr.write.assert_called_with("done")
-            e.callback(True)
-
-        d.addCallback(check_result)
-
-        vr.get()
-        return e
+        app = Application([('/test', AHandler, dict(ap_settings=Mock()))])
+        client = Client(app)
+        resp = yield client.get('/test')
+        eq_(resp.content, "done")
 
 
 class TestSimplePushRequestSchema(unittest.TestCase):

@@ -1,15 +1,18 @@
 import json
 
 import twisted
-from cyclone.web import Application
-from mock import Mock
 from moto import mock_dynamodb2
-from nose.tools import eq_
-from twisted.internet.defer import Deferred
+from nose.tools import eq_, ok_
+from twisted.internet.defer import inlineCallbacks
+from twisted.logger import globalLogPublisher
 from twisted.trial import unittest
 
 from autopush.db import create_rotating_message_table
+from autopush.http import EndpointHTTPFactory
+from autopush.logging import begin_or_register
 from autopush.settings import AutopushSettings
+from autopush.tests.client import Client
+from autopush.tests.support import TestingLogObserver
 from autopush.web.log_check import LogCheckHandler
 
 mock_dynamodb2 = mock_dynamodb2()
@@ -28,48 +31,44 @@ class LogCheckTestCase(unittest.TestCase):
 
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
-        from twisted.logger import Logger
 
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
         )
-        self.request_mock = Mock(body=b'', arguments={},
-                                 headers={"ttl": "0"},
-                                 host='example.com:8080')
-        self.lch = LogCheckHandler(Application(),
-                                   self.request_mock,
-                                   ap_settings=settings)
 
-        self.finish_deferred = Deferred()
-        self.lch.finish = lambda: self.finish_deferred.callback(True)
-        self.lch.set_status = Mock()
-        self.lch.write = Mock()
-        self.lch.log = Mock(spec=Logger)
+        self.logs = TestingLogObserver()
+        begin_or_register(self.logs, discardBuffer=True)
+        self.addCleanup(globalLogPublisher.removeObserver, self.logs)
 
+        app = EndpointHTTPFactory.for_handler(LogCheckHandler, settings)
+        self.client = Client(app)
+
+    @inlineCallbacks
     def test_get_err(self):
+        resp = yield self.client.get('/v1/err')
+        eq_(len(self.logs), 2)
+        ok_(self.logs.logged(
+            lambda e: (e['log_level'].name == 'error' and
+                       e['log_format'] == 'Test Error Message' and
+                       e['status_code'] == 418)
+        ))
+        payload = json.loads(resp.content)
+        eq_(payload.get('code'), 418)
+        eq_(payload.get('message'), "ERROR:Success")
 
-        def handle_finish(value):
-            call_args = self.lch.log.error.call_args[1]
-            eq_(call_args.get('format'), 'Test Error Message')
-            eq_(call_args.get('status_code'), 418)
-            write_arg = json.loads(self.lch.write.call_args[0][0])
-            eq_(write_arg.get('code'), 418)
-            eq_(write_arg.get('message'), "ERROR:Success")
-
-        self.finish_deferred.addCallback(handle_finish)
-        self.lch.get(None)
-        return self.finish_deferred
-
+    @inlineCallbacks
     def test_get_crit(self):
+        resp = yield self.client.get('/v1/err/crit')
+        eq_(len(self.logs), 2)
+        ok_(self.logs.logged(
+            lambda e: (e['log_level'].name == 'critical' and
+                       e['log_failure'] and
+                       e['log_format'] == 'Test Critical Message' and
+                       e['status_code'] == 418)
+        ))
+        payload = json.loads(resp.content)
+        eq_(payload.get('code'), 418)
+        eq_(payload.get('error'), "Test Failure")
 
-        def handle_finish(value):
-            call_args = self.lch.log.failure.call_args[1]
-            eq_(call_args.get('status_code'), 418)
-            write_args = json.loads(self.lch.write.call_args[0][0])
-            eq_(write_args.get('code'), 418)
-            eq_(write_args.get('error'), 'Test Failure')
-
-        self.finish_deferred.addCallback(handle_finish)
-        self.lch.get(err_type='CRIT')
-        return self.finish_deferred
+        self.flushLoggedErrors()
