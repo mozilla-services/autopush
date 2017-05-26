@@ -317,7 +317,7 @@ type and 3rd party bridge instance ID token for this connection.
 
 .. http:post:: /v1/{type}/{app_id}/registration
 
-This call requires no Authorization header for first time use.
+This call requires no Authorization header.
 
 **Parameters:**
 

@@ -21,7 +21,12 @@ from autopush.web.health import (
 from autopush.web.limitedhttpconnection import LimitedHTTPConnection
 from autopush.web.log_check import LogCheckHandler
 from autopush.web.message import MessageHandler
-from autopush.web.registration import RegistrationHandler
+from autopush.web.registration import (
+    ChannelRegistrationHandler,
+    NewRegistrationHandler,
+    SubRegistrationHandler,
+    UaidRegistrationHandler,
+)
 from autopush.web.simplepush import SimplePushHandler
 from autopush.web.webpush import WebPushHandler
 from autopush.websocket import (
@@ -109,9 +114,17 @@ class EndpointHTTPFactory(BaseHTTPFactory):
         (r"/wpush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
          WebPushHandler),
         (r"/m/(?P<message_id>[^\/]+)", MessageHandler),
-        (r"/v1/(?P<router_type>[^\/]+)/(?P<router_token>[^\/]+)/"
-         r"registration(?:/(?P<uaid>[^\/]+))?(?:/subscription)?"
-         r"(?:/(?P<chid>[^\/]+))?", RegistrationHandler),
+        (r"/v1/(?P<type>[^\/]+)/(?P<app_id>[^\/]+)/registration",
+         NewRegistrationHandler),
+        (r"/v1/(?P<type>[^\/]+)/(?P<app_id>[^\/]+)/registration/"
+         r"(?P<uaid>[^\/]+)",
+         UaidRegistrationHandler),
+        (r"/v1/(?P<type>[^\/]+)/(?P<app_id>[^\/]+)/registration/"
+         r"(?P<uaid>[^\/]+)/subscription",
+         SubRegistrationHandler),
+        (r"/v1/(?P<type>[^\/]+)/(?P<app_id>[^\/]+)/registration/"
+         r"(?P<uaid>[^\/]+)/subscription/(?P<chid>[^\/]+)",
+         ChannelRegistrationHandler),
         (r"/v1/err(?:/(?P<err_type>[^\/]+))?", LogCheckHandler),
     )
 
