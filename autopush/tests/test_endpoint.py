@@ -5,7 +5,6 @@ import twisted.internet.base
 from cryptography.fernet import Fernet, InvalidToken
 from cyclone.web import Application
 from mock import Mock, patch
-from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial import unittest
@@ -31,21 +30,22 @@ from autopush.utils import (
     generate_hash,
 )
 from autopush.web.message import MessageHandler
-from autopush.web.registration import RegistrationHandler
+from autopush.web.registration import NewRegistrationHandler
 
-mock_dynamodb2 = mock_dynamodb2()
 dummy_uaid = uuid.UUID("abad1dea00000000aabbccdd00000000")
 dummy_chid = uuid.UUID("deadbeef00000000decafbad00000000")
 dummy_token = dummy_uaid.hex + ":" + str(dummy_chid)
 
 
 def setUp():
-    mock_dynamodb2.start()
+    from .test_integration import setUp
+    setUp()
     create_rotating_message_table()
 
 
 def tearDown():
-    mock_dynamodb2.stop()
+    from .test_integration import tearDown
+    tearDown()
 
 
 class FileConsumer(object):  # pragma: no cover
@@ -142,10 +142,8 @@ class MessageTestCase(unittest.TestCase):
         eq_(resp.get_status(), 503)
 
 
-CORS_HEAD = "GET,POST,PUT,DELETE"
-
-
 class RegistrationTestCase(unittest.TestCase):
+    CORS_HEAD = "POST"
 
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
@@ -164,13 +162,13 @@ class RegistrationTestCase(unittest.TestCase):
             "router_type": "test",
             "router_data": dict()
         }
-        app = EndpointHTTPFactory.for_handler(RegistrationHandler, settings)
+        app = EndpointHTTPFactory(settings)
         self.client = Client(app)
 
         self.request_mock = Mock(body=b'', arguments={}, headers={})
-        self.reg = RegistrationHandler(Application(),
-                                       self.request_mock,
-                                       ap_settings=settings)
+        self.reg = NewRegistrationHandler(Application(),
+                                          self.request_mock,
+                                          ap_settings=settings)
         self.auth = ("WebPush %s" %
                      generate_hash(settings.bear_hash_key[0], dummy_uaid.hex))
 
@@ -234,14 +232,14 @@ class RegistrationTestCase(unittest.TestCase):
         reg = self.reg
         reg.ap_settings.cors = False
         ok_(reg._headers.get(ch1) != "*")
-        ok_(reg._headers.get(ch2) != CORS_HEAD)
+        ok_(reg._headers.get(ch2) != self.CORS_HEAD)
 
         reg.clear_header(ch1)
         reg.clear_header(ch2)
         reg.ap_settings.cors = True
         reg.prepare()
         eq_(reg._headers[ch1], "*")
-        eq_(reg._headers[ch2], CORS_HEAD)
+        eq_(reg._headers[ch2], self.CORS_HEAD)
 
     def test_cors_head(self):
         ch1 = "Access-Control-Allow-Origin"
@@ -251,7 +249,7 @@ class RegistrationTestCase(unittest.TestCase):
         reg.prepare()
         reg.head(None)
         eq_(reg._headers[ch1], "*")
-        eq_(reg._headers[ch2], CORS_HEAD)
+        eq_(reg._headers[ch2], self.CORS_HEAD)
 
     def test_cors_options(self):
         ch1 = "Access-Control-Allow-Origin"
@@ -261,7 +259,7 @@ class RegistrationTestCase(unittest.TestCase):
         reg.prepare()
         reg.options(None)
         eq_(reg._headers[ch1], "*")
-        eq_(reg._headers[ch2], CORS_HEAD)
+        eq_(reg._headers[ch2], self.CORS_HEAD)
 
     @inlineCallbacks
     def test_post(self):
@@ -283,15 +281,15 @@ class RegistrationTestCase(unittest.TestCase):
         eq_(resp.get_status(), 200)
 
         payload = json.loads(resp.content)
-        eq_(payload["uaid"], dummy_uaid.hex.replace('-', ''))
-        eq_(payload["channelID"], dummy_uaid.hex)
+        eq_(payload["uaid"], dummy_uaid.hex)
+        eq_(payload["channelID"], dummy_chid.hex)
         eq_(payload["endpoint"], "http://localhost/wpush/v1/abcd123")
         ok_("secret" in payload)
 
     @inlineCallbacks
     def test_post_gcm(self):
         self.patch('uuid.uuid4',
-                   side_effect=(uuid.uuid4(), dummy_chid, dummy_uaid))
+                   side_effect=(uuid.uuid4(), dummy_uaid, dummy_chid))
 
         from autopush.router.gcm import GCMRouter
         sids = {"182931248179192": {"auth": "aailsjfilajdflijdsilfjsliaj"}}
@@ -375,7 +373,8 @@ class RegistrationTestCase(unittest.TestCase):
         })
 
         resp = yield self.client.post(
-            self.url(router_type="test", uaid=dummy_uaid.hex),
+            self.url(router_type="test", uaid=dummy_uaid.hex) +
+            "/subscription",
             headers={"Authorization": self.auth},
             body=json.dumps(dict(
                 channelID=str(dummy_chid),
@@ -386,25 +385,10 @@ class RegistrationTestCase(unittest.TestCase):
         eq_(payload["endpoint"], "http://localhost/wpush/v1/abcd123")
 
     @inlineCallbacks
-    def test_post_bad_uaid(self):
-        self.patch('uuid.uuid4', return_value=dummy_uaid)
-
-        resp = yield self.client.post(
-            self.url(router_type="simplepush", uaid='invalid'),
-            headers={"Authorization": self.auth},
-            body=json.dumps(dict(
-                type="simplepush",
-                channelID=str(dummy_chid),
-                data={},
-            ))
-        )
-        self._check_error(resp, 401, 109, "Unauthorized")
-
-    @inlineCallbacks
     def test_no_uaid(self):
         self.settings.router.get_uaid = Mock()
         self.settings.router.get_uaid.side_effect = ItemNotFound
-        resp = yield self.client.post(
+        resp = yield self.client.delete(
             self.url(router_type="webpush",
                      uaid=dummy_uaid.hex,
                      chid=str(dummy_chid))
@@ -413,7 +397,7 @@ class RegistrationTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_no_auth(self):
-        resp = yield self.client.post(
+        resp = yield self.client.delete(
             self.url(router_type="webpush",
                      uaid=dummy_uaid.hex,
                      chid=str(dummy_chid)),
@@ -422,19 +406,15 @@ class RegistrationTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_bad_body(self):
-        resp = yield self.client.post(
-            self.url(router_type="webpush",
-                     uaid=dummy_uaid.hex,
-                     chid=str(dummy_chid)),
-            body="{invalid"
-        )
-        self._check_error(resp, 401, 108, "Unauthorized")
+        url = self.url(router_type="webpush", uaid=dummy_uaid.hex)
+        resp = yield self.client.put(url, body="{invalid")
+        self._check_error(resp, 400, 108, "Bad Request")
 
     @inlineCallbacks
     def test_post_bad_params(self):
         self.patch('uuid.uuid4', return_value=dummy_uaid)
 
-        resp = yield self.client.post(
+        resp = yield self.client.delete(
             self.url(router_type="simplepush",
                      uaid=dummy_uaid.hex,
                      chid=str(dummy_chid)),
@@ -446,29 +426,6 @@ class RegistrationTestCase(unittest.TestCase):
         self._check_error(resp, 401, 109, 'Unauthorized')
 
     @inlineCallbacks
-    def test_post_uaid_chid(self, *args):
-        self.patch('uuid.uuid4', return_value=dummy_uaid)
-
-        self.fernet_mock.configure_mock(**{
-            'encrypt.return_value': 'abcd123',
-        })
-
-        resp = yield self.client.post(
-            self.url(router_type="simplepush",
-                     uaid=dummy_uaid.hex,
-                     chid=str(dummy_chid)),
-            headers={"Authorization": self.auth},
-            body=json.dumps(dict(
-                type="simplepush",
-                channelID=str(dummy_chid),
-                data={},
-            ))
-        )
-        payload = json.loads(resp.content)
-        eq_(payload["channelID"], str(dummy_chid))
-        eq_(payload["endpoint"], "http://localhost/wpush/v1/abcd123")
-
-    @inlineCallbacks
     def test_post_nochid(self, *args):
         self.patch('uuid.uuid4', return_value=dummy_chid)
 
@@ -476,7 +433,8 @@ class RegistrationTestCase(unittest.TestCase):
             'encrypt.return_value': 'abcd123',
         })
         resp = yield self.client.post(
-            self.url(router_type="simplepush", uaid=dummy_uaid.hex),
+            self.url(router_type="simplepush", uaid=dummy_uaid.hex) +
+            "/subscription",
             headers={"Authorization": self.auth},
             body=json.dumps(dict(
                 type="simplepush",
@@ -511,7 +469,8 @@ class RegistrationTestCase(unittest.TestCase):
         })
 
         resp = yield self.client.post(
-            self.url(router_type="simplepush", uaid=dummy_uaid.hex),
+            self.url(router_type="simplepush", uaid=dummy_uaid.hex) +
+            "/subscription",
             headers={"Authorization": self.auth},
             body=json.dumps(dict(
                 type="simplepush",
@@ -541,10 +500,9 @@ class RegistrationTestCase(unittest.TestCase):
         payload = json.loads(resp.content)
         eq_(payload, {})
         frouter.register.assert_called_with(
-            dummy_uaid.hex,
+            uaid="",
             router_data=data,
             app_id='test',
-            uri=uri
         )
         user_data = self.router_mock.register_user.call_args[0][0]
         eq_(user_data['uaid'], dummy_uaid.hex)
@@ -557,9 +515,21 @@ class RegistrationTestCase(unittest.TestCase):
 
         resp = yield self.client.put(
             self.url(router_type="test", uaid=dummy_uaid.hex),
-            headers={"Authorization": "Fred Smith"}
+            headers={"Authorization": "Fred Smith"},
+            body=json.dumps(dict(token="blah"))
         )
         self._check_error(resp, 401, 109, "Unauthorized")
+
+    @inlineCallbacks
+    def test_put_bad_uaid_path(self, *args):
+        self.patch('uuid.uuid4', return_value=dummy_uaid)
+
+        resp = yield self.client.put(
+            self.url(router_type="test", uaid="invalid"),
+            headers={"Authorization": "Fred Smith"},
+            body=json.dumps(dict(token="blah"))
+        )
+        eq_(resp.get_status(), 404)
 
     @inlineCallbacks
     def test_put_bad_arguments(self, *args):
@@ -583,7 +553,8 @@ class RegistrationTestCase(unittest.TestCase):
 
         resp = yield self.client.put(
             self.url(router_type='test', uaid=dummy_uaid.hex),
-            headers={"Authorization": self.auth}
+            headers={"Authorization": self.auth},
+            body=json.dumps(dict(token="blah"))
         )
         self._check_error(resp, rexc.status_code, rexc.errno, "")
 
@@ -598,7 +569,7 @@ class RegistrationTestCase(unittest.TestCase):
             self.url(router_type="test",
                      router_token="test",
                      uaid=dummy_uaid.hex,
-                     chid="invalid"),
+                     chid=uuid.uuid4().hex),
             headers={"Authorization": self.auth},
         )
         self._check_error(resp, 410, 106, "")
@@ -648,8 +619,10 @@ class RegistrationTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_delete_bad_uaid(self):
+        # Return a 401 as the random UUID was never registered
         resp = yield self.client.delete(
-            self.url(router_type="test", router_token="test", uaid="invalid"),
+            self.url(router_type="test", router_token="test",
+                     uaid=uuid.uuid4().hex),
             headers={"Authorization": self.auth},
         )
         eq_(resp.get_status(), 401)
@@ -702,11 +675,3 @@ class RegistrationTestCase(unittest.TestCase):
         payload = json.loads(resp.content)
         eq_(chids, payload['channelIDs'])
         eq_(dummy_uaid.hex, payload['uaid'])
-
-    @inlineCallbacks
-    def test_get_no_uaid(self):
-        resp = yield self.client.get(
-            self.url(router_type="test", router_token="test"),
-            headers={"Authorization": self.auth}
-        )
-        eq_(resp.get_status(), 410)
