@@ -1986,8 +1986,8 @@ class TestAPNSBridgeIntegration(IntegrationBase):
             "firefox",
         )
         response, body = yield _agent('POST', url, body=json.dumps(
-            {"chid": str(uuid.uuid4()),
-             "token": uuid.uuid4().hex,
+            {"token": uuid.uuid4().hex,
+             "aps": {"foo": "bar", "gorp": "baz"}
              }
         ))
         eq_(response.code, 200)
@@ -2024,7 +2024,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         eq_(ca_data['cryptokey'], crypto_key)
         eq_(ca_data['enc'], salt)
         ok_('alert' not in ca_data['aps'])
-        eq_(ca_data['aps']['content-available'], 1)
+        eq_(ca_data['aps']['foo'], "bar")
         eq_(ca_data['body'], base64url_encode(data))
 
 
