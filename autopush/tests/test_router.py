@@ -190,7 +190,8 @@ class APNSRouterTestCase(unittest.TestCase):
             "enc": "test",
             "ver": 10,
             "aps": {
-                "content-available": 1,
+                "mutable-content": 1,
+                "alert": {"title": " ", "body": " "}
             },
             "enckey": "test",
             "con": "aesgcm",

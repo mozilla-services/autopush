@@ -3,7 +3,8 @@ import uuid
 from typing import (  # noqa
     Optional,
     Set,
-    Tuple
+    Tuple,
+    Dict
 )
 
 import simplejson as json
@@ -71,7 +72,6 @@ class TokenSchema(SubInfoSchema):
     """Filters allowed values from body data"""
     token = fields.Str(allow_none=True)
     # Temporarily allow 'aps' definition data for iOS.
-    # TODO: lock down dict content to just allowed extra values.
     aps = fields.Dict(allow_none=True)
 
 
