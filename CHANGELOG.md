@@ -1,3 +1,27 @@
+<a name="1.31.0"></a>
+## 1.31.0 (2017-05-31)
+
+
+#### Features
+
+*   switch to new iOS mutable aps payload ([fd1a6b5a](https://github.com/mozilla-services/autopush/commit/fd1a6b5a8afe8b27469c6264cb0e61887cf091ac))
+*   avoid triggering validation errors from bridge API ([f3641e4f](https://github.com/mozilla-services/autopush/commit/f3641e4f3c50cf1eeb055f17a286d61df1478fbb), closes [#893](https://github.com/mozilla-services/autopush/issues/893))
+*   update library dependencies to latest ([a2a5a1fd](https://github.com/mozilla-services/autopush/commit/a2a5a1fd044d4a46e18dbdfbd8c3c4aeb93136ab), closes [#901](https://github.com/mozilla-services/autopush/issues/901))
+
+#### Bug Fixes
+
+*   Ensure 'aps' passes through marshmallow schema check ([a1f159e2](https://github.com/mozilla-services/autopush/commit/a1f159e26fe7fdfea0a33e3b8126c67108dc0c92))
+*   Trap for missing Vapid AUTH header token ([2fccec64](https://github.com/mozilla-services/autopush/commit/2fccec64b166c6487a598362b1242456e1846f4a))
+*   Serialize Decimal correctly for ios aps ([1580e21a](https://github.com/mozilla-services/autopush/commit/1580e21a7bd569cfe5ce7aa92983d915e843be22))
+
+#### Refactor
+
+*   convert to inlineCallbacks ([71bb8e59](https://github.com/mozilla-services/autopush/commit/71bb8e59a138821fb93f904e43cba2e67bcca019))
+*   convert handler tests to client/inlineCallbacks ([bf80e4f6](https://github.com/mozilla-services/autopush/commit/bf80e4f61c681f90fae007d19cb1e965a07fb726))
+*   bring in cyclone trunk's testing client ([a1b8ae72](https://github.com/mozilla-services/autopush/commit/a1b8ae721d9164716f3e98c834625230ba0eca28))
+
+
+
 <a name="1.30.0"></a>
 ## 1.30.0 (2017-05-17)
 
