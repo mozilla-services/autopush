@@ -5,22 +5,23 @@ HTTP Endpoints for Notifications
 
 Autopush exposes three HTTP endpoints:
 
-`/push/...`
+`/[sw]push/...`
 
-This is tied to :class:`EndpointHandler` (:ref:`endpoint_module`). This endpoint is returned by the Push registration process and is used by the
-:term:`AppServer` to send Push alerts to the Application. See :ref:`send`.
+This is tied to one of the Endpoint Handlers, either `/wpush/...` for
+:class:`~autopush.web.webpush.WebPushHandler`, or `/spush/...` for :class:`~autopush.web.simplepush.SimplePushHandler`.
+(Note, `SimplePushHandler` is obsolete and will be removed without
+notification in a future update.) This endpoint is returned by the Push
+registration process and is used by the :term:`AppServer` to send Push
+alerts to the Application. See :ref:`send`.
 
 `/m/...`
 
-This is tied to :class:`MessageHandler` (:ref:`endpoint_module`). This
-endpoint handles individual
-message operations on messages pending delivery, such as deleting the
-message or updating the contents or Time To Live (TTL). See :ref:`cancel`
-and :ref:`update`.
+This is tied to :class:`~autopush.web.message.MessageHandler`. This endpoint allows
+a message that has not yet been delivered to be deleted. See :ref:`cancel`.
 
 `/v1/.../.../registration/...`
 
-This is tied to the :class:`RegistrationHandler` (:ref:`endpoint_module`). This endpoint is used by
+This is tied to the :ref:`reg_calls` Handlers. This endpoint is used by
 apps that wish to use :term:`bridging` protocols to register new channels.
 See :ref:`bridge_api`.
 
@@ -40,19 +41,21 @@ Lexicon
    :{UAID}: The Push User Agent Registration ID
 
 Push assigns each remote recipient a unique identifier. {UAID}s are UUIDs in
-lower case, dashed format. (e.g. '01234567-abcd-abcd-abcd-01234567abcd') This
+lower case, undashed format. (e.g. '01234567abcdabcdabcd01234567abcd') This
 value is assigned during **Registration**
 
    :{CHID}: The :term:`Channel` Subscription ID
 
 Push assigns a unique identifier for each subscription for a given {UAID}.
-Like {UAID}s, {CHID}s are UUIDs in lower case, dashed format.
-This value is assigned during **Channel Subscription**
+Like {UAID}s, {CHID}s are UUIDs, but in lower case, dashed format( e.g.
+'01234567-abcd-abcd-abcd-0123456789ab'). The User Agent usually creates this
+value and passes it as part of the **Channel Subscription**. If no value is
+supplied, the server will create and return one.
 
    :{message-id}: The unique Message ID
 
 Push assigns each message for a given Channel Subscription a unique
-identifier. This value is assigned during **Send Notification**
+identifier. This value is assigned during **Send Notification**.
 
 .. _error_resp:
 
@@ -142,6 +145,9 @@ Please note, the Push endpoint URL (which is what is used to send notifications)
 should be considered "opaque". We reserve the right to change any portion
 of the Push URL in future provisioned URLs.
 
+The `Topic` HTTP header allows new messages to replace previously sent, unreceived
+subscription updates. See :ref:`topic`.
+
 **Call:**
 
 .. http:post:: {push_endpoint}
@@ -159,11 +165,6 @@ of the Push URL in future provisioned URLs.
         data may be limited to only 2744 bytes instead of the normal 4096
         bytes.
 
-**Parameters:**
-
-    :form version: (*Optional*) Version of notification, defaults to current
-                   time
-
 **Reply:**
 
 .. code-block:: json
@@ -176,6 +177,40 @@ of the Push URL in future provisioned URLs.
     :statuscode 202: Message stored for delivery to client at a later
                      time.
     :statuscode 200: Message delivered to node client is connected to.
+
+
+.. _topic:
+
+Message Topics
+~~~~~~~~~~~~~~
+
+Message topics allow newer message content to replace previously sent, unread messages.
+This prevents the UA from displaying multiple messages upon reconnect. `A blog post <https://hacks.mozilla.org/2016/11/mozilla-push-server-now-supports-topics/>`__
+provides an example of how to use Topics, but a summary is provided here.
+
+To specify a Topic, include a `Topic` HTTP header along with your :ref:`send`. The topic can be
+any 32 byte alpha-numeric string (including "_" and "-").
+
+Example topics might be `MailMessages`, `Current_Score`, or `20170814-1400_Meeting_Reminder`
+
+For example:
+
+.. code-block:: bash
+
+    curl -X POST \
+        https://push.services.mozilla.com/wpush/abc123... \
+        -H "TTL: 86400" \
+        -H "Topic: new_mail" \
+        -H "Authorization: Vapid AbCd..." \
+        ...
+
+Would create or replace a message that is valid for the next 24 hours that has the topic
+of `new_mail`. The body of this might contain the number of unread messages. If a new
+message arrives, the Application Server could send a second message with a body
+containing a revised message count.
+
+Later, when the User reconnects, she will only see a single notification containing
+the latest notification, with the most recent new mail message count.
 
 .. _cancel:
 
@@ -207,40 +242,6 @@ Delete the message given the `message_id`.
 
 
 .. _update:
-
-Update Notification
-~~~~~~~~~~~~~~~~~~~
-
-Update the message at the given `{message_id}`.
-
-
-**Call:**
-
-
-.. http:put:: /m/(string/message_id)
-
-**Parameters:**
-
-    This method takes the same arguments as WebPush PUT, with values
-    replacing that for the provided message.
-
-    .. note::
-
-        In the rare condition that the client is online, and has received
-        the message but has not acknowledged it yet; then it is possible that
-        the client will not get the updated message until reconnect. This
-        should be considered a rare edge-case.
-
-**Reply:**
-
-.. code-block:: json
-
-    {}
-
-**Return Codes:**
-
-    :statuscode 404: `message_id` is not found.
-    :statuscode 200: Message has been updated.
 
 ---
 
@@ -306,11 +307,14 @@ An example of the Authorization header would be:
 Calls
 -----
 
+.. _reg_calls:
+
 Registration
 ~~~~~~~~~~~~
 
 Request a new UAID registration, Channel ID, and optionally set a bridge
-type and 3rd party bridge instance ID token for this connection.
+type and 3rd party bridge instance ID token for this connection. (See
+:class:`~autopush.web.registration.NewRegistrationHandler`)
 
 **Call:**
 
@@ -362,7 +366,7 @@ Token updates
 ~~~~~~~~~~~~~
 
 Update the current bridge token value. Note, this is a ***PUT*** call, since
-we are updating existing information.
+we are updating existing information. (See :class:`~autopush.web.registration.UaidRegistrationHandler`)
 
 **Call:**
 
@@ -412,7 +416,7 @@ See :ref:`errors`.
 Channel Subscription
 ~~~~~~~~~~~~~~~~~~~~
 
-Acquire a new ChannelID for a given UAID.
+Acquire a new ChannelID for a given UAID. (See :class:`~autopush.web.registration.SubRegistrationHandler`)
 
 **Call:**
 
@@ -458,7 +462,7 @@ Unregister UAID (and all associated ChannelID subscriptions)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Indicate that the UAID, and by extension all associated subscriptions,
-is no longer valid.
+is no longer valid. (See :class:`~autopush.web.registration.UaidRegistrationHandler`)
 
 **Call:**
 
@@ -487,7 +491,7 @@ See :ref:`errors`.
 Unsubscribe Channel
 ~~~~~~~~~~~~~~~~~~~
 
-Remove a given ChannelID subscription from a UAID.
+Remove a given ChannelID subscription from a UAID. (See: :class:`~autopush.web.registration.ChannelRegistrationHandler`)
 
 **Call:**
 
@@ -517,6 +521,7 @@ Get Known Channels for a UAID
 
 Fetch the known ChannelIDs for a given bridged endpoint. This is useful to check link status.
 If no channelIDs are present for a given UAID, an empty set of channelIDs will be returned.
+(See: :class:`~autopush.web.registration.UaidRegistrationHandler`)
 
 **Call:**
 
