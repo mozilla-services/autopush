@@ -12,7 +12,6 @@ from boto.dynamodb2.exceptions import (
     ItemNotFound
 )
 from boto.exception import JSONResponseError
-from cyclone.web import Application
 from mock import Mock, patch
 from nose.tools import assert_raises, eq_, ok_
 from txstatsd.metrics.metrics import Metrics
@@ -27,9 +26,11 @@ from twisted.trial import unittest
 
 import autopush.db as db
 from autopush.db import create_rotating_message_table
+from autopush.http import InternalRouterHTTPFactory
 from autopush.settings import AutopushSettings
 from autopush.tests import MockAssist
 from autopush.utils import WebPushNotification
+from autopush.tests.client import Client
 from autopush.tests.test_db import make_webpush_notification
 from autopush.websocket import (
     PushState,
@@ -1938,38 +1939,37 @@ class RouterHandlerTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
-        settings.metrics = Mock(spec=Metrics)
-        self.mock_request = Mock()
-        self.handler = RouterHandler(Application(), self.mock_request,
-                                     ap_settings=settings)
-        self.handler.set_status = self.status_mock = Mock()
-        self.handler.write = self.write_mock = Mock()
+        self.app = InternalRouterHTTPFactory.for_handler(
+            RouterHandler,
+            settings
+        )
+        self.client = Client(self.app)
 
+    def url(self, **kwargs):
+        return '/push/{uaid}'.format(**kwargs)
+
+    @inlineCallbacks
     def test_client_connected(self):
-        uaid = uuid.uuid4().hex
-        self.mock_request.body = "{}"
-        self.ap_settings.clients[uaid] = client_mock = Mock()
-        client_mock.paused = False
-        self.handler.put(uaid)
-        eq_(len(self.write_mock.mock_calls), 1)
-        eq_(len(client_mock.mock_calls), 1)
+        uaid = dummy_uaid_str
+        self.ap_settings.clients[uaid] = client_mock = Mock(paused=False)
+        resp = yield self.client.put(self.url(uaid=uaid), body="{}")
+        eq_(resp.get_status(), 200)
+        eq_(resp.content, "Client accepted for delivery")
+        client_mock.send_notification.assert_called_once()
 
+    @inlineCallbacks
     def test_client_not_connected(self):
-        uaid = uuid.uuid4().hex
-        self.mock_request.body = "{}"
-        self.handler.put(uaid)
-        eq_(len(self.write_mock.mock_calls), 1)
-        eq_(len(self.status_mock.mock_calls), 1)
-        self.status_mock.assert_called_with(404, reason=None)
+        resp = yield self.client.put(self.url(uaid=dummy_uaid_str), body="{}")
+        eq_(resp.get_status(), 404)
+        eq_(resp.content, "Client not connected.")
 
+    @inlineCallbacks
     def test_client_connected_but_busy(self):
-        uaid = uuid.uuid4().hex
-        self.mock_request.body = "{}"
-        self.ap_settings.clients[uaid] = client_mock = Mock()
-        client_mock.accept_notification = False
-        self.handler.put(uaid)
-        eq_(len(self.write_mock.mock_calls), 1)
-        self.status_mock.assert_called_with(503, reason=None)
+        uaid = dummy_uaid_str
+        self.ap_settings.clients[uaid] = Mock(accept_notification=False)
+        resp = yield self.client.put(self.url(uaid=uaid), body="{}")
+        eq_(resp.get_status(), 503)
+        eq_(resp.content, "Client busy.")
 
 
 class NotificationHandlerTestCase(unittest.TestCase):
@@ -1980,46 +1980,56 @@ class NotificationHandlerTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
-        settings.metrics = Mock(spec=Metrics)
-        self.mock_request = Mock()
-        self.handler = NotificationHandler(Application(), self.mock_request,
-                                           ap_settings=settings)
-        self.handler.set_status = self.status_mock = Mock()
-        self.handler.write = self.write_mock = Mock()
+        self.app = InternalRouterHTTPFactory.for_handler(
+            NotificationHandler,
+            settings
+        )
+        self.client = Client(self.app)
 
+    def url(self, **kwargs):
+        result = '/notif/{uaid}'.format(**kwargs)
+        if kwargs.get('connected_at'):
+            result += '/' + kwargs.get('connected_at')
+        return result
+
+    @inlineCallbacks
     def test_connected_and_free(self):
-        uaid = uuid.uuid4().hex
-        self.mock_request.body = "{}"
-        self.ap_settings.clients[uaid] = client_mock = Mock()
-        client_mock.paused = False
-        self.handler.put(uaid)
-        eq_(len(self.write_mock.mock_calls), 1)
-        eq_(len(client_mock.mock_calls), 1)
+        uaid = dummy_uaid_str
+        self.ap_settings.clients[uaid] = client_mock = Mock(paused=False)
+        resp = yield self.client.put(self.url(uaid=uaid), body="{}")
+        eq_(resp.get_status(), 200)
+        eq_(resp.content, "Notification check started")
+        client_mock.process_notifications.assert_called_once()
 
+    @inlineCallbacks
     def test_connected_and_busy(self):
-        uaid = uuid.uuid4().hex
-        self.mock_request.body = "{}"
-        self.ap_settings.clients[uaid] = client_mock = Mock()
-        client_mock.paused = True
-        client_mock._check_notifications = False
-        self.handler.put(uaid)
-        eq_(len(self.write_mock.mock_calls), 1)
+        uaid = dummy_uaid_str
+        self.ap_settings.clients[uaid] = client_mock = Mock(
+            paused=True,
+            _check_notifications=False
+        )
+        resp = yield self.client.put(self.url(uaid=uaid), body="{}")
+        eq_(resp.get_status(), 202)
+        eq_(resp.content, "Flagged for Notification check")
         eq_(client_mock._check_notifications, True)
-        eq_(self.status_mock.call_args, ((202,),))
 
+    @inlineCallbacks
     def test_not_connected(self):
-        uaid = uuid.uuid4().hex
-        self.mock_request.body = "{}"
-        self.handler.put(uaid)
-        eq_(len(self.write_mock.mock_calls), 1)
-        self.status_mock.assert_called_with(404, reason=None)
+        resp = yield self.client.put(self.url(uaid=dummy_uaid_str), body="{}")
+        eq_(resp.get_status(), 404)
+        eq_(resp.content, "Client not connected.")
 
+    @inlineCallbacks
     def test_delete(self):
-        uaid = uuid.uuid4().hex
+        uaid = dummy_uaid_str
         now = int(time.time() * 1000)
-        self.ap_settings.clients[uaid] = mock_client = Mock()
-        mock_client.ps = Mock()
-        mock_client.ps.connected_at = now
-        mock_client.sendClose = Mock()
-        self.handler.delete(uaid, "", now)
-        ok_(mock_client.sendClose.called)
+        self.ap_settings.clients[uaid] = client_mock = Mock(
+            ps=Mock(connected_at=now),
+            sendClose=Mock()
+        )
+        resp = yield self.client.delete(
+            self.url(uaid=uaid, connected_at=str(now))
+        )
+        eq_(resp.get_status(), 200)
+        eq_(resp.content, "Terminated duplicate")
+        client_mock.sendClose.assert_called_once()
