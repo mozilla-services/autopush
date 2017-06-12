@@ -153,7 +153,7 @@ class InternalRouterHTTPFactory(BaseHTTPFactory):
 
     ap_handlers = (
         (r"/push/([^\/]+)", RouterHandler),
-        (r"/notif/([^\/]+)(/([^\/]+))?", NotificationHandler),
+        (r"/notif/([^\/]+)(?:/(\d+))?", NotificationHandler),
     )
 
     @property

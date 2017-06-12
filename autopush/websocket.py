@@ -1643,14 +1643,14 @@ class NotificationHandler(BaseHandler):
         settings.metrics.increment("updates.notification.checking")
         self.write("Notification check started")
 
-    def delete(self, uaid, ignored, connectionTime):
+    def delete(self, uaid, connected_at):
         """HTTP Delete
 
         Drop a connected client as the client has connected to a new node.
 
         """
         client = self.ap_settings.clients.get(uaid)
-        if client and client.ps.connected_at == int(connectionTime):
+        if client and client.ps.connected_at == int(connected_at):
             client.sendClose()
             self.write("Terminated duplicate")
 
