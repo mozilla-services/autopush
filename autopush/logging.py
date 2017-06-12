@@ -172,7 +172,7 @@ class PushLogger(object):
             reply = dict()
             for k, v in kv:
                 if (k not in IGNORED_KEYS and
-                        type(v) in (str, unicode, list, int, float)):
+                        type(v) in (str, unicode, list, int, float, bool)):
                     reply[k] = v
             return reply
 
