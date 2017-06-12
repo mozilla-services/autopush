@@ -8,26 +8,26 @@
 Daemon Script Entry Points
 ++++++++++++++++++++++++++
 
-.. autofunction:: connection_main
+.. autoclass:: ConnectionApplication
+    :members:
+    :private-members:
+    :member-order: bysource
 
-.. autofunction:: endpoint_main
+.. autoclass:: EndpointApplication
+    :members:
+    :private-members:
+    :member-order: bysource
 
-Argument Parsing Helpers
-++++++++++++++++++++++++
+Common Root
++++++++++++
 
-.. autofunction:: add_shared_args
+.. autoclass:: AutopushMultiService
+    :members:
+    :private-members:
+    :member-order: bysource
 
-.. autofunction:: add_external_router_args
-
-.. autofunction:: _parse_connection
-
-.. autofunction:: _parse_endpoint
 
 Utility Functions
 +++++++++++++++++
 
 .. autofunction:: make_settings
-
-.. autofunction:: skip_request_logging
-
-.. autofunction:: mount_health_handlers

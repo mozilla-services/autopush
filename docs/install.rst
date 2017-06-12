@@ -144,3 +144,8 @@ directs autopush to your local DynamoDB instance.
 .. _`properly set up your boto config file`:
      https://boto.readthedocs.io/en/latest/boto_config_tut.html
 .. _`cryptography`: https://cryptography.io/en/latest/installation
+
+.. toctree::
+    :maxdepth: 1
+
+    apns.rst
