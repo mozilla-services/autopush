@@ -1,3 +1,25 @@
+<a name="1.32.0"></a>
+## 1.32.0 (2017-06-15)
+
+
+#### Bug Fixes
+
+*   log boolean values ([1ed34d52](https://github.com/mozilla-services/autopush/commit/1ed34d52337a8cf3de0f051dfe799a202ab11215), closes [#915](https://github.com/mozilla-services/autopush/issues/915))
+
+#### Features
+
+*   upgrade to pypy 5.8.0 ([5e8c941f](https://github.com/mozilla-services/autopush/commit/5e8c941f65397872885108a9ab0bb6c01a4eab23))
+
+#### Doc
+
+*   update docs after refactor ([ea1dfd84](https://github.com/mozilla-services/autopush/commit/ea1dfd847532075f111710787c635277813280e3))
+
+#### Refactor
+
+*   convert to inlineCallbacks ([39f09d3d](https://github.com/mozilla-services/autopush/commit/39f09d3dd10679b83ed8717861bdaa26428a3522))
+
+
+
 <a name="1.31.0"></a>
 ## 1.31.0 (2017-05-31)
 
