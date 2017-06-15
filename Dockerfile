@@ -1,4 +1,4 @@
-FROM pypy:2-5.6.0
+FROM pypy:2-5.8.0
 
 RUN mkdir -p /app
 ADD . /app
