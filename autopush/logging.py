@@ -266,9 +266,9 @@ class FirehoseProcessor(object):
         self._last_send = time.time()
         while True:
             time_since_sent = time.time() - self._last_send
+            remaining_wait = self.MAX_INTERVAL - time_since_sent
             try:
-                record = self._records.get(
-                    timeout=max(self.MAX_INTERVAL-time_since_sent, 0))
+                record = self._records.get(timeout=remaining_wait)
             except Queue.Empty:
                 # Send the records
                 self._send_record_batch()
@@ -294,6 +294,7 @@ class FirehoseProcessor(object):
         self._send_record_batch()
 
     def _send_record_batch(self):
+        self._last_send = time.time()
         if not self._prepped:
             return
 
@@ -312,4 +313,3 @@ class FirehoseProcessor(object):
 
         self._prepped = []
         self._total_size = 0
-        self._last_send = time.time()

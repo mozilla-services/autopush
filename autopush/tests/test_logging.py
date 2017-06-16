@@ -1,5 +1,6 @@
 import json
 import os
+import Queue
 import sys
 import StringIO
 
@@ -210,10 +211,13 @@ class FirehoseProcessorTestCase(twisted.trial.unittest.TestCase):
     def test_queue_timeout(self):
         proc = FirehoseProcessor("test")
         proc.MAX_INTERVAL = 0
+        proc._records.get = mock_get = Mock()
+        proc._send_record_batch = mock_send = Mock()
+        mock_get.side_effect = (Queue.Empty, None)
 
         proc.start()
         proc.stop()
-        eq_(len(self.mock_boto.mock_calls), 1)
+        mock_send.assert_called()
 
     def test_batch_send_failure(self):
         proc = FirehoseProcessor("test")
