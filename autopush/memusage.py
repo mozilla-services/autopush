@@ -26,12 +26,27 @@ def memusage():
     buf.writelines([repr(rusage), '\n\n'])
     trap_err(objgraph.show_most_common_types, limit=0, file=buf)
     buf.write('\n\n')
-    pmap = trap_err(subprocess.check_output, ['pmap', '-x', str(os.getpid())],
-                    stderr=subprocess.STDOUT)
-    buf.writelines([pmap, '\n\n'])
+    trap_err(pmap_extended, buf)
     trap_err(dump_rpy_heap, buf)
     trap_err(get_stats_asmmemmgr, buf)
     return buf.getvalue()
+
+
+def pmap_extended(stream):
+    """Write pmap (w/ the most extended stats supported) to stream"""
+    pid = str(os.getpid())
+    # -XX/-X are recent linux only
+    ex_args = ['XX', 'X', 'x']
+    while True:
+        cmd = ['pmap', '-' + ex_args.pop(0), pid]
+        try:
+            pmap = subprocess.check_output(cmd, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError:  # pragma: nocover
+            if not ex_args:
+                raise
+        else:
+            stream.writelines([' '.join(cmd[:2]), '\n', pmap, '\n\n'])
+            break
 
 
 def dump_rpy_heap(stream):  # pragma: nocover
