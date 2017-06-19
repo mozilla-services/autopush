@@ -1,3 +1,13 @@
+<a name="1.32.1"></a>
+## 1.32.1 (2017-06-19)
+
+
+#### Features
+
+*   dump pmap -XX/X if available ([fa792a6a](https://github.com/mozilla-services/autopush/commit/fa792a6a9536263bcbac8aa29da147a987ffe854))
+
+
+
 <a name="1.32.0"></a>
 ## 1.32.0 (2017-06-15)
 
