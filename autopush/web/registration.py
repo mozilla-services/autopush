@@ -1,5 +1,7 @@
 import re
 import uuid
+
+from marshmallow_polyfield import PolyField
 from typing import (  # noqa
     Optional,
     Set,
@@ -15,8 +17,9 @@ from marshmallow import (
     fields,
     pre_load,
     post_load,
+    validate,
     validates,
-    validates_schema
+    validates_schema,
 )
 from twisted.internet.defer import Deferred  # noqa
 from twisted.internet.threads import deferToThread
@@ -71,7 +74,21 @@ class SubInfoSchema(Schema):
 class TokenSchema(SubInfoSchema):
     """Filters allowed values from body data"""
     token = fields.Str(allow_none=True)
-    # Temporarily allow 'aps' definition data for iOS.
+
+
+valid_token = validate.Regexp("^[^ ]{8,}$")
+
+
+class GCMTokenSchema(SubInfoSchema):
+    token = fields.Str(allow_none=False,
+                       validate=valid_token,
+                       error="Missing required token value")
+
+
+class APNSTokenSchema(SubInfoSchema):
+    token = fields.Str(allow_none=False,
+                       validate=valid_token,
+                       error="Missing required token value")
     aps = fields.Dict(allow_none=True)
 
 
@@ -158,8 +175,18 @@ class AuthorizationCheckSchema(Schema):
                                      headers=request_pref_header)
 
 
+def conditional_token_check(object_dict, parent_dict):
+    if parent_dict['path_kwargs']['type'] in ['gcm', 'fcm']:
+        return GCMTokenSchema()
+    if parent_dict['path_kwargs']['type'] == 'apns':
+        return APNSTokenSchema()
+    return TokenSchema()
+
+
 class RouterDataSchema(Schema):
-    router_data = fields.Nested(TokenSchema, load_from="body")
+    router_data = PolyField(
+        load_from="body",
+        deserialization_schema_selector=conditional_token_check)
 
     @validates_schema(skip_on_field_errors=True)
     def register_router(self, data):
