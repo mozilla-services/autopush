@@ -1445,7 +1445,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
            self.ps.direct_updates[chid] <= version:
             del self.ps.direct_updates[chid]
             self.log.info(format="Ack", router_key="simplepush",
-                          channel_id=chid, message_id=version,
+                          channel_id=chid, message_id=str(version),
                           message_source="direct",
                           uaid_hash=self.ps.uaid_hash,
                           user_agent=self.ps.user_agent, code=code,
@@ -1453,7 +1453,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.stats.direct_acked += 1
             return
         self.log.info(format="Ack", router_key="simplepush", channel_id=chid,
-                      message_id=version, message_source="stored",
+                      message_id=str(version), message_source="stored",
                       uaid_hash=self.ps.uaid_hash,
                       user_agent=self.ps.user_agent, code=code,
                       **self.ps.raw_agent)
@@ -1491,7 +1491,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             return
 
         self.log.info(format="Nack", uaid_hash=self.ps.uaid_hash,
-                      user_agent=self.ps.user_agent, message_id=version,
+                      user_agent=self.ps.user_agent, message_id=str(version),
                       code=code, **self.ps.raw_agent)
         self.ps.stats.nacks += 1
 

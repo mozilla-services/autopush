@@ -1420,7 +1420,8 @@ class WebsocketTestCase(unittest.TestCase):
         assert_called_included(self.proto.log.info,
                                format="Ack",
                                router_key="simplepush",
-                               message_source="direct")
+                               message_source="direct",
+                               message_id=str(12))
 
     def test_ack_with_bad_input(self):
         self._connect()
@@ -1445,7 +1446,8 @@ class WebsocketTestCase(unittest.TestCase):
         assert_called_included(self.proto.log.info,
                                format="Ack",
                                router_key="webpush",
-                               message_source="direct")
+                               message_source="direct",
+                               message_id=dummy_version)
 
     def test_ack_with_webpush_from_storage(self):
         self._connect()
