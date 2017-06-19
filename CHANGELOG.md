@@ -1,3 +1,14 @@
+<a name="1.32.2"></a>
+## 1.32.2 (2017-06-19)
+
+
+#### Bug Fixes
+
+*   ensure simplepush messages log message_id as str ([dabfb6d6](https://github.com/mozilla-services/autopush/commit/dabfb6d61fb5bdb623d158f736c4721dba696ac0), closes [#925](https://github.com/mozilla-services/autopush/issues/925))
+*   avoid firehose logger spinning the CPU ([d1baa2a1](https://github.com/mozilla-services/autopush/commit/d1baa2a133f3db716de798b70c38a884f64e9ad1))
+
+
+
 <a name="1.32.1"></a>
 ## 1.32.1 (2017-06-19)
 
