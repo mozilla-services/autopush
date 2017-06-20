@@ -1865,6 +1865,23 @@ class TestGCMBridgeIntegration(IntegrationBase):
         eq_(ca_data['enc'], salt)
         eq_(ca_data['body'], base64url_encode(data))
 
+    @inlineCallbacks
+    def test_registration_no_token(self):
+        self._add_router()
+        # get the senderid
+        url = "{}/v1/{}/{}/registration".format(
+            self.ep.settings.endpoint_url,
+            "gcm",
+            self.senderID,
+        )
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {
+                "chid": str(uuid.uuid4()),
+                "token": '',
+             }
+        ))
+        eq_(response.code, 400)
+
 
 class TestFCMBridgeIntegration(IntegrationBase):
 
@@ -1986,8 +2003,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
             "firefox",
         )
         response, body = yield _agent('POST', url, body=json.dumps(
-            {"token": uuid.uuid4().hex,
-             }
+            {"token": uuid.uuid4().hex}
         ))
         eq_(response.code, 200)
         jbody = json.loads(body)
@@ -2026,6 +2042,20 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         eq_(ca_data['aps']['alert']['title'], " ")
         eq_(ca_data['aps']['alert']['body'], " ")
         eq_(ca_data['body'], base64url_encode(data))
+
+    @inlineCallbacks
+    def test_registration_no_token(self):
+        self._add_router()
+        # get the senderid
+        url = "{}/v1/{}/{}/registration".format(
+            self.ep.settings.endpoint_url,
+            "apns",
+            "firefox",
+        )
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {"token": ''}
+        ))
+        eq_(response.code, 400)
 
     @inlineCallbacks
     def test_registration_aps_override(self):
