@@ -216,14 +216,18 @@ class RegistrationTestCase(unittest.TestCase):
         d = self.reg._init_info()
         eq_(d["remote_ip"], "local2")
 
-    def test_ap_settings_update(self):
+    def test_settings_crypto_key(self):
         fake = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
-        reg = self.reg
-        reg.ap_settings.update(banana="fruit")
-        eq_(reg.ap_settings.banana, "fruit")
-        reg.ap_settings.update(crypto_key=fake)
-        eq_(reg.ap_settings.fernet._fernets[0]._encryption_key,
+        settings = AutopushSettings(crypto_key=fake)
+        eq_(settings.fernet._fernets[0]._encryption_key,
             '\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+
+        fake2 = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB='
+        settings = AutopushSettings(crypto_key=[fake, fake2])
+        eq_(settings.fernet._fernets[0]._encryption_key,
+            '\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
+        eq_(settings.fernet._fernets[1]._encryption_key,
+            '\x10A\x04\x10A\x04\x10A\x04\x10A\x04\x10A\x04\x10')
 
     def test_cors(self):
         ch1 = "Access-Control-Allow-Origin"

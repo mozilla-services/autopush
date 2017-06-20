@@ -205,7 +205,7 @@ class EndpointApplication(AutopushMultiService):
             endpoint_scheme=ns.endpoint_scheme,
             endpoint_hostname=ns.endpoint_hostname or ns.hostname,
             endpoint_port=ns.endpoint_port,
-            enable_cors=not ns.no_cors,
+            cors=not ns.no_cors,
             bear_hash_key=ns.auth_key,
             proxy_protocol_port=ns.proxy_protocol_port,
         )
