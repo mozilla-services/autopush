@@ -1866,6 +1866,100 @@ class TestGCMBridgeIntegration(IntegrationBase):
         eq_(ca_data['body'], base64url_encode(data))
 
     @inlineCallbacks
+    def test_registration_aes128gcm(self):
+        self._add_router()
+        # get the senderid
+        url = "{}/v1/{}/{}/registration".format(
+            self.ep.settings.endpoint_url,
+            "gcm",
+            self.senderID,
+        )
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {"chid": str(uuid.uuid4()),
+             "token": uuid.uuid4().hex,
+             }
+        ))
+        eq_(response.code, 200)
+        jbody = json.loads(body)
+
+        # Send a fake message
+        data = ("\xa2\xa5\xbd\xda\x40\xdc\xd1\xa5\xf9\x6a\x60\xa8\x57\x7b\x48"
+                "\xe4\x43\x02\x5a\x72\xe0\x64\x69\xcd\x29\x6f\x65\x44\x53\x78"
+                "\xe1\xd9\xf6\x46\x26\xce\x69")
+        content_encoding = "aes128gcm"
+
+        response, body = yield _agent(
+            'POST',
+            str(jbody['endpoint']),
+            headers=Headers({
+                "ttl": ["0"],
+                "content-encoding": [content_encoding],
+            }),
+            body=data
+        )
+
+        ca_data = self._mock_send.call_args[0][0].data
+        eq_(response.code, 201)
+        # ChannelID here MUST match what we got from the registration call.
+        # Currently, this is a lowercase, hex UUID without dashes.
+        eq_(ca_data['chid'], jbody['channelID'])
+        eq_(ca_data['con'], content_encoding)
+        eq_(ca_data['body'], base64url_encode(data))
+        ok_('enc' not in ca_data)
+
+    @inlineCallbacks
+    def test_registration_aes128gcm_bad_(self):
+        self._add_router()
+        # get the senderid
+        url = "{}/v1/{}/{}/registration".format(
+            self.ep.settings.endpoint_url,
+            "gcm",
+            self.senderID,
+        )
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {"chid": str(uuid.uuid4()),
+             "token": uuid.uuid4().hex,
+             }
+        ))
+        eq_(response.code, 200)
+        jbody = json.loads(body)
+
+        # Send a fake message
+        data = ("\xa2\xa5\xbd\xda\x40\xdc\xd1\xa5\xf9\x6a\x60\xa8\x57\x7b\x48"
+                "\xe4\x43\x02\x5a\x72\xe0\x64\x69\xcd\x29\x6f\x65\x44\x53\x78"
+                "\xe1\xd9\xf6\x46\x26\xce\x69")
+        crypto_key = ("keyid=p256dh;dh=BAFJxCIaaWyb4JSkZopERL9MjXBeh3WdBxew"
+                      "SYP0cZWNMJaT7YNaJUiSqBuGUxfRj-9vpTPz5ANmUYq3-u-HWOI")
+        salt = "keyid=p256dh;salt=S82AseB7pAVBJ2143qtM3A"
+        content_encoding = "aes128gcm"
+
+        response, body = yield _agent(
+            'POST',
+            str(jbody['endpoint']),
+            headers=Headers({
+                "ttl": ["0"],
+                "content-encoding": [content_encoding],
+                "crypto-key": [crypto_key]
+            }),
+            body=data
+        )
+
+        eq_(response.code, 400)
+        ok_("do not include 'dh' in " in body.lower())
+        response, body = yield _agent(
+            'POST',
+            str(jbody['endpoint']),
+            headers=Headers({
+                "ttl": ["0"],
+                "content-encoding": [content_encoding],
+                "encryption": [salt]
+            }),
+            body=data
+        )
+        eq_(response.code, 400)
+        ok_("do not include 'salt' in " in body.lower())
+
+    @inlineCallbacks
     def test_registration_no_token(self):
         self._add_router()
         # get the senderid

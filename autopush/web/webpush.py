@@ -13,7 +13,7 @@ from marshmallow import (
     validates_schema,
 )
 from marshmallow_polyfield import PolyField
-from marshmallow.validate import OneOf
+from marshmallow.validate import Equal
 from twisted.logger import Logger  # noqa
 from twisted.internet.defer import Deferred  # noqa
 from twisted.internet.defer import maybeDeferred
@@ -170,7 +170,7 @@ class WebPushCrypto01HeaderSchema(Schema):
     content_encoding = fields.String(
         required=True,
         load_from="content-encoding",
-        validate=OneOf(["aesgcm128"])
+        validate=Equal("aesgcm128")
     )
     encryption = fields.String(required=True)
     encryption_key = fields.String(
@@ -213,13 +213,13 @@ class WebPushCrypto01HeaderSchema(Schema):
 class WebPushCrypto04HeaderSchema(Schema):
     """Validates WebPush Message Encryption
 
-    Uses draft-ietf-webpush-encryption-04 rules for validation.
+    Uses draft-ietf-httpbis-encryption-encoding-04 rules for validation.
 
     """
     content_encoding = fields.String(
         required=True,
         load_from="content-encoding",
-        validate=OneOf(["aesgcm"])
+        validate=Equal("aesgcm")
     )
     encryption = fields.String(required=True)
     crypto_key = fields.String(
@@ -255,6 +255,40 @@ class WebPushCrypto04HeaderSchema(Schema):
             )
 
 
+class WebPushCrypto06HeaderSchema(Schema):
+    """Validates WebPush Message Encryption
+
+    Uses draft-ietf-httpbis-encryption-encoding-06 rules for validation
+
+    """
+
+    content_encoding = fields.String(
+        required=True,
+        load_from="content-encoding",
+        validate=Equal("aes128gcm")
+    )
+
+    encryption = fields.String(required=False)
+    crypto_key = fields.String(required=False,
+                               load_from="crypto-key")
+
+    @validates("encryption")
+    def validate_encryption(self, value):
+        if CryptoKey.parse_and_get_label(value, "salt"):
+            raise InvalidRequest("Do not include 'salt' in aes128gcm "
+                                 "Encryption header",
+                                 status_code=400,
+                                 errno=110)
+
+    @validates("crypto_key")
+    def validate_crypto_key(self, value):
+        if CryptoKey.parse_and_get_label(value, "dh"):
+            raise InvalidRequest("Do not include 'dh' in aes128gcm "
+                                 "Crypto-Key header",
+                                 status_code=400,
+                                 errno=110)
+
+
 class WebPushInvalidContentEncodingSchema(Schema):
     """Returned to raise an Invalid Content-encoding error"""
     @validates_schema
@@ -275,6 +309,8 @@ def conditional_crypto_deserialize(object_dict, parent_object_dict):
             return WebPushCrypto01HeaderSchema()
         elif encoding == "aesgcm":
             return WebPushCrypto04HeaderSchema()
+        elif encoding == "aes128gcm":
+            return WebPushCrypto06HeaderSchema()
         else:
             return WebPushInvalidContentEncodingSchema()
     else:
