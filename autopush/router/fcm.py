@@ -175,8 +175,9 @@ class FCMRouter(object):
 
             data['body'] = notification.data
             data['con'] = notification.headers['encoding']
-            data['enc'] = notification.headers['encryption']
 
+            if 'encryption' in notification.headers:
+                data['enc'] = notification.headers['encryption']
             if 'crypto_key' in notification.headers:
                 data['cryptokey'] = notification.headers['crypto_key']
             elif 'encryption_key' in notification.headers:
