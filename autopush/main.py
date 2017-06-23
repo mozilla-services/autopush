@@ -23,6 +23,8 @@ from autopush.http import (
     EndpointHTTPFactory,
     MemUsageHTTPFactory
 )
+import autopush.utils as utils
+import autopush.logging as logging
 from autopush.exceptions import InvalidSettings
 from autopush.db import DatabaseManager
 from autopush.haproxy import HAProxyServerEndpoint
@@ -118,6 +120,8 @@ class AutopushMultiService(MultiService):
 
         """
         ns = cls.parse_args(cls.config_files if use_files else [], args)
+        if not ns.no_aws:
+            logging.HOSTNAME = utils.get_ec2_instance_id()
         PushLogger.setup_logging(
             cls.logger_name,
             log_level=ns.log_level or ("debug" if ns.debug else "info"),

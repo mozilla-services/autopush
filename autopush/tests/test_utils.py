@@ -1,5 +1,6 @@
 import unittest
 
+from mock import patch, Mock
 from nose.tools import eq_
 
 
@@ -29,3 +30,22 @@ class TestUserAgentParser(unittest.TestCase):
         eq_(raw["ua_os_family"], "BlackBerry OS")
         eq_(dd["ua_browser_family"], "Other")
         eq_(raw["ua_browser_family"], "BlackBerry")
+
+    @patch("requests.get")
+    def test_get_ec2_instance_id_unknown(self, request_mock):
+        import requests
+        from autopush.utils import get_ec2_instance_id
+
+        request_mock.side_effect = requests.HTTPError
+        result = get_ec2_instance_id()
+        eq_(result, "Unknown")
+
+    @patch("requests.get")
+    def test_get_ec2_instance_id(self, request_mock):
+        from autopush.utils import get_ec2_instance_id
+        mock_reply = Mock()
+        mock_reply.content = "i-123242"
+
+        request_mock.return_value = mock_reply
+        result = get_ec2_instance_id()
+        eq_(result, "i-123242")
