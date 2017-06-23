@@ -24,7 +24,7 @@ class RouterResponse(object):
 
 
 class IRouter(object):
-    def __init__(self, settings, router_conf):
+    def __init__(self, settings, router_conf, **kwargs):
         """Initialize the Router to handle notifications and registrations with
         the given settings and router conf."""
         raise NotImplementedError("__init__ must be implemented")

@@ -1,5 +1,13 @@
+from mock import Mock
 from twisted.logger import ILogObserver
 from zope.interface import implementer
+
+from autopush.db import (
+    DatabaseManager,
+    Router,
+    Storage
+)
+from autopush.metrics import SinkMetrics
 
 
 @implementer(ILogObserver)
@@ -28,3 +36,12 @@ class TestingLogObserver(object):
         """Extract the last logged session"""
         return filter(lambda e: e["log_format"] == "Session",
                       self._events)[-1]
+
+
+def test_db(metrics=None):
+    """Return a test DatabaseManager: its Storage/Router are mocked"""
+    return DatabaseManager(
+        storage=Mock(spec=Storage),
+        router=Mock(spec=Router),
+        metrics=SinkMetrics() if metrics is None else metrics
+    )

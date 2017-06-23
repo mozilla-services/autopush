@@ -3,7 +3,6 @@ import uuid
 
 import twisted.internet.base
 from cryptography.fernet import Fernet, InvalidToken
-from cyclone.web import Application
 from mock import Mock, patch
 from nose.tools import eq_, ok_
 from twisted.internet.defer import inlineCallbacks
@@ -13,8 +12,6 @@ from twisted.trial import unittest
 import autopush.utils as utils
 from autopush.db import (
     ProvisionedThroughputExceededException,
-    Router,
-    Storage,
     Message,
     ItemNotFound,
     create_rotating_message_table,
@@ -22,10 +19,13 @@ from autopush.db import (
 )
 from autopush.exceptions import RouterException
 from autopush.http import EndpointHTTPFactory
-from autopush.settings import AutopushSettings
+from autopush.metrics import SinkMetrics
+from autopush.router import routers_from_settings
 from autopush.router.interface import IRouter
+from autopush.settings import AutopushSettings
 from autopush.tests.client import Client
 from autopush.tests.test_db import make_webpush_notification
+from autopush.tests.support import test_db
 from autopush.utils import (
     generate_hash,
 )
@@ -64,12 +64,11 @@ class MessageTestCase(unittest.TestCase):
             statsd_host=None,
             crypto_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
         )
+        db = test_db()
+        self.message_mock = db.message = Mock(spec=Message)
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
-        self.router_mock = settings.router = Mock(spec=Router)
-        self.storage_mock = settings.storage = Mock(spec=Storage)
-        self.message_mock = settings.message = Mock(spec=Message)
 
-        app = EndpointHTTPFactory.for_handler(MessageHandler, settings)
+        app = EndpointHTTPFactory.for_handler(MessageHandler, settings, db=db)
         self.client = Client(app)
 
     def url(self, **kwargs):
@@ -153,22 +152,22 @@ class RegistrationTestCase(unittest.TestCase):
             bear_hash_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
         )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
-        self.router_mock = settings.router = Mock(spec=Router)
-        self.storage_mock = settings.storage = Mock(spec=Storage)
-        self.router_mock.register_user = Mock()
-        self.router_mock.register_user.return_value = (True, {}, {})
-        settings.routers["test"] = Mock(spec=IRouter)
-        settings.router.get_uaid.return_value = {
+
+        self.db = db = test_db()
+        db.router.register_user.return_value = (True, {}, {})
+        db.router.get_uaid.return_value = {
             "router_type": "test",
             "router_data": dict()
         }
-        app = EndpointHTTPFactory(settings)
+        db.create_initial_message_tables()
+
+        self.routers = routers = routers_from_settings(settings, db)
+        routers["test"] = Mock(spec=IRouter)
+        app = EndpointHTTPFactory(settings, db=db, routers=routers)
         self.client = Client(app)
 
         self.request_mock = Mock(body=b'', arguments={}, headers={})
-        self.reg = NewRegistrationHandler(Application(),
-                                          self.request_mock,
-                                          ap_settings=settings)
+        self.reg = NewRegistrationHandler(app, self.request_mock)
         self.auth = ("WebPush %s" %
                      generate_hash(settings.bear_hash_key[0], dummy_uaid.hex))
 
@@ -293,9 +292,12 @@ class RegistrationTestCase(unittest.TestCase):
 
         from autopush.router.gcm import GCMRouter
         sids = {"182931248179192": {"auth": "aailsjfilajdflijdsilfjsliaj"}}
-        gcm = GCMRouter(self.settings,
-                        {"dryrun": True, "senderIDs": sids})
-        self.settings.routers["gcm"] = gcm
+        gcm = GCMRouter(
+            self.settings,
+            {"dryrun": True, "senderIDs": sids},
+            SinkMetrics()
+        )
+        self.routers["gcm"] = gcm
         self.fernet_mock.configure_mock(**{
             'encrypt.return_value': 'abcd123',
         })
@@ -314,7 +316,7 @@ class RegistrationTestCase(unittest.TestCase):
         eq_(payload["uaid"], dummy_uaid.hex)
         eq_(payload["channelID"], dummy_chid.hex)
         eq_(payload["endpoint"], "http://localhost/wpush/v1/abcd123")
-        calls = self.settings.router.register_user.call_args
+        calls = self.db.router.register_user.call_args
         call_args = calls[0][0]
         eq_(True, has_connected_this_month(call_args))
         ok_("secret" in payload)
@@ -348,10 +350,9 @@ class RegistrationTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_post_bad_router_register(self, *args):
-        frouter = Mock(spec=IRouter)
-        self.settings.routers["simplepush"] = frouter
+        router = self.routers["simplepush"]
         rexc = RouterException("invalid", status_code=402, errno=107)
-        frouter.register = Mock(side_effect=rexc)
+        router.register = Mock(side_effect=rexc)
 
         resp = yield self.client.post(
             self.url(router_type="simplepush"),
@@ -386,8 +387,7 @@ class RegistrationTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_no_uaid(self):
-        self.settings.router.get_uaid = Mock()
-        self.settings.router.get_uaid.side_effect = ItemNotFound
+        self.db.router.get_uaid.side_effect = ItemNotFound
         resp = yield self.client.delete(
             self.url(router_type="webpush",
                      uaid=dummy_uaid.hex,
@@ -487,7 +487,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.patch('uuid.uuid4', return_value=dummy_uaid)
 
         data = dict(token="some_token")
-        frouter = self.settings.routers["test"]
+        frouter = self.routers["test"]
         frouter.register = Mock()
         frouter.register.return_value = data
 
@@ -504,7 +504,7 @@ class RegistrationTestCase(unittest.TestCase):
             router_data=data,
             app_id='test',
         )
-        user_data = self.router_mock.register_user.call_args[0][0]
+        user_data = self.db.router.register_user.call_args[0][0]
         eq_(user_data['uaid'], dummy_uaid.hex)
         eq_(user_data['router_type'], 'test')
         eq_(user_data['router_data']['token'], 'some_token')
@@ -547,7 +547,7 @@ class RegistrationTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_put_bad_router_register(self):
-        frouter = self.settings.routers["test"]
+        frouter = self.routers["test"]
         rexc = RouterException("invalid", status_code=402, errno=107)
         frouter.register = Mock(side_effect=rexc)
 
@@ -561,7 +561,7 @@ class RegistrationTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_delete_bad_chid_value(self):
         notif = make_webpush_notification(dummy_uaid.hex, str(dummy_chid))
-        messages = self.settings.message
+        messages = self.db.message
         messages.register_channel(dummy_uaid.hex, str(dummy_chid))
         messages.store_message(notif)
 
@@ -577,7 +577,7 @@ class RegistrationTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_delete_no_such_chid(self):
         notif = make_webpush_notification(dummy_uaid.hex, str(dummy_chid))
-        messages = self.settings.message
+        messages = self.db.message
         messages.register_channel(dummy_uaid.hex, str(dummy_chid))
         messages.store_message(notif)
 
@@ -599,11 +599,10 @@ class RegistrationTestCase(unittest.TestCase):
     def test_delete_uaid(self):
         notif = make_webpush_notification(dummy_uaid.hex, str(dummy_chid))
         notif2 = make_webpush_notification(dummy_uaid.hex, str(dummy_chid))
-        messages = self.settings.message
+        messages = self.db.message
         messages.store_message(notif)
         messages.store_message(notif2)
-        self.settings.router.drop_user = Mock()
-        self.settings.router.drop_user.return_value = True
+        self.db.router.drop_user.return_value = True
 
         yield self.client.delete(
             self.url(router_type="simplepush",
@@ -613,9 +612,8 @@ class RegistrationTestCase(unittest.TestCase):
         )
         # Note: Router is mocked, so the UAID is never actually
         # dropped.
-        ok_(self.settings.router.drop_user.called)
-        eq_(self.settings.router.drop_user.call_args_list[0][0],
-            (dummy_uaid.hex,))
+        ok_(self.db.router.drop_user.called)
+        eq_(self.db.router.drop_user.call_args_list[0][0], (dummy_uaid.hex,))
 
     @inlineCallbacks
     def test_delete_bad_uaid(self):
@@ -629,8 +627,7 @@ class RegistrationTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_delete_orphans(self):
-        self.router_mock.drop_user = Mock()
-        self.router_mock.drop_user.return_value = False
+        self.db.router.drop_user.return_value = False
         resp = yield self.client.delete(
             self.url(router_type="test",
                      router_token="test",
@@ -663,15 +660,15 @@ class RegistrationTestCase(unittest.TestCase):
     def test_get(self):
         chids = [str(dummy_chid), str(dummy_uaid)]
 
-        self.settings.message.all_channels = Mock()
-        self.settings.message.all_channels.return_value = (True, chids)
+        self.db.message.all_channels = Mock()
+        self.db.message.all_channels.return_value = (True, chids)
         resp = yield self.client.get(
             self.url(router_type="test",
                      router_token="test",
                      uaid=dummy_uaid.hex),
             headers={"Authorization": self.auth}
         )
-        self.settings.message.all_channels.assert_called_with(str(dummy_uaid))
+        self.db.message.all_channels.assert_called_with(str(dummy_uaid))
         payload = json.loads(resp.content)
         eq_(chids, payload['channelIDs'])
         eq_(dummy_uaid.hex, payload['uaid'])

@@ -6,6 +6,7 @@ import re
 import configargparse
 from twisted.logger import Logger
 
+from autopush.db import DatabaseManager
 from autopush.main import AutopushMultiService
 from autopush.main_argparse import add_shared_args
 from autopush.settings import AutopushSettings
@@ -19,12 +20,15 @@ class EndpointDiagnosticCLI(object):
 
     def __init__(self, sysargs, use_files=True):
         args = self._load_args(sysargs, use_files)
-        self._settings = AutopushSettings(
+        self._settings = settings = AutopushSettings(
             crypto_key=args.crypto_key,
             router_tablename=args.router_tablename,
             storage_tablename=args.storage_tablename,
             message_tablename=args.message_tablename,
+            statsd_host=None,
         )
+        self.db = DatabaseManager.from_settings(settings)
+        self.db.setup(settings.preflight_uaid)
         self._endpoint = args.endpoint
         self._pp = pprint.PrettyPrinter(indent=4)
 
@@ -56,6 +60,7 @@ class EndpointDiagnosticCLI(object):
         api_ver, token = md.get("api_ver", "v1"), md["token"]
 
         parsed = self._settings.parse_endpoint(
+            self.db.metrics,
             token=token,
             version=api_ver,
         )
@@ -63,13 +68,13 @@ class EndpointDiagnosticCLI(object):
 
         print("UAID: {}\nCHID: {}\n".format(uaid, chid))
 
-        rec = self._settings.router.get_uaid(uaid)
+        rec = self.db.router.get_uaid(uaid)
         print("Router record:")
         self._pp.pprint(rec._data)
         print("\n")
 
         mess_table = rec["current_month"]
-        chans = self._settings.message_tables[mess_table].all_channels(uaid)
+        chans = self.db.message_tables[mess_table].all_channels(uaid)
         print("Channels in message table:")
         self._pp.pprint(chans)
 

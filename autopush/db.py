@@ -37,6 +37,11 @@ import time
 import uuid
 from functools import wraps
 
+from attr import (
+    attrs,
+    attrib,
+    Factory
+)
 from boto.exception import JSONResponseError, BotoServerError
 from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
@@ -51,6 +56,7 @@ from typing import (  # noqa
     Any,
     Callable,
     Dict,
+    Generator,
     Iterable,
     List,
     Optional,
@@ -58,7 +64,11 @@ from typing import (  # noqa
     TypeVar,
     Tuple,
 )
+from twisted.internet.defer import Deferred  # noqa
+from twisted.internet.defer import inlineCallbacks, returnValue
+from twisted.internet.threads import deferToThread
 
+import autopush.metrics
 from autopush.exceptions import AutopushException
 from autopush.metrics import IMetrics  # noqa
 from autopush.types import ItemLike  # noqa
@@ -853,3 +863,136 @@ class Router(object):
             return True
         except ConditionalCheckFailedException:
             return False
+
+
+@attrs
+class DatabaseManager(object):
+    """Provides database access"""
+
+    storage = attrib()  # type: Storage
+    router = attrib()   # type: Router
+
+    metrics = attrib()  # type: IMetrics
+
+    message_tables = attrib(default=Factory(dict))  # type: Dict[str, Message]
+    current_msg_month = attrib(default=None)        # type: Optional[str]
+    current_month = attrib(default=None)            # type: Optional[int]
+
+    _message_prefix = attrib(default="message")  # type: str
+
+    @classmethod
+    def from_settings(cls, settings):
+        router_table = get_router_table(
+            settings.router_tablename,
+            settings.router_read_throughput,
+            settings.router_write_throughput
+        )
+        storage_table = get_storage_table(
+            settings.storage_tablename,
+            settings.storage_read_throughput,
+            settings.storage_write_throughput
+        )
+        get_rotating_message_table(
+            settings.message_tablename,
+            message_read_throughput=settings.message_read_throughput,
+            message_write_throughput=settings.message_write_throughput
+        )
+        metrics = autopush.metrics.from_settings(settings)
+        return cls(
+            storage=Storage(storage_table, metrics),
+            router=Router(router_table, metrics),
+            message_prefix=settings.message_tablename,
+            metrics=metrics
+        )
+
+    def setup(self, preflight_uaid):
+        # type: (str) -> None
+        """Setup metrics, message tables and perform preflight_check"""
+        self.metrics.start()
+
+        # Used to determine whether a connection is out of date with current
+        # db objects. There are three noteworty cases:
+        # 1 "Last Month" the table requires a rollover.
+        # 2 "This Month" the most common case.
+        # 3 "Next Month" where the system will soon be rolling over, but with
+        #   timing, some nodes may roll over sooner. Ensuring the next month's
+        #   table is present before the switchover is the main reason for this,
+        #   just in case some nodes do switch sooner.
+        self.create_initial_message_tables()
+
+        preflight_check(self.storage, self.router, preflight_uaid)
+
+    @property
+    def message(self):
+        # type: () -> Message
+        """Property that access the current message table"""
+        return self.message_tables[self.current_msg_month]
+
+    @message.setter
+    def message(self, value):
+        # type: (Message) -> None
+        """Setter to set the current message table"""
+        self.message_tables[self.current_msg_month] = value
+
+    def _tomorrow(self):
+        # type: () -> datetime.date
+        return datetime.date.today() + datetime.timedelta(days=1)
+
+    def create_initial_message_tables(self):
+        """Initializes a dict of the initial rotating messages tables.
+
+        An entry for last months table, an entry for this months table,
+        an entry for tomorrow, if tomorrow is a new month.
+
+        """
+        today = datetime.date.today()
+        last_month = get_rotating_message_table(self._message_prefix, -1)
+        this_month = get_rotating_message_table(self._message_prefix)
+        self.current_month = today.month
+        self.current_msg_month = this_month.table_name
+        self.message_tables = {
+            last_month.table_name: Message(last_month, self.metrics),
+            this_month.table_name: Message(this_month, self.metrics)
+        }
+        if self._tomorrow().month != today.month:
+            next_month = get_rotating_message_table(self._message_prefix,
+                                                    delta=1)
+            self.message_tables[next_month.table_name] = Message(
+                next_month, self.metrics)
+
+    @inlineCallbacks
+    def update_rotating_tables(self):
+        # type: () -> Generator
+        """This method is intended to be tasked to run periodically off the
+        twisted event hub to rotate tables.
+
+        When today is a new month from yesterday, then we swap out all the
+        table objects on the settings object.
+
+        """
+        today = datetime.date.today()
+        tomorrow = self._tomorrow()
+        if ((tomorrow.month != today.month) and
+                sorted(self.message_tables.keys())[-1] != tomorrow.month):
+            next_month = yield deferToThread(
+                get_rotating_message_table,
+                self._message_prefix, 0, tomorrow
+            )
+            self.message_tables[next_month.table_name] = Message(
+                next_month, self.metrics)
+
+        if today.month == self.current_month:
+            # No change in month, we're fine.
+            returnValue(False)
+
+        # Get tables for the new month, and verify they exist before we try to
+        # switch over
+        message_table = yield deferToThread(get_rotating_message_table,
+                                            self._message_prefix)
+
+        # Both tables found, safe to switch-over
+        self.current_month = today.month
+        self.current_msg_month = message_table.table_name
+        self.message_tables[self.current_msg_month] = Message(
+            message_table, self.metrics)
+        returnValue(True)

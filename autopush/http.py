@@ -2,6 +2,7 @@
 from typing import (  # noqa
     Any,
     Callable,
+    Dict,
     Optional,
     Sequence,
     Tuple,
@@ -11,6 +12,9 @@ from typing import (  # noqa
 import cyclone.web
 
 from autopush.base import BaseHandler
+from autopush.db import DatabaseManager
+from autopush.router import routers_from_settings
+from autopush.router.interface import IRouter  # noqa
 from autopush.settings import AutopushSettings  # noqa
 from autopush.ssl import AutopushSSLContextFactory
 from autopush.web.health import (
@@ -53,45 +57,47 @@ class BaseHTTPFactory(cyclone.web.Application):
     )
 
     def __init__(self,
-                 ap_settings,
-                 handlers=None,
-                 log_function=skip_request_logging,
+                 ap_settings,    # type: AutopushSettings
+                 db,             # type: DatabaseManager
+                 routers,        # type: Dict[str, IRouter]
+                 handlers=None,  # type: APHandlers
+                 log_function=skip_request_logging,  # type: CycloneLogger
                  **kwargs):
-        # type: (AutopushSettings, APHandlers, CycloneLogger, **Any) -> None
+        # type: (...) -> None
         self.ap_settings = ap_settings
+        self.db = db
+        self.routers = routers
         self.noisy = ap_settings.debug
 
         cyclone.web.Application.__init__(
             self,
+            handlers=self.ap_handlers if handlers is None else handlers,
             default_host=self._hostname,
             debug=ap_settings.debug,
             log_function=log_function,
             **kwargs
         )
-        self.add_ap_handlers(
-            self.ap_handlers if handlers is None else handlers)
-
-    def add_ap_handlers(self, handlers):
-        # type: (APHandlers) -> None
-        """Add BaseHandlers w/ their appropriate handler kwargs"""
-        h_kwargs = dict(ap_settings=self.ap_settings)
-        self.add_handlers(
-            ".*$",
-            [(pattern, handler, h_kwargs) for pattern, handler in handlers]
-        )
 
     def add_health_handlers(self):
         """Add the health check HTTP handlers"""
-        self.add_ap_handlers(self.health_ap_handlers)
+        self.add_handlers(".*$", self.health_ap_handlers)
 
     @property
     def _hostname(self):
         return self.ap_settings.hostname
 
     @classmethod
-    def for_handler(cls, handler_cls, *args, **kwargs):
-        # type: (Type[BaseHandler], *Any, **Any) -> BaseHTTPFactory
-        """Create a cyclone app around a specific handler_cls.
+    def for_handler(cls,
+                    handler_cls,    # Type[BaseHTTPFactory]
+                    ap_settings,    # type: AutopushSettings
+                    db=None,        # type: Optional[DatabaseManager]
+                    routers=None,   # type: Optional[Dict[str, IRouter]]
+                    **kwargs):
+        # type: (...) -> BaseHTTPFactory
+        """Create a cyclone app around a specific handler_cls for tests.
+
+        Creates an uninitialized (no setup() called) DatabaseManager
+        from settings if one isn't specified.
 
         handler_cls must be included in ap_handlers or a ValueError is
         thrown.
@@ -101,7 +107,17 @@ class BaseHTTPFactory(cyclone.web.Application):
             raise ValueError("handler_cls incompatibile with handlers kwarg")
         for pattern, handler in cls.ap_handlers + cls.health_ap_handlers:
             if handler is handler_cls:
-                return cls(handlers=[(pattern, handler)], *args, **kwargs)
+                if db is None:
+                    db = DatabaseManager.from_settings(ap_settings)
+                if routers is None:
+                    routers = routers_from_settings(ap_settings, db)
+                return cls(
+                    ap_settings,
+                    db=db,
+                    routers=routers,
+                    handlers=[(pattern, handler)],
+                    **kwargs
+                )
         raise ValueError("{!r} not in ap_handlers".format(
             handler_cls))  # pragma: nocover
 

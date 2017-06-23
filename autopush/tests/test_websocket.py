@@ -14,7 +14,6 @@ from boto.dynamodb2.exceptions import (
 from boto.exception import JSONResponseError
 from mock import Mock, patch
 from nose.tools import assert_raises, eq_, ok_
-from txstatsd.metrics.metrics import Metrics
 from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks,
@@ -25,8 +24,9 @@ from twisted.internet.error import ConnectError
 from twisted.trial import unittest
 
 import autopush.db as db
-from autopush.db import create_rotating_message_table
+from autopush.db import DatabaseManager, create_rotating_message_table
 from autopush.http import InternalRouterHTTPFactory
+from autopush.metrics import SinkMetrics
 from autopush.settings import AutopushSettings
 from autopush.tests import MockAssist
 from autopush.utils import WebPushNotification
@@ -38,6 +38,7 @@ from autopush.websocket import (
     RouterHandler,
     NotificationHandler,
     WebSocketServerProtocol,
+    periodic_reporter
 )
 from autopush.utils import base64url_encode, ms_time
 
@@ -114,7 +115,11 @@ class WebsocketTestCase(unittest.TestCase):
             statsd_host=None,
             env="test",
         )
-        self.factory = PushServerFactory(settings)
+        db = DatabaseManager.from_settings(settings)
+        self.metrics = db.metrics = Mock(spec=SinkMetrics)
+        db.create_initial_message_tables()
+
+        self.factory = PushServerFactory(settings, db)
         self.proto = self.factory.buildProtocol(('localhost', 8080))
         self.proto._log_exc = False
         self.proto.log = Mock(spec=Logger)
@@ -123,13 +128,12 @@ class WebsocketTestCase(unittest.TestCase):
         self.orig_close = self.proto.sendClose
         request_mock = Mock()
         request_mock.headers = {}
-        self.proto.ps = PushState(settings=settings, request=request_mock)
+        self.proto.ps = PushState(db=db, request=request_mock)
         self.proto.sendClose = self.close_mock = Mock()
         self.proto.transport = self.transport_mock = Mock()
         self.proto.closeHandshakeTimeout = 0
         self.proto.autoPingInterval = 300
         self.proto._force_retry = self.proto.force_retry
-        settings.metrics = Mock(spec=Metrics)
 
     def tearDown(self):
         self.proto.force_retry = self.proto._force_retry
@@ -215,7 +219,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.state = ""
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.nukeConnection()
-        ok_(self.proto.ap_settings.metrics.increment.called)
+        ok_(self.proto.metrics.increment.called)
 
     @patch("autopush.websocket.reactor")
     def test_nuke_connection_shutdown_ran(self, mock_reactor):
@@ -252,18 +256,18 @@ class WebsocketTestCase(unittest.TestCase):
                           "rv:1.9.2.3) Gecko/20100401 Firefox/3.6.3 (.NET "
                           "CLR 3.5.30729)"}
         req.host = "example.com:8080"
-        ps = PushState(settings=self.proto.ap_settings, request=req)
+        ps = PushState(db=self.proto.db, request=req)
         eq_(sorted(ps._base_tags),
             sorted(['ua_os_family:Windows',
                     'ua_browser_family:Firefox',
                     'host:example.com:8080']))
 
     def test_reporter(self):
-        from autopush.websocket import periodic_reporter
-        periodic_reporter(self.ap_settings, self.factory)
+        self.metrics.reset_mock()
+        periodic_reporter(self.ap_settings, self.metrics, self.factory)
 
         # Verify metric increase of nothing
-        calls = self.ap_settings.metrics.method_calls
+        calls = self.metrics.method_calls
         eq_(len(calls), 4)
         name, args, _ = calls[0]
         eq_(name, "gauge")
@@ -382,8 +386,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.direct_updates[chid] = 12
 
         # Apply some mocks
-        self.proto.ap_settings.storage.save_notification = Mock()
-        self.proto.ap_settings.router.get_uaid = mock_get = Mock()
+        self.proto.db.storage.save_notification = Mock()
+        self.proto.db.router.get_uaid = mock_get = Mock()
         self.proto.ap_settings.agent = mock_agent = Mock()
         mock_get.return_value = dict(node_id="localhost:2000")
 
@@ -403,8 +407,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.direct_updates[dummy_chid_str] = [dummy_notif()]
 
         # Apply some mocks
-        self.proto.ap_settings.message.store_message = Mock()
-        self.proto.ap_settings.router.get_uaid = mock_get = Mock()
+        self.proto.db.message.store_message = Mock()
+        self.proto.db.router.get_uaid = mock_get = Mock()
         self.proto.ap_settings.agent = mock_agent = Mock()
         mock_get.return_value = dict(node_id="localhost:2000")
 
@@ -424,16 +428,16 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.direct_updates[chid] = 12
 
         # Apply some mocks
-        self.proto.ap_settings.storage.save_notification = Mock()
-        self.proto.ap_settings.router.get_uaid = mock_get = Mock()
-        self.proto.ps.metrics = mock_metrics = Mock()
+        self.proto.db.storage.save_notification = Mock()
+        self.proto.db.router.get_uaid = mock_get = Mock()
         mock_get.return_value = False
+        self.metrics.reset_mock()
 
         # Close the connection
         self.proto.onClose(True, None, None)
-        yield self._wait_for(lambda: len(mock_metrics.mock_calls) > 2)
-        eq_(len(mock_metrics.mock_calls), 3)
-        mock_metrics.increment.assert_called_with(
+        yield self._wait_for(lambda: len(self.metrics.mock_calls) > 2)
+        eq_(len(self.metrics.mock_calls), 3)
+        self.metrics.increment.assert_called_with(
             "client.notify_uaid_failure", tags=None)
 
     @inlineCallbacks
@@ -447,9 +451,9 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.direct_updates[chid] = 12
 
         # Apply some mocks
-        self.proto.ap_settings.storage.save_notification = Mock()
-        self.proto.ap_settings.router.get_uaid = mock_get = Mock()
-        self.proto.ps.metrics = mock_metrics = Mock()
+        self.proto.db.storage.save_notification = Mock()
+        self.proto.db.router.get_uaid = mock_get = Mock()
+        self.metrics.reset_mock()
 
         def raise_item(*args, **kwargs):
             raise ItemNotFound()
@@ -458,9 +462,9 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Close the connection
         self.proto.onClose(True, None, None)
-        yield self._wait_for(lambda: len(mock_metrics.mock_calls) > 2)
-        eq_(len(mock_metrics.mock_calls), 3)
-        mock_metrics.increment.assert_called_with(
+        yield self._wait_for(lambda: len(self.metrics.mock_calls) > 2)
+        eq_(len(self.metrics.mock_calls), 3)
+        self.metrics.increment.assert_called_with(
             "client.lookup_uaid_failure", tags=None)
 
     @inlineCallbacks
@@ -474,8 +478,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.direct_updates[chid] = 12
 
         # Apply some mocks
-        self.proto.ap_settings.storage.save_notification = Mock()
-        self.proto.ap_settings.router.get_uaid = mock_get = Mock()
+        self.proto.db.storage.save_notification = Mock()
+        self.proto.db.router.get_uaid = mock_get = Mock()
         mock_get.return_value = mock_node_get = Mock()
         mock_node_get.get.return_value = None
 
@@ -491,7 +495,7 @@ class WebsocketTestCase(unittest.TestCase):
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2015, 12, 15)
         msg_date = "{}_{}_{}".format(
-            self.proto.ap_settings._message_prefix,
+            self.proto.db._message_prefix,
             msg_day.year,
             msg_day.month)
         msg_data = {
@@ -500,7 +504,7 @@ class WebsocketTestCase(unittest.TestCase):
             "last_connect": int(msg_day.strftime("%s")),
             "current_month": msg_date,
         }
-        router = self.proto.ap_settings.router
+        router = self.proto.db.router
         router.table.put_item(data=dict(
             uaid=orig_uaid,
             connected_at=ms_time(),
@@ -513,7 +517,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         mock_msg = Mock(wraps=db.Message)
         mock_msg.fetch_messages.return_value = []
-        self.proto.ap_settings.router.register_user = fake_msg
+        self.proto.db.router.register_user = fake_msg
         # because we're faking the dates, process_notifications will key
         # error and fail to return. This will cause the expected path for
         # this test to fail. Since we're requesting the client to change
@@ -521,7 +525,7 @@ class WebsocketTestCase(unittest.TestCase):
         # notifications are irrelevant for this test.
         self.proto.process_notifications = Mock()
         # massage message_tables to include our fake range
-        mt = self.proto.ps.settings.message_tables
+        mt = self.proto.ps.db.message_tables
         for k in mt.keys():
             del(mt[k])
         mt['message_2016_1'] = mock_msg
@@ -547,7 +551,7 @@ class WebsocketTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_hello_tomorrow(self):
         orig_uaid = "deadbeef00000000abad1dea00000000"
-        router = self.proto.ap_settings.router
+        router = self.proto.db.router
         router.register_user(dict(
             uaid=orig_uaid,
             connected_at=ms_time(),
@@ -559,7 +563,7 @@ class WebsocketTestCase(unittest.TestCase):
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2016, 3, 1)
         msg_date = "{}_{}_{}".format(
-            self.proto.ap_settings._message_prefix,
+            self.proto.db._message_prefix,
             msg_day.year,
             msg_day.month)
         msg_data = {
@@ -576,9 +580,9 @@ class WebsocketTestCase(unittest.TestCase):
         mock_msg.fetch_messages.return_value = "01;", []
         mock_msg.fetch_timestamp_messages.return_value = None, []
         mock_msg.all_channels.return_value = (None, [])
-        self.proto.ap_settings.router.register_user = fake_msg
+        self.proto.db.router.register_user = fake_msg
         # massage message_tables to include our fake range
-        mt = self.proto.ps.settings.message_tables
+        mt = self.proto.ps.db.message_tables
         for k in mt.keys():
             del(mt[k])
         mt['message_2016_1'] = mock_msg
@@ -606,7 +610,7 @@ class WebsocketTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_hello_tomorrow_provision_error(self):
         orig_uaid = "deadbeef00000000abad1dea00000000"
-        router = self.proto.ap_settings.router
+        router = self.proto.db.router
         router.register_user(dict(
             uaid=orig_uaid,
             connected_at=ms_time(),
@@ -618,7 +622,7 @@ class WebsocketTestCase(unittest.TestCase):
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2016, 3, 1)
         msg_date = "{}_{}_{}".format(
-            self.proto.ap_settings._message_prefix,
+            self.proto.db._message_prefix,
             msg_day.year,
             msg_day.month)
         msg_data = {
@@ -635,9 +639,9 @@ class WebsocketTestCase(unittest.TestCase):
         mock_msg.fetch_messages.return_value = "01;", []
         mock_msg.fetch_timestamp_messages.return_value = None, []
         mock_msg.all_channels.return_value = (None, [])
-        self.proto.ap_settings.router.register_user = fake_msg
+        self.proto.db.router.register_user = fake_msg
         # massage message_tables to include our fake range
-        mt = self.proto.ps.settings.message_tables
+        mt = self.proto.ps.db.message_tables
         mt.clear()
         mt['message_2016_1'] = mock_msg
         mt['message_2016_2'] = mock_msg
@@ -650,7 +654,7 @@ class WebsocketTestCase(unittest.TestCase):
         def raise_error(*args):
             raise ProvisionedThroughputExceededException(None, None)
 
-        self.proto.ap_settings.router.update_message_month = MockAssist([
+        self.proto.db.router.update_message_month = MockAssist([
             raise_error,
             Mock(),
         ])
@@ -716,7 +720,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_hello_with_missing_router_type(self):
         self._connect()
         uaid = uuid.uuid4().hex
-        router = self.proto.ap_settings.router
+        router = self.proto.db.router
         router.table.put_item(data=dict(
             uaid=uaid,
             connected_at=ms_time()-1000,
@@ -732,7 +736,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_hello_with_missing_current_month(self):
         self._connect()
         uaid = uuid.uuid4().hex
-        router = self.proto.ap_settings.router
+        router = self.proto.db.router
         router.register_user(dict(
             uaid=uaid,
             connected_at=ms_time(),
@@ -748,7 +752,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_hello_with_uaid(self):
         self._connect()
         uaid = uuid.uuid4().hex
-        router = self.proto.ap_settings.router
+        router = self.proto.db.router
         router.register_user(dict(
             uaid=uaid,
             connected_at=ms_time(),
@@ -764,7 +768,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_hello_resets_record(self):
         self._connect()
         uaid = uuid.uuid4().hex
-        router = self.proto.ap_settings.router
+        router = self.proto.db.router
         router.register_user(dict(
             uaid=uaid,
             connected_at=ms_time(),
@@ -811,7 +815,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_hello_failure(self):
         self._connect()
         # Fail out the register_user call
-        router = self.proto.ap_settings.router
+        router = self.proto.db.router
         router.table.connection.update_item = Mock(side_effect=KeyError)
 
         self._send_message(dict(messageType="hello", channelIDs=[], stop=1))
@@ -829,7 +833,7 @@ class WebsocketTestCase(unittest.TestCase):
         def throw_error(*args, **kwargs):
             raise ProvisionedThroughputExceededException(None, None)
 
-        router = self.proto.ap_settings.router
+        router = self.proto.db.router
         router.table.connection.update_item = Mock(side_effect=throw_error)
 
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -848,7 +852,7 @@ class WebsocketTestCase(unittest.TestCase):
         def throw_error(*args, **kwargs):
             raise JSONResponseError(None, None)
 
-        router = self.proto.ap_settings.router
+        router = self.proto.db.router
         router.table.connection.update_item = Mock(side_effect=throw_error)
 
         self._send_message(dict(messageType="hello", channelIDs=[]))
@@ -862,12 +866,12 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
 
         # Fail out the register_user call
-        self.proto.ap_settings.router.register_user = \
+        self.proto.db.router.register_user = \
             Mock(return_value=(False, {}))
 
         self._send_message(dict(messageType="hello", channelIDs=[]))
         msg = yield self.get_response()
-        calls = self.proto.ap_settings.router.register_user.mock_calls
+        calls = self.proto.db.router.register_user.mock_calls
         eq_(len(calls), 1)
         eq_(msg["status"], 500)
         eq_(msg["reason"], "already_connected")
@@ -924,7 +928,7 @@ class WebsocketTestCase(unittest.TestCase):
                                                "ignored": "ok"}))
         msg = yield self.get_response()
         eq_(msg["status"], 200)
-        route_data = self.proto.ap_settings.router.get_uaid(
+        route_data = self.proto.db.router.get_uaid(
             msg["uaid"]).get('wake_data')
         eq_(route_data,
             {'data': {"ip": "127.0.0.1", "port": 9999, "mcc": "hammer",
@@ -942,7 +946,7 @@ class WebsocketTestCase(unittest.TestCase):
         msg = yield self.get_response()
         eq_(msg["status"], 200)
         ok_("wake_data" not in
-            self.proto.ap_settings.router.get_uaid(msg["uaid"]).keys())
+            self.proto.db.router.get_uaid(msg["uaid"]).keys())
 
     @inlineCallbacks
     def test_not_hello(self):
@@ -1069,10 +1073,10 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.use_webpush = True
         chid = str(uuid.uuid4())
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.ap_settings.message.register_channel = Mock()
+        self.proto.db.message.register_channel = Mock()
 
         yield self.proto.process_register(dict(channelID=chid))
-        ok_(self.proto.ap_settings.message.register_channel.called)
+        ok_(self.proto.db.message.register_channel.called)
         assert_called_included(self.proto.log.info, format="Register")
 
     @inlineCallbacks
@@ -1081,7 +1085,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.use_webpush = True
         chid = str(uuid.uuid4())
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.ap_settings.message.register_channel = Mock()
+        self.proto.db.message.register_channel = Mock()
         test_key = "SomeRandomCryptoKeyString"
         test_sha = sha256(test_key).hexdigest()
         test_endpoint = ('http://localhost/wpush/v2/' +
@@ -1101,7 +1105,7 @@ class WebsocketTestCase(unittest.TestCase):
         )
         eq_(test_endpoint,
             self.proto.sendJSON.call_args[0][0]['pushEndpoint'])
-        ok_(self.proto.ap_settings.message.register_channel.called)
+        ok_(self.proto.db.message.register_channel.called)
         assert_called_included(self.proto.log.info, format="Register")
 
     @inlineCallbacks
@@ -1205,7 +1209,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.use_webpush = True
         chid = str(uuid.uuid4())
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.ap_settings.message.register_channel = register = Mock()
+        self.proto.db.message.register_channel = register = Mock()
 
         def throw_provisioned(*args, **kwargs):
             raise ProvisionedThroughputExceededException(None, None)
@@ -1213,7 +1217,7 @@ class WebsocketTestCase(unittest.TestCase):
         register.side_effect = throw_provisioned
 
         yield self.proto.process_register(dict(channelID=chid))
-        ok_(self.proto.ap_settings.message.register_channel.called)
+        ok_(self.proto.db.message.register_channel.called)
         ok_(self.send_mock.called)
         args, _ = self.send_mock.call_args
         msg = json.loads(args[0])
@@ -1313,7 +1317,7 @@ class WebsocketTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
 
         # Replace storage delete with call to fail
-        table = self.proto.ap_settings.storage.table
+        table = self.proto.db.storage.table
         delete = table.delete_item
 
         def raise_exception(*args, **kwargs):
@@ -1524,7 +1528,7 @@ class WebsocketTestCase(unittest.TestCase):
             def __call__(self, *args, **kwargs):
                 return self.tries != 0
 
-        self.proto.ap_settings.storage = Mock(
+        self.proto.db.storage = Mock(
             **{"delete_notification.side_effect": FailFirst()})
 
         chid = str(uuid.uuid4())
@@ -1584,7 +1588,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = uuid.uuid4().hex
 
         # Swap out fetch_notifications
-        self.proto.ap_settings.storage.fetch_notifications = Mock(
+        self.proto.db.storage.fetch_notifications = Mock(
             return_value=[]
         )
 
@@ -1619,7 +1623,7 @@ class WebsocketTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         # Swap out fetch_notifications
-        self.proto.ap_settings.storage.fetch_notifications = MockAssist([
+        self.proto.db.storage.fetch_notifications = MockAssist([
             throw_error,
             [],
         ])
@@ -1645,7 +1649,7 @@ class WebsocketTestCase(unittest.TestCase):
         def throw_error(*args, **kwargs):
             raise Exception("An error happened!")
 
-        self.proto.ap_settings.storage = Mock(
+        self.proto.db.storage = Mock(
             **{"fetch_notifications.side_effect": throw_error})
         self.proto.ps._check_notifications = True
         self.proto.process_notifications()
@@ -1747,11 +1751,11 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_notif_finished_with_too_many_messages(self):
         self._connect()
+        self.ap_settings.msg_limit = 2
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ps.use_webpush = True
         self.proto.ps._check_notifications = True
-        self.proto.ps.msg_limit = 2
-        self.proto.ap_settings.router.drop_user = Mock()
+        self.proto.db.router.drop_user = Mock()
         self.proto.ps.message.fetch_messages = Mock()
 
         notif = make_webpush_notification(
@@ -1786,14 +1790,14 @@ class WebsocketTestCase(unittest.TestCase):
         chid3 = str(uuid.uuid4())
 
         # Create a router record
-        router = self.proto.ap_settings.router
+        router = self.proto.db.router
         router.register_user(dict(
             uaid=uaid,
             connected_at=ms_time(),
             router_type="simplepush",
         ))
 
-        storage = self.proto.ap_settings.storage
+        storage = self.proto.db.storage
         storage.save_notification(uaid, chid, 12)
         storage.save_notification(uaid, chid2, 8)
         storage.save_notification(uaid, chid3, 9)
@@ -1831,14 +1835,14 @@ class WebsocketTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
 
         # Create a dummy router record
-        router = self.proto.ap_settings.router
+        router = self.proto.db.router
         router.register_user(dict(
             uaid=uaid,
             connected_at=ms_time(),
             router_type="simplepush",
         ))
 
-        storage = self.proto.ap_settings.storage
+        storage = self.proto.db.storage
         storage.save_notification(uaid, chid, 10)
 
         # Verify the message is stored
@@ -1878,14 +1882,14 @@ class WebsocketTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
 
         # Create a dummy router record
-        router = self.proto.ap_settings.router
+        router = self.proto.db.router
         router.register_user(dict(
             uaid=uaid,
             connected_at=ms_time(),
             router_type="simplepush",
         ))
 
-        storage = self.proto.ap_settings.storage
+        storage = self.proto.db.storage
         storage.save_notification(uaid, chid, 12)
 
         # Verify the message is stored
@@ -1920,7 +1924,7 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(len(calls), 1)
 
     def test_incomplete_uaid(self):
-        mm = self.proto.ap_settings.router = Mock()
+        mm = self.proto.db.router = Mock()
         fr = self.proto.force_retry = Mock()
         uaid = uuid.uuid4().hex
         mm.get_uaid.return_value = {

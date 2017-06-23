@@ -89,6 +89,6 @@ class WebPushRouter(SimpleRouter):
                                            "Location": location},
                                   logged_status=204)
         return deferToThread(
-            self.ap_settings.message_tables[month_table].store_message,
+            self.db.message_tables[month_table].store_message,
             notification=notification,
         )

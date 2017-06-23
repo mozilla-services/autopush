@@ -40,8 +40,7 @@ class MessageHandler(BaseWebHandler):
 
 
         """
-        d = deferToThread(self.ap_settings.message.delete_message,
-                          notification)
+        d = deferToThread(self.db.message.delete_message, notification)
         d.addCallback(self._delete_completed)
         self._db_error_handling(d)
         return d

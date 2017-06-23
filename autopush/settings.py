@@ -1,48 +1,32 @@
 """Autopush Settings Object and Setup"""
-import datetime
+import json
 import socket
-
+from argparse import Namespace  # noqa
 from hashlib import sha256
+from typing import Any  # noqa
 
 from cryptography.fernet import Fernet, MultiFernet
 from cryptography.hazmat.primitives import constant_time
 from twisted.internet import reactor
-from twisted.internet.defer import (
-    inlineCallbacks,
-    returnValue,
-)
-from twisted.internet.threads import deferToThread
 from twisted.web.client import Agent, HTTPConnectionPool, _HTTP11ClientFactory
 
-from autopush.db import (
-    get_router_table,
-    get_storage_table,
-    get_rotating_message_table,
-    preflight_check,
-    Storage,
-    Router,
-    Message,
-)
-from autopush.exceptions import InvalidTokenException, VapidAuthException
-from autopush.metrics import (
-    DatadogMetrics,
-    TwistedMetrics,
-    SinkMetrics,
-)
-from autopush.router import (
-    APNSRouter,
-    GCMRouter,
-    SimpleRouter,
-    WebPushRouter,
+
+import autopush.db as db
+from autopush.exceptions import (
+    InvalidSettings,
+    InvalidTokenException,
+    VapidAuthException
 )
 from autopush.utils import (
+    CLIENT_SHA256_RE,
     canonical_url,
+    get_amid,
     resolve_ip,
     repad,
     base64url_decode,
     parse_auth_header,
 )
-from autopush.crypto_key import (CryptoKey, CryptoKeyException)
+from autopush.crypto_key import CryptoKey, CryptoKeyException
 
 
 class QuietClientFactory(_HTTP11ClientFactory):
@@ -144,18 +128,11 @@ class AutopushSettings(object):
         if resolve_hostname:
             self.hostname = resolve_ip(self.hostname)
 
-        # Metrics setup
-        if datadog_api_key:
-            self.metrics = DatadogMetrics(
-                hostname=self.hostname,
-                api_key=datadog_api_key,
-                app_key=datadog_app_key,
-                flush_interval=datadog_flush_interval,
-            )
-        elif statsd_host:
-            self.metrics = TwistedMetrics(statsd_host, statsd_port)
-        else:
-            self.metrics = SinkMetrics()
+        self.datadog_api_key = datadog_api_key
+        self.datadog_app_key = datadog_app_key
+        self.datadog_flush_interval = datadog_flush_interval
+        self.statsd_host = statsd_host
+        self.statsd_port = statsd_port
 
         self.port = port
         self.router_port = router_port
@@ -200,53 +177,23 @@ class AutopushSettings(object):
         self.max_connections = max_connections
         self.close_handshake_timeout = close_handshake_timeout
 
-        # Database objects
-        self.router_table = get_router_table(router_tablename,
-                                             router_read_throughput,
-                                             router_write_throughput)
-        self.storage_table = get_storage_table(
-            storage_tablename,
-            storage_read_throughput,
-            storage_write_throughput)
-        self.message_table = get_rotating_message_table(
-            message_tablename,
-            message_read_throughput=message_read_throughput,
-            message_write_throughput=message_write_throughput)
-        self._message_prefix = message_tablename
-        self.message_limit = msg_limit
-        self.storage = Storage(self.storage_table, self.metrics)
-        self.router = Router(self.router_table, self.metrics)
+        self.router_tablename = router_tablename
+        self.router_read_throughput = router_read_throughput
+        self.router_write_throughput = router_write_throughput
+        self.storage_tablename = storage_tablename
+        self.storage_read_throughput = storage_read_throughput
+        self.storage_write_throughput = storage_write_throughput
+        self.message_tablename = message_tablename
+        self.message_read_throughput = message_read_throughput
+        self.message_write_throughput = message_write_throughput
 
-        # Used to determine whether a connection is out of date with current
-        # db objects. There are three noteworty cases:
-        # 1 "Last Month" the table requires a rollover.
-        # 2 "This Month" the most common case.
-        # 3 "Next Month" where the system will soon be rolling over, but with
-        #   timing, some nodes may roll over sooner. Ensuring the next month's
-        #   table is present before the switchover is the main reason for this,
-        #   just in case some nodes do switch sooner.
-        self.create_initial_message_tables()
-
-        # Run preflight check
-        preflight_check(self.storage, self.router, preflight_uaid)
+        self.msg_limit = msg_limit
 
         # CORS
         self.cors = enable_cors
 
         # Force timeout in idle seconds
         self.wake_timeout = wake_timeout
-
-        # Setup the routers
-        self.routers = dict()
-        self.routers["simplepush"] = SimpleRouter(
-            self,
-            router_conf.get("simplepush")
-        )
-        self.routers["webpush"] = WebPushRouter(self, None)
-        if 'apns' in router_conf:
-            self.routers["apns"] = APNSRouter(self, router_conf["apns"])
-        if 'gcm' in router_conf:
-            self.routers["gcm"] = GCMRouter(self, router_conf["gcm"])
 
         # Env
         self.env = env
@@ -258,78 +205,123 @@ class AutopushSettings(object):
         # Generate messages per legacy rules, only used for testing to
         # generate legacy data.
         self._notification_legacy = False
+        self.preflight_uaid = preflight_uaid
 
-    @property
-    def message(self):
-        """Property that access the current message table"""
-        return self.message_tables[self.current_msg_month]
+    @classmethod
+    def from_argparse(cls, ns, **kwargs):
+        # type: (Namespace, **Any) -> AutopushSettings
+        """Create an instance from argparse/additional kwargs"""
+        router_conf = {}
+        if ns.key_hash:
+            db.key_hash = ns.key_hash
+        # Some routers require a websocket to timeout on idle
+        # (e.g. UDP)
+        if ns.wake_pem is not None and ns.wake_timeout != 0:
+            router_conf["simplepush"] = {"idle": ns.wake_timeout,
+                                         "server": ns.wake_server,
+                                         "cert": ns.wake_pem}
+        if ns.apns_creds:
+            # if you have the critical elements for each external
+            # router, create it
+            try:
+                router_conf["apns"] = json.loads(ns.apns_creds)
+            except (ValueError, TypeError):
+                raise InvalidSettings(
+                    "Invalid JSON specified for APNS config options")
+        if ns.gcm_enabled:
+            # Create a common gcmclient
+            try:
+                sender_ids = json.loads(ns.senderid_list)
+            except (ValueError, TypeError):
+                raise InvalidSettings(
+                    "Invalid JSON specified for senderid_list")
+            try:
+                # This is an init check to verify that things are
+                # configured correctly. Otherwise errors may creep in
+                # later that go unaccounted.
+                sender_ids[sender_ids.keys()[0]]
+            except (IndexError, TypeError):
+                raise InvalidSettings("No GCM SenderIDs specified or found.")
+            router_conf["gcm"] = {"ttl": ns.gcm_ttl,
+                                  "dryrun": ns.gcm_dryrun,
+                                  "max_data": ns.max_data,
+                                  "collapsekey": ns.gcm_collapsekey,
+                                  "senderIDs": sender_ids}
 
-    @message.setter
-    def message(self, value):
-        """Setter to set the current message table"""
-        self.message_tables[self.current_msg_month] = value
+        client_certs = None
+        # endpoint only
+        if getattr(ns, 'client_certs', None):
+            try:
+                client_certs_arg = json.loads(ns.client_certs)
+            except (ValueError, TypeError):
+                raise InvalidSettings(
+                    "Invalid JSON specified for client_certs")
+            if client_certs_arg:
+                if not ns.ssl_key:
+                    raise InvalidSettings("client_certs specified without SSL "
+                                          "enabled (no ssl_key specified)")
+                client_certs = {}
+                for name, sigs in client_certs_arg.iteritems():
+                    if not isinstance(sigs, list):
+                        raise InvalidSettings(
+                            "Invalid JSON specified for client_certs")
+                    for sig in sigs:
+                        sig = sig.upper()
+                        if (not name or not CLIENT_SHA256_RE.match(sig) or
+                                sig in client_certs):
+                            raise InvalidSettings(
+                                "Invalid client_certs argument")
+                        client_certs[sig] = name
 
-    def _tomorrow(self):
-        return datetime.date.today() + datetime.timedelta(days=1)
+        if ns.fcm_enabled:
+            # Create a common gcmclient
+            if not ns.fcm_auth:
+                raise InvalidSettings("No Authorization Key found for FCM")
+            if not ns.fcm_senderid:
+                raise InvalidSettings("No SenderID found for FCM")
+            router_conf["fcm"] = {"ttl": ns.fcm_ttl,
+                                  "dryrun": ns.fcm_dryrun,
+                                  "max_data": ns.max_data,
+                                  "collapsekey": ns.fcm_collapsekey,
+                                  "auth": ns.fcm_auth,
+                                  "senderid": ns.fcm_senderid}
 
-    def create_initial_message_tables(self):
-        """Initializes a dict of the initial rotating messages tables.
+        ami_id = None
+        # Not a fan of double negatives, but this makes more
+        # understandable args
+        if not ns.no_aws:
+            ami_id = get_amid()
 
-        An entry for last months table, an entry for this months table,
-        an entry for tomorrow, if tomorrow is a new month.
-
-        """
-        today = datetime.date.today()
-        last_month = get_rotating_message_table(self._message_prefix, -1)
-        this_month = get_rotating_message_table(self._message_prefix)
-        self.current_month = today.month
-        self.current_msg_month = this_month.table_name
-        self.message_tables = {
-            last_month.table_name: Message(last_month, self.metrics),
-            this_month.table_name: Message(this_month, self.metrics)
-        }
-        if self._tomorrow().month != today.month:
-            next_month = get_rotating_message_table(self._message_prefix,
-                                                    delta=1)
-            self.message_tables[next_month.table_name] = Message(
-                next_month, self.metrics)
-
-    @inlineCallbacks
-    def update_rotating_tables(self):
-        """This method is intended to be tasked to run periodically off the
-        twisted event hub to rotate tables.
-
-        When today is a new month from yesterday, then we swap out all the
-        table objects on the settings object.
-
-        """
-        today = datetime.date.today()
-        tomorrow = self._tomorrow()
-        if ((tomorrow.month != today.month) and
-                sorted(self.message_tables.keys())[-1] !=
-                tomorrow.month):
-            next_month = yield deferToThread(
-                get_rotating_message_table,
-                self._message_prefix, 0, tomorrow
-            )
-            self.message_tables[next_month.table_name] = Message(
-                next_month, self.metrics)
-
-        if today.month == self.current_month:
-            # No change in month, we're fine.
-            returnValue(False)
-
-        # Get tables for the new month, and verify they exist before we try to
-        # switch over
-        message_table = yield deferToThread(get_rotating_message_table,
-                                            self._message_prefix)
-
-        # Both tables found, safe to switch-over
-        self.current_month = today.month
-        self.current_msg_month = message_table.table_name
-        self.message_tables[self.current_msg_month] = \
-            Message(message_table, self.metrics)
-        returnValue(True)
+        return cls(
+            crypto_key=ns.crypto_key,
+            datadog_api_key=ns.datadog_api_key,
+            datadog_app_key=ns.datadog_app_key,
+            datadog_flush_interval=ns.datadog_flush_interval,
+            hostname=ns.hostname,
+            statsd_host=ns.statsd_host,
+            statsd_port=ns.statsd_port,
+            router_conf=router_conf,
+            router_tablename=ns.router_tablename,
+            storage_tablename=ns.storage_tablename,
+            storage_read_throughput=ns.storage_read_throughput,
+            storage_write_throughput=ns.storage_write_throughput,
+            message_tablename=ns.message_tablename,
+            message_read_throughput=ns.message_read_throughput,
+            message_write_throughput=ns.message_write_throughput,
+            router_read_throughput=ns.router_read_throughput,
+            router_write_throughput=ns.router_write_throughput,
+            resolve_hostname=ns.resolve_hostname,
+            wake_timeout=ns.wake_timeout,
+            ami_id=ami_id,
+            client_certs=client_certs,
+            msg_limit=ns.msg_limit,
+            connect_timeout=ns.connection_timeout,
+            memusage_port=ns.memusage_port,
+            ssl_key=ns.ssl_key,
+            ssl_cert=ns.ssl_cert,
+            ssl_dh_param=ns.ssl_dh_param,
+            **kwargs
+        )
 
     def update(self, **kwargs):
         """Update the arguments, if a ``crypto_key`` is in kwargs then the
@@ -376,7 +368,7 @@ class AutopushSettings(object):
         ep = self.fernet.encrypt(base + sha256(raw_key).digest()).strip('=')
         return root + 'v2/' + ep
 
-    def parse_endpoint(self, token, version="v1", ckey_header=None,
+    def parse_endpoint(self, metrics, token, version="v1", ckey_header=None,
                        auth_header=None):
         """Parse an endpoint into component elements of UAID, CHID and optional
         key hash if v2
@@ -404,7 +396,7 @@ class AutopushSettings(object):
             vapid_auth = parse_auth_header(auth_header)
             if not vapid_auth:
                 raise VapidAuthException("Invalid Auth token")
-            self.metrics.increment("updates.notification.auth.{}".format(
+            metrics.increment("updates.notification.auth.{}".format(
                 vapid_auth['scheme']
             ))
             # pull the public key from the VAPID auth header if needed

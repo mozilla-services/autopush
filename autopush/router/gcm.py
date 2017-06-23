@@ -18,9 +18,11 @@ class GCMRouter(object):
     collapseKey = "simplepush"
     MAX_TTL = 2419200
 
-    def __init__(self, ap_settings, router_conf):
+    def __init__(self, ap_settings, router_conf, metrics):
         """Create a new GCM router and connect to GCM"""
+        self.ap_settings = ap_settings
         self.config = router_conf
+        self.metrics = metrics
         self.min_ttl = router_conf.get("ttl", 60)
         self.dryRun = router_conf.get("dryrun", False)
         self.collapseKey = router_conf.get("collapseKey", "simplepush")
@@ -36,11 +38,8 @@ class GCMRouter(object):
                 self.gcm[sid] = gcmclient.GCM(auth)
             except:
                 raise IOError("GCM Bridge not initiated in main")
-        self.metrics = ap_settings.metrics
         self._base_tags = []
-        self.router_table = ap_settings.router
         self.log.debug("Starting GCM router...")
-        self.ap_settings = ap_settings
 
     def amend_endpoint_response(self, response, router_data):
         # type: (JSONDict, JSONDict) -> None

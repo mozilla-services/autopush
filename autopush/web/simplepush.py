@@ -36,6 +36,7 @@ class SimplePushSubscriptionSchema(Schema):
     def extract_subscription(self, d):
         try:
             result = self.context["settings"].parse_endpoint(
+                self.context["metrics"],
                 token=d["token"],
                 version=d["api_ver"],
             )
@@ -46,7 +47,7 @@ class SimplePushSubscriptionSchema(Schema):
     @validates_schema
     def validate_uaid_chid(self, d):
         try:
-            result = self.context["settings"].router.get_uaid(d["uaid"].hex)
+            result = self.context["db"].router.get_uaid(d["uaid"].hex)
         except ItemNotFound:
             raise InvalidRequest("UAID not found", status_code=410, errno=103)
 
@@ -118,7 +119,7 @@ class SimplePushHandler(BaseWebHandler):
             channel_id=str(subscription["chid"]),
         )
 
-        router = self.ap_settings.routers[user_data["router_type"]]
+        router = self.routers[user_data["router_type"]]
         d = maybeDeferred(router.route_notification, notification, user_data)
         d.addCallback(self._router_completed, user_data, "")
         d.addErrback(self._router_fail_err)

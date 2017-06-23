@@ -14,17 +14,16 @@ from twisted.trial import unittest as trialtest
 import hyper
 import hyper.tls
 
-from autopush.db import get_rotating_message_table
+from autopush.db import DatabaseManager, get_rotating_message_table
 from autopush.exceptions import InvalidSettings
 from autopush.http import skip_request_logging
 from autopush.main import (
     ConnectionApplication,
     EndpointApplication,
-    make_settings,
 )
 from autopush.settings import AutopushSettings
+from autopush.tests.support import test_db
 from autopush.utils import resolve_ip
-
 
 connection_main = ConnectionApplication.main
 endpoint_main = EndpointApplication.main
@@ -62,10 +61,11 @@ class SettingsTestCase(unittest.TestCase):
         tomorrow = datetime.datetime(year=next_year,
                                      month=next_month,
                                      day=1)
-        AutopushSettings._tomorrow = Mock()
-        AutopushSettings._tomorrow.return_value = tomorrow
-        settings = AutopushSettings()
-        eq_(len(settings.message_tables), 3)
+        db = test_db()
+        db._tomorrow = Mock()
+        db._tomorrow.return_value = tomorrow
+        db.create_initial_message_tables()
+        eq_(len(db.message_tables), 3)
 
 
 class SettingsAsyncTestCase(trialtest.TestCase):
@@ -73,25 +73,27 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         from autopush.db import get_month
         settings = AutopushSettings(
             hostname="example.com", resolve_hostname=True)
+        db = DatabaseManager.from_settings(settings)
+        db.create_initial_message_tables()
 
         # Erase the tables it has on init, and move current month back one
         last_month = get_month(-1)
-        settings.current_month = last_month.month
-        settings.message_tables = {}
+        db.current_month = last_month.month
+        db.message_tables = {}
 
         # Create the next month's table, just in case today is the day before
         # a new month, in which case the lack of keys will cause an error in
         # update_rotating_tables
         next_month = get_month(1)
-        settings.message_tables[next_month.month] = None
+        db.message_tables[next_month.month] = None
 
         # Get the deferred back
         e = Deferred()
-        d = settings.update_rotating_tables()
+        d = db.update_rotating_tables()
 
         def check_tables(result):
-            eq_(len(settings.message_tables), 2)
-            eq_(settings.current_month, get_month().month)
+            eq_(len(db.message_tables), 2)
+            eq_(db.current_month, get_month().month)
 
         d.addCallback(check_tables)
         d.addBoth(lambda x: e.callback(True))
@@ -123,26 +125,26 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         tomorrow = datetime.datetime(year=next_year,
                                      month=next_month,
                                      day=1)
-        AutopushSettings._tomorrow = Mock()
-        AutopushSettings._tomorrow.return_value = tomorrow
 
         settings = AutopushSettings(
             hostname="example.com", resolve_hostname=True)
+        db = DatabaseManager.from_settings(settings)
+        db._tomorrow = Mock(return_value=tomorrow)
+        db.create_initial_message_tables()
 
         # We should have 3 tables, one for next/this/last month
-        eq_(len(settings.message_tables), 3)
+        eq_(len(db.message_tables), 3)
 
         # Grab next month's table name and remove it
-        next_month = get_rotating_message_table(settings._message_prefix,
-                                                delta=1)
-        settings.message_tables.pop(next_month.table_name)
+        next_month = get_rotating_message_table(db._message_prefix, delta=1)
+        db.message_tables.pop(next_month.table_name)
 
         # Get the deferred back
-        d = settings.update_rotating_tables()
+        d = db.update_rotating_tables()
 
         def check_tables(result):
-            eq_(len(settings.message_tables), 3)
-            ok_(next_month.table_name in settings.message_tables)
+            eq_(len(db.message_tables), 3)
+            ok_(next_month.table_name in db.message_tables)
 
         d.addCallback(check_tables)
         return d
@@ -151,22 +153,24 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         from autopush.db import get_month
         settings = AutopushSettings(
             hostname="google.com", resolve_hostname=True)
+        db = DatabaseManager.from_settings(settings)
+        db.create_initial_message_tables()
 
         # Erase the tables it has on init, and move current month back one
-        settings.message_tables = {}
+        db.message_tables = {}
 
         # Create the next month's table, just in case today is the day before
         # a new month, in which case the lack of keys will cause an error in
         # update_rotating_tables
         next_month = get_month(1)
-        settings.message_tables[next_month.month] = None
+        db.message_tables[next_month.month] = None
 
         # Get the deferred back
         e = Deferred()
-        d = settings.update_rotating_tables()
+        d = db.update_rotating_tables()
 
         def check_tables(result):
-            eq_(len(settings.message_tables), 1)
+            eq_(len(db.message_tables), 1)
 
         d.addCallback(check_tables)
         d.addBoth(lambda x: e.callback(True))
@@ -178,7 +182,7 @@ class ConnectionMainTestCase(unittest.TestCase):
         patchers = [
             "autopush.main.TimerService.startService",
             "autopush.main.reactor",
-            "autopush.settings.TwistedMetrics",
+            "autopush.metrics.TwistedMetrics",
         ]
         self.mocks = {}
         for name in patchers:
@@ -270,10 +274,10 @@ class EndpointMainTestCase(unittest.TestCase):
 
     def setUp(self):
         patchers = [
+            "autopush.db.preflight_check",
             "autopush.main.TimerService.startService",
             "autopush.main.reactor",
-            "autopush.settings.TwistedMetrics",
-            "autopush.settings.preflight_check",
+            "autopush.metrics.TwistedMetrics",
         ]
         self.mocks = {}
         for name in patchers:
@@ -329,10 +333,10 @@ class EndpointMainTestCase(unittest.TestCase):
 
     @patch('hyper.tls', spec=hyper.tls)
     def test_client_certs_parse(self, mock):
-        ap = make_settings(self.TestArg)
-        eq_(ap.client_certs["1A:"*31 + "F9"], 'partner1')
-        eq_(ap.client_certs["2B:"*31 + "E8"], 'partner2')
-        eq_(ap.client_certs["3C:"*31 + "D7"], 'partner2')
+        settings = AutopushSettings.from_argparse(self.TestArg)
+        eq_(settings.client_certs["1A:"*31 + "F9"], 'partner1')
+        eq_(settings.client_certs["2B:"*31 + "E8"], 'partner2')
+        eq_(settings.client_certs["3C:"*31 + "D7"], 'partner2')
 
     def test_bad_client_certs(self):
         cert = self.TestArg._client_certs['partner1'][0]
@@ -355,19 +359,20 @@ class EndpointMainTestCase(unittest.TestCase):
            spec=hyper.HTTP20Connection)
     @patch('hyper.tls', spec=hyper.tls)
     def test_settings(self, *args):
-        ap = make_settings(self.TestArg)
+        settings = AutopushSettings.from_argparse(self.TestArg)
+        app = EndpointApplication(settings)
         # verify that the hostname is what we said.
-        eq_(ap.hostname, self.TestArg.hostname)
-        eq_(ap.routers["gcm"].config['collapsekey'], "collapse")
-        eq_(ap.routers["apns"]._config['firefox']['cert'], "cert.file")
-        eq_(ap.routers["apns"]._config['firefox']['key'], "key.file")
-        eq_(ap.wake_timeout, 10)
+        eq_(settings.hostname, self.TestArg.hostname)
+        eq_(app.routers["gcm"].config['collapsekey'], "collapse")
+        eq_(app.routers["apns"]._config['firefox']['cert'], "cert.file")
+        eq_(app.routers["apns"]._config['firefox']['key'], "key.file")
+        eq_(settings.wake_timeout, 10)
 
     def test_bad_senders(self):
         old_list = self.TestArg.senderid_list
         self.TestArg.senderid_list = "{}"
         with assert_raises(InvalidSettings):
-            make_settings(self.TestArg)
+            AutopushSettings.from_argparse(self.TestArg)
         self.TestArg.senderid_list = old_list
 
     def test_bad_fcm_senders(self):
@@ -375,11 +380,11 @@ class EndpointMainTestCase(unittest.TestCase):
         old_senderid = self.TestArg.fcm_senderid
         self.TestArg.fcm_auth = ""
         with assert_raises(InvalidSettings):
-            make_settings(self.TestArg)
+            AutopushSettings.from_argparse(self.TestArg)
         self.TestArg.fcm_auth = old_auth
         self.TestArg.fcm_senderid = ""
         with assert_raises(InvalidSettings):
-            make_settings(self.TestArg)
+            AutopushSettings.from_argparse(self.TestArg)
         self.TestArg.fcm_senderid = old_senderid
 
     def test_gcm_start(self):
@@ -398,5 +403,5 @@ class EndpointMainTestCase(unittest.TestCase):
 
         request_mock.return_value = MockReply
         self.TestArg.no_aws = False
-        ap = make_settings(self.TestArg)
-        eq_(ap.ami_id, "ami_123")
+        settings = AutopushSettings.from_argparse(self.TestArg)
+        eq_(settings.ami_id, "ami_123")

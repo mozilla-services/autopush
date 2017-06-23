@@ -1,9 +1,15 @@
 import sys
 import uuid
+from typing import TYPE_CHECKING
 
 import cyclone.web
 from twisted.logger import Logger
 from twisted.python import failure
+
+if TYPE_CHECKING:  # pragma: nocover
+    from autopush.db import DatabaseManager  # noqa
+    from autopush.metrics import IMetrics  # noqa
+    from autopush.settings import AutopushSettings  # noqa
 
 
 class BaseHandler(cyclone.web.RequestHandler):
@@ -11,10 +17,24 @@ class BaseHandler(cyclone.web.RequestHandler):
 
     log = Logger()
 
-    def initialize(self, ap_settings):
-        """Setup basic attributes from AutopushSettings"""
-        self.ap_settings = ap_settings
+    def initialize(self):
+        """Initialize info from the client"""
         self._client_info = self._init_info()
+
+    @property
+    def ap_settings(self):
+        # type: () -> AutopushSettings
+        return self.application.ap_settings
+
+    @property
+    def db(self):
+        # type: () -> DatabaseManager
+        return self.application.db
+
+    @property
+    def metrics(self):
+        # type: () -> IMetrics
+        return self.db.metrics
 
     def _init_info(self):
         return dict(

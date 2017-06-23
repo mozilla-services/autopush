@@ -1,10 +1,15 @@
 """Metrics interface and implementations"""
+from typing import TYPE_CHECKING
+
 from twisted.internet import reactor
 from txstatsd.client import StatsDClientProtocol, TwistedStatsDClient
 from txstatsd.metrics.metrics import Metrics
 
 import datadog
 from datadog import ThreadStats
+
+if TYPE_CHECKING:  # pragma: nocover
+    from autopush.settings import AutopushSettings  # noqa
 
 
 class IMetrics(object):
@@ -97,3 +102,19 @@ class DatadogMetrics(object):
     def timing(self, name, duration, **kwargs):
         self._client.timing(self._prefix_name(name), value=duration,
                             host=self._host, **kwargs)
+
+
+def from_settings(settings):
+    # type: (AutopushSettings) -> IMetrics
+    """Create an IMetrics from the given settings"""
+    if settings.datadog_api_key:
+        return DatadogMetrics(
+            hostname=settings.hostname,
+            api_key=settings.datadog_api_key,
+            app_key=settings.datadog_app_key,
+            flush_interval=settings.datadog_flush_interval,
+        )
+    elif settings.statsd_host:
+        return TwistedMetrics(settings.statsd_host, settings.statsd_port)
+    else:
+        return SinkMetrics()

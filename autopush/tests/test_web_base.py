@@ -2,7 +2,6 @@ import sys
 import uuid
 
 from boto.exception import BotoServerError
-from cyclone.web import Application
 from mock import Mock, patch
 from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
@@ -15,6 +14,7 @@ from autopush.db import (
     create_rotating_message_table,
     ProvisionedThroughputExceededException,
 )
+from autopush.http import EndpointHTTPFactory
 from autopush.exceptions import InvalidRequest
 from autopush.settings import AutopushSettings
 
@@ -57,9 +57,10 @@ class TestBase(unittest.TestCase):
                                  headers={"ttl": "0"},
                                  host='example.com:8080')
 
-        self.base = BaseWebHandler(Application(),
-                                   self.request_mock,
-                                   ap_settings=settings)
+        self.base = BaseWebHandler(
+            EndpointHTTPFactory(settings, db=None, routers=None),
+            self.request_mock
+        )
         self.status_mock = self.base.set_status = Mock()
         self.write_mock = self.base.write = Mock()
         self.base.log = Mock(spec=Logger)

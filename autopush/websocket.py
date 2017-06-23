@@ -87,10 +87,11 @@ from autopush.db import (
     generate_last_connect,
     dump_uaid,
 )
-from autopush.db import Message  # noqa
+from autopush.db import DatabaseManager, Message  # noqa
 from autopush.exceptions import MessageOverloadException
 from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
+from autopush.metrics import IMetrics  # noqa
 from autopush.settings import AutopushSettings  # noqa
 from autopush.ssl import AutopushSSLContextFactory
 from autopush.utils import (
@@ -116,18 +117,14 @@ def extract_code(data):
     return code
 
 
-def periodic_reporter(settings, factory):
-    # type: (AutopushSettings, PushServerFactory) -> None
+def periodic_reporter(settings, metrics, factory):
+    # type: (AutopushSettings, IMetrics, PushServerFactory) -> None
     """Twisted Task function that runs every few seconds to emit general
     metrics regarding twisted and client counts"""
-    settings.metrics.gauge("update.client.writers",
-                           len(reactor.getWriters()))
-    settings.metrics.gauge("update.client.readers",
-                           len(reactor.getReaders()))
-    settings.metrics.gauge("update.client.connections",
-                           len(settings.clients))
-    settings.metrics.gauge("update.client.ws_connections",
-                           factory.countConnections)
+    metrics.gauge("update.client.writers", len(reactor.getWriters()))
+    metrics.gauge("update.client.readers", len(reactor.getReaders()))
+    metrics.gauge("update.client.connections", len(settings.clients))
+    metrics.gauge("update.client.ws_connections", factory.countConnections)
 
 
 def log_exception(func):
@@ -187,7 +184,6 @@ class PushState(object):
         '_base_tags',
         '_should_stop',
         '_paused',
-        'metrics',
         '_uaid_obj',
         '_uaid_hash',
         'raw_agent',
@@ -197,7 +193,7 @@ class PushState(object):
         'router_type',
         'wake_data',
         'connected_at',
-        'settings',
+        'db',
         'stats',
 
         # Table rotation
@@ -217,14 +213,13 @@ class PushState(object):
         'updates_sent',
         'direct_updates',
 
-        'msg_limit',
         '_reset_uaid',
     ]
 
-    def __init__(self, settings, request):
+    def __init__(self, db, request):
         self._callbacks = []
         self.stats = SessionStatistics()
-        self.settings = settings
+        self.db = db
         host = ""
 
         if request:
@@ -245,11 +240,11 @@ class PushState(object):
         if host:
             self._base_tags.append("host:%s" % host)
 
+        db.metrics.increment("client.socket.connect",
+                             tags=self._base_tags or None)
+
         self._should_stop = False
         self._paused = False
-        self.metrics = settings.metrics
-        self.metrics.increment("client.socket.connect",
-                               tags=self._base_tags or None)
         self.uaid = None
         self.last_ping = 0
         self.check_storage = False
@@ -260,12 +255,11 @@ class PushState(object):
         self.ping_time_out = False
 
         # Message table rotation initial settings
-        self.message_month = settings.current_msg_month
+        self.message_month = db.current_msg_month
         self.rotate_message_table = False
 
         self._check_notifications = False
         self._more_notifications = False
-        self.msg_limit = settings.message_limit
 
         # Timestamp message defaults
         self.scan_timestamps = False
@@ -291,7 +285,7 @@ class PushState(object):
     def message(self):
         # type: () -> Message
         """Property to access the currently used message table"""
-        return self.settings.message_tables[self.message_month]
+        return self.db.message_tables[self.message_month]
 
     @property
     def user_agent(self):
@@ -370,7 +364,18 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     @property
     def ap_settings(self):
+        # type: () -> AutopushSettings
         return self.factory.ap_settings
+
+    @property
+    def db(self):
+        # type: () -> DatabaseManager
+        return self.factory.db
+
+    @property
+    def metrics(self):
+        # type: () -> IMetrics
+        return self.db.metrics
 
     # Defer helpers
     def deferToThread(self, func, *args, **kwargs):
@@ -458,13 +463,13 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         """Override for sanity checking during auto-ping interval"""
         if not self.ps.uaid:
             # No uaid yet, drop the connection
-            self.ps.metrics.increment("client.autoping.no_uaid",
-                                      tags=self.base_tags)
+            self.metrics.increment("client.autoping.no_uaid",
+                                   tags=self.base_tags)
             self.sendClose()
         elif self.ap_settings.clients.get(self.ps.uaid) != self:
             # UAID, but we're not in clients anymore for some reason
-            self.ps.metrics.increment("client.autoping.invalid_client",
-                                      tags=self.base_tags)
+            self.metrics.increment("client.autoping.invalid_client",
+                                   tags=self.base_tags)
             self.sendClose()
         return WebSocketServerProtocol._sendAutoPing(self)
 
@@ -481,13 +486,13 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         still hadn't run by this point"""
         # Did onClose get called? If so, we shutdown properly, no worries.
         if hasattr(self, "_shutdown_ran"):
-            self.ps.metrics.increment("client.success.sendClose",
-                                      tags=self.base_tags)
+            self.metrics.increment("client.success.sendClose",
+                                   tags=self.base_tags)
             return
 
         # Uh-oh, we have not been shut-down properly, report detailed data
-        self.ps.metrics.increment("client.error.sendClose_failed",
-                                  tags=self.base_tags)
+        self.metrics.increment("client.error.sendClose_failed",
+                               tags=self.base_tags)
 
         self.transport.abortConnection()
 
@@ -495,7 +500,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def onConnect(self, request):
         """autobahn onConnect handler for when a connection has started"""
         track_object(self, msg="onConnect Start")
-        self.ps = PushState(settings=self.ap_settings, request=request)
+        self.ps = PushState(db=self.db, request=request)
 
         # Setup ourself to handle producing the data
         self.transport.bufferSize = 2 * 1024
@@ -610,11 +615,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def cleanUp(self, wasClean, code, reason):
         """Thorough clean-up method to cancel all remaining deferreds, and send
         connection metrics in"""
-        self.ps.metrics.increment("client.socket.disconnect",
-                                  tags=self.base_tags)
+        self.metrics.increment("client.socket.disconnect", tags=self.base_tags)
         elapsed = (ms_time() - self.ps.connected_at) / 1000.0
-        self.ps.metrics.timing("client.socket.lifespan", duration=elapsed,
-                               tags=self.base_tags)
+        self.metrics.timing("client.socket.lifespan", duration=elapsed,
+                            tags=self.base_tags)
         self.ps.stats.connection_time = int(elapsed)
 
         # Cleanup our client entry
@@ -661,7 +665,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def _save_simple_notif(self, channel_id, version):
         """Save a simplepush notification"""
         return deferToThread(
-            self.ap_settings.storage.save_notification,
+            self.db.storage.save_notification,
             uaid=self.ps.uaid,
             chid=channel_id,
             version=version,
@@ -672,7 +676,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         connected"""
         # Locate the node that has this client connected
         d = deferToThread(
-            self.ap_settings.router.get_uaid,
+            self.db.router.get_uaid,
             self.ps.uaid
         )
         d.addCallback(self._notify_node)
@@ -684,15 +688,15 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # type: (failure.Failure) -> None
         """Traps UAID not found error"""
         fail.trap(ItemNotFound)
-        self.ps.metrics.increment("client.lookup_uaid_failure",
-                                  tags=self.base_tags)
+        self.metrics.increment("client.lookup_uaid_failure",
+                               tags=self.base_tags)
 
     def _notify_node(self, result):
         """Checks the result of lookup node to send the notify if the client is
         connected elsewhere now"""
         if not result:
-            self.ps.metrics.increment("client.notify_uaid_failure",
-                                      tags=self.base_tags)
+            self.metrics.increment("client.notify_uaid_failure",
+                                   tags=self.base_tags)
             return
 
         node_id = result.get("node_id")
@@ -840,7 +844,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if self.ps.wake_data:
             user_item["wake_data"] = self.ps.wake_data
 
-        return self.ap_settings.router.register_user(user_item)
+        return self.db.router.register_user(user_item)
 
     def _verify_user_record(self):
         """Verify a user record is valid
@@ -852,7 +856,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         """
         try:
-            record = self.ap_settings.router.get_uaid(self.ps.uaid)
+            record = self.db.router.get_uaid(self.ps.uaid)
         except ItemNotFound:
             return None
 
@@ -862,18 +866,18 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.log.info(format="Dropping User", code=104,
                           uaid_hash=self.ps.uaid_hash,
                           uaid_record=dump_uaid(record))
-            self.force_retry(self.ap_settings.router.drop_user, self.ps.uaid)
+            self.force_retry(self.db.router.drop_user, self.ps.uaid)
             return None
 
         # Validate webpush records
         if self.ps.use_webpush:
             # Current month must exist and be a valid prior month
             if ("current_month" not in record) or record["current_month"] \
-                    not in self.ps.settings.message_tables:
+                    not in self.db.message_tables:
                 self.log.info(format="Dropping User", code=105,
                               uaid_hash=self.ps.uaid_hash,
                               uaid_record=dump_uaid(record))
-                self.force_retry(self.ap_settings.router.drop_user,
+                self.force_retry(self.db.router.drop_user,
                                  self.ps.uaid)
                 return None
 
@@ -963,7 +967,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.sendJSON(msg)
         self.log.info(format="hello", uaid_hash=self.ps.uaid_hash,
                       **self.ps.raw_agent)
-        self.ps.metrics.increment("updates.client.hello", tags=self.base_tags)
+        self.metrics.increment("updates.client.hello", tags=self.base_tags)
         self.process_notifications()
 
     def process_notifications(self):
@@ -996,7 +1000,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             d = self.deferToThread(self.webpush_fetch())
         else:
             d = self.deferToThread(
-                self.ap_settings.storage.fetch_notifications, self.ps.uaid)
+                self.db.storage.fetch_notifications, self.ps.uaid)
         d.addCallback(self.finish_notifications)
         d.addErrback(self.error_notification_overload)
         d.addErrback(self.trap_cancel)
@@ -1031,7 +1035,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def error_message_overload(self, fail):
         """errBack for handling excessive messages per UAID"""
         fail.trap(MessageOverloadException)
-        self.force_retry(self.ap_settings.router.drop_user, self.ps.uaid)
+        self.force_retry(self.db.router.drop_user, self.ps.uaid)
         self.sendClose()
 
     def finish_notifications(self, notifs):
@@ -1075,7 +1079,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             d.addErrback(self.trap_cancel)
         elif self.ps.reset_uaid:
             # Told to reset the user?
-            self.force_retry(self.ap_settings.router.drop_user, self.ps.uaid)
+            self.force_retry(self.db.router.drop_user, self.ps.uaid)
             self.sendClose()
 
     def finish_webpush_notifications(self, result):
@@ -1110,7 +1114,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # Told to reset the user?
             if self.ps.reset_uaid:
                 self.force_retry(
-                    self.ap_settings.router.drop_user, self.ps.uaid)
+                    self.db.router.drop_user, self.ps.uaid)
                 self.sendClose()
 
             # Not told to check for notifications, do we need to now rotate
@@ -1138,11 +1142,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             msg = notif.websocket_format()
             messages_sent = True
             self.sent_notification_count += 1
-            if self.sent_notification_count > self.ps.msg_limit:
+            if self.sent_notification_count > self.ap_settings.msg_limit:
                 raise MessageOverloadException()
             if notif.topic:
-                self.ps.metrics.increment("updates.notification.topic",
-                                          tags=self.base_tags)
+                self.metrics.increment("updates.notification.topic",
+                                       tags=self.base_tags)
             self.sendJSON(msg)
 
         # Did we send any messages?
@@ -1183,19 +1187,19 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         _, channels = self.ps.message.all_channels(self.ps.uaid)
 
         # Get the current message month
-        cur_month = self.ap_settings.current_msg_month
+        cur_month = self.db.current_msg_month
         if channels:
             # Save the current channels into this months message table
-            msg_table = self.ap_settings.message_tables[cur_month]
+            msg_table = self.db.message_tables[cur_month]
             msg_table.save_channels(self.ps.uaid, channels)
 
         # Finally, update the route message month
-        self.ap_settings.router.update_message_month(self.ps.uaid, cur_month)
+        self.db.router.update_message_month(self.ps.uaid, cur_month)
 
     def _finish_monthly_transition(self, result):
         """Mark the client as successfully transitioned and resume"""
         # Update the current month now that we've moved forward a month
-        self.ps.message_month = self.ap_settings.current_msg_month
+        self.ps.message_month = self.db.current_msg_month
         self.ps.rotate_message_table = False
         self.transport.resumeProducing()
 
@@ -1215,7 +1219,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def _send_ping(self):
         """Helper for ping sending that tracks when the ping was sent"""
         self.ps.last_ping = time.time()
-        self.ps.metrics.increment("updates.client.ping", tags=self.base_tags)
+        self.metrics.increment("updates.client.ping", tags=self.base_tags)
         return self.sendMessage("{}", False)
 
     def process_ping(self):
@@ -1291,8 +1295,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                "status": 200
                }
         self.sendJSON(msg)
-        self.ps.metrics.increment("updates.client.register",
-                                  tags=self.base_tags)
+        self.metrics.increment("updates.client.register", tags=self.base_tags)
         self.ps.stats.registers += 1
         self.log.info(format="Register", channel_id=chid,
                       endpoint=endpoint,
@@ -1310,8 +1313,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         except ValueError:
             return self.bad_message("unregister", "Invalid ChannelID")
 
-        self.ps.metrics.increment("updates.client.unregister",
-                                  tags=self.base_tags)
+        self.metrics.increment("updates.client.unregister",
+                               tags=self.base_tags)
         self.ps.stats.unregisters += 1
         event = dict(format="Unregister", channel_id=chid,
                      uaid_hash=self.ps.uaid_hash,
@@ -1335,7 +1338,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                              self.ps.uaid, chid)
         else:
             # Delete any record from storage, we don't wait for this
-            self.force_retry(self.ap_settings.storage.delete_notification,
+            self.force_retry(self.db.storage.delete_notification,
                              self.ps.uaid, chid)
 
         data["status"] = 200
@@ -1463,7 +1466,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             del self.ps.updates_sent[chid]
         else:
             return
-        return self.force_retry(self.ap_settings.storage.delete_notification,
+        return self.force_retry(self.db.storage.delete_notification,
                                 self.ps.uaid, chid, version)
 
     def process_ack(self, data):
@@ -1473,7 +1476,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if not updates or not isinstance(updates, list):
             return
 
-        self.ps.metrics.increment("updates.client.ack", tags=self.base_tags)
+        self.metrics.increment("updates.client.ack", tags=self.base_tags)
         defers = filter(None, map(self.ack_update, updates))
 
         if defers:
@@ -1551,8 +1554,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                                                         update)
             self.ps.direct_updates[chid].append(notif)
             if notif.topic:
-                self.ps.metrics.increment("updates.notification.topic",
-                                          tags=self.base_tags)
+                self.metrics.increment("updates.notification.topic",
+                                       tags=self.base_tags)
             self.sendJSON(notif.websocket_format())
         else:
             self.ps.direct_updates[chid] = version
@@ -1565,10 +1568,11 @@ class PushServerFactory(WebSocketServerFactory):
 
     protocol = PushServerProtocol
 
-    def __init__(self, ap_settings):
-        # type: (AutopushSettings) -> None
+    def __init__(self, ap_settings, db):
+        # type: (AutopushSettings, DatabaseManager) -> None
         WebSocketServerFactory.__init__(self, ap_settings.ws_url)
         self.ap_settings = ap_settings
+        self.db = db
         self.setProtocolOptions(
             webStatus=False,
             openHandshakeTimeout=5,
@@ -1596,20 +1600,20 @@ class RouterHandler(BaseHandler):
         client = settings.clients.get(uaid)
         if not client:
             self.set_status(404, reason=None)
-            settings.metrics.increment("updates.router.disconnected")
+            self.metrics.increment("updates.router.disconnected")
             self.write("Client not connected.")
             return
 
         if client.paused:
             self.set_status(503, reason=None)
 
-            settings.metrics.increment("updates.router.busy")
+            self.metrics.increment("updates.router.busy")
             self.write("Client busy.")
             return
 
         update = json.loads(self.request.body)
         client.send_notification(update)
-        settings.metrics.increment("updates.router.received")
+        self.metrics.increment("updates.router.received")
         self.write("Client accepted for delivery")
 
 
@@ -1623,10 +1627,9 @@ class NotificationHandler(BaseHandler):
 
         """
         client = self.ap_settings.clients.get(uaid)
-        settings = self.ap_settings
         if not client:
             self.set_status(404, reason=None)
-            settings.metrics.increment("updates.notification.disconnected")
+            self.metrics.increment("updates.notification.disconnected")
             self.write("Client not connected.")
             return
 
@@ -1634,13 +1637,13 @@ class NotificationHandler(BaseHandler):
             # Client already busy waiting for stuff, flag for check
             client._check_notifications = True
             self.set_status(202)
-            settings.metrics.increment("updates.notification.flagged")
+            self.metrics.increment("updates.notification.flagged")
             self.write("Flagged for Notification check")
             return
 
         # Client is online and idle, start a notification check
         client.process_notifications()
-        settings.metrics.increment("updates.notification.checking")
+        self.metrics.increment("updates.notification.checking")
         self.write("Notification check started")
 
     def delete(self, uaid, connected_at):

@@ -13,6 +13,7 @@ from contextlib import contextmanager
 from distutils.spawn import find_executable
 from StringIO import StringIO
 from httplib import HTTPResponse  # noqa
+from mock import Mock, call
 from unittest.case import SkipTest
 
 from zope.interface import implementer
@@ -612,8 +613,7 @@ class TestSimple(IntegrationBase):
         yield client.disconnect()
 
         # Verify the last_connect is there and the current month
-        c = yield deferToThread(
-            self.conn.settings.router.get_uaid, client.uaid)
+        c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
         eq_(True, has_connected_this_month(c))
 
         # Move it back
@@ -629,8 +629,7 @@ class TestSimple(IntegrationBase):
         yield client.disconnect()
         times = 0
         while times < 10:
-            c = yield deferToThread(
-                self.conn.settings.router.get_uaid, client.uaid)
+            c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
             if has_connected_this_month(c):
                 break
             else:  # pragma: nocover
@@ -1257,12 +1256,11 @@ class TestWebPush(IntegrationBase):
 
     @inlineCallbacks
     def test_message_with_topic(self):
-        from mock import Mock, call
         data = str(uuid.uuid4())
-        self.conn.settings.metrics = Mock(spec=SinkMetrics)
+        self.conn.db.metrics = Mock(spec=SinkMetrics)
         client = yield self.quick_register(use_webpush=True)
         yield client.send_notification(data=data, topic="topicname")
-        self.conn.settings.metrics.increment.assert_has_calls([
+        self.conn.db.metrics.increment.assert_has_calls([
             call('updates.notification.topic',
                  tags=['host:localhost', 'use_webpush:True'])
         ])
@@ -1343,17 +1341,16 @@ class TestWebPush(IntegrationBase):
 
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
-            prefix=self.conn.settings._message_prefix, delta=-1)
-        lm_message = self.conn.settings.message_tables[last_month]
+            prefix=self.conn.db._message_prefix, delta=-1)
+        lm_message = self.conn.db.message_tables[last_month]
         yield deferToThread(
-            self.conn.settings.router.update_message_month,
+            self.conn.db.router.update_message_month,
             client.uaid,
             last_month
         )
 
         # Verify the move
-        c = yield deferToThread(
-            self.conn.settings.router.get_uaid, client.uaid)
+        c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
         eq_(c["current_month"], last_month)
 
         # Verify last_connect is current, then move that back
@@ -1366,7 +1363,7 @@ class TestWebPush(IntegrationBase):
 
         # Move the clients channels back one month
         exists, chans = yield deferToThread(
-            self.conn.settings.message.all_channels, client.uaid
+            self.conn.db.message.all_channels, client.uaid
         )
         eq_(exists, True)
         eq_(len(chans), 1)
@@ -1377,14 +1374,15 @@ class TestWebPush(IntegrationBase):
         )
 
         # Remove the channels entry entirely from this month
-        yield deferToThread(self.conn.settings.message.table.delete_item,
-                            uaid=client.uaid,
-                            chidmessageid=" "
-                            )
+        yield deferToThread(
+            self.conn.db.message.table.delete_item,
+            uaid=client.uaid,
+            chidmessageid=" "
+        )
 
         # Verify the channel is gone
         exists, chans = yield deferToThread(
-            self.conn.settings.message.all_channels,
+            self.conn.db.message.all_channels,
             client.uaid
         )
         eq_(exists, False)
@@ -1421,16 +1419,16 @@ class TestWebPush(IntegrationBase):
         start = time.time()
         while time.time()-start < 2:
             c = yield deferToThread(
-                self.conn.settings.router.get_uaid, client.uaid)
-            if c["current_month"] == self.conn.settings.current_msg_month:
+                self.conn.db.router.get_uaid, client.uaid)
+            if c["current_month"] == self.conn.db.current_msg_month:
                 break
             else:
                 yield deferToThread(time.sleep, 0.2)
 
         # Verify the month update in the router table
         c = yield deferToThread(
-            self.conn.settings.router.get_uaid, client.uaid)
-        eq_(c["current_month"], self.conn.settings.current_msg_month)
+            self.conn.db.router.get_uaid, client.uaid)
+        eq_(c["current_month"], self.conn.db.current_msg_month)
         eq_(server_client.ps.rotate_message_table, False)
 
         # Verify the client moved last_connect
@@ -1438,7 +1436,7 @@ class TestWebPush(IntegrationBase):
 
         # Verify the channels were moved
         exists, chans = yield deferToThread(
-            self.conn.settings.message.all_channels,
+            self.conn.db.message.all_channels,
             client.uaid
         )
         eq_(exists, True)
@@ -1454,17 +1452,16 @@ class TestWebPush(IntegrationBase):
 
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
-            prefix=self.conn.settings._message_prefix, delta=-1)
-        lm_message = self.conn.settings.message_tables[last_month]
+            prefix=self.conn.db._message_prefix, delta=-1)
+        lm_message = self.conn.db.message_tables[last_month]
         yield deferToThread(
-            self.conn.settings.router.update_message_month,
+            self.conn.db.router.update_message_month,
             client.uaid,
             last_month
         )
 
         # Verify the move
-        c = yield deferToThread(
-            self.conn.settings.router.get_uaid, client.uaid)
+        c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
         eq_(c["current_month"], last_month)
 
         # Verify last_connect is current, then move that back
@@ -1477,7 +1474,7 @@ class TestWebPush(IntegrationBase):
 
         # Move the clients channels back one month
         exists, chans = yield deferToThread(
-            self.conn.settings.message.all_channels, client.uaid
+            self.conn.db.message.all_channels, client.uaid
         )
         eq_(exists, True)
         eq_(len(chans), 1)
@@ -1518,16 +1515,15 @@ class TestWebPush(IntegrationBase):
         start = time.time()
         while time.time()-start < 2:
             c = yield deferToThread(
-                self.conn.settings.router.get_uaid, client.uaid)
-            if c["current_month"] == self.conn.settings.current_msg_month:
+                self.conn.db.router.get_uaid, client.uaid)
+            if c["current_month"] == self.conn.db.current_msg_month:
                 break
             else:
                 yield deferToThread(time.sleep, 0.2)
 
         # Verify the month update in the router table
-        c = yield deferToThread(
-            self.conn.settings.router.get_uaid, client.uaid)
-        eq_(c["current_month"], self.conn.settings.current_msg_month)
+        c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
+        eq_(c["current_month"], self.conn.db.current_msg_month)
         eq_(server_client.ps.rotate_message_table, False)
 
         # Verify the client moved last_connect
@@ -1535,7 +1531,7 @@ class TestWebPush(IntegrationBase):
 
         # Verify the channels were moved
         exists, chans = yield deferToThread(
-            self.conn.settings.message.all_channels,
+            self.conn.db.message.all_channels,
             client.uaid
         )
         eq_(exists, True)
@@ -1553,21 +1549,20 @@ class TestWebPush(IntegrationBase):
 
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
-            prefix=self.conn.settings._message_prefix, delta=-1)
+            prefix=self.conn.db._message_prefix, delta=-1)
         yield deferToThread(
-            self.conn.settings.router.update_message_month,
+            self.conn.db.router.update_message_month,
             client.uaid,
             last_month
         )
 
         # Verify the move
-        c = yield deferToThread(
-            self.conn.settings.router.get_uaid, client.uaid)
+        c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
         eq_(c["current_month"], last_month)
 
         # Verify there's no channels
         exists, chans = yield deferToThread(
-            self.conn.settings.message.all_channels,
+            self.conn.db.message.all_channels,
             client.uaid
         )
         eq_(exists, False)
@@ -1585,16 +1580,15 @@ class TestWebPush(IntegrationBase):
         start = time.time()
         while time.time()-start < 2:
             c = yield deferToThread(
-                self.conn.settings.router.get_uaid, client.uaid)
-            if c["current_month"] == self.conn.settings.current_msg_month:
+                self.conn.db.router.get_uaid, client.uaid)
+            if c["current_month"] == self.conn.db.current_msg_month:
                 break
             else:
                 yield deferToThread(time.sleep, 0.2)
 
         # Verify the month update in the router table
-        c = yield deferToThread(
-            self.conn.settings.router.get_uaid, client.uaid)
-        eq_(c["current_month"], self.conn.settings.current_msg_month)
+        c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
+        eq_(c["current_month"], self.conn.db.current_msg_month)
         eq_(server_client.ps.rotate_message_table, False)
 
         yield self.shut_down(client)
@@ -1794,7 +1788,6 @@ class TestGCMBridgeIntegration(IntegrationBase):
 
     def _add_router(self):
         from autopush.router.gcm import GCMRouter
-        from mock import Mock
         gcm = GCMRouter(
             self.ep.settings,
             {
@@ -1805,9 +1798,10 @@ class TestGCMBridgeIntegration(IntegrationBase):
                 "senderIDs": {self.senderID:
                               {"auth": "AIzaSyCx9PRtH8ByaJR3Cf"
                                        "Jamz0D2N0uaCgRGiI"}}
-            }
+            },
+            self.ep.db.metrics
         )
-        self.ep.settings.routers["gcm"] = gcm
+        self.ep.routers["gcm"] = gcm
         # Set up the mock call to avoid calling the live system.
         # The problem with calling the live system (even sandboxed) is that
         # you need a valid credential set from a mobile device, which can be
@@ -1983,7 +1977,6 @@ class TestFCMBridgeIntegration(IntegrationBase):
 
     def _add_router(self):
         from autopush.router.fcm import FCMRouter
-        from mock import Mock
         fcm = FCMRouter(
             self.ep.settings,
             {
@@ -1993,9 +1986,10 @@ class TestFCMBridgeIntegration(IntegrationBase):
                 "collapsekey": "test",
                 "senderID": self.senderID,
                 "auth": "AIzaSyCx9PRtH8ByaJR3CfJamz0D2N0uaCgRGiI",
-            }
+            },
+            self.ep.db.metrics
         )
-        self.ep.settings.routers["fcm"] = fcm
+        self.ep.routers["fcm"] = fcm
         # Set up the mock call to avoid calling the live system.
         # The problem with calling the live system (even sandboxed) is that
         # you need a valid credential set from a mobile device, which can be
@@ -2066,17 +2060,19 @@ class TestAPNSBridgeIntegration(IntegrationBase):
 
     def _add_router(self):
         from autopush.router.apnsrouter import APNSRouter
-        from mock import Mock
         apns = APNSRouter(
-            self.ep.settings, {
+            self.ep.settings,
+            {
                 "firefox": {
                     "cert": "/home/user/certs/SimplePushDemo.p12_cert.pem",
                     "key": "/home/user/certs/SimplePushDemo.p12_key.pem",
                     "sandbox": True,
                 }
             },
-            load_connections=False,)
-        self.ep.settings.routers["apns"] = apns
+            self.ep.db.metrics,
+            load_connections=False
+        )
+        self.ep.routers["apns"] = apns
         # Set up the mock call to avoid calling the live system.
         # The problem with calling the live system (even sandboxed) is that
         # you need a valid credential set from a mobile device, which can be
