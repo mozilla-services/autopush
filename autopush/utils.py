@@ -147,6 +147,20 @@ def get_amid():
         return "Unknown"
 
 
+def get_ec2_instance_id():
+    # type: () -> str
+    """Fetch the EC2 instance-id
+
+    """
+    try:
+        resp = requests.get(
+            "http://169.254.169.254/latest/meta-data/instance-id",
+            timeout=1)
+        return resp.content
+    except (requests.HTTPError, requests.ConnectionError):
+        return "Unknown"
+
+
 def decipher_public_key(key_data):
     # type: (str) -> str
     """A public key may come in several flavors. Attempt to extract the

@@ -8,6 +8,8 @@ from txstatsd.metrics.metrics import Metrics
 import datadog
 from datadog import ThreadStats
 
+from autopush.utils import get_ec2_instance_id
+
 if TYPE_CHECKING:  # pragma: nocover
     from autopush.settings import AutopushSettings  # noqa
 
@@ -109,7 +111,8 @@ def from_settings(settings):
     """Create an IMetrics from the given settings"""
     if settings.datadog_api_key:
         return DatadogMetrics(
-            hostname=settings.hostname,
+            hostname=get_ec2_instance_id() if settings.ami_id else
+            settings.hostname,
             api_key=settings.datadog_api_key,
             app_key=settings.datadog_app_key,
             flush_interval=settings.datadog_flush_interval,
