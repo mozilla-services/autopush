@@ -375,9 +375,6 @@ class IntegrationBase(unittest.TestCase):
             crypto_key=crypto_key,
             **self.conn_kwargs()
         )
-        # Dirty reactor unless we shut down the cached connections
-        self.addCleanup(ep_settings.agent._pool.closeCachedConnections)
-        self.addCleanup(conn_settings.agent._pool.closeCachedConnections)
 
         # Endpoint HTTP router
         self.ep = ep = EndpointApplication(ep_settings)
@@ -1409,7 +1406,7 @@ class TestWebPush(IntegrationBase):
         eq_(chan, result["channelID"])
 
         # Check that the client is going to rotate the month
-        server_client = self.conn.settings.clients[client.uaid]
+        server_client = self.conn.clients[client.uaid]
         eq_(server_client.ps.rotate_message_table, True)
 
         # Acknowledge the notification, which triggers the migration
@@ -1505,7 +1502,7 @@ class TestWebPush(IntegrationBase):
         eq_(chan, result["channelID"])
 
         # Check that the client is going to rotate the month
-        server_client = self.conn.settings.clients[client.uaid]
+        server_client = self.conn.clients[client.uaid]
         eq_(server_client.ps.rotate_message_table, True)
 
         # Acknowledge the notification, which triggers the migration
@@ -1573,7 +1570,7 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
 
         # Check that the client is going to rotate the month
-        server_client = self.conn.settings.clients[client.uaid]
+        server_client = self.conn.clients[client.uaid]
         eq_(server_client.ps.rotate_message_table, True)
 
         # Wait up to 2 seconds for the table rotation to occur

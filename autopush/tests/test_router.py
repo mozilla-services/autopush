@@ -12,6 +12,7 @@ from nose.tools import eq_, ok_, assert_raises
 from twisted.trial import unittest
 from twisted.internet.error import ConnectError, ConnectionRefusedError
 from twisted.internet.defer import inlineCallbacks
+from twisted.web.client import Agent
 
 import hyper
 import hyper.tls
@@ -913,7 +914,8 @@ class SimplePushRouterTestCase(unittest.TestCase):
         self.metrics = metrics = Mock(spec=SinkMetrics)
         db = test_db(metrics=metrics)
 
-        self.router = SimpleRouter(settings, {}, db)
+        self.agent_mock = agent = Mock(spec=Agent)
+        self.router = SimpleRouter(settings, {}, db, agent)
         self.router.log = Mock(spec=Logger)
         self.notif = Notification(10, "data", dummy_chid)
         mock_result = Mock(spec=gcmclient.gcm.Result)
@@ -923,8 +925,6 @@ class SimplePushRouterTestCase(unittest.TestCase):
         mock_result.needs_retry.return_value = False
         self.router_mock = db.router
         self.storage_mock = db.storage
-        self.agent_mock = Mock(spec=settings.agent)
-        settings.agent = self.agent_mock
 
     def _raise_connect_error(self):
         raise ConnectError()
@@ -1160,7 +1160,8 @@ class WebPushRouterTestCase(unittest.TestCase):
             "encryption": "awesomecrypto",
             "crypto-key": "niftykey"
         }
-        self.router = WebPushRouter(settings, {}, db)
+        self.agent_mock = agent = Mock(spec=Agent)
+        self.router = WebPushRouter(settings, {}, db, agent)
         self.notif = WebPushNotification(
             uaid=uuid.UUID(dummy_uaid),
             channel_id=uuid.UUID(dummy_chid),
@@ -1177,8 +1178,6 @@ class WebPushRouterTestCase(unittest.TestCase):
         mock_result.needs_retry.return_value = False
         self.router_mock = db.router
         self.message_mock = db.message = Mock(spec=Message)
-        self.agent_mock = Mock(spec=settings.agent)
-        settings.agent = self.agent_mock
         self.settings = settings
 
     def test_route_to_busy_node_saves_looks_up_and_sends_check_201(self):

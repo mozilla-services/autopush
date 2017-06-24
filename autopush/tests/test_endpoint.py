@@ -161,7 +161,7 @@ class RegistrationTestCase(unittest.TestCase):
         }
         db.create_initial_message_tables()
 
-        self.routers = routers = routers_from_settings(settings, db)
+        self.routers = routers = routers_from_settings(settings, db, Mock())
         routers["test"] = Mock(spec=IRouter)
         app = EndpointHTTPFactory(settings, db=db, routers=routers)
         self.client = Client(app)

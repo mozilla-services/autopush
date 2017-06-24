@@ -10,6 +10,12 @@ from typing import (  # noqa
 )
 
 import cyclone.web
+from twisted.internet import reactor
+from twisted.web.client import (
+    _HTTP11ClientFactory,
+    Agent,
+    HTTPConnectionPool,
+)
 
 from autopush.base import BaseHandler
 from autopush.db import DatabaseManager
@@ -59,14 +65,12 @@ class BaseHTTPFactory(cyclone.web.Application):
     def __init__(self,
                  ap_settings,    # type: AutopushSettings
                  db,             # type: DatabaseManager
-                 routers,        # type: Dict[str, IRouter]
                  handlers=None,  # type: APHandlers
                  log_function=skip_request_logging,  # type: CycloneLogger
                  **kwargs):
         # type: (...) -> None
         self.ap_settings = ap_settings
         self.db = db
-        self.routers = routers
         self.noisy = ap_settings.debug
 
         cyclone.web.Application.__init__(
@@ -91,7 +95,6 @@ class BaseHTTPFactory(cyclone.web.Application):
                     handler_cls,    # Type[BaseHTTPFactory]
                     ap_settings,    # type: AutopushSettings
                     db=None,        # type: Optional[DatabaseManager]
-                    routers=None,   # type: Optional[Dict[str, IRouter]]
                     **kwargs):
         # type: (...) -> BaseHTTPFactory
         """Create a cyclone app around a specific handler_cls for tests.
@@ -109,17 +112,20 @@ class BaseHTTPFactory(cyclone.web.Application):
             if handler is handler_cls:
                 if db is None:
                     db = DatabaseManager.from_settings(ap_settings)
-                if routers is None:
-                    routers = routers_from_settings(ap_settings, db)
-                return cls(
+                return cls._for_handler(
                     ap_settings,
                     db=db,
-                    routers=routers,
                     handlers=[(pattern, handler)],
                     **kwargs
                 )
         raise ValueError("{!r} not in ap_handlers".format(
             handler_cls))  # pragma: nocover
+
+    @classmethod
+    def _for_handler(cls, **kwargs):
+        # type: (**Any) -> BaseHTTPFactory
+        """Create an instance w/ default kwargs for for_handler"""
+        raise NotImplementedError  # pragma: nocover
 
 
 class EndpointHTTPFactory(BaseHTTPFactory):
@@ -146,6 +152,15 @@ class EndpointHTTPFactory(BaseHTTPFactory):
 
     protocol = LimitedHTTPConnection
 
+    def __init__(self,
+                 ap_settings,  # type: AutopushSettings
+                 db,           # type: DatabaseManager
+                 routers,      # type: Dict[str, IRouter]
+                 **kwargs):
+        # type: (...) -> None
+        BaseHTTPFactory.__init__(self, ap_settings, db=db, **kwargs)
+        self.routers = routers
+
     def ssl_cf(self):
         # type: () -> Optional[AutopushSSLContextFactory]
         """Build our SSL Factory (if configured).
@@ -164,6 +179,16 @@ class EndpointHTTPFactory(BaseHTTPFactory):
             require_peer_certs=settings.enable_tls_auth
         )
 
+    @classmethod
+    def _for_handler(cls, ap_settings, db, routers=None, **kwargs):
+        if routers is None:
+            routers = routers_from_settings(
+                ap_settings,
+                db=db,
+                agent=agent_from_settings(ap_settings)
+            )
+        return cls(ap_settings, db=db, routers=routers, **kwargs)
+
 
 class InternalRouterHTTPFactory(BaseHTTPFactory):
 
@@ -171,6 +196,15 @@ class InternalRouterHTTPFactory(BaseHTTPFactory):
         (r"/push/([^\/]+)", RouterHandler),
         (r"/notif/([^\/]+)(?:/(\d+))?", NotificationHandler),
     )
+
+    def __init__(self,
+                 ap_settings,  # type: AutopushSettings
+                 db,           # type: DatabaseManager
+                 clients,      # type: Dict[str, PushServerProtocol]
+                 **kwargs):
+        # type: (...) -> None
+        BaseHTTPFactory.__init__(self, ap_settings, db, **kwargs)
+        self.clients = clients
 
     @property
     def _hostname(self):
@@ -193,9 +227,30 @@ class InternalRouterHTTPFactory(BaseHTTPFactory):
             dh_file=settings.ssl_dh_param
         )
 
+    @classmethod
+    def _for_handler(cls, ap_settings, db, clients=None, **kwargs):
+        if clients is None:
+            clients = {}
+        return cls(ap_settings, db=db, clients=clients, **kwargs)
+
 
 class MemUsageHTTPFactory(BaseHTTPFactory):
 
     ap_handlers = (
         (r"^/_memusage", MemUsageHandler),
     )
+
+
+class QuietClientFactory(_HTTP11ClientFactory):
+    """Silence the start/stop factory messages."""
+    noisy = False
+
+
+def agent_from_settings(settings):
+    # type: (AutopushSettings) -> Agent
+    """Create a twisted.web.client Agent from settings"""
+    # Use a persistent connection pool for HTTP requests.
+    pool = HTTPConnectionPool(reactor)
+    if not settings.debug:
+        pool._factory = QuietClientFactory
+    return Agent(reactor, connectTimeout=settings.connect_timeout, pool=pool)

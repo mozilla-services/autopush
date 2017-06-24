@@ -22,6 +22,7 @@ from twisted.internet.defer import (
 )
 from twisted.internet.error import ConnectError
 from twisted.trial import unittest
+from twisted.web.client import Agent
 
 import autopush.db as db
 from autopush.db import DatabaseManager, create_rotating_message_table
@@ -38,7 +39,6 @@ from autopush.websocket import (
     RouterHandler,
     NotificationHandler,
     WebSocketServerProtocol,
-    periodic_reporter
 )
 from autopush.utils import base64url_encode, ms_time
 
@@ -119,7 +119,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.metrics = db.metrics = Mock(spec=SinkMetrics)
         db.create_initial_message_tables()
 
-        self.factory = PushServerFactory(settings, db)
+        self.mock_agent = agent = Mock(spec=Agent)
+        self.factory = PushServerFactory(settings, db, agent, {})
         self.proto = self.factory.buildProtocol(('localhost', 8080))
         self.proto._log_exc = False
         self.proto.log = Mock(spec=Logger)
@@ -139,8 +140,6 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.force_retry = self.proto._force_retry
 
     def _connect(self):
-        # Do not call agent
-        self.proto.ap_settings.agent = Mock()
         self.proto.onConnect(None)
 
     def _send_message(self, msg):
@@ -264,7 +263,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_reporter(self):
         self.metrics.reset_mock()
-        periodic_reporter(self.ap_settings, self.metrics, self.factory)
+        self.factory.periodic_reporter(self.metrics)
 
         # Verify metric increase of nothing
         calls = self.metrics.method_calls
@@ -364,13 +363,13 @@ class WebsocketTestCase(unittest.TestCase):
     def test_close_with_cleanup(self):
         self._connect()
         self.proto.ps.uaid = dummy_uaid_str
-        self.proto.ap_settings.clients[dummy_uaid_str] = self.proto
+        self.factory.clients[dummy_uaid_str] = self.proto
 
         # Stick a mock on
         notif_mock = Mock()
         self.proto.ps._callbacks.append(notif_mock)
         self.proto.onClose(True, None, None)
-        eq_(len(self.proto.ap_settings.clients), 0)
+        eq_(len(self.factory.clients), 0)
         eq_(len(list(notif_mock.mock_calls)), 1)
         name, _, _ = notif_mock.mock_calls[0]
         eq_(name, "cancel")
@@ -379,7 +378,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_close_with_delivery_cleanup(self):
         self._connect()
         self.proto.ps.uaid = dummy_uaid_str
-        self.proto.ap_settings.clients[dummy_uaid_str] = self.proto
+        self.factory.clients[dummy_uaid_str] = self.proto
         chid = str(uuid.uuid4())
 
         # Stick an un-acked direct notification in
@@ -388,19 +387,18 @@ class WebsocketTestCase(unittest.TestCase):
         # Apply some mocks
         self.proto.db.storage.save_notification = Mock()
         self.proto.db.router.get_uaid = mock_get = Mock()
-        self.proto.ap_settings.agent = mock_agent = Mock()
         mock_get.return_value = dict(node_id="localhost:2000")
 
         # Close the connection
         self.proto.onClose(True, None, None)
-        yield self._wait_for(lambda: mock_agent.mock_calls)
+        yield self._wait_for(lambda: self.mock_agent.mock_calls)
         self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_close_with_delivery_cleanup_using_webpush(self):
         self._connect()
         self.proto.ps.uaid = dummy_uaid.hex
-        self.proto.ap_settings.clients[dummy_uaid.hex] = self.proto
+        self.factory.clients[dummy_uaid.hex] = self.proto
         self.proto.ps.use_webpush = True
 
         # Stick an un-acked direct notification in
@@ -409,19 +407,18 @@ class WebsocketTestCase(unittest.TestCase):
         # Apply some mocks
         self.proto.db.message.store_message = Mock()
         self.proto.db.router.get_uaid = mock_get = Mock()
-        self.proto.ap_settings.agent = mock_agent = Mock()
         mock_get.return_value = dict(node_id="localhost:2000")
 
         # Close the connection
         self.proto.onClose(True, None, None)
-        yield self._wait_for(lambda: mock_agent.mock_calls)
+        yield self._wait_for(lambda: self.mock_agent.mock_calls)
         self.flushLoggedErrors()
 
     @inlineCallbacks
     def test_close_with_delivery_cleanup_and_get_no_result(self):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.ap_settings.clients["asdf"] = self.proto
+        self.factory.clients["asdf"] = self.proto
         chid = str(uuid.uuid4())
 
         # Stick an un-acked direct notification in
@@ -444,7 +441,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_close_with_delivery_cleanup_and_get_uaid_error(self):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.ap_settings.clients["asdf"] = self.proto
+        self.factory.clients["asdf"] = self.proto
         chid = str(uuid.uuid4())
 
         # Stick an un-acked direct notification in
@@ -471,7 +468,7 @@ class WebsocketTestCase(unittest.TestCase):
     def test_close_with_delivery_cleanup_and_no_node_id(self):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.ap_settings.clients["asdf"] = self.proto
+        self.factory.clients["asdf"] = self.proto
         chid = str(uuid.uuid4())
 
         # Stick an un-acked direct notification in
@@ -1177,15 +1174,13 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_register_kill_others(self):
         self._connect()
-        mock_agent = Mock()
-        self.proto.ap_settings.agent = mock_agent
         node_id = "http://otherhost"
         uaid = "deadbeef000000000000000000000000"
         self.proto.ps.uaid = uaid
         connected = int(time.time())
         res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
-        mock_agent.request.assert_called_with(
+        self.mock_agent.request.assert_called_with(
             "DELETE",
             "%s/notif/%s/%s" % (node_id, uaid, connected))
 
@@ -1193,7 +1188,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
 
         d = Deferred()
-        self.proto.ap_settings.agent.request.return_value = d
+        self.mock_agent.request.return_value = d
         node_id = "http://otherhost"
         uaid = "deadbeef000000000000000000000000"
         self.proto.ps.uaid = uaid
@@ -1226,8 +1221,6 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_check_kill_self(self):
         self._connect()
-        mock_agent = Mock()
-        self.proto.ap_settings.agent = mock_agent
         node_id = "http://localhost"
         uaid = "deadbeef000000000000000000000000"
         # Test that the 'existing' connection is newer than the current one.
@@ -1235,7 +1228,7 @@ class WebsocketTestCase(unittest.TestCase):
         ca = connected + 30000
         ff = Mock()
         ff.ps.connected_at = ca
-        self.proto.ap_settings.clients = {uaid: ff}
+        self.factory.clients = {uaid: ff}
         self.sendClose = Mock()
         self.proto.sendClose = Mock()
         self.proto.ps.uaid = uaid
@@ -1247,8 +1240,6 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_check_kill_existing(self):
         self._connect()
-        mock_agent = Mock()
-        self.proto.ap_settings.agent = mock_agent
         node_id = "http://localhost"
         uaid = "deadbeef000000000000000000000000"
         # Test that the 'existing' connection is older than the current one.
@@ -1256,7 +1247,7 @@ class WebsocketTestCase(unittest.TestCase):
         ca = connected - 30000
         ff = Mock()
         ff.ps.connected_at = ca
-        self.proto.ap_settings.clients = {uaid: ff}
+        self.factory.clients = {uaid: ff}
         self.proto.sendClose = Mock()
         self.proto.ps.uaid = uaid
         res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
@@ -1957,7 +1948,7 @@ class RouterHandlerTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_client_connected(self):
         uaid = dummy_uaid_str
-        self.ap_settings.clients[uaid] = client_mock = Mock(paused=False)
+        self.app.clients[uaid] = client_mock = Mock(paused=False)
         resp = yield self.client.put(self.url(uaid=uaid), body="{}")
         eq_(resp.get_status(), 200)
         eq_(resp.content, "Client accepted for delivery")
@@ -1972,7 +1963,7 @@ class RouterHandlerTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_client_connected_but_busy(self):
         uaid = dummy_uaid_str
-        self.ap_settings.clients[uaid] = Mock(accept_notification=False)
+        self.app.clients[uaid] = Mock(accept_notification=False)
         resp = yield self.client.put(self.url(uaid=uaid), body="{}")
         eq_(resp.get_status(), 503)
         eq_(resp.content, "Client busy.")
@@ -2001,7 +1992,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_connected_and_free(self):
         uaid = dummy_uaid_str
-        self.ap_settings.clients[uaid] = client_mock = Mock(paused=False)
+        self.app.clients[uaid] = client_mock = Mock(paused=False)
         resp = yield self.client.put(self.url(uaid=uaid), body="{}")
         eq_(resp.get_status(), 200)
         eq_(resp.content, "Notification check started")
@@ -2010,7 +2001,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_connected_and_busy(self):
         uaid = dummy_uaid_str
-        self.ap_settings.clients[uaid] = client_mock = Mock(
+        self.app.clients[uaid] = client_mock = Mock(
             paused=True,
             _check_notifications=False
         )
@@ -2029,7 +2020,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
     def test_delete(self):
         uaid = dummy_uaid_str
         now = int(time.time() * 1000)
-        self.ap_settings.clients[uaid] = client_mock = Mock(
+        self.app.clients[uaid] = client_mock = Mock(
             ps=Mock(connected_at=now),
             sendClose=Mock()
         )

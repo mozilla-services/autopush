@@ -7,9 +7,7 @@ from typing import Any  # noqa
 
 from cryptography.fernet import Fernet, MultiFernet
 from cryptography.hazmat.primitives import constant_time
-from twisted.internet import reactor
-from twisted.web.client import Agent, HTTPConnectionPool, _HTTP11ClientFactory
-
+from twisted.web.client import _HTTP11ClientFactory
 
 import autopush.db as db
 from autopush.exceptions import (
@@ -98,13 +96,8 @@ class AutopushSettings(object):
 
         """
         self.debug = debug
-        # Use a persistent connection pool for HTTP requests.
-        pool = HTTPConnectionPool(reactor)
-        if not debug:
-            pool._factory = QuietClientFactory
 
-        self.agent = Agent(reactor, connectTimeout=connect_timeout,
-                           pool=pool)
+        self.connect_timeout = connect_timeout
 
         if not crypto_key:
             crypto_key = [Fernet.generate_key()]
@@ -120,7 +113,6 @@ class AutopushSettings(object):
         self.bear_hash_key = bear_hash_key
 
         self.max_data = max_data
-        self.clients = {}
 
         # Setup hosts/ports/urls
         default_hostname = socket.gethostname()
