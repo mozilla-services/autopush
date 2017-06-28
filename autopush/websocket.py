@@ -863,10 +863,12 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # All records must have a router_type and connected_at, in some odd
         # cases a record exists for some users that doesn't
         if "router_type" not in record or "connected_at" not in record:
-            self.log.info(format="Dropping User", code=104,
-                          uaid_hash=self.ps.uaid_hash,
-                          uaid_record=dump_uaid(record))
+            self.log.debug(format="Dropping User", code=104,
+                           uaid_hash=self.ps.uaid_hash,
+                           uaid_record=dump_uaid(record))
             self.force_retry(self.db.router.drop_user, self.ps.uaid)
+            self.metrics.increment("client.drop_user",
+                                   tags={"errno": 104})
             return None
 
         # Validate webpush records
@@ -874,11 +876,13 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # Current month must exist and be a valid prior month
             if ("current_month" not in record) or record["current_month"] \
                     not in self.db.message_tables:
-                self.log.info(format="Dropping User", code=105,
-                              uaid_hash=self.ps.uaid_hash,
-                              uaid_record=dump_uaid(record))
+                self.log.debug(format="Dropping User", code=105,
+                               uaid_hash=self.ps.uaid_hash,
+                               uaid_record=dump_uaid(record))
                 self.force_retry(self.db.router.drop_user,
                                  self.ps.uaid)
+                self.metrics.increment("client.drop_user",
+                                       tags={"errno": 105})
                 return None
 
             # Determine if message table rotation is needed
@@ -965,8 +969,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         msg['env'] = self.ap_settings.env
         self.ap_settings.clients[self.ps.uaid] = self
         self.sendJSON(msg)
-        self.log.info(format="hello", uaid_hash=self.ps.uaid_hash,
-                      **self.ps.raw_agent)
+        self.log.debug(format="hello", uaid_hash=self.ps.uaid_hash,
+                       **self.ps.raw_agent)
         self.metrics.increment("updates.client.hello", tags=self.base_tags)
         self.process_notifications()
 
@@ -1297,11 +1301,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.sendJSON(msg)
         self.metrics.increment("updates.client.register", tags=self.base_tags)
         self.ps.stats.registers += 1
-        self.log.info(format="Register", channel_id=chid,
-                      endpoint=endpoint,
-                      uaid_hash=self.ps.uaid_hash,
-                      user_agent=self.ps.user_agent,
-                      **self.ps.raw_agent)
+        self.log.debug(format="Register", channel_id=chid,
+                       endpoint=endpoint,
+                       uaid_hash=self.ps.uaid_hash,
+                       user_agent=self.ps.user_agent,
+                       **self.ps.raw_agent)
 
     def process_unregister(self, data):
         """Process an unregister message"""
@@ -1322,7 +1326,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                      **self.ps.raw_agent)
         if "code" in data:
             event["code"] = extract_code(data)
-        self.log.info(**event)
+        self.log.debug(**event)
 
         # Clear out any existing tracked messages for this channel
         if self.ps.use_webpush:
@@ -1377,11 +1381,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if found:
             msg = found[0]
             size = len(msg.data) if msg.data else 0
-            self.log.info(format="Ack", router_key="webpush", channel_id=chid,
-                          message_id=version, message_source="direct",
-                          message_size=size, uaid_hash=self.ps.uaid_hash,
-                          user_agent=self.ps.user_agent, code=code,
-                          **self.ps.raw_agent)
+            self.log.debug(format="Ack", router_key="webpush", channel_id=chid,
+                           message_id=version, message_source="direct",
+                           message_size=size, uaid_hash=self.ps.uaid_hash,
+                           user_agent=self.ps.user_agent, code=code,
+                           **self.ps.raw_agent)
             self.ps.stats.direct_acked += 1
             self.ps.direct_updates[chid].remove(msg)
             return
@@ -1392,11 +1396,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if found:
             msg = found[0]
             size = len(msg.data) if msg.data else 0
-            self.log.info(format="Ack", router_key="webpush", channel_id=chid,
-                          message_id=version, message_source="stored",
-                          message_size=size, uaid_hash=self.ps.uaid_hash,
-                          user_agent=self.ps.user_agent, code=code,
-                          **self.ps.raw_agent)
+            self.log.debug(format="Ack", router_key="webpush", channel_id=chid,
+                           message_id=version, message_source="stored",
+                           message_size=size, uaid_hash=self.ps.uaid_hash,
+                           user_agent=self.ps.user_agent, code=code,
+                           **self.ps.raw_agent)
             self.ps.stats.stored_acked += 1
 
             if msg.sortkey_timestamp:
@@ -1447,19 +1451,19 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if chid in self.ps.direct_updates and \
            self.ps.direct_updates[chid] <= version:
             del self.ps.direct_updates[chid]
-            self.log.info(format="Ack", router_key="simplepush",
-                          channel_id=chid, message_id=str(version),
-                          message_source="direct",
-                          uaid_hash=self.ps.uaid_hash,
-                          user_agent=self.ps.user_agent, code=code,
-                          **self.ps.raw_agent)
+            self.log.debug(format="Ack", router_key="simplepush",
+                           channel_id=chid, message_id=str(version),
+                           message_source="direct",
+                           uaid_hash=self.ps.uaid_hash,
+                           user_agent=self.ps.user_agent, code=code,
+                           **self.ps.raw_agent)
             self.ps.stats.direct_acked += 1
             return
-        self.log.info(format="Ack", router_key="simplepush", channel_id=chid,
-                      message_id=str(version), message_source="stored",
-                      uaid_hash=self.ps.uaid_hash,
-                      user_agent=self.ps.user_agent, code=code,
-                      **self.ps.raw_agent)
+        self.log.debug(format="Ack", router_key="simplepush", channel_id=chid,
+                       message_id=str(version), message_source="stored",
+                       uaid_hash=self.ps.uaid_hash,
+                       user_agent=self.ps.user_agent, code=code,
+                       **self.ps.raw_agent)
         self.ps.stats.stored_acked += 1
         if chid in self.ps.updates_sent and \
            self.ps.updates_sent[chid] <= version:
@@ -1493,9 +1497,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if not version:
             return
 
-        self.log.info(format="Nack", uaid_hash=self.ps.uaid_hash,
-                      user_agent=self.ps.user_agent, message_id=str(version),
-                      code=code, **self.ps.raw_agent)
+        self.log.debug(format="Nack", uaid_hash=self.ps.uaid_hash,
+                       user_agent=self.ps.user_agent, message_id=str(version),
+                       code=code, **self.ps.raw_agent)
         self.ps.stats.nacks += 1
 
     def check_missed_notifications(self, results, resume=False):

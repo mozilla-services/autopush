@@ -409,17 +409,17 @@ class UaidRegistrationHandler(BaseRegistrationHandler):
         return d
 
     def _delete_uaid(self, uaid):
-        self.log.info(format="Dropping User", code=101,
-                      uaid_hash=hasher(uaid.hex))
+        self.log.debug(format="Dropping User", code=101,
+                       uaid_hash=hasher(uaid.hex))
         if not self.db.router.drop_user(uaid.hex):
             raise ItemNotFound("UAID not found")
 
     def _uaid_not_found_err(self, fail):
         """errBack for uaid lookup not finding the user"""
         fail.trap(ItemNotFound)
-        self.log.info(format="UAID not found in AWS.",
-                      status_code=410, errno=103,
-                      client_info=self._client_info)
+        self.log.debug(format="UAID not found in AWS.",
+                       status_code=410, errno=103,
+                       client_info=self._client_info)
         self._write_response(410, errno=103,
                              message="Endpoint has expired. "
                                      "Do not send messages to this endpoint.")
@@ -470,7 +470,7 @@ class ChannelRegistrationHandler(BaseRegistrationHandler):
     def _chid_not_found_err(self, fail):
         """errBack for unknown chid"""
         fail.trap(ItemNotFound, ValueError)
-        self.log.info(format="CHID not found in AWS.",
-                      status_code=410, errno=106,
-                      **self._client_info)
+        self.log.debug(format="CHID not found in AWS.",
+                       status_code=410, errno=106,
+                       **self._client_info)
         self._write_response(410, 106, message="Invalid endpoint.")

@@ -46,7 +46,7 @@ class MessageHandler(BaseWebHandler):
         return d
 
     def _delete_completed(self, *args, **kwargs):
-        self.log.info(format="Message Deleted", status_code=204,
-                      **self._client_info)
+        self.log.debug(format="Message Deleted", status_code=204,
+                       **self._client_info)
         self.set_status(204)
         self.finish()

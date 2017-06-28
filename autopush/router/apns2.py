@@ -94,7 +94,7 @@ class APNSClient(object):
                 ssl_context=self.ssl_context,
                 force_proto='h2') for x in range(0, max_connections)))
         if self.log:
-            self.log.info("Starting APNS connection")
+            self.log.debug("Starting APNS connection")
 
     def send(self, router_token, payload, apns_id,
              priority=True, topic=None, exp=None):

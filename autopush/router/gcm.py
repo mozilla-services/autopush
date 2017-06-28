@@ -146,8 +146,8 @@ class GCMRouter(object):
         #  for reg_id, msg_id in reply.success.items():
         # updates
         for old_id, new_id in reply.canonical.items():
-            self.log.info("GCM id changed : {old} => {new}",
-                          old=old_id, new=new_id)
+            self.log.debug("GCM id changed : {old} => {new}",
+                           old=old_id, new=new_id)
             self.metrics.increment("updates.client.bridge.gcm.failed.rereg",
                                    self._base_tags)
             return RouterResponse(status_code=503,
@@ -158,7 +158,7 @@ class GCMRouter(object):
         for reg_id in reply.not_registered:
             self.metrics.increment("updates.client.bridge.gcm.failed.unreg",
                                    self._base_tags)
-            self.log.info("GCM no longer registered: %s" % reg_id)
+            self.log.debug("GCM no longer registered: %s" % reg_id)
             return RouterResponse(
                 status_code=410,
                 response_body="Endpoint requires client update",
@@ -169,8 +169,8 @@ class GCMRouter(object):
         if len(reply.failed.items()) > 0:
             self.metrics.increment("updates.client.bridge.gcm.failed.failure",
                                    self._base_tags)
-            self.log.info("GCM failures: {failed()}",
-                          failed=lambda: repr(reply.failed.items()))
+            self.log.debug("GCM failures: {failed()}",
+                           failed=lambda: repr(reply.failed.items()))
             raise RouterException("GCM unable to deliver", status_code=410,
                                   response_body="GCM recipient not available.",
                                   log_exception=False,
