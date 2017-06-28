@@ -9,7 +9,8 @@ botocore==1.5.53
 cffi==1.10.0
 click==6.7
 contextlib2==0.5.5
-cryptography==1.8.1
+# Include https://github.com/pyca/cryptography/pull/3732 until it is released.
+-e git+https://github.com/pyca/cryptography.git@f21ffff2d2bc916b70e66810b4582a604f03965f#egg=cryptography
 cyclone==1.1
 datadog==0.16.0
 decorator==4.0.11
