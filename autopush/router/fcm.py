@@ -227,8 +227,8 @@ class FCMRouter(object):
         if reply.get('canonical_ids'):
             old_id = router_data['token']
             new_id = result.get('registration_id')
-            self.log.info("FCM id changed : {old} => {new}",
-                          old=old_id, new=new_id)
+            self.log.debug("FCM id changed : {old} => {new}",
+                           old=old_id, new=new_id)
             self.metrics.increment("updates.client.bridge.fcm.failed.rereg",
                                    self._base_tags)
             return RouterResponse(status_code=503,
@@ -253,10 +253,10 @@ class FCMRouter(object):
                                                     "later.",
                                       log_exception=False)
             creds = router_data["creds"]
-            self.log.info("{msg} : {info}",
-                          msg=err['msg'],
-                          info={"senderid": creds.get('registration_id'),
-                                "reason": reason})
+            self.log.debug("{msg} : {info}",
+                           msg=err['msg'],
+                           info={"senderid": creds.get('registration_id'),
+                                 "reason": reason})
             return RouterResponse(
                 status_code=err['err'],
                 errno=err['errno'],

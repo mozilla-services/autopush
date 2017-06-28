@@ -26,6 +26,7 @@ from typing import (  # noqa
 
 from autopush.crypto_key import CryptoKey
 from autopush.db import DatabaseManager  # noqa
+from autopush.metrics import Metrics  # noqa
 from autopush.db import dump_uaid, hasher
 from autopush.exceptions import (
     InvalidRequest,
@@ -109,21 +110,24 @@ class WebPushSubscriptionSchema(Schema):
     def _validate_webpush(self, d, result):
         db = self.context["db"]  # type: DatabaseManager
         log = self.context["log"]  # type: Logger
+        metrics = self.context["metrics"]  # type: Metrics
         channel_id = normalize_id(d["chid"])
         uaid = result["uaid"]
         if 'current_month' not in result:
-            log.info(format="Dropping User", code=102,
-                     uaid_hash=hasher(uaid),
-                     uaid_record=dump_uaid(result))
+            log.debug(format="Dropping User", code=102,
+                      uaid_hash=hasher(uaid),
+                      uaid_record=dump_uaid(result))
+            metrics.increment("updates.drop_user", tags={"errno": 102})
             db.router.drop_user(uaid)
             raise InvalidRequest("No such subscription", status_code=410,
                                  errno=106)
 
         month_table = result["current_month"]
         if month_table not in db.message_tables:
-            log.info(format="Dropping User", code=103,
-                     uaid_hash=hasher(uaid),
-                     uaid_record=dump_uaid(result))
+            log.debug(format="Dropping User", code=103,
+                      uaid_hash=hasher(uaid),
+                      uaid_record=dump_uaid(result))
+            metrics.increment("updates.drop_user", tags={"errno": 103})
             db.router.drop_user(uaid)
             raise InvalidRequest("No such subscription", status_code=410,
                                  errno=106)
@@ -131,8 +135,8 @@ class WebPushSubscriptionSchema(Schema):
 
         if (not exists or channel_id.lower() not
                 in map(lambda x: normalize_id(x), chans)):
-            log.info("Unknown subscription: {channel_id}",
-                     channel_id=channel_id)
+            log.debug("Unknown subscription: {channel_id}",
+                      channel_id=channel_id)
             raise InvalidRequest("No such subscription", status_code=410,
                                  errno=106)
 
@@ -481,10 +485,10 @@ class WebPushHandler(BaseWebHandler):
                 # An empty router_data object indicates that the record should
                 # be deleted. There is no longer valid route information for
                 # this record.
-                self.log.info(format="Dropping User", code=100,
-                              uaid_hash=hasher(uaid_data["uaid"]),
-                              uaid_record=dump_uaid(uaid_data),
-                              client_info=self._client_info)
+                self.log.debug(format="Dropping User", code=100,
+                               uaid_hash=hasher(uaid_data["uaid"]),
+                               uaid_record=dump_uaid(uaid_data),
+                               client_info=self._client_info)
                 d = deferToThread(self.db.router.drop_user, uaid_data["uaid"])
                 d.addCallback(lambda x: self._router_response(response))
                 return d
@@ -503,10 +507,10 @@ class WebPushHandler(BaseWebHandler):
         else:
             # No changes are requested by the bridge system, proceed as normal
             if response.status_code == 200 or response.logged_status == 200:
-                self.log.info(format="Successful delivery",
-                              client_info=self._client_info)
+                self.log.debug(format="Successful delivery",
+                               client_info=self._client_info)
             elif response.status_code == 202 or response.logged_status == 202:
-                self.log.info(
+                self.log.debug(
                     format="Router miss, message stored.",
                     client_info=self._client_info)
             self.metrics.timing("updates.handled", duration=time_diff)

@@ -1065,7 +1065,7 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(msg["status"], 200)
         eq_(msg["messageType"], "register")
         ok_("pushEndpoint" in msg)
-        assert_called_included(self.proto.log.info, format="Register")
+        assert_called_included(self.proto.log.debug, format="Register")
 
     @inlineCallbacks
     def test_register_webpush(self):
@@ -1077,7 +1077,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         yield self.proto.process_register(dict(channelID=chid))
         ok_(self.proto.db.message.register_channel.called)
-        assert_called_included(self.proto.log.info, format="Register")
+        assert_called_included(self.proto.log.debug, format="Register")
 
     @inlineCallbacks
     def test_register_webpush_with_key(self):
@@ -1106,7 +1106,7 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(test_endpoint,
             self.proto.sendJSON.call_args[0][0]['pushEndpoint'])
         ok_(self.proto.db.message.register_channel.called)
-        assert_called_included(self.proto.log.info, format="Register")
+        assert_called_included(self.proto.log.debug, format="Register")
 
     @inlineCallbacks
     def test_register_no_chid(self):
@@ -1289,7 +1289,7 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(msg["status"], 200)
         eq_(msg["channelID"], chid)
         eq_(len(self.proto.log.mock_calls), 2)
-        assert_called_included(self.proto.log.info, format="Unregister")
+        assert_called_included(self.proto.log.debug, format="Unregister")
 
     @inlineCallbacks
     def test_ws_unregister_without_chid(self):
@@ -1330,7 +1330,7 @@ class WebsocketTestCase(unittest.TestCase):
                                 channelID=chid))
         yield self._wait_for(lambda: self.proto.log.failure.called)
         self.proto.log.failure.assert_called_once()
-        assert_called_included(self.proto.log.info, format="Unregister")
+        assert_called_included(self.proto.log.debug, format="Unregister")
 
     def test_notification(self):
         self._connect()
@@ -1420,8 +1420,8 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Verify it was cleared out
         eq_(len(self.proto.ps.direct_updates), 0)
-        eq_(len(self.proto.log.info.mock_calls), 2)
-        assert_called_included(self.proto.log.info,
+        eq_(len(self.proto.log.debug.mock_calls), 2)
+        assert_called_included(self.proto.log.debug,
                                format="Ack",
                                router_key="simplepush",
                                message_source="direct",
@@ -1446,8 +1446,8 @@ class WebsocketTestCase(unittest.TestCase):
             version=dummy_version
         ))
         eq_(self.proto.ps.direct_updates[chid], [])
-        eq_(len(self.proto.log.info.mock_calls), 1)
-        assert_called_included(self.proto.log.info,
+        eq_(len(self.proto.log.debug.mock_calls), 1)
+        assert_called_included(self.proto.log.debug,
                                format="Ack",
                                router_key="webpush",
                                message_source="direct",
@@ -1472,8 +1472,8 @@ class WebsocketTestCase(unittest.TestCase):
         ))
         ok_(self.proto.force_retry.called)
         ok_(mock_defer.addBoth.called)
-        eq_(len(self.proto.log.info.mock_calls), 1)
-        assert_called_included(self.proto.log.info,
+        eq_(len(self.proto.log.debug.mock_calls), 1)
+        assert_called_included(self.proto.log.debug,
                                format="Ack",
                                router_key="webpush",
                                message_source="stored")
@@ -1486,7 +1486,7 @@ class WebsocketTestCase(unittest.TestCase):
             version=dummy_version,
             code=200
         )), False)
-        eq_(len(self.proto.log.info.mock_calls), 1)
+        eq_(len(self.proto.log.debug.mock_calls), 1)
 
     def test_nack_no_version(self):
         self._connect()
@@ -1495,7 +1495,7 @@ class WebsocketTestCase(unittest.TestCase):
             messageType="nack",
             code=200
         )), False)
-        eq_(len(self.proto.log.info.mock_calls), 0)
+        eq_(len(self.proto.log.debug.mock_calls), 0)
 
     def test_ack_remove(self):
         self._connect()

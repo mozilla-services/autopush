@@ -210,10 +210,10 @@ class BaseWebHandler(BaseHandler):
         """errBack for validation errors"""
         fail.trap(InvalidRequest)
         exc = fail.value
-        self.log.info(format="Request validation error: {}".format(exc),
-                      status_code=exc.status_code,
-                      errno=exc.errno,
-                      client_info=self._client_info)
+        self.log.debug(format="Request validation error: {}".format(exc),
+                       status_code=exc.status_code,
+                       errno=exc.errno,
+                       client_info=self._client_info)
 
         self._write_response(exc.status_code, exc.errno,
                              message="Request did not validate %s" %
@@ -237,17 +237,17 @@ class BaseWebHandler(BaseHandler):
     def _overload_err(self, fail):
         """errBack for throughput provisioned exceptions"""
         fail.trap(ProvisionedThroughputExceededException)
-        self.log.info(format="Throughput Exceeded", status_code=503,
-                      errno=201, client_info=self._client_info)
+        self.log.debug(format="Throughput Exceeded", status_code=503,
+                       errno=201, client_info=self._client_info)
         self._write_response(503, 201,
                              message="Please slow message send rate")
 
     def _boto_err(self, fail):
         """errBack for random boto exceptions"""
         fail.trap(BotoServerError)
-        self.log.info(format="BOTO Error: %s" % str(fail.value),
-                      status_code=503, errno=202,
-                      client_info=self._client_info)
+        self.log.debug(format="BOTO Error: %s" % str(fail.value),
+                       status_code=503, errno=202,
+                       client_info=self._client_info)
         self._write_response(503, errno=202,
                              message="Communication error, please retry")
 
@@ -280,15 +280,15 @@ class BaseWebHandler(BaseHandler):
                     errno=exc.errno or 0,
                     client_info=self._client_info)  # pragma nocover
             if 200 <= exc.status_code < 300:
-                self.log.info(format="Success", status_code=exc.status_code,
-                              logged_status=exc.logged_status or 0,
-                              client_info=self._client_info)
+                self.log.debug(format="Success", status_code=exc.status_code,
+                               logged_status=exc.logged_status or 0,
+                               client_info=self._client_info)
             elif 400 <= exc.status_code < 500:
-                self.log.info(format="Client error",
-                              status_code=exc.status_code,
-                              logged_status=exc.logged_status or 0,
-                              errno=exc.errno or 0,
-                              client_info=self._client_info)
+                self.log.debug(format="Client error",
+                               status_code=exc.status_code,
+                               logged_status=exc.logged_status or 0,
+                               errno=exc.errno or 0,
+                               client_info=self._client_info)
         self._router_response(exc)
 
     def _write_validation_err(self, errors):
@@ -323,5 +323,5 @@ class BaseWebHandler(BaseHandler):
         """
         status_code = status_code or self.get_status()
         self._timings["request_time"] = time.time() - self._start_time
-        self.log.info("Request timings", client_info=self._client_info,
-                      timings=self._timings, status_code=status_code)
+        self.log.debug("Request timings", client_info=self._client_info,
+                       timings=self._timings, status_code=status_code)

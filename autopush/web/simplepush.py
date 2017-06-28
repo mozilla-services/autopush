@@ -129,11 +129,11 @@ class SimplePushHandler(BaseWebHandler):
     def _router_completed(self, response, uaid_data, warning=""):
         """Called after router has completed successfully"""
         if response.status_code == 200 or response.logged_status == 200:
-            self.log.info(format="Successful delivery",
-                          client_info=self._client_info)
+            self.log.debug(format="Successful delivery",
+                           client_info=self._client_info)
         elif response.status_code == 202 or response.logged_status == 202:
-            self.log.info(format="Router miss, message stored.",
-                          client_info=self._client_info)
+            self.log.debug(format="Router miss, message stored.",
+                           client_info=self._client_info)
         time_diff = time.time() - self._start_time
         self.metrics.timing("updates.handled", duration=time_diff)
         response.response_body = (
