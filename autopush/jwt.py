@@ -1,6 +1,11 @@
 import base64
 import binascii
 import json
+try:
+    from __pypy__ import add_memory_pressure
+except ImportError:
+    def add_memory_pressure(estimate):
+        pass
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
@@ -89,6 +94,10 @@ class VerifyJWT(object):
                 ec.SECP256R1(),
                 key
             ).public_key(default_backend())
+
+            # cffi issue #320: public_key & verify allocate approx.
+            add_memory_pressure(144)
+
             # NOTE: verify() will take any string as the signature. It appears
             # to be doing lazy verification and matching strings rather than
             # comparing content values. If the signatures start failing for
