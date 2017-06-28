@@ -1,6 +1,7 @@
 import base64
 import binascii
 import json
+import os
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.backends import default_backend
@@ -11,6 +12,19 @@ from twisted.logger import Logger
 from typing import Tuple  # noqa
 
 from autopush.types import JSONDict  # noqa
+
+# temporarily toggleable for easily enabling on production
+_JWT_MEMORY_PRESSURE = os.environ.get('_JWT_MEMORY_PRESSURE', 0)
+if _JWT_MEMORY_PRESSURE != 0:  # pragma: nocover
+    try:
+        from __pypy__ import add_memory_pressure
+    except ImportError:
+        _JWT_MEMORY_PRESSURE = 0
+    else:
+        try:
+            _JWT_MEMORY_PRESSURE = int(_JWT_MEMORY_PRESSURE)
+        except ValueError:
+            _JWT_MEMORY_PRESSURE = 2496
 
 
 def repad(string):
@@ -89,6 +103,11 @@ class VerifyJWT(object):
                 ec.SECP256R1(),
                 key
             ).public_key(default_backend())
+
+            # cffi issue #320: public_key & verify allocate approx.
+            if _JWT_MEMORY_PRESSURE:  # pragma: nocover
+                add_memory_pressure(_JWT_MEMORY_PRESSURE)
+
             # NOTE: verify() will take any string as the signature. It appears
             # to be doing lazy verification and matching strings rather than
             # comparing content values. If the signatures start failing for
