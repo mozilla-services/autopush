@@ -7,7 +7,7 @@ matrix:
   include:
     - python: 2.7
       env: TOXENV=py27 DDB=true CODECOV=true
-    - python: pypy-5.4.1
+    - python: pypy-5.6.0
       env: TOXENV=pypy DDB=true CODECOV=true
     - env: TOXENV=flake8
     - python: 3.6
