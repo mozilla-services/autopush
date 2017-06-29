@@ -117,16 +117,6 @@ def extract_code(data):
     return code
 
 
-def periodic_reporter(settings, metrics, factory):
-    # type: (AutopushSettings, IMetrics, PushServerFactory) -> None
-    """Twisted Task function that runs every few seconds to emit general
-    metrics regarding twisted and client counts"""
-    metrics.gauge("update.client.writers", len(reactor.getWriters()))
-    metrics.gauge("update.client.readers", len(reactor.getReaders()))
-    metrics.gauge("update.client.connections", len(settings.clients))
-    metrics.gauge("update.client.ws_connections", factory.countConnections)
-
-
 def log_exception(func):
     """Exception Logger Decorator for protocol methods"""
     @wraps(func)
@@ -466,7 +456,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.metrics.increment("client.autoping.no_uaid",
                                    tags=self.base_tags)
             self.sendClose()
-        elif self.ap_settings.clients.get(self.ps.uaid) != self:
+        elif self.factory.clients.get(self.ps.uaid) != self:
             # UAID, but we're not in clients anymore for some reason
             self.metrics.increment("client.autoping.invalid_client",
                                    tags=self.base_tags)
@@ -622,8 +612,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.ps.stats.connection_time = int(elapsed)
 
         # Cleanup our client entry
-        if self.ps.uaid and self.ap_settings.clients.get(self.ps.uaid) == self:
-            del self.ap_settings.clients[self.ps.uaid]
+        if self.ps.uaid and self.factory.clients.get(self.ps.uaid) == self:
+            del self.factory.clients[self.ps.uaid]
 
         # Cancel any outstanding deferreds that weren't already called
         for d in self.ps._callbacks:
@@ -709,7 +699,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         # Send the notify to the node
         url = node_id + "/notif/" + self.ps.uaid
-        d = self.ap_settings.agent.request(
+        d = self.factory.agent.request(
             "PUT",
             url.encode("utf8"),
         ).addCallback(IgnoreBody.ignore)
@@ -927,7 +917,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             return
 
         # Handle dupes on the same node
-        existing = self.ap_settings.clients.get(self.ps.uaid)
+        existing = self.factory.clients.get(self.ps.uaid)
         if existing:
             if self.ps.connected_at <= existing.ps.connected_at:
                 self.sendClose()
@@ -942,7 +932,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             last_connect = previous.get("connected_at")
             if last_connect and node_id != self.ap_settings.router_url:
                 url = "%s/notif/%s/%s" % (node_id, self.ps.uaid, last_connect)
-                d = self.ap_settings.agent.request(
+                d = self.factory.agent.request(
                     "DELETE",
                     url.encode("utf8"),
                 )
@@ -967,7 +957,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             msg["ping"] = self.autoPingInterval
 
         msg['env'] = self.ap_settings.env
-        self.ap_settings.clients[self.ps.uaid] = self
+        self.factory.clients[self.ps.uaid] = self
         self.sendJSON(msg)
         self.log.debug(format="hello", uaid_hash=self.ps.uaid_hash,
                        **self.ps.raw_agent)
@@ -1572,11 +1562,13 @@ class PushServerFactory(WebSocketServerFactory):
 
     protocol = PushServerProtocol
 
-    def __init__(self, ap_settings, db):
+    def __init__(self, ap_settings, db, agent, clients):
         # type: (AutopushSettings, DatabaseManager) -> None
         WebSocketServerFactory.__init__(self, ap_settings.ws_url)
         self.ap_settings = ap_settings
         self.db = db
+        self.agent = agent
+        self.clients = clients
         self.setProtocolOptions(
             webStatus=False,
             openHandshakeTimeout=5,
@@ -1585,6 +1577,17 @@ class PushServerFactory(WebSocketServerFactory):
             maxConnections=ap_settings.max_connections,
             closeHandshakeTimeout=ap_settings.close_handshake_timeout,
         )
+
+    def periodic_reporter(self, metrics):
+        # type: (IMetrics) -> None
+        """Twisted Task function that runs every few seconds to emit general
+        metrics regarding twisted and client counts.
+
+        """
+        metrics.gauge("update.client.writers", len(reactor.getWriters()))
+        metrics.gauge("update.client.readers", len(reactor.getReaders()))
+        metrics.gauge("update.client.connections", len(self.clients))
+        metrics.gauge("update.client.ws_connections", self.countConnections)
 
 
 class RouterHandler(BaseHandler):
@@ -1600,8 +1603,7 @@ class RouterHandler(BaseHandler):
         Attempt delivery of a notification to a connected client.
 
         """
-        settings = self.ap_settings
-        client = settings.clients.get(uaid)
+        client = self.application.clients.get(uaid)
         if not client:
             self.set_status(404, reason=None)
             self.metrics.increment("updates.router.disconnected")
@@ -1630,7 +1632,7 @@ class NotificationHandler(BaseHandler):
         notifications.
 
         """
-        client = self.ap_settings.clients.get(uaid)
+        client = self.application.clients.get(uaid)
         if not client:
             self.set_status(404, reason=None)
             self.metrics.increment("updates.notification.disconnected")
@@ -1656,7 +1658,7 @@ class NotificationHandler(BaseHandler):
         Drop a connected client as the client has connected to a new node.
 
         """
-        client = self.ap_settings.clients.get(uaid)
+        client = self.application.clients.get(uaid)
         if client and client.ps.connected_at == int(connected_at):
             client.sendClose()
             self.write("Terminated duplicate")

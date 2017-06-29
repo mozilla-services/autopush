@@ -51,7 +51,7 @@ class WebPushRouter(SimpleRouter):
         payload = notification.serialize()
         payload["timestamp"] = int(time.time())
         url = node_id + "/push/" + uaid
-        request = self.ap_settings.agent.request(
+        request = self.agent.request(
             "PUT",
             url.encode("utf8"),
             bodyProducer=FileBodyProducer(StringIO(json.dumps(payload))),

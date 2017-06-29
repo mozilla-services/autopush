@@ -26,10 +26,10 @@ class HealthHandler(BaseWebHandler):
 
         """
         self._healthy = True
-        self._health_checks = {
-            "version": __version__,
-            "clients": len(self.ap_settings.clients)
-        }
+        self._health_checks = dict(
+            version=__version__,
+            clients=len(getattr(self.application, 'clients', ()))
+        )
 
         dl = DeferredList([
             self._check_table(self.db.router.table),

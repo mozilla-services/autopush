@@ -10,6 +10,7 @@ from twisted.application.internet import (
 )
 from twisted.application.service import MultiService
 from twisted.internet import reactor
+from twisted.internet.defer import inlineCallbacks
 from twisted.internet.protocol import ServerFactory  # noqa
 from twisted.logger import Logger
 from typing import (  # noqa
@@ -21,7 +22,8 @@ from typing import (  # noqa
 from autopush.http import (
     InternalRouterHTTPFactory,
     EndpointHTTPFactory,
-    MemUsageHTTPFactory
+    MemUsageHTTPFactory,
+    agent_from_settings
 )
 import autopush.utils as utils
 import autopush.logging as logging
@@ -35,7 +37,6 @@ from autopush.settings import AutopushSettings
 from autopush.websocket import (
     ConnectionWSSite,
     PushServerFactory,
-    periodic_reporter,
 )
 
 log = Logger()
@@ -60,6 +61,7 @@ class AutopushMultiService(MultiService):
         super(AutopushMultiService, self).__init__()
         self.settings = settings
         self.db = DatabaseManager.from_settings(settings)
+        self.agent = agent_from_settings(settings)
 
     @staticmethod
     def parse_args(config_files, args):
@@ -87,7 +89,7 @@ class AutopushMultiService(MultiService):
 
     def add_memusage(self):
         """Add the memusage Service"""
-        factory = MemUsageHTTPFactory(self.settings, None, None)
+        factory = MemUsageHTTPFactory(self.settings, None)
         self.addService(
             TCPServer(self.settings.memusage_port, factory, reactor=reactor))
 
@@ -96,6 +98,11 @@ class AutopushMultiService(MultiService):
         reactor.suggestThreadPoolSize(self.THREAD_POOL_SIZE)
         self.startService()
         reactor.run()
+
+    @inlineCallbacks
+    def stopService(self):
+        yield self.agent._pool.closeCachedConnections()
+        yield super(AutopushMultiService, self).stopService()
 
     @classmethod
     def _from_argparse(cls, ns, **kwargs):
@@ -157,7 +164,8 @@ class EndpointApplication(AutopushMultiService):
 
     def __init__(self, *args, **kwargs):
         super(EndpointApplication, self).__init__(*args, **kwargs)
-        self.routers = routers_from_settings(self.settings, self.db)
+        self.routers = routers_from_settings(self.settings, self.db,
+                                             self.agent)
 
     def setup(self, rotate_tables=True):
         self.db.setup(self.settings.preflight_uaid)
@@ -220,6 +228,10 @@ class ConnectionApplication(AutopushMultiService):
     websocket_factory = PushServerFactory
     websocket_site_factory = ConnectionWSSite
 
+    def __init__(self, *args, **kwargs):
+        super(ConnectionApplication, self).__init__(*args, **kwargs)
+        self.clients = {}
+
     def setup(self, rotate_tables=True):
         self.db.setup(self.settings.preflight_uaid)
 
@@ -235,7 +247,8 @@ class ConnectionApplication(AutopushMultiService):
 
     def add_internal_router(self):
         """Start the internal HTTP notification router"""
-        factory = self.internal_router_factory(self.settings, self.db, None)
+        factory = self.internal_router_factory(
+            self.settings, self.db, self.clients)
         factory.add_health_handlers()
         self.add_maybe_ssl(self.settings.router_port, factory,
                            factory.ssl_cf())
@@ -243,11 +256,11 @@ class ConnectionApplication(AutopushMultiService):
     def add_websocket(self):
         """Start the public WebSocket server"""
         settings = self.settings
-        ws_factory = self.websocket_factory(settings, self.db)
+        ws_factory = self.websocket_factory(settings, self.db, self.agent,
+                                            self.clients)
         site_factory = self.websocket_site_factory(settings, ws_factory)
         self.add_maybe_ssl(settings.port, site_factory, site_factory.ssl_cf())
-        self.add_timer(1.0, periodic_reporter, settings, self.db.metrics,
-                       ws_factory)
+        self.add_timer(1.0, ws_factory.periodic_reporter, self.db.metrics)
 
     @classmethod
     def from_argparse(cls, ns):

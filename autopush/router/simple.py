@@ -40,11 +40,12 @@ class SimpleRouter(object):
     """
     log = Logger()
 
-    def __init__(self, ap_settings, router_conf, db):
+    def __init__(self, ap_settings, router_conf, db, agent):
         """Create a new SimpleRouter"""
         self.ap_settings = ap_settings
         self.conf = router_conf
         self.db = db
+        self.agent = agent
         self.waker = None
 
     @property
@@ -195,7 +196,7 @@ class SimpleRouter(object):
                               "version": notification.version,
                               "data": notification.data})
         url = node_id + "/push/" + uaid
-        d = self.ap_settings.agent.request(
+        d = self.agent.request(
             "PUT",
             url.encode("utf8"),
             bodyProducer=FileBodyProducer(StringIO(payload)),
@@ -206,7 +207,7 @@ class SimpleRouter(object):
     def _send_notification_check(self, uaid, node_id):
         """Send a command to the node to check for notifications"""
         url = node_id + "/notif/" + uaid
-        return self.ap_settings.agent.request(
+        return self.agent.request(
             "PUT",
             url.encode("utf8"),
         ).addCallback(IgnoreBody.ignore)

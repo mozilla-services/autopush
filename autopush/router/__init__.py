@@ -6,6 +6,8 @@ through the appropriate system for a given client.
 """
 from typing import Dict  # noqa
 
+from twisted.web.client import Agent  # noqa
+
 from autopush.db import DatabaseManager  # noqa
 from autopush.router.apnsrouter import APNSRouter
 from autopush.router.gcm import GCMRouter
@@ -19,14 +21,14 @@ __all__ = ["APNSRouter", "FCMRouter", "GCMRouter", "SimpleRouter",
            "WebPushRouter"]
 
 
-def routers_from_settings(settings, db):
-    # type: (AutopushSettings, DatabaseManager) -> Dict[str, IRouter]
+def routers_from_settings(settings, db, agent):
+    # type: (AutopushSettings, DatabaseManager, Agent) -> Dict[str, IRouter]
     """Create a dict of IRouters for the given settings"""
     router_conf = settings.router_conf
     routers = dict(
         simplepush=SimpleRouter(
-            settings, router_conf.get("simplepush"), db),
-        webpush=WebPushRouter(settings, None, db)
+            settings, router_conf.get("simplepush"), db, agent),
+        webpush=WebPushRouter(settings, None, db, agent)
     )
     if 'apns' in router_conf:
         routers["apns"] = APNSRouter(settings, router_conf["apns"], db.metrics)
