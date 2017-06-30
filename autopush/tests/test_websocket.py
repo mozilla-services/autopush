@@ -7,6 +7,7 @@ from collections import defaultdict
 
 import twisted.internet.base
 from autobahn.twisted.util import sleep
+from autobahn.websocket.protocol import ConnectionRequest
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
     ItemNotFound
@@ -127,9 +128,9 @@ class WebsocketTestCase(unittest.TestCase):
 
         self.proto.sendMessage = self.send_mock = Mock()
         self.orig_close = self.proto.sendClose
-        request_mock = Mock()
+        request_mock = Mock(spec=ConnectionRequest)
         request_mock.headers = {}
-        self.proto.ps = PushState(db=db, request=request_mock)
+        self.proto.ps = PushState.from_request(request=request_mock, db=db)
         self.proto.sendClose = self.close_mock = Mock()
         self.proto.transport = self.transport_mock = Mock()
         self.proto.closeHandshakeTimeout = 0
@@ -140,7 +141,10 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.force_retry = self.proto._force_retry
 
     def _connect(self):
-        self.proto.onConnect(None)
+        req = Mock(spec=ConnectionRequest)
+        req.headers = {}
+        req.host = None
+        self.proto.onConnect(req)
 
     def _send_message(self, msg):
         self.proto.onMessage(json.dumps(msg).encode('utf8'), False)
@@ -241,7 +245,6 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(self.proto.ps._should_stop, True)
 
     def test_headers_locate(self):
-        from autobahn.websocket.protocol import ConnectionRequest
         req = ConnectionRequest("localhost", {"user-agent": "Me"},
                                 "localhost", "/", {}, 1, "localhost",
                                 [], [])
@@ -255,7 +258,7 @@ class WebsocketTestCase(unittest.TestCase):
                           "rv:1.9.2.3) Gecko/20100401 Firefox/3.6.3 (.NET "
                           "CLR 3.5.30729)"}
         req.host = "example.com:8080"
-        ps = PushState(db=self.proto.db, request=req)
+        ps = PushState.from_request(request=req, db=self.proto.db)
         eq_(sorted(ps._base_tags),
             sorted(['ua_os_family:Windows',
                     'ua_browser_family:Firefox',
