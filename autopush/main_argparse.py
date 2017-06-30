@@ -17,7 +17,7 @@ def add_shared_args(parser):
                         " Stream Name", default="", env_var="STREAM_NAME",
                         type=str)
     parser.add_argument('--crypto_key', help="Crypto key for tokens",
-                        default=[], env_var="CRYPTO_KEY", type=str,
+                        default=None, env_var="CRYPTO_KEY", type=str,
                         action="append")
     parser.add_argument('--key_hash', help="Key to hash IDs for storage",
                         default="", env_var="KEY_HASH", type=str)

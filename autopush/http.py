@@ -41,8 +41,10 @@ from autopush.web.simplepush import SimplePushHandler
 from autopush.web.webpush import WebPushHandler
 from autopush.websocket import (
     NotificationHandler,
+    PushServerProtocol,
     RouterHandler,
 )
+from autopush.websocket import PushServerProtocol  # noqa
 
 APHandlers = Sequence[Tuple[str, Type[BaseHandler]]]
 CycloneLogger = Callable[[BaseHandler], None]
@@ -122,8 +124,8 @@ class BaseHTTPFactory(cyclone.web.Application):
             handler_cls))  # pragma: nocover
 
     @classmethod
-    def _for_handler(cls, **kwargs):
-        # type: (**Any) -> BaseHTTPFactory
+    def _for_handler(cls, ap_settings, **kwargs):
+        # type: (AutopushSettings, **Any) -> BaseHTTPFactory
         """Create an instance w/ default kwargs for for_handler"""
         raise NotImplementedError  # pragma: nocover
 

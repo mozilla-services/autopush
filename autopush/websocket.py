@@ -67,6 +67,7 @@ from twisted.logger import Logger
 from twisted.protocols import policies
 from twisted.python import failure
 from twisted.web._newclient import ResponseFailed
+from twisted.web.client import Agent  # noqa
 from twisted.web.resource import Resource
 from twisted.web.server import Site
 from typing import (  # noqa
@@ -1563,7 +1564,7 @@ class PushServerFactory(WebSocketServerFactory):
     protocol = PushServerProtocol
 
     def __init__(self, ap_settings, db, agent, clients):
-        # type: (AutopushSettings, DatabaseManager) -> None
+        # type: (AutopushSettings, DatabaseManager, Agent, Dict) -> None
         WebSocketServerFactory.__init__(self, ap_settings.ws_url)
         self.ap_settings = ap_settings
         self.db = db
