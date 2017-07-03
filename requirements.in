@@ -1,0 +1,29 @@
+apns
+attrs
+autobahn[twisted]
+boto
+boto3
+click
+configargparse
+# Include https://github.com/pyca/cryptography/pull/3732 until it is released.
+-e git+https://github.com/pyca/cryptography.git@f21ffff2d2bc916b70e66810b4582a604f03965f#egg=cryptography
+cyclone
+datadog
+gcm-client
+hyper
+marshmallow
+marshmallow-polyfield
+objgraph
+pyasn1
+pyfcm
+pyopenssl
+raven
+requests
+service-identity
+simplejson
+twisted
+-e git+https://github.com/habnabit/txstatsd.git@157ef85fbdeafe23865c7c4e176237ffcb3c3f1f#egg=txStatsD-master
+typing
+ua-parser
+wsaccel ; platform_python_implementation == "CPython"
+zope.interface

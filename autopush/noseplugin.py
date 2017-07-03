@@ -22,15 +22,12 @@ open_objects = {}
 
 
 def track_object(obj, msg=None):
-    if not asizeof:
+    """Track sizeof obj. Only when testing w/ pympler installed"""
+    if not _testing or not asizeof:
         return
 
-    # Only track if testing
     sizer = asizeof.Asizer()
     sizer.exclude_types(_excludes)
-    if not _testing:
-        return
-
     tracked_objects[id(obj)].append(
         (time.time(), obj, sizer.asizeof(obj) / 1024.0, msg)
     )
