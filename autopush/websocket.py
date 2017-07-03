@@ -38,6 +38,7 @@ from random import randrange
 
 import attr
 from attr import (
+    Factory,
     attrs,
     attrib
 )
@@ -46,6 +47,7 @@ from autobahn.twisted.websocket import (
     WebSocketServerFactory,
     WebSocketServerProtocol
 )
+from autobahn.websocket.protocol import ConnectionRequest  # noqa
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
     ItemNotFound
@@ -95,6 +97,7 @@ from autopush.protocol import IgnoreBody
 from autopush.metrics import IMetrics  # noqa
 from autopush.settings import AutopushSettings  # noqa
 from autopush.ssl import AutopushSSLContextFactory
+from autopush.types import JSONDict  # noqa
 from autopush.utils import (
     parse_user_agent,
     validate_uaid,
@@ -167,109 +170,86 @@ class SessionStatistics(object):
 
 
 @implementer(IProducer)
+@attrs(slots=True)
 class PushState(object):
+    """Compact storage of a PushProtocolConnection's state"""
 
-    __slots__ = [
-        '_callbacks',
-        '_user_agent',
-        '_base_tags',
-        '_should_stop',
-        '_paused',
-        '_uaid_obj',
-        '_uaid_hash',
-        'raw_agent',
-        'last_ping',
-        'check_storage',
-        'use_webpush',
-        'router_type',
-        'wake_data',
-        'connected_at',
-        'db',
-        'stats',
+    db = attrib()  # type: DatabaseManager
+    _callbacks = attrib(default=Factory(list))  # type: List[Deferred]
 
-        # Table rotation
-        'message_month',
-        'message',
-        'rotate_message_table',
+    stats = attrib(
+        default=Factory(SessionStatistics))  # type: SessionStatistics
 
-        # Timestamped message handling
-        'scan_timestamps',
-        'current_timestamp',
+    _user_agent = attrib(default=None)  # type: Optional[str]
+    _base_tags = attrib(default=Factory(list))  # type: List[str]
+    raw_agent = attrib(default=Factory(dict))  # type: Optional[Dict[str, str]]
 
-        'ping_time_out',
-        '_check_notifications',
-        '_more_notifications',
-        '_notification_fetch',
-        '_register',
-        'updates_sent',
-        'direct_updates',
+    _should_stop = attrib(default=False)  # type: bool
+    _paused = attrib(default=False)  # type: bool
 
-        '_reset_uaid',
-    ]
+    _uaid_obj = attrib(default=None)  # type: Optional[uuid.UUID]
+    _uaid_hash = attrib(default=None)  # type: Optional[str]
 
-    def __init__(self, db, request):
-        self._callbacks = []
-        self.stats = SessionStatistics()
-        self.db = db
-        host = ""
+    last_ping = attrib(default=0.0)  # type: float
+    check_storage = attrib(default=False)  # type: bool
+    use_webpush = attrib(default=False)  # type: bool
+    router_type = attrib(default=None)  # type: Optional[str]
+    wake_data = attrib(default=None)  # type: Optional[JSONDict]
+    connected_at = attrib(default=Factory(ms_time))  # type: float
+    ping_time_out = attrib(default=False)  # type: bool
 
-        if request:
-            self._user_agent = request.headers.get("user-agent")
-            # Get the name of the server the request asked for.
-            host = request.host
-        else:
-            self._user_agent = None
+    # Message table rotation
+    message_month = attrib(init=False)  # type: str
+    rotate_message_table = attrib(default=False)  # type: bool
 
-        self.stats.host = host
-        self._base_tags = []
-        self.raw_agent = {}
+    _check_notifications = attrib(default=False)  # type: bool
+    _more_notifications = attrib(default=False)  # type: bool
+
+    # Timestamped message handling defaults
+    scan_timestamps = attrib(default=False)  # type: bool
+    current_timestamp = attrib(default=None)  # type: Optional[int]
+
+    # Hanger for common actions we defer
+    _notification_fetch = attrib(default=None)  # type: Optional[Deferred]
+    _register = attrib(default=None)  # type: Optional[Deferred]
+
+    # Reflects Notification's sent that haven't been ack'd This is
+    # simplepush style by default
+    updates_sent = attrib(default=Factory(dict))  # type: Dict
+
+    # Track Notification's we don't need to delete separately This is
+    # simplepush style by default
+    direct_updates = attrib(default=Factory(dict))  # type: Dict
+
+    # Whether this record should be reset after delivering stored
+    # messages
+    _reset_uaid = attrib(default=False)  # type: bool
+
+    @classmethod
+    def from_request(cls, request, **kwargs):
+        # type: (ConnectionRequest, **Any) -> PushState
+        return cls(
+            user_agent=request.headers.get("user-agent"),
+            stats=SessionStatistics(host=request.host),
+            **kwargs
+        )
+
+    def __attrs_post_init__(self):
+        """Initialize PushState"""
         if self._user_agent:
             dd_tags, self.raw_agent = parse_user_agent(self._user_agent)
             for tag_name, tag_value in dd_tags.items():
                 setattr(self.stats, tag_name, tag_value)
                 self._base_tags.append("%s:%s" % (tag_name, tag_value))
-        if host:
-            self._base_tags.append("host:%s" % host)
+        if self.stats.host:
+            self._base_tags.append("host:%s" % self.stats.host)
 
-        db.metrics.increment("client.socket.connect",
-                             tags=self._base_tags or None)
-
-        self._should_stop = False
-        self._paused = False
-        self.uaid = None
-        self.last_ping = 0
-        self.check_storage = False
-        self.use_webpush = False
-        self.router_type = None
-        self.wake_data = None
-        self.connected_at = ms_time()
-        self.ping_time_out = False
+        self.db.metrics.increment("client.socket.connect",
+                                  tags=self._base_tags or None)
 
         # Message table rotation initial settings
-        self.message_month = db.current_msg_month
-        self.rotate_message_table = False
+        self.message_month = self.db.current_msg_month
 
-        self._check_notifications = False
-        self._more_notifications = False
-
-        # Timestamp message defaults
-        self.scan_timestamps = False
-        self.current_timestamp = None
-
-        # Hanger for common actions we defer
-        self._notification_fetch = None
-        self._register = None
-
-        # Reflects Notification's sent that haven't been ack'd
-        # This is simplepush style by default
-        self.updates_sent = {}
-
-        # Track Notification's we don't need to delete separately
-        # This is simplepush style by default
-        self.direct_updates = {}
-
-        # Whether this record should be reset after delivering stored
-        # messages
         self.reset_uaid = False
 
     @property
@@ -491,7 +471,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def onConnect(self, request):
         """autobahn onConnect handler for when a connection has started"""
         track_object(self, msg="onConnect Start")
-        self.ps = PushState(db=self.db, request=request)
+        self.ps = PushState.from_request(request=request, db=self.db)
 
         # Setup ourself to handle producing the data
         self.transport.bufferSize = 2 * 1024
