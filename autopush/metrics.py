@@ -1,5 +1,5 @@
 """Metrics interface and implementations"""
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Sequence, Any  # noqa
 
 from twisted.internet import reactor
 from txstatsd.client import StatsDClientProtocol, TwistedStatsDClient
@@ -72,6 +72,14 @@ class TwistedMetrics(object):
 
     def timing(self, name, duration, **kwargs):
         self._metric.timing(name, duration)
+
+
+def make_tags(base=None, **kwargs):
+    # type: (Sequence[str], **Any) -> Sequence[str]
+    """Generate a list of tag values"""
+    tags = list(base or [])
+    tags.extend('{}:{}'.format(key, val) for key, val in kwargs.iteritems())
+    return tags
 
 
 class DatadogMetrics(object):

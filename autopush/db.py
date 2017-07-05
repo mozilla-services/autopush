@@ -42,7 +42,7 @@ from attr import (
     attrib,
     Factory
 )
-from boto.exception import JSONResponseError, BotoServerError
+from boto.exception import JSONResponseError
 from boto.dynamodb2.exceptions import (
     ConditionalCheckFailedException,
     ItemNotFound,
@@ -298,17 +298,7 @@ def track_provisioned(func):
     def wrapper(self, *args, **kwargs):
         if TRACK_DB_CALLS:
             DB_CALLS.append(func.__name__)
-        try:
-            return func(self, *args, **kwargs)
-        except ProvisionedThroughputExceededException:
-            self.metrics.increment("error.provisioned.%s" % func.__name__)
-            raise
-        except JSONResponseError:
-            self.metrics.increment("error.jsonresponse.%s" % func.__name__)
-            raise
-        except BotoServerError:
-            self.metrics.increment("error.botoserver.%s" % func.__name__)
-            raise
+        return func(self, *args, **kwargs)
     return wrapper
 
 
@@ -433,7 +423,6 @@ class Storage(object):
                                        chid=normalize_id(chid))
             return True
         except ProvisionedThroughputExceededException:
-            self.metrics.increment("error.provisioned.delete_notification")
             return False
 
 
@@ -678,7 +667,6 @@ class Router(object):
             # We unfortunately have to catch this here, as track_provisioned
             # will not see this, since JSONResponseError is a subclass and
             # will capture it
-            self.metrics.increment("error.provisioned.get_uaid")
             raise
         except JSONResponseError:  # pragma: nocover
             # We trap JSONResponseError because Moto returns text instead of

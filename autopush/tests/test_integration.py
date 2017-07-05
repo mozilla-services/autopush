@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from distutils.spawn import find_executable
 from StringIO import StringIO
 from httplib import HTTPResponse  # noqa
-from mock import Mock, call
+from mock import Mock, call, patch
 from unittest.case import SkipTest
 
 from zope.interface import implementer
@@ -47,7 +47,7 @@ from autopush.logging import begin_or_register
 from autopush.main import ConnectionApplication, EndpointApplication
 from autopush.settings import AutopushSettings
 from autopush.utils import base64url_encode
-from autopush.metrics import SinkMetrics
+from autopush.metrics import SinkMetrics, DatadogMetrics
 from autopush.tests.support import TestingLogObserver
 from autopush.websocket import PushServerFactory
 
@@ -675,8 +675,9 @@ class TestData(IntegrationBase):
         ))
         yield self.shut_down(client)
 
+    @patch("autopush.metrics.datadog")
     @inlineCallbacks
-    def test_webpush_data_delivery_to_disconnected_client(self):
+    def test_webpush_data_delivery_to_disconnected_client(self, m_ddog):
         tests = {
             "d248d4e0-0ef4-41d9-8db5-2533ad8e4041": dict(
                 data=b"\xe2\x82\x28\xf0\x28\x8c\xbc", result="4oIo8CiMvA"),
@@ -688,6 +689,11 @@ class TestData(IntegrationBase):
             "6c33e055-5762-47e5-b90c-90ad9bfe3f53": dict(
                 data=b"\xc3\x28\xa0\xa1\xe2\x28\xa1", result="wyigoeIooQ"),
         }
+        # Piggy back a check for stored source metrics
+        self.conn.db.metrics = DatadogMetrics(
+            "someapikey", "someappkey", namespace="testpush",
+            hostname="localhost")
+        self.conn.db.metrics._client = Mock()
 
         client = Client("ws://localhost:9010/", use_webpush=True)
         yield client.connect()
@@ -716,6 +722,8 @@ class TestData(IntegrationBase):
 
         ok_(self.logs.logged_ci(lambda ci: 'message_size' in ci),
             "message_size not logged")
+        eq_(self.conn.db.metrics._client.gauge.call_args[1]['tags'],
+            ['source:Stored'])
         yield self.shut_down(client)
 
     @inlineCallbacks

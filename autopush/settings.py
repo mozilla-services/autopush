@@ -339,9 +339,10 @@ class AutopushSettings(object):
             vapid_auth = parse_auth_header(auth_header)
             if not vapid_auth:
                 raise VapidAuthException("Invalid Auth token")
-            metrics.increment("updates.notification.auth.{}".format(
-                vapid_auth['scheme']
-            ))
+            metrics.increment("notification.auth",
+                              tags="vapid:{version},scheme:{scheme}".format(
+                                  **vapid_auth
+                              ).split(","))
             # pull the public key from the VAPID auth header if needed
             try:
                 if vapid_auth['version'] != 1:

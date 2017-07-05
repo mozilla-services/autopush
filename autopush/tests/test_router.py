@@ -543,11 +543,17 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_router_notification_gcm_id_change(self):
         self.mock_result.canonical["old"] = "new"
         self.router.gcm['test123'] = self.gcm
+        self.router.metrics = Mock()
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict(token="new"))
+            eq_(self.router.metrics.increment.call_args[0][0],
+                'notification.bridge.error')
+            self.router.metrics.increment.call_args[1]['tags'].sort()
+            eq_(self.router.metrics.increment.call_args[1]['tags'],
+                ['platform:gcm', 'reason:reregister'])
             ok_(self.router.gcm['test123'].send.called)
         d.addCallback(check_results)
         return d
@@ -555,11 +561,17 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_router_notification_gcm_not_regged(self):
         self.mock_result.not_registered = {"connect_data": True}
         self.router.gcm['test123'] = self.gcm
+        self.router.metrics = Mock()
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.router_data, dict())
+            eq_(self.router.metrics.increment.call_args[0][0],
+                'notification.bridge.error')
+            self.router.metrics.increment.call_args[1]['tags'].sort()
+            eq_(self.router.metrics.increment.call_args[1]['tags'],
+                ['platform:gcm', 'reason:unregistered'])
             ok_(self.router.gcm['test123'].send.called)
         d.addCallback(check_results)
         return d
@@ -573,7 +585,10 @@ class GCMRouterTestCase(unittest.TestCase):
         def check_results(fail):
             ok_(self.router.metrics.increment.called)
             eq_(self.router.metrics.increment.call_args[0][0],
-                'updates.client.bridge.gcm.failed.failure')
+                'notification.bridge.error')
+            self.router.metrics.increment.call_args[1]['tags'].sort()
+            eq_(self.router.metrics.increment.call_args[1]['tags'],
+                ['platform:gcm', 'reason:failure'])
             eq_(fail.value.message, 'GCM unable to deliver')
             self._check_error_call(fail.value, 410)
         d.addBoth(check_results)
@@ -588,7 +603,10 @@ class GCMRouterTestCase(unittest.TestCase):
         def check_results(fail):
             ok_(self.router.metrics.increment.called)
             eq_(self.router.metrics.increment.call_args[0][0],
-                'updates.client.bridge.gcm.failed.retry')
+                'notification.bridge.error')
+            self.router.metrics.increment.call_args[1]['tags'].sort()
+            eq_(self.router.metrics.increment.call_args[1]['tags'],
+                ['platform:gcm', 'reason:retry'])
             eq_(fail.value.message, 'GCM failure to deliver, retry')
             self._check_error_call(fail.value, 503)
         d.addBoth(check_results)
@@ -1113,9 +1131,6 @@ class SimplePushRouterTestCase(unittest.TestCase):
         def verify_deliver(result):
             ok_(isinstance(result, RouterResponse))
             eq_(result.status_code, 200)
-            self.metrics.increment.assert_called_with(
-                "router.broadcast.save_hit"
-            )
         d.addBoth(verify_deliver)
         return d
 
@@ -1202,9 +1217,6 @@ class WebPushRouterTestCase(unittest.TestCase):
             eq_(t_h.get('encryption'), self.headers.get('encryption'))
             eq_(t_h.get('crypto_key'), self.headers.get('crypto-key'))
             eq_(t_h.get('encoding'), self.headers.get('content-encoding'))
-            self.metrics.increment.assert_called_with(
-                "router.broadcast.save_hit"
-            )
             ok_("Location" in result.headers)
 
         d.addCallback(verify_deliver)

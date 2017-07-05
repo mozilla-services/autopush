@@ -7,6 +7,7 @@ from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
 from autopush.exceptions import RouterException
+from autopush.metrics import make_tags
 from autopush.router.interface import RouterResponse
 from autopush.types import JSONDict  # noqa
 
@@ -38,7 +39,7 @@ class GCMRouter(object):
                 self.gcm[sid] = gcmclient.GCM(auth)
             except:
                 raise IOError("GCM Bridge not initiated in main")
-        self._base_tags = []
+        self._base_tags = ["platform:gcm"]
         self.log.debug("Starting GCM router...")
 
     def amend_endpoint_response(self, response, router_data):
@@ -82,12 +83,12 @@ class GCMRouter(object):
         # correct encryption headers are included with the data.
         if notification.data:
             mdata = self.config.get('max_data', 4096)
-            if len(notification.data) > mdata:
+            if notification.data_length > mdata:
                 raise self._error("This message is intended for a " +
                                   "constrained device and is limited " +
                                   "to 3070 bytes. Converted buffer too " +
                                   "long by %d bytes" %
-                                  (len(notification.data) - mdata),
+                                  (notification.data_length - mdata),
                                   413, errno=104, log_exception=False)
 
             data['body'] = notification.data
@@ -122,15 +123,15 @@ class GCMRouter(object):
             raise RouterException("Server error", status_code=500)
         except ConnectionError as e:
             self.log.warn("GCM Unavailable: %s" % e)
-            self.metrics.increment("updates.client.bridge.gcm.connection_err",
-                                   self._base_tags)
+            self.metrics.increment("notification.bridge.error",
+                                   tags=make_tags(
+                                       self._base_tags,
+                                       reason="connection_unavailable"))
             raise RouterException("Server error", status_code=502,
                                   log_exception=False)
         except Exception as e:
             self.log.error("Unhandled exception in GCM Routing: %s" % e)
             raise RouterException("Server error", status_code=500)
-        self.metrics.increment("updates.client.bridge.gcm.attempted",
-                               self._base_tags)
         return self._process_reply(result, uaid_data, ttl=router_ttl,
                                    notification=notification)
 
@@ -148,16 +149,18 @@ class GCMRouter(object):
         for old_id, new_id in reply.canonical.items():
             self.log.debug("GCM id changed : {old} => {new}",
                            old=old_id, new=new_id)
-            self.metrics.increment("updates.client.bridge.gcm.failed.rereg",
-                                   self._base_tags)
+            self.metrics.increment("notification.bridge.error",
+                                   tags=make_tags(self._base_tags,
+                                                  reason="reregister"))
             return RouterResponse(status_code=503,
                                   response_body="Please try request again.",
                                   router_data=dict(token=new_id))
         # naks:
         # uninstall:
         for reg_id in reply.not_registered:
-            self.metrics.increment("updates.client.bridge.gcm.failed.unreg",
-                                   self._base_tags)
+            self.metrics.increment("notification.bridge.error",
+                                   tags=make_tags(self._base_tags,
+                                                  reason="unregistered"))
             self.log.debug("GCM no longer registered: %s" % reg_id)
             return RouterResponse(
                 status_code=410,
@@ -167,8 +170,9 @@ class GCMRouter(object):
 
         #  for reg_id, err_code in reply.failed.items():
         if len(reply.failed.items()) > 0:
-            self.metrics.increment("updates.client.bridge.gcm.failed.failure",
-                                   self._base_tags)
+            self.metrics.increment("notification.bridge.error",
+                                   tags=make_tags(self._base_tags,
+                                                  reason="failure"))
             self.log.debug("GCM failures: {failed()}",
                            failed=lambda: repr(reply.failed.items()))
             raise RouterException("GCM unable to deliver", status_code=410,
@@ -178,8 +182,9 @@ class GCMRouter(object):
 
         # retries:
         if reply.needs_retry():
-            self.metrics.increment("updates.client.bridge.gcm.failed.retry",
-                                   self._base_tags)
+            self.metrics.increment("notification.bridge.error",
+                                   tags=make_tags(self._base_tags,
+                                                  reason="retry"))
             self.log.warn("GCM retry requested: {failed()}",
                           failed=lambda: repr(reply.failed.items()))
             raise RouterException("GCM failure to deliver, retry",
@@ -187,8 +192,12 @@ class GCMRouter(object):
                                   response_body="Please try request later.",
                                   log_exception=False)
 
-        self.metrics.increment("updates.client.bridge.gcm.succeeded",
+        self.metrics.increment("notification.bridge.sent",
                                self._base_tags)
+        self.metrics.gauge("notification.message_data",
+                           notification.data_length,
+                           tags=make_tags(self._base_tags,
+                                          destination='Direct'))
         location = "%s/m/%s" % (self.ap_settings.endpoint_url,
                                 notification.version)
         return RouterResponse(status_code=201, response_body="",

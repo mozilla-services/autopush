@@ -13,6 +13,7 @@ from twisted.internet.threads import deferToThread
 from twisted.web.client import FileBodyProducer
 
 from autopush.exceptions import RouterException
+from autopush.metrics import make_tags
 from autopush.protocol import IgnoreBody
 from autopush.router.interface import RouterResponse
 from autopush.router.simple import SimpleRouter
@@ -24,6 +25,9 @@ class WebPushRouter(SimpleRouter):
     """SimpleRouter subclass to store individual messages appropriately"""
 
     def delivered_response(self, notification):
+        self.metrics.gauge("notification.message_data",
+                           notification.data_length,
+                           tags=make_tags(destination='Stored'))
         location = "%s/m/%s" % (self.ap_settings.endpoint_url,
                                 notification.location)
         return RouterResponse(status_code=201, response_body="",
@@ -32,6 +36,9 @@ class WebPushRouter(SimpleRouter):
                               logged_status=200)
 
     def stored_response(self, notification):
+        self.metrics.gauge("notification.message_data",
+                           notification.data_length,
+                           tags=make_tags(destination='Direct'))
         location = "%s/m/%s" % (self.ap_settings.endpoint_url,
                                 notification.location)
         return RouterResponse(status_code=201, response_body="",

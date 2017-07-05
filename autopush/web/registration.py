@@ -337,8 +337,7 @@ class NewRegistrationHandler(BaseRegistrationHandler):
         Router type/data registration.
 
         """
-        self.metrics.increment("updates.client.register",
-                               tags=self.base_tags())
+        self.metrics.increment("ua.command.register", tags=self.base_tags())
 
         uaid = uuid.uuid4()
 
@@ -455,7 +454,7 @@ class ChannelRegistrationHandler(BaseRegistrationHandler):
     @threaded_validate(UnregisterChidSchema)
     def delete(self, uaid, chid):
         # type: (uuid.UUID, str) -> Deferred
-        self.metrics.increment("updates.client.unregister",
+        self.metrics.increment("ua.command.unregister",
                                tags=self.base_tags())
         d = deferToThread(self._delete_channel, uaid, chid)
         d.addCallback(self._success)
