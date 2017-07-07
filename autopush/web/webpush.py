@@ -367,7 +367,11 @@ class WebPushRequestSchema(Schema):
                 public_key = vapid_auth['k']
             else:
                 public_key = d["subscription"].get("public_key")
-            jwt = extract_jwt(token, public_key)
+            jwt = extract_jwt(
+                token,
+                public_key,
+                is_trusted=self.context['settings'].enable_tls_auth
+            )
         except (KeyError, ValueError, InvalidSignature, TypeError,
                 VapidAuthException):
             raise InvalidRequest("Invalid Authorization Header",

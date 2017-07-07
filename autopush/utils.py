@@ -188,13 +188,17 @@ def decipher_public_key(key_data):
     raise ValueError("Unknown public key format specified")
 
 
-def extract_jwt(token, crypto_key):
-    # type: (str, str) -> Dict[str, str]
+def extract_jwt(token, crypto_key, is_trusted=False):
+    # type: (str, str, bool) -> Dict[str, str]
     """Extract the claims from the validated JWT. """
     # first split and convert the jwt.
     if not token or not crypto_key:
         return {}
-    return jwt.decode(token, decipher_public_key(crypto_key.encode('utf8')))
+    if is_trusted:
+        return jwt.extract_assertion(token)
+    return jwt.validate_and_extract_assertion(
+        token,
+        decipher_public_key(crypto_key.encode('utf8')))
 
 
 def parse_user_agent(agent_string):
