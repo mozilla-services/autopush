@@ -78,7 +78,21 @@ class VerifyJWT(object):
         return payload, encoded
 
     @staticmethod
-    def decode(token, key):
+    def extract_assertion(token):
+        # type (str) -> JSONDict
+        """Extract the assertion dictionary from the passed token. This does
+        NOT do validation.
+
+        :param token: Partial or full VAPID auth token
+        :return dict of the VAPID claims
+
+        """
+        return json.loads(
+            base64.urlsafe_b64decode(
+                repad(token.split('.')[1]).encode('utf8')))
+
+    @staticmethod
+    def validate_and_extract_assertion(token, key):
         # type (str, str) -> JSONDict
         """Decode a web token into a assertion dictionary.
 
@@ -119,9 +133,7 @@ class VerifyJWT(object):
                 signature,
                 sig_material.encode('utf8'),
                 ec.ECDSA(hashes.SHA256()))
-            return json.loads(
-                base64.urlsafe_b64decode(
-                    repad(sig_material.split('.')[1]).encode('utf8')))
+            return VerifyJWT.extract_assertion(sig_material)
         except InvalidSignature:
             raise
         except (ValueError, TypeError, binascii.Error, PyAsn1Error):

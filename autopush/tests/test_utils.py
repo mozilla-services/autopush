@@ -3,6 +3,8 @@ import unittest
 from mock import patch, Mock
 from nose.tools import eq_
 
+from autopush.tests.test_integration import _get_vapid
+
 
 class TestUserAgentParser(unittest.TestCase):
     def _makeFUT(self, *args):
@@ -30,6 +32,12 @@ class TestUserAgentParser(unittest.TestCase):
         eq_(raw["ua_os_family"], "BlackBerry OS")
         eq_(dd["ua_browser_family"], "Other")
         eq_(raw["ua_browser_family"], "BlackBerry")
+
+    def test_trusted_vapid(self):
+        from autopush.utils import extract_jwt
+        vapid_info = _get_vapid(payload={'sub': 'mailto:foo@example.com'})
+        data = extract_jwt(vapid_info['auth'], 'invalid_key', is_trusted=True)
+        eq_(data['sub'], 'mailto:foo@example.com')
 
     @patch("requests.get")
     def test_get_ec2_instance_id_unknown(self, request_mock):
