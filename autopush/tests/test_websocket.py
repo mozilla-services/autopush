@@ -126,6 +126,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto._log_exc = False
         self.proto.log = Mock(spec=Logger)
 
+        self.proto.debug = True
+
         self.proto.sendMessage = self.send_mock = Mock()
         self.orig_close = self.proto.sendClose
         request_mock = Mock(spec=ConnectionRequest)
@@ -222,7 +224,6 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.state = ""
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.nukeConnection()
-        ok_(self.proto.metrics.increment.called)
 
     @patch("autopush.websocket.reactor")
     def test_nuke_connection_shutdown_ran(self, mock_reactor):
@@ -263,17 +264,6 @@ class WebsocketTestCase(unittest.TestCase):
             sorted(['ua_os_family:Windows',
                     'ua_browser_family:Firefox',
                     'host:example.com:8080']))
-
-    def test_reporter(self):
-        self.metrics.reset_mock()
-        self.factory.periodic_reporter(self.metrics)
-
-        # Verify metric increase of nothing
-        calls = self.metrics.method_calls
-        eq_(len(calls), 4)
-        name, args, _ = calls[0]
-        eq_(name, "gauge")
-        eq_(args, ("update.client.writers", 0))
 
     def test_handshake_sub(self):
         self.factory.externalPort = 80
@@ -435,10 +425,10 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Close the connection
         self.proto.onClose(True, None, None)
-        yield self._wait_for(lambda: len(self.metrics.mock_calls) > 2)
-        eq_(len(self.metrics.mock_calls), 3)
-        self.metrics.increment.assert_called_with(
-            "client.notify_uaid_failure", tags=None)
+        yield self._wait_for(lambda: len(self.metrics.mock_calls) > 0)
+        eq_(self.metrics.timing.call_args[0][0], 'ua.connection.lifespan')
+        # Wait for final cleanup (no error or metric produced)
+        yield sleep(.25)
 
     @inlineCallbacks
     def test_close_with_delivery_cleanup_and_get_uaid_error(self):
@@ -462,10 +452,9 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Close the connection
         self.proto.onClose(True, None, None)
-        yield self._wait_for(lambda: len(self.metrics.mock_calls) > 2)
-        eq_(len(self.metrics.mock_calls), 3)
-        self.metrics.increment.assert_called_with(
-            "client.lookup_uaid_failure", tags=None)
+        yield self._wait_for(lambda: self.proto.log.info.called)
+        # Wait for final cleanup (no error or metric produced)
+        yield sleep(.25)
 
     @inlineCallbacks
     def test_close_with_delivery_cleanup_and_no_node_id(self):
@@ -1766,6 +1755,7 @@ class WebsocketTestCase(unittest.TestCase):
         d = Deferred()
 
         def check(*args, **kwargs):
+            eq_(self.metrics.gauge.call_args[1]['tags'], ["source:Direct"])
             ok_(self.proto.force_retry.called)
             ok_(self.send_mock.called)
             d.callback(True)

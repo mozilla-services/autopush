@@ -260,7 +260,6 @@ class ConnectionApplication(AutopushMultiService):
                                             self.clients)
         site_factory = self.websocket_site_factory(settings, ws_factory)
         self.add_maybe_ssl(settings.port, site_factory, site_factory.ssl_cf())
-        self.add_timer(1.0, ws_factory.periodic_reporter, self.db.metrics)
 
     @classmethod
     def from_argparse(cls, ns):

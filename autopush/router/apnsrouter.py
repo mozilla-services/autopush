@@ -8,6 +8,7 @@ from twisted.logger import Logger
 from twisted.python.failure import Failure
 
 from autopush.exceptions import RouterException
+from autopush.metrics import make_tags
 from autopush.router.apns2 import (
     APNSClient,
     APNS_MAX_CONNECTIONS,
@@ -62,7 +63,7 @@ class APNSRouter(object):
         self.ap_settings = ap_settings
         self._config = router_conf
         self.metrics = metrics
-        self._base_tags = []
+        self._base_tags = ["platform:apns"]
         self.apns = dict()
         for rel_channel in self._config:
             self.apns[rel_channel] = self._connect(rel_channel,
@@ -144,8 +145,10 @@ class APNSRouter(object):
             apns_client.send(router_token=router_token, payload=payload,
                              apns_id=apns_id)
         except (ConnectionError, AttributeError) as ex:
-            self.metrics.increment("updates.client.bridge.apns.connection_err",
-                                   self._base_tags)
+            self.metrics.increment("notification.bridge.error",
+                                   tags=make_tags(self._base_tags,
+                                                  application=rel_channel,
+                                                  reason="connection_error"))
             self.log.error("Connection Error sending to APNS",
                            log_failure=Failure(ex))
             raise RouterException(
@@ -165,11 +168,19 @@ class APNSRouter(object):
 
         location = "%s/m/%s" % (self.ap_settings.endpoint_url,
                                 notification.version)
+        self.metrics.increment("notification.bridge.sent",
+                               tags=make_tags(self._base_tags,
+                                              application=rel_channel))
+
         self.metrics.increment(
             "updates.client.bridge.apns.%s.sent" %
             router_data["rel_channel"],
             self._base_tags
         )
+        self.metrics.gauge("notification.message_data",
+                           notification.data_length,
+                           tags=make_tags(self._base_tags,
+                                          destination='Direct'))
         return RouterResponse(status_code=201, response_body="",
                               headers={"TTL": notification.ttl,
                                        "Location": location},

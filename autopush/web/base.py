@@ -134,6 +134,10 @@ class Notification(object):
     data = attrib()
     channel_id = attrib()
 
+    @property
+    def data_length(self):
+        return len(self.data or "")
+
 
 class BaseWebHandler(BaseHandler):
     """Common overrides for Push web API's"""
@@ -267,10 +271,11 @@ class BaseWebHandler(BaseHandler):
                 errno=response.errno or 999,
                 message=response.response_body)
 
-    def _router_fail_err(self, fail):
+    def _router_fail_err(self, fail, router_type=None, vapid=False):
         """errBack for router failures"""
         fail.trap(RouterException)
         exc = fail.value
+        success = False
         if exc.log_exception:
             if exc.status_code >= 500:
                 fmt = fail.value.message or 'Exception'
@@ -283,12 +288,26 @@ class BaseWebHandler(BaseHandler):
                 self.log.debug(format="Success", status_code=exc.status_code,
                                logged_status=exc.logged_status or 0,
                                client_info=self._client_info)
+                success = True
+                self.metrics.increment('notification.message.success',
+                                       tags=[
+                                           'destination:Direct',
+                                           'router:{}'.format(router_type),
+                                           'vapid:{}'.format(vapid is not None)
+                                       ])
             elif 400 <= exc.status_code < 500:
                 self.log.debug(format="Client error",
                                status_code=exc.status_code,
                                logged_status=exc.logged_status or 0,
                                errno=exc.errno or 0,
                                client_info=self._client_info)
+        if not success:
+            self.metrics.increment('notification.message.error',
+                                   tags=[
+                                        "code:{}".format(exc.status_code),
+                                        "router:{}".format(router_type),
+                                        "vapid:{}".format(vapid is not None)
+                                   ])
         self._router_response(exc)
 
     def _write_validation_err(self, errors):

@@ -274,6 +274,7 @@ class WebPushNotification(object):
     timestamp = attrib(default=Factory(lambda: int(time.time())))  # type: int
     sortkey_timestamp = attrib(default=None)  # type: Optional[int]
     topic = attrib(default=None)  # type: Optional[str]
+    source = attrib(default="Direct")  # type: Optional[str]
 
     message_id = attrib(default=None)  # type: str
 
@@ -436,6 +437,11 @@ class WebPushNotification(object):
         """Return an appropriate value for the Location header"""
         return self.message_id
 
+    @property
+    def data_length(self):
+        """Return the length of the data"""
+        return len(self.data or "")
+
     def expired(self, at_time=None):
         # type: (Optional[int]) -> bool
         """Indicates whether the message has expired or not
@@ -464,7 +470,8 @@ class WebPushNotification(object):
             message_id=key_info["message_id"],
             update_id=item.get("updateid"),
             timestamp=item.get("timestamp"),
-            sortkey_timestamp=key_info.get("sortkey_timestamp")
+            sortkey_timestamp=key_info.get("sortkey_timestamp"),
+            source="Stored"
         )
 
         # Ensure we generate the sort-key properly for legacy messges

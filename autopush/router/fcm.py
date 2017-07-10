@@ -7,6 +7,7 @@ from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
 from autopush.exceptions import RouterException
+from autopush.metrics import make_tags
 from autopush.router.interface import RouterResponse
 from autopush.types import JSONDict  # noqa
 
@@ -110,7 +111,7 @@ class FCMRouter(object):
         self.collapseKey = router_conf.get("collapseKey", "webpush")
         self.senderID = router_conf.get("senderID")
         self.auth = router_conf.get("auth")
-        self._base_tags = []
+        self._base_tags = ["platform:fcm"]
         try:
             self.fcm = pyfcm.FCMNotification(api_key=self.auth)
         except Exception as e:
@@ -165,12 +166,12 @@ class FCMRouter(object):
         # correct encryption headers are included with the data.
         if notification.data:
             mdata = self.config.get('max_data', 4096)
-            if len(notification.data) > mdata:
+            if notification.data_length > mdata:
                 raise self._error("This message is intended for a " +
                                   "constrained device and is limited " +
                                   "to 3070 bytes. Converted buffer too " +
                                   "long by %d bytes" %
-                                  (len(notification.data) - mdata),
+                                  (notification.data_length - mdata),
                                   413, errno=104, log_exception=False)
 
             data['body'] = notification.data
@@ -199,16 +200,16 @@ class FCMRouter(object):
             self.log.error("Authentication Error: %s" % e)
             raise RouterException("Server error", status_code=500)
         except ConnectionError as e:
-            self.metrics.increment("updates.client.bridge.fcm.connection_err",
-                                   self._base_tags)
+            self.metrics.increment("notification.bridge.error",
+                                   tags=make_tags(
+                                       self._base_tags,
+                                       reason="connection_unavailable"))
             self.log.warn("Could not connect to FCM server: %s" % e)
             raise RouterException("Server error", status_code=502,
                                   log_exception=False)
         except Exception as e:
             self.log.error("Unhandled FCM Error: %s" % e)
             raise RouterException("Server error", status_code=500)
-        self.metrics.increment("updates.client.bridge.fcm.attempted",
-                               self._base_tags)
         return self._process_reply(result, notification, router_data,
                                    ttl=router_ttl)
 
@@ -229,20 +230,22 @@ class FCMRouter(object):
             new_id = result.get('registration_id')
             self.log.debug("FCM id changed : {old} => {new}",
                            old=old_id, new=new_id)
-            self.metrics.increment("updates.client.bridge.fcm.failed.rereg",
-                                   self._base_tags)
+            self.metrics.increment("notification.bridge.error",
+                                   tags=make_tags(self._base_tags,
+                                                  reason="reregister"))
             return RouterResponse(status_code=503,
                                   response_body="Please try request again.",
                                   router_data=dict(token=new_id))
         if reply.get('failure'):
-            self.metrics.increment("updates.client.bridge.fcm.failed",
-                                   self._base_tags)
+            self.metrics.increment("notification.bridge.error",
+                                   tags=make_tags(self._base_tags,
+                                                  reason="failure"))
             reason = result.get('error', "Unreported")
             err = self.reasonTable.get(reason)
             if err.get("crit", False):
                 self.log.critical(
                     err['msg'],
-                    nlen=len(notification.data),
+                    nlen=notification.data_length,
                     regid=router_data["token"],
                     senderid=self.senderID,
                     ttl=notification.ttl,
@@ -263,8 +266,12 @@ class FCMRouter(object):
                 response_body=err['msg'],
                 router_data={},
             )
-        self.metrics.increment("updates.client.bridge.fcm.succeeded",
+        self.metrics.increment("notification.bridge.sent",
                                self._base_tags)
+        self.metrics.gauge("notification.message_data",
+                           notification.data_length,
+                           tags=make_tags(self._base_tags,
+                                          destination="Direct"))
         location = "%s/m/%s" % (self.ap_settings.endpoint_url,
                                 notification.version)
         return RouterResponse(status_code=201, response_body="",

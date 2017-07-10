@@ -17,6 +17,8 @@ from autopush.db import (
 from autopush.http import EndpointHTTPFactory
 from autopush.exceptions import InvalidRequest
 from autopush.settings import AutopushSettings
+from autopush.metrics import SinkMetrics
+from autopush.tests.support import test_db
 
 dummy_request_id = "11111111-1234-1234-1234-567812345678"
 dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
@@ -58,7 +60,8 @@ class TestBase(unittest.TestCase):
                                  host='example.com:8080')
 
         self.base = BaseWebHandler(
-            EndpointHTTPFactory(settings, db=None, routers=None),
+            EndpointHTTPFactory(settings, db=test_db(SinkMetrics()),
+                                routers=None),
             self.request_mock
         )
         self.status_mock = self.base.set_status = Mock()

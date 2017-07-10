@@ -26,7 +26,7 @@ from typing import (  # noqa
 
 from autopush.crypto_key import CryptoKey
 from autopush.db import DatabaseManager  # noqa
-from autopush.metrics import Metrics  # noqa
+from autopush.metrics import Metrics, make_tags  # noqa
 from autopush.db import dump_uaid, hasher
 from autopush.exceptions import (
     InvalidRequest,
@@ -117,7 +117,8 @@ class WebPushSubscriptionSchema(Schema):
             log.debug(format="Dropping User", code=102,
                       uaid_hash=hasher(uaid),
                       uaid_record=dump_uaid(result))
-            metrics.increment("updates.drop_user", tags={"errno": 102})
+            metrics.increment("updates.drop_user",
+                              tags=make_tags(errno=102))
             db.router.drop_user(uaid)
             raise InvalidRequest("No such subscription", status_code=410,
                                  errno=106)
@@ -127,7 +128,8 @@ class WebPushSubscriptionSchema(Schema):
             log.debug(format="Dropping User", code=103,
                       uaid_hash=hasher(uaid),
                       uaid_record=dump_uaid(result))
-            metrics.increment("updates.drop_user", tags={"errno": 103})
+            metrics.increment("updates.drop_user",
+                              tags=make_tags(errno=103))
             db.router.drop_user(uaid)
             raise InvalidRequest("No such subscription", status_code=410,
                                  errno=106)
@@ -465,20 +467,26 @@ class WebPushHandler(BaseWebHandler):
             uaid_hash=hasher(user_data.get("uaid")),
             channel_id=user_data.get("chid"),
             router_key=user_data["router_type"],
-            message_size=len(notification.data or ""),
+            message_size=notification.data_length,
             message_ttl=notification.ttl,
             version=notification.version,
             encoding=encoding,
         )
-        router = self.routers[user_data["router_type"]]
+        router_type = user_data["router_type"]
+        router = self.routers[router_type]
         self._router_time = time.time()
         d = maybeDeferred(router.route_notification, notification, user_data)
-        d.addCallback(self._router_completed, user_data, "")
-        d.addErrback(self._router_fail_err)
+        d.addCallback(self._router_completed, user_data, "",
+                      router_type=router_type,
+                      vapid=jwt)
+        d.addErrback(self._router_fail_err,
+                     router_type=router_type,
+                     vapid=jwt is not None)
         d.addErrback(self._response_err)
         return d
 
-    def _router_completed(self, response, uaid_data, warning=""):
+    def _router_completed(self, response, uaid_data, warning="",
+                          router_type=None, vapid=None):
         """Called after router has completed successfully"""
         # Log the time taken for routing
         self._timings["route_time"] = time.time() - self._router_time
@@ -506,10 +514,13 @@ class WebPushHandler(BaseWebHandler):
             d.addCallback(lambda x: self._router_completed(
                 response,
                 uaid_data,
-                warning))
+                warning,
+                router_type,
+                vapid))
             return d
         else:
             # No changes are requested by the bridge system, proceed as normal
+            dest = 'Direct'
             if response.status_code == 200 or response.logged_status == 200:
                 self.log.debug(format="Successful delivery",
                                client_info=self._client_info)
@@ -517,7 +528,16 @@ class WebPushHandler(BaseWebHandler):
                 self.log.debug(
                     format="Router miss, message stored.",
                     client_info=self._client_info)
-            self.metrics.timing("updates.handled", duration=time_diff)
+                dest = 'Stored'
+            self.metrics.timing("notification.request_time",
+                                duration=time_diff)
+            self.metrics.increment('notification.message.success',
+                                   tags=make_tags(
+                                       destination=dest,
+                                       router=router_type,
+                                       vapid=(vapid is not None))
+                                   )
+
             response.response_body = (
                 response.response_body + " " + warning).strip()
             self._router_response(response)

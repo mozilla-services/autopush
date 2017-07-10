@@ -21,6 +21,7 @@ from autopush.exceptions import (
 )
 
 from autopush.db import hasher
+from autopush.metrics import make_tags
 from autopush.web.base import (
     threaded_validate,
     Notification,
@@ -128,14 +129,21 @@ class SimplePushHandler(BaseWebHandler):
 
     def _router_completed(self, response, uaid_data, warning=""):
         """Called after router has completed successfully"""
+        dest = 'Direct'
         if response.status_code == 200 or response.logged_status == 200:
             self.log.debug(format="Successful delivery",
                            client_info=self._client_info)
         elif response.status_code == 202 or response.logged_status == 202:
             self.log.debug(format="Router miss, message stored.",
                            client_info=self._client_info)
+            dest = 'Stored'
         time_diff = time.time() - self._start_time
-        self.metrics.timing("updates.handled", duration=time_diff)
+        self.metrics.timing("notification.request_time", duration=time_diff)
+        self.metrics.increment('notification.message.success',
+                               tags=make_tags(
+                                   destination=dest,
+                                   router='simplepush')
+                               )
         response.response_body = (
             response.response_body + " " + warning).strip()
         self._router_response(response)

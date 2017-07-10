@@ -29,6 +29,7 @@ from twisted.web._newclient import ResponseFailed
 from twisted.web.client import FileBodyProducer
 
 from autopush.exceptions import RouterException
+from autopush.metrics import make_tags
 from autopush.protocol import IgnoreBody
 from autopush.router.interface import RouterResponse
 from autopush.types import JSONDict  # noqa
@@ -61,9 +62,15 @@ class SimpleRouter(object):
         """Stubbed out for this router"""
 
     def stored_response(self, notification):
+        self.metrics.gauge("notification.message_data",
+                           notification.data_length,
+                           tags=make_tags(destination='Stored'))
         return RouterResponse(202, "Notification Stored")
 
     def delivered_response(self, notification):
+        self.metrics.gauge("notification.message_data",
+                           notification.data_length,
+                           tags=make_tags(destination='Direct'))
         return RouterResponse(200, "Delivered")
 
     @inlineCallbacks
@@ -98,7 +105,6 @@ class SimpleRouter(object):
                     # in AWS or if the connection timesout.
                     self.log.debug("Could not route message: {exc}", exc=exc)
             if result and result.code == 200:
-                self.metrics.increment("router.broadcast.hit")
                 returnValue(self.delivered_response(notification))
 
         # Save notification, node is not present or busy
@@ -108,7 +114,6 @@ class SimpleRouter(object):
         try:
             result = yield self._save_notification(uaid_data, notification)
             if result is False:
-                self.metrics.increment("router.broadcast.miss")
                 returnValue(self.stored_response(notification))
         except JSONResponseError:
             raise RouterException("Error saving to database",
@@ -128,7 +133,6 @@ class SimpleRouter(object):
         try:
             uaid_data = yield deferToThread(router.get_uaid, uaid)
         except JSONResponseError:
-            self.metrics.increment("router.broadcast.miss")
             returnValue(self.stored_response(notification))
         except ItemNotFound:
             self.metrics.increment("updates.client.deleted")
@@ -141,7 +145,6 @@ class SimpleRouter(object):
         # Verify there's a node_id in here, if not we're done
         node_id = uaid_data.get("node_id")
         if not node_id:
-            self.metrics.increment("router.broadcast.miss")
             returnValue(self.stored_response(notification))
         try:
             result = yield self._send_notification_check(uaid, node_id)
@@ -152,14 +155,11 @@ class SimpleRouter(object):
             yield deferToThread(
                 router.clear_node,
                 uaid_data).addErrback(self._eat_db_err)
-            self.metrics.increment("router.broadcast.miss")
             returnValue(self.stored_response(notification))
 
         if result.code == 200:
-            self.metrics.increment("router.broadcast.save_hit")
             returnValue(self.delivered_response(notification))
         else:
-            self.metrics.increment("router.broadcast.miss")
             ret_val = self.stored_response(notification)
             if self.udp is not None and "server" in self.conf:
                 # Attempt to send off the UDP wake request.

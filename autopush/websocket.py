@@ -94,7 +94,7 @@ from autopush.db import DatabaseManager, Message  # noqa
 from autopush.exceptions import MessageOverloadException
 from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
-from autopush.metrics import IMetrics  # noqa
+from autopush.metrics import IMetrics, make_tags  # noqa
 from autopush.settings import AutopushSettings  # noqa
 from autopush.ssl import AutopushSSLContextFactory
 from autopush.types import JSONDict  # noqa
@@ -243,9 +243,6 @@ class PushState(object):
                 self._base_tags.append("%s:%s" % (tag_name, tag_value))
         if self.stats.host:
             self._base_tags.append("host:%s" % self.stats.host)
-
-        self.db.metrics.increment("client.socket.connect",
-                                  tags=self._base_tags or None)
 
         # Message table rotation initial settings
         self.message_month = self.db.current_msg_month
@@ -434,13 +431,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         """Override for sanity checking during auto-ping interval"""
         if not self.ps.uaid:
             # No uaid yet, drop the connection
-            self.metrics.increment("client.autoping.no_uaid",
-                                   tags=self.base_tags)
             self.sendClose()
         elif self.factory.clients.get(self.ps.uaid) != self:
             # UAID, but we're not in clients anymore for some reason
-            self.metrics.increment("client.autoping.invalid_client",
-                                   tags=self.base_tags)
             self.sendClose()
         return WebSocketServerProtocol._sendAutoPing(self)
 
@@ -457,14 +450,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         still hadn't run by this point"""
         # Did onClose get called? If so, we shutdown properly, no worries.
         if hasattr(self, "_shutdown_ran"):
-            self.metrics.increment("client.success.sendClose",
-                                   tags=self.base_tags)
             return
-
-        # Uh-oh, we have not been shut-down properly, report detailed data
-        self.metrics.increment("client.error.sendClose_failed",
-                               tags=self.base_tags)
-
         self.transport.abortConnection()
 
     @log_exception
@@ -586,9 +572,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def cleanUp(self, wasClean, code, reason):
         """Thorough clean-up method to cancel all remaining deferreds, and send
         connection metrics in"""
-        self.metrics.increment("client.socket.disconnect", tags=self.base_tags)
         elapsed = (ms_time() - self.ps.connected_at) / 1000.0
-        self.metrics.timing("client.socket.lifespan", duration=elapsed,
+        self.metrics.timing("ua.connection.lifespan", duration=elapsed,
                             tags=self.base_tags)
         self.ps.stats.connection_time = int(elapsed)
 
@@ -659,15 +644,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # type: (failure.Failure) -> None
         """Traps UAID not found error"""
         fail.trap(ItemNotFound)
-        self.metrics.increment("client.lookup_uaid_failure",
-                               tags=self.base_tags)
 
     def _notify_node(self, result):
         """Checks the result of lookup node to send the notify if the client is
         connected elsewhere now"""
         if not result:
-            self.metrics.increment("client.notify_uaid_failure",
-                                   tags=self.base_tags)
             return
 
         node_id = result.get("node_id")
@@ -837,9 +818,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.log.debug(format="Dropping User", code=104,
                            uaid_hash=self.ps.uaid_hash,
                            uaid_record=dump_uaid(record))
+            tags = ['code:104']
+            tags.extend(self.base_tags or [])
+            self.metrics.increment("ua.expiration", tags=tags)
             self.force_retry(self.db.router.drop_user, self.ps.uaid)
-            self.metrics.increment("client.drop_user",
-                                   tags={"errno": 104})
             return None
 
         # Validate webpush records
@@ -852,8 +834,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                                uaid_record=dump_uaid(record))
                 self.force_retry(self.db.router.drop_user,
                                  self.ps.uaid)
-                self.metrics.increment("client.drop_user",
-                                       tags={"errno": 105})
+                tags = ['code:105']
+                tags.extend(self.base_tags or [])
+                self.metrics.increment("ua.expiration", tags=tags)
                 return None
 
             # Determine if message table rotation is needed
@@ -942,7 +925,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.sendJSON(msg)
         self.log.debug(format="hello", uaid_hash=self.ps.uaid_hash,
                        **self.ps.raw_agent)
-        self.metrics.increment("updates.client.hello", tags=self.base_tags)
+        self.metrics.increment("ua.command.hello", tags=self.base_tags)
         self.process_notifications()
 
     def process_notifications(self):
@@ -1120,8 +1103,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             if self.sent_notification_count > self.ap_settings.msg_limit:
                 raise MessageOverloadException()
             if notif.topic:
-                self.metrics.increment("updates.notification.topic",
+                self.metrics.increment("notification.topic",
                                        tags=self.base_tags)
+            self.metrics.gauge('ua.message_data', len(msg.get('data', '')),
+                               tags=make_tags(source=notif.source))
             self.sendJSON(msg)
 
         # Did we send any messages?
@@ -1194,7 +1179,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def _send_ping(self):
         """Helper for ping sending that tracks when the ping was sent"""
         self.ps.last_ping = time.time()
-        self.metrics.increment("updates.client.ping", tags=self.base_tags)
         return self.sendMessage("{}", False)
 
     def process_ping(self):
@@ -1270,7 +1254,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                "status": 200
                }
         self.sendJSON(msg)
-        self.metrics.increment("updates.client.register", tags=self.base_tags)
+        self.metrics.increment("ua.command.register", tags=self.base_tags)
         self.ps.stats.registers += 1
         self.log.debug(format="Register", channel_id=chid,
                        endpoint=endpoint,
@@ -1288,7 +1272,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         except ValueError:
             return self.bad_message("unregister", "Invalid ChannelID")
 
-        self.metrics.increment("updates.client.unregister",
+        self.metrics.increment("ua.command.unregister",
                                tags=self.base_tags)
         self.ps.stats.unregisters += 1
         event = dict(format="Unregister", channel_id=chid,
@@ -1451,7 +1435,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if not updates or not isinstance(updates, list):
             return
 
-        self.metrics.increment("updates.client.ack", tags=self.base_tags)
+        self.metrics.increment("ua.command.ack", tags=self.base_tags)
         defers = filter(None, map(self.ack_update, updates))
 
         if defers:
@@ -1471,6 +1455,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.log.debug(format="Nack", uaid_hash=self.ps.uaid_hash,
                        user_agent=self.ps.user_agent, message_id=str(version),
                        code=code, **self.ps.raw_agent)
+        tags = ["code:401"]
+        tags.extend(self.base_tags or [])
+        self.metrics.increment('ua.command.nack', tags=tags)
         self.ps.stats.nacks += 1
 
     def check_missed_notifications(self, results, resume=False):
@@ -1559,17 +1546,6 @@ class PushServerFactory(WebSocketServerFactory):
             closeHandshakeTimeout=ap_settings.close_handshake_timeout,
         )
 
-    def periodic_reporter(self, metrics):
-        # type: (IMetrics) -> None
-        """Twisted Task function that runs every few seconds to emit general
-        metrics regarding twisted and client counts.
-
-        """
-        metrics.gauge("update.client.writers", len(reactor.getWriters()))
-        metrics.gauge("update.client.readers", len(reactor.getReaders()))
-        metrics.gauge("update.client.connections", len(self.clients))
-        metrics.gauge("update.client.ws_connections", self.countConnections)
-
 
 class RouterHandler(BaseHandler):
     """Router Handler
@@ -1587,20 +1563,17 @@ class RouterHandler(BaseHandler):
         client = self.application.clients.get(uaid)
         if not client:
             self.set_status(404, reason=None)
-            self.metrics.increment("updates.router.disconnected")
             self.write("Client not connected.")
             return
 
         if client.paused:
             self.set_status(503, reason=None)
 
-            self.metrics.increment("updates.router.busy")
             self.write("Client busy.")
             return
 
         update = json.loads(self.request.body)
         client.send_notification(update)
-        self.metrics.increment("updates.router.received")
         self.write("Client accepted for delivery")
 
 
@@ -1616,7 +1589,6 @@ class NotificationHandler(BaseHandler):
         client = self.application.clients.get(uaid)
         if not client:
             self.set_status(404, reason=None)
-            self.metrics.increment("updates.notification.disconnected")
             self.write("Client not connected.")
             return
 
@@ -1624,13 +1596,12 @@ class NotificationHandler(BaseHandler):
             # Client already busy waiting for stuff, flag for check
             client._check_notifications = True
             self.set_status(202)
-            self.metrics.increment("updates.notification.flagged")
             self.write("Flagged for Notification check")
             return
 
         # Client is online and idle, start a notification check
         client.process_notifications()
-        self.metrics.increment("updates.notification.checking")
+        self.metrics.increment("ua.notification_check")
         self.write("Notification check started")
 
     def delete(self, uaid, connected_at):
