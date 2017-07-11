@@ -563,6 +563,21 @@ class RegistrationTestCase(unittest.TestCase):
         self._check_error(resp, rexc.status_code, rexc.errno, "")
 
     @inlineCallbacks
+    def test_delete_success(self):
+        notif = make_webpush_notification(dummy_uaid.hex, str(dummy_chid))
+        messages = self.db.message
+        messages.register_channel(dummy_uaid.hex, str(dummy_chid))
+        messages.store_message(notif)
+
+        yield self.client.delete(
+            self.url(router_type="test",
+                     router_token="test",
+                     uaid=dummy_uaid.hex,
+                     chid=str(dummy_chid)),
+            headers={"Authorization": self.auth},
+        )
+
+    @inlineCallbacks
     def test_delete_bad_chid_value(self):
         notif = make_webpush_notification(dummy_uaid.hex, str(dummy_chid))
         messages = self.db.message

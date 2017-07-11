@@ -314,8 +314,10 @@ class BaseRegistrationHandler(BaseWebHandler):
             router.amend_endpoint_response(response, router_data)
         self.set_header("Content-Type", "application/json")
         self.write(json.dumps(response))
-        self.log.debug("Endpoint registered via HTTP",
-                       client_info=self._client_info)
+        self.log.info("Register",
+                      client_info=self._client_info,
+                      endpoint=endpoint,
+                      uaid_hash=hasher(uaid))
         self.finish()
 
     def _success(self, result):
@@ -465,6 +467,10 @@ class ChannelRegistrationHandler(BaseRegistrationHandler):
     def _delete_channel(self, uaid, chid):
         if not self.db.message.unregister_channel(uaid.hex, chid):
             raise ItemNotFound("ChannelID not found")
+        self.log.info("Unregister",
+                      client_info=self._client_info,
+                      channel_id=chid,
+                      uaid_hash=hasher(uaid))
 
     def _chid_not_found_err(self, fail):
         """errBack for unknown chid"""
