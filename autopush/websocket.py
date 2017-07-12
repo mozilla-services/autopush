@@ -1256,11 +1256,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.sendJSON(msg)
         self.metrics.increment("ua.command.register", tags=self.base_tags)
         self.ps.stats.registers += 1
-        self.log.debug(format="Register", channel_id=chid,
-                       endpoint=endpoint,
-                       uaid_hash=self.ps.uaid_hash,
-                       user_agent=self.ps.user_agent,
-                       **self.ps.raw_agent)
+        self.log.info(format="Register", channel_id=chid,
+                      endpoint=endpoint,
+                      uaid_hash=self.ps.uaid_hash,
+                      user_agent=self.ps.user_agent,
+                      **self.ps.raw_agent)
 
     def process_unregister(self, data):
         """Process an unregister message"""
@@ -1281,7 +1281,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                      **self.ps.raw_agent)
         if "code" in data:
             event["code"] = extract_code(data)
-        self.log.debug(**event)
+        self.log.info(**event)
 
         # Clear out any existing tracked messages for this channel
         if self.ps.use_webpush:

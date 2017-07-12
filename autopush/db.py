@@ -466,8 +466,8 @@ class Message(object):
         conn = self.table.connection
         db_key = self.encode({"uaid": hasher(uaid), "chidmessageid": " "})
         expr = "DELETE chids :channel_id"
-        expr_values = self.encode({":channel_id":
-                                   set([normalize_id(channel_id)])})
+        chid = normalize_id(channel_id)
+        expr_values = self.encode({":channel_id": set([chid])})
 
         result = conn.update_item(
             self.table.table_name,
@@ -479,7 +479,7 @@ class Message(object):
         chids = result.get('Attributes', {}).get('chids', {})
         if chids:
             try:
-                return channel_id in self.table._dynamizer.decode(chids)
+                return chid in self.table._dynamizer.decode(chids)
             except (TypeError, AttributeError):  # pragma: nocover
                 pass
         # if, for some reason, there are no chids defined, return False.

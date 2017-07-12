@@ -1054,7 +1054,7 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(msg["status"], 200)
         eq_(msg["messageType"], "register")
         ok_("pushEndpoint" in msg)
-        assert_called_included(self.proto.log.debug, format="Register")
+        assert_called_included(self.proto.log.info, format="Register")
 
     @inlineCallbacks
     def test_register_webpush(self):
@@ -1066,7 +1066,7 @@ class WebsocketTestCase(unittest.TestCase):
 
         yield self.proto.process_register(dict(channelID=chid))
         ok_(self.proto.db.message.register_channel.called)
-        assert_called_included(self.proto.log.debug, format="Register")
+        assert_called_included(self.proto.log.info, format="Register")
 
     @inlineCallbacks
     def test_register_webpush_with_key(self):
@@ -1095,7 +1095,7 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(test_endpoint,
             self.proto.sendJSON.call_args[0][0]['pushEndpoint'])
         ok_(self.proto.db.message.register_channel.called)
-        assert_called_included(self.proto.log.debug, format="Register")
+        assert_called_included(self.proto.log.info, format="Register")
 
     @inlineCallbacks
     def test_register_no_chid(self):
@@ -1272,7 +1272,7 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(msg["status"], 200)
         eq_(msg["channelID"], chid)
         eq_(len(self.proto.log.mock_calls), 2)
-        assert_called_included(self.proto.log.debug, format="Unregister")
+        assert_called_included(self.proto.log.info, format="Unregister")
 
     @inlineCallbacks
     def test_ws_unregister_without_chid(self):
@@ -1313,7 +1313,7 @@ class WebsocketTestCase(unittest.TestCase):
                                 channelID=chid))
         yield self._wait_for(lambda: self.proto.log.failure.called)
         self.proto.log.failure.assert_called_once()
-        assert_called_included(self.proto.log.debug, format="Unregister")
+        assert_called_included(self.proto.log.info, format="Unregister")
 
     def test_notification(self):
         self._connect()
