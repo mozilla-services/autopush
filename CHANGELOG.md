@@ -1,3 +1,35 @@
+<a name="1.33.0"></a>
+## 1.33.0 (2017-07-12)
+
+
+#### Features
+
+*   Use modern metrics ([39db9a7d](https://github.com/mozilla-services/autopush/commit/39db9a7d821c4dc531fecbcf71ce4a3fd59a6d96), closes [#950](https://github.com/mozilla-services/autopush/issues/950))
+*   Do not do VAPID auth on trusted connections ([f9b375a1](https://github.com/mozilla-services/autopush/commit/f9b375a1471d50d57c9d66d48928f14379f4d615), closes [#938](https://github.com/mozilla-services/autopush/issues/938))
+*   Use cryptography from git to fix a memory leak ([615e961e](https://github.com/mozilla-services/autopush/commit/615e961e69b5d265fff8da3bf443c213ec37d0fd))
+*   demote info to debug to reduce logging messages ([7b5d9d0f](https://github.com/mozilla-services/autopush/commit/7b5d9d0f59e662d247c90d2b52d9ce7359f05da0), closes [#936](https://github.com/mozilla-services/autopush/issues/936))
+*   log EC2 instance ID when using AWS for hostname ([d8efd5e1](https://github.com/mozilla-services/autopush/commit/d8efd5e1b05cd68239eb9eeb34e21129f0361def), closes [#931](https://github.com/mozilla-services/autopush/issues/931))
+*   accept aes128gcm content encoding ([00947d1f](https://github.com/mozilla-services/autopush/commit/00947d1f620d4b0ea451d2d16f23c45b8dca470b), closes [#930](https://github.com/mozilla-services/autopush/issues/930))
+
+#### Refactor
+
+*   convert PushState to attrs ([e96f8631](https://github.com/mozilla-services/autopush/commit/e96f8631147f5a2fa203dbf2bfebeaef5668ffc8), closes [#632](https://github.com/mozilla-services/autopush/issues/632))
+*   convert AutopushSettings to attrs ([1616d245](https://github.com/mozilla-services/autopush/commit/1616d2454e88d4cd2b4a9a3b5c19c94a924088c8))
+*   split clients and agent off settings ([70129bc2](https://github.com/mozilla-services/autopush/commit/70129bc257b6f64e84a243a2f2588333bee0d835))
+*   begin tearing apart AutopushSettings ([fc66ddcc](https://github.com/mozilla-services/autopush/commit/fc66ddcc4819599f1c957eaaee181df09040b4a2))
+
+#### Bug Fixes
+
+*   add logging for register/unregister calls for websocket and bridges ([9e82e0d1](https://github.com/mozilla-services/autopush/commit/9e82e0d14a4664530a74bcdab06b1929cd41f8bd), closes [#953](https://github.com/mozilla-services/autopush/issues/953))
+*   add memory pressure for jwt's cryptography usage ([99048cde](https://github.com/mozilla-services/autopush/commit/99048cde25c988ac7922b42a3d7e11043160fa55), closes [#917](https://github.com/mozilla-services/autopush/issues/917))
+*   Return 400 if routing token is blank or unspecified ([910c7185](https://github.com/mozilla-services/autopush/commit/910c7185af0b9feb3ff77acbb6ad0b6fd611d889))
+
+#### Chore
+
+*   update to precise's latest pypy ([5e270934](https://github.com/mozilla-services/autopush/commit/5e270934a265fcc49201688c4df31326bb33cf07))
+
+
+
 <a name="1.32.2"></a>
 ## 1.32.2 (2017-06-19)
 
