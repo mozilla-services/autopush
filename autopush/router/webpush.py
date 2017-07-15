@@ -33,6 +33,7 @@ from autopush.exceptions import RouterException
 from autopush.metrics import make_tags
 from autopush.protocol import IgnoreBody
 from autopush.router.interface import RouterResponse
+from autopush.types import JSONDict  # noqa
 
 TTL_URL = "https://webpush-wg.github.io/webpush-protocol/#rfc.section.6.2"
 

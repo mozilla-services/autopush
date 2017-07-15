@@ -344,9 +344,9 @@ class IntegrationBase(unittest.TestCase):
         endpoint_port=endpoint_port,
         endpoint_scheme='http',
         statsd_host=None,
-        router_tablename=ROUTER_TABLE,
-        storage_tablename=STORAGE_TABLE,
-        message_tablename=MESSAGE_TABLE,
+        router_table=dict(tablename=ROUTER_TABLE),
+        storage_table=dict(tablename=STORAGE_TABLE),
+        message_table=dict(tablename=MESSAGE_TABLE),
         use_cryptography=True,
         enable_simplepush=True,
     )
@@ -358,9 +358,9 @@ class IntegrationBase(unittest.TestCase):
         router_port=9030,
         endpoint_scheme='http',
         statsd_host=None,
-        router_tablename=ROUTER_TABLE,
-        storage_tablename=STORAGE_TABLE,
-        message_tablename=MESSAGE_TABLE,
+        router_table=dict(tablename=ROUTER_TABLE),
+        storage_table=dict(tablename=STORAGE_TABLE),
+        message_table=dict(tablename=MESSAGE_TABLE),
         use_cryptography=True,
         enable_simplepush=True,
     )
@@ -428,8 +428,7 @@ class SSLEndpointMixin(object):
     def endpoint_kwargs(self):
         return dict(
             super(SSLEndpointMixin, self).endpoint_kwargs(),
-            ssl_key=self.servercert,
-            ssl_cert=self.servercert,
+            ssl=dict(key=self.servercert, cert=self.servercert),
             endpoint_scheme='https'
         )
 
@@ -1351,7 +1350,7 @@ class TestWebPush(IntegrationBase):
 
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
-            prefix=self.conn.db._message_prefix, delta=-1)
+            prefix=self.conn.settings.message_table.tablename, delta=-1)
         lm_message = self.conn.db.message_tables[last_month]
         yield deferToThread(
             self.conn.db.router.update_message_month,
@@ -1462,7 +1461,7 @@ class TestWebPush(IntegrationBase):
 
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
-            prefix=self.conn.db._message_prefix, delta=-1)
+            prefix=self.conn.settings.message_table.tablename, delta=-1)
         lm_message = self.conn.db.message_tables[last_month]
         yield deferToThread(
             self.conn.db.router.update_message_month,
@@ -1559,7 +1558,7 @@ class TestWebPush(IntegrationBase):
 
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
-            prefix=self.conn.db._message_prefix, delta=-1)
+            prefix=self.conn.settings.message_table.tablename, delta=-1)
         yield deferToThread(
             self.conn.db.router.update_message_month,
             client.uaid,

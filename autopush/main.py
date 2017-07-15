@@ -15,6 +15,7 @@ from twisted.internet.protocol import ServerFactory  # noqa
 from twisted.logger import Logger
 from typing import (  # noqa
     Any,
+    Dict,
     Optional,
     Sequence,
 )
@@ -38,6 +39,7 @@ from autopush.websocket import (
     ConnectionWSSite,
     PushServerFactory,
 )
+from autopush.websocket import PushServerProtocol  # noqa
 
 log = Logger()
 
@@ -162,10 +164,10 @@ class EndpointApplication(AutopushMultiService):
 
     endpoint_factory = EndpointHTTPFactory
 
-    def __init__(self, *args, **kwargs):
-        super(EndpointApplication, self).__init__(*args, **kwargs)
-        self.routers = routers_from_settings(self.settings, self.db,
-                                             self.agent)
+    def __init__(self, settings):
+        # type: (AutopushSettings) -> None
+        super(EndpointApplication, self).__init__(settings)
+        self.routers = routers_from_settings(settings, self.db, self.agent)
 
     def setup(self, rotate_tables=True):
         self.db.setup(self.settings.preflight_uaid)
@@ -228,9 +230,10 @@ class ConnectionApplication(AutopushMultiService):
     websocket_factory = PushServerFactory
     websocket_site_factory = ConnectionWSSite
 
-    def __init__(self, *args, **kwargs):
-        super(ConnectionApplication, self).__init__(*args, **kwargs)
-        self.clients = {}
+    def __init__(self, settings):
+        # type: (AutopushSettings) -> None
+        super(ConnectionApplication, self).__init__(settings)
+        self.clients = {}  # type: Dict[str, PushServerProtocol]
 
     def setup(self, rotate_tables=True):
         self.db.setup(self.settings.preflight_uaid)
@@ -275,8 +278,11 @@ class ConnectionApplication(AutopushMultiService):
             router_port=ns.router_port,
             env=ns.env,
             hello_timeout=ns.hello_timeout,
-            router_ssl_key=ns.router_ssl_key,
-            router_ssl_cert=ns.router_ssl_cert,
+            router_ssl=dict(
+                key=ns.router_ssl_key,
+                cert=ns.router_ssl_cert,
+                dh_param=ns.ssl_dh_param
+            ),
             auto_ping_interval=ns.auto_ping_interval,
             auto_ping_timeout=ns.auto_ping_timeout,
             max_connections=ns.max_connections,

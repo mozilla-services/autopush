@@ -118,7 +118,7 @@ class WebsocketTestCase(unittest.TestCase):
         )
         db = DatabaseManager.from_settings(settings)
         self.metrics = db.metrics = Mock(spec=SinkMetrics)
-        db.create_initial_message_tables()
+        db.setup_tables()
 
         self.mock_agent = agent = Mock(spec=Agent)
         self.factory = PushServerFactory(settings, db, agent, {})
@@ -484,7 +484,7 @@ class WebsocketTestCase(unittest.TestCase):
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2015, 12, 15)
         msg_date = "{}_{}_{}".format(
-            self.proto.db._message_prefix,
+            self.ap_settings.message_table.tablename,
             msg_day.year,
             msg_day.month)
         msg_data = {
@@ -552,7 +552,7 @@ class WebsocketTestCase(unittest.TestCase):
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2016, 3, 1)
         msg_date = "{}_{}_{}".format(
-            self.proto.db._message_prefix,
+            self.ap_settings.message_table.tablename,
             msg_day.year,
             msg_day.month)
         msg_data = {
@@ -611,7 +611,7 @@ class WebsocketTestCase(unittest.TestCase):
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2016, 3, 1)
         msg_date = "{}_{}_{}".format(
-            self.proto.db._message_prefix,
+            self.ap_settings.message_table.tablename,
             msg_day.year,
             msg_day.month)
         msg_data = {

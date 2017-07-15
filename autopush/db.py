@@ -38,6 +38,7 @@ import uuid
 from functools import wraps
 
 from attr import (
+    asdict,
     attrs,
     attrib,
     Factory
@@ -80,7 +81,7 @@ from autopush.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: nocover
-    from autopush.settings import AutopushSettings  # noqa
+    from autopush.settings import AutopushSettings, DDBTableConfig  # noqa
 
 
 # Typing
@@ -862,23 +863,24 @@ class Router(object):
 class DatabaseManager(object):
     """Provides database access"""
 
-    storage = attrib()  # type: Storage
-    router = attrib()   # type: Router
+    _storage_conf = attrib()  # type: DDBTableConfig
+    _router_conf = attrib()   # type: DDBTableConfig
+    _message_conf = attrib()  # type: DDBTableConfig
 
     metrics = attrib()  # type: IMetrics
 
+    storage = attrib(default=None)                  # type: Optional[Storage]
+    router = attrib(default=None)                   # type: Optional[Router]
     message_tables = attrib(default=Factory(dict))  # type: Dict[str, Message]
     current_msg_month = attrib(init=False)          # type: Optional[str]
     current_month = attrib(init=False)              # type: Optional[int]
-
-    _message_prefix = attrib(default="message")     # type: str
 
     def __attrs_post_init__(self):
         """Initialize sane defaults"""
         today = datetime.date.today()
         self.current_month = today.month
         self.current_msg_month = make_rotating_tablename(
-            self._message_prefix,
+            self._message_conf.tablename,
             date=today
         )
 
@@ -886,26 +888,11 @@ class DatabaseManager(object):
     def from_settings(cls, settings, **kwargs):
         # type: (AutopushSettings, **Any) -> DatabaseManager
         """Create a DatabaseManager from the given settings"""
-        router_table = get_router_table(
-            settings.router_tablename,
-            settings.router_read_throughput,
-            settings.router_write_throughput
-        )
-        storage_table = get_storage_table(
-            settings.storage_tablename,
-            settings.storage_read_throughput,
-            settings.storage_write_throughput
-        )
-        get_rotating_message_table(
-            settings.message_tablename,
-            message_read_throughput=settings.message_read_throughput,
-            message_write_throughput=settings.message_write_throughput
-        )
         metrics = autopush.metrics.from_settings(settings)
         return cls(
-            storage=Storage(storage_table, metrics),
-            router=Router(router_table, metrics),
-            message_prefix=settings.message_tablename,
+            storage_conf=settings.storage_table,
+            router_conf=settings.router_table,
+            message_conf=settings.message_table,
             metrics=metrics,
             **kwargs
         )
@@ -914,7 +901,19 @@ class DatabaseManager(object):
         # type: (str) -> None
         """Setup metrics, message tables and perform preflight_check"""
         self.metrics.start()
+        self.setup_tables()
+        preflight_check(self.storage, self.router, preflight_uaid)
 
+    def setup_tables(self):
+        """Lookup or create the database tables"""
+        self.storage = Storage(
+            get_storage_table(**asdict(self._storage_conf)),
+            self.metrics
+        )
+        self.router = Router(
+            get_router_table(**asdict(self._router_conf)),
+            self.metrics
+        )
         # Used to determine whether a connection is out of date with current
         # db objects. There are three noteworty cases:
         # 1 "Last Month" the table requires a rollover.
@@ -924,8 +923,6 @@ class DatabaseManager(object):
         #   table is present before the switchover is the main reason for this,
         #   just in case some nodes do switch sooner.
         self.create_initial_message_tables()
-
-        preflight_check(self.storage, self.router, preflight_uaid)
 
     @property
     def message(self):
@@ -950,9 +947,19 @@ class DatabaseManager(object):
         an entry for tomorrow, if tomorrow is a new month.
 
         """
+        mconf = self._message_conf
         today = datetime.date.today()
-        last_month = get_rotating_message_table(self._message_prefix, -1)
-        this_month = get_rotating_message_table(self._message_prefix)
+        last_month = get_rotating_message_table(
+            prefix=mconf.tablename,
+            delta=-1,
+            message_read_throughput=mconf.read_throughput,
+            message_write_throughput=mconf.write_throughput
+        )
+        this_month = get_rotating_message_table(
+            prefix=mconf.tablename,
+            message_read_throughput=mconf.read_throughput,
+            message_write_throughput=mconf.write_throughput
+        )
         self.current_month = today.month
         self.current_msg_month = this_month.table_name
         self.message_tables = {
@@ -960,8 +967,12 @@ class DatabaseManager(object):
             this_month.table_name: Message(this_month, self.metrics)
         }
         if self._tomorrow().month != today.month:
-            next_month = get_rotating_message_table(self._message_prefix,
-                                                    delta=1)
+            next_month = get_rotating_message_table(
+                prefix=mconf.tablename,
+                delta=1,
+                message_read_throughput=mconf.read_throughput,
+                message_write_throughput=mconf.write_throughput
+            )
             self.message_tables[next_month.table_name] = Message(
                 next_month, self.metrics)
 
@@ -975,13 +986,18 @@ class DatabaseManager(object):
         table objects on the settings object.
 
         """
+        mconf = self._message_conf
         today = datetime.date.today()
         tomorrow = self._tomorrow()
         if ((tomorrow.month != today.month) and
                 sorted(self.message_tables.keys())[-1] != tomorrow.month):
             next_month = yield deferToThread(
                 get_rotating_message_table,
-                self._message_prefix, 0, tomorrow
+                prefix=mconf.tablename,
+                delta=0,
+                date=tomorrow,
+                message_read_throughput=mconf.read_throughput,
+                message_write_throughput=mconf.write_throughput
             )
             self.message_tables[next_month.table_name] = Message(
                 next_month, self.metrics)
@@ -992,8 +1008,12 @@ class DatabaseManager(object):
 
         # Get tables for the new month, and verify they exist before we try to
         # switch over
-        message_table = yield deferToThread(get_rotating_message_table,
-                                            self._message_prefix)
+        message_table = yield deferToThread(
+            get_rotating_message_table,
+            prefix=mconf.tablename,
+            message_read_throughput=mconf.read_throughput,
+            message_write_throughput=mconf.write_throughput
+        )
 
         # Both tables found, safe to switch-over
         self.current_month = today.month

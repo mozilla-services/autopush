@@ -191,7 +191,7 @@ def decipher_public_key(key_data):
 
 
 def extract_jwt(token, crypto_key, is_trusted=False, use_crypto=False):
-    # type: (str, str, bool) -> Dict[str, str]
+    # type: (str, str, bool, bool) -> Dict[str, str]
     """Extract the claims from the validated JWT. """
     # first split and convert the jwt.
     if not token or not crypto_key:

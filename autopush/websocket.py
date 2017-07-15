@@ -96,7 +96,7 @@ from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
 from autopush.metrics import IMetrics, make_tags  # noqa
 from autopush.settings import AutopushSettings  # noqa
-from autopush.ssl import AutopushSSLContextFactory
+from autopush.ssl import AutopushSSLContextFactory  # noqa
 from autopush.types import JSONDict  # noqa
 from autopush.utils import (
     parse_user_agent,
@@ -1630,14 +1630,7 @@ class ConnectionWSSite(Site):
         Configured from the ssl_key/cert/dh_param values.
 
         """
-        settings = self.ap_settings
-        if not settings.ssl_key:
-            return None
-        return AutopushSSLContextFactory(
-            settings.ssl_key,
-            settings.ssl_cert,
-            dh_file=settings.ssl_dh_param
-        )
+        return self.ap_settings.ssl.cf()
 
 
 class DefaultResource(Resource):
