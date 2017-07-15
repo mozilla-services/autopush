@@ -69,7 +69,7 @@ The subject contains succinct description of the change:
 ### Body
 
 In order to maintain a reference to the context of the commit, add
-`closes #<issue_number>` if it closes a related issue or `issue #<issue_number>`
+`Closes #<issue_number>` if it closes a related issue or `Issue #<issue_number>`
 if it's a partial fix.
 
 You can also write a detailed description of the commit: Just as in the

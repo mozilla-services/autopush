@@ -1,0 +1,10 @@
+update: insecure
+schedule: "every day"
+search: False
+requirements:
+  - requirements.txt
+branch_prefix: chore/pyup/
+assignees:
+ - bbangert
+ - jrconlin
+ - pjenvey

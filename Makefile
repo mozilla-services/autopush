@@ -55,6 +55,10 @@ build: $(BIN)/pip
 	$(INSTALL) -r $(REQS)
 	$(PYTHON) setup.py develop
 
+requirements: $(BIN)/pip
+	$(INSTALL) pip-tools
+	pip-compile --no-header --upgrade -o $(REQS) requirements.in > /dev/null
+
 test: $(BIN)/tox ddb
 	$(BIN)/tox
 
