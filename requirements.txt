@@ -27,7 +27,7 @@ h2==3.0.1                 # via hyper
 hpack==3.0.0              # via h2
 hyper==0.7.0
 hyperframe==5.1.0         # via h2, hyper
-hyperlink==17.2.1         # via twisted
+hyperlink==17.3.0         # via twisted
 idna==2.5                 # via requests
 incremental==17.5.0       # via twisted
 ipaddress==1.0.18
