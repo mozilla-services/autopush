@@ -26,7 +26,7 @@ graphviz==0.8             # via objgraph
 h2==3.0.1                 # via hyper
 hpack==3.0.0              # via h2
 hyper==0.7.0
-hyperframe==3.2.0         # via h2, hyper
+hyperframe==5.1.0         # via h2, hyper
 hyperlink==17.2.1         # via twisted
 idna==2.5                 # via requests
 incremental==17.5.0       # via twisted
