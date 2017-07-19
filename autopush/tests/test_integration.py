@@ -722,8 +722,8 @@ class TestData(IntegrationBase):
 
         ok_(self.logs.logged_ci(lambda ci: 'message_size' in ci),
             "message_size not logged")
-        eq_(self.conn.db.metrics._client.gauge.call_args[1]['tags'],
-            ['source:Stored'])
+        inc_call = self.conn.db.metrics._client.increment.call_args_list[5]
+        eq_(inc_call[1]['tags'], ['source:Stored'])
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -1266,8 +1266,9 @@ class TestWebPush(IntegrationBase):
         client = yield self.quick_register(use_webpush=True)
         yield client.send_notification(data=data, topic="topicname")
         self.conn.db.metrics.increment.assert_has_calls([
-            call('updates.notification.topic',
-                 tags=['host:localhost', 'use_webpush:True'])
+            call('ua.command.hello'),
+            call('ua.command.register'),
+            call('ua.notification.topic')
         ])
         yield self.shut_down(client)
 

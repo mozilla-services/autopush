@@ -819,7 +819,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                            uaid_hash=self.ps.uaid_hash,
                            uaid_record=dump_uaid(record))
             tags = ['code:104']
-            tags.extend(self.base_tags or [])
             self.metrics.increment("ua.expiration", tags=tags)
             self.force_retry(self.db.router.drop_user, self.ps.uaid)
             return None
@@ -835,7 +834,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                 self.force_retry(self.db.router.drop_user,
                                  self.ps.uaid)
                 tags = ['code:105']
-                tags.extend(self.base_tags or [])
                 self.metrics.increment("ua.expiration", tags=tags)
                 return None
 
@@ -925,7 +923,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.sendJSON(msg)
         self.log.debug(format="hello", uaid_hash=self.ps.uaid_hash,
                        **self.ps.raw_agent)
-        self.metrics.increment("ua.command.hello", tags=self.base_tags)
+        self.metrics.increment("ua.command.hello")
         self.process_notifications()
 
     def process_notifications(self):
@@ -1103,10 +1101,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             if self.sent_notification_count > self.ap_settings.msg_limit:
                 raise MessageOverloadException()
             if notif.topic:
-                self.metrics.increment("notification.topic",
-                                       tags=self.base_tags)
-            self.metrics.gauge('ua.message_data', len(msg.get('data', '')),
-                               tags=make_tags(source=notif.source))
+                self.metrics.increment("ua.notification.topic")
+            self.metrics.increment('ua.message_data', len(msg.get('data', '')),
+                                   tags=make_tags(source=notif.source))
             self.sendJSON(msg)
 
         # Did we send any messages?
@@ -1254,7 +1251,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                "status": 200
                }
         self.sendJSON(msg)
-        self.metrics.increment("ua.command.register", tags=self.base_tags)
+        self.metrics.increment("ua.command.register")
         self.ps.stats.registers += 1
         self.log.info(format="Register", channel_id=chid,
                       endpoint=endpoint,
@@ -1272,8 +1269,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         except ValueError:
             return self.bad_message("unregister", "Invalid ChannelID")
 
-        self.metrics.increment("ua.command.unregister",
-                               tags=self.base_tags)
+        self.metrics.increment("ua.command.unregister")
         self.ps.stats.unregisters += 1
         event = dict(format="Unregister", channel_id=chid,
                      uaid_hash=self.ps.uaid_hash,
@@ -1435,7 +1431,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if not updates or not isinstance(updates, list):
             return
 
-        self.metrics.increment("ua.command.ack", tags=self.base_tags)
+        self.metrics.increment("ua.command.ack")
         defers = filter(None, map(self.ack_update, updates))
 
         if defers:
@@ -1456,7 +1452,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                        user_agent=self.ps.user_agent, message_id=str(version),
                        code=code, **self.ps.raw_agent)
         tags = ["code:401"]
-        tags.extend(self.base_tags or [])
         self.metrics.increment('ua.command.nack', tags=tags)
         self.ps.stats.nacks += 1
 
@@ -1516,8 +1511,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                                                         update)
             self.ps.direct_updates[chid].append(notif)
             if notif.topic:
-                self.metrics.increment("updates.notification.topic",
-                                       tags=self.base_tags)
+                self.metrics.increment("ua.notification.topic")
             self.sendJSON(notif.websocket_format())
         else:
             self.ps.direct_updates[chid] = version

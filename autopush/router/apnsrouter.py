@@ -173,14 +173,15 @@ class APNSRouter(object):
                                               application=rel_channel))
 
         self.metrics.increment(
-            "updates.client.bridge.apns.%s.sent" %
-            router_data["rel_channel"],
-            self._base_tags
+            "updates.client.bridge.apns.{}.sent".format(
+                router_data["rel_channel"]
+            ),
+            tags=self._base_tags
         )
-        self.metrics.gauge("notification.message_data",
-                           notification.data_length,
-                           tags=make_tags(self._base_tags,
-                                          destination='Direct'))
+        self.metrics.increment("notification.message_data",
+                               notification.data_length,
+                               tags=make_tags(self._base_tags,
+                                              destination='Direct'))
         return RouterResponse(status_code=201, response_body="",
                               headers={"TTL": notification.ttl,
                                        "Location": location},

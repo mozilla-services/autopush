@@ -62,15 +62,15 @@ class SimpleRouter(object):
         """Stubbed out for this router"""
 
     def stored_response(self, notification):
-        self.metrics.gauge("notification.message_data",
-                           notification.data_length,
-                           tags=make_tags(destination='Stored'))
+        self.metrics.increment("notification.message_data",
+                               notification.data_length,
+                               tags=make_tags(destination='Stored'))
         return RouterResponse(202, "Notification Stored")
 
     def delivered_response(self, notification):
-        self.metrics.gauge("notification.message_data",
-                           notification.data_length,
-                           tags=make_tags(destination='Direct'))
+        self.metrics.increment("notification.message_data",
+                               notification.data_length,
+                               tags=make_tags(destination='Direct'))
         return RouterResponse(200, "Delivered")
 
     @inlineCallbacks

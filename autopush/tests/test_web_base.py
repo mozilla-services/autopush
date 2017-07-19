@@ -218,14 +218,14 @@ class TestBase(unittest.TestCase):
     def test_router_response(self):
         from autopush.router.interface import RouterResponse
         response = RouterResponse(headers=dict(Location="http://a.com/"))
-        self.base._router_response(response)
+        self.base._router_response(response, None, None)
         self.status_mock.assert_called_with(200, reason=None)
 
     def test_router_response_client_error(self):
         from autopush.router.interface import RouterResponse
         response = RouterResponse(headers=dict(Location="http://a.com/"),
                                   status_code=400)
-        self.base._router_response(response)
+        self.base._router_response(response, None, None)
         self.status_mock.assert_called_with(400, reason=None)
 
     def test_router_fail_err(self):
