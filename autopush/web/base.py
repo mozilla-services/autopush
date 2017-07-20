@@ -154,6 +154,7 @@ class BaseWebHandler(BaseHandler):
         self._base_tags = {}
         self._start_time = time.time()
         self._timings = {}
+        self._handling_message = False
 
     @property
     def routers(self):
@@ -186,7 +187,9 @@ class BaseWebHandler(BaseHandler):
     #############################################################
     def _write_response(self, status_code, errno, message=None, error=None,
                         headers=None,
-                        url=DEFAULT_ERR_URL):
+                        url=DEFAULT_ERR_URL,
+                        router_type=None,
+                        vapid=None):
         """Writes out a full JSON error and sets the appropriate status"""
         self.set_status(status_code, reason=error)
         error_data = dict(
@@ -207,6 +210,13 @@ class BaseWebHandler(BaseHandler):
         if status_code == 410:
             self.set_header("Cache-Control", "max-age=86400")
 
+        if self._handling_message and status_code >= 300:
+            self.metrics.increment('notification.message.error',
+                                   tags=[
+                                       "code:{}".format(status_code),
+                                       "router:{}".format(router_type),
+                                       "vapid:{}".format(vapid is not None)
+                                   ])
         self._track_timing()
         self.finish()
 
@@ -255,7 +265,7 @@ class BaseWebHandler(BaseHandler):
         self._write_response(503, errno=202,
                              message="Communication error, please retry")
 
-    def _router_response(self, response):
+    def _router_response(self, response, router_type, vapid):
         for name, val in response.headers.items():
             if val is not None:
                 self.set_header(name, val)
@@ -263,19 +273,33 @@ class BaseWebHandler(BaseHandler):
         if 200 <= response.status_code < 300:
             self.set_status(response.status_code, reason=None)
             self.write(response.response_body)
+
+            dest = 'Direct'
+            if response.status_code == 202 or response.logged_status == 202:
+                dest = 'Stored'
+
+            if self._handling_message:
+                self.metrics.increment('notification.message.success',
+                                       tags=[
+                                           'destination:{}'.format(dest),
+                                           'router:{}'.format(router_type),
+                                           'vapid:{}'.format(vapid is not None)
+                                       ])
             self._track_timing(status_code=response.logged_status)
             self.finish()
         else:
             self._write_response(
                 response.status_code,
                 errno=response.errno or 999,
-                message=response.response_body)
+                message=response.response_body,
+                router_type=router_type,
+                vapid=vapid
+            )
 
     def _router_fail_err(self, fail, router_type=None, vapid=False):
         """errBack for router failures"""
         fail.trap(RouterException)
         exc = fail.value
-        success = False
         if exc.log_exception:
             if exc.status_code >= 500:
                 fmt = fail.value.message or 'Exception'
@@ -288,27 +312,13 @@ class BaseWebHandler(BaseHandler):
                 self.log.debug(format="Success", status_code=exc.status_code,
                                logged_status=exc.logged_status or 0,
                                client_info=self._client_info)
-                success = True
-                self.metrics.increment('notification.message.success',
-                                       tags=[
-                                           'destination:Direct',
-                                           'router:{}'.format(router_type),
-                                           'vapid:{}'.format(vapid is not None)
-                                       ])
             elif 400 <= exc.status_code < 500:
                 self.log.debug(format="Client error",
                                status_code=exc.status_code,
                                logged_status=exc.logged_status or 0,
                                errno=exc.errno or 0,
                                client_info=self._client_info)
-        if not success:
-            self.metrics.increment('notification.message.error',
-                                   tags=[
-                                        "code:{}".format(exc.status_code),
-                                        "router:{}".format(router_type),
-                                        "vapid:{}".format(vapid is not None)
-                                   ])
-        self._router_response(exc)
+        self._router_response(exc, router_type, vapid)
 
     def _write_validation_err(self, errors):
         """Writes a set of validation errors out with details about what

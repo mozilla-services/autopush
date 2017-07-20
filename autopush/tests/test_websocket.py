@@ -1755,7 +1755,7 @@ class WebsocketTestCase(unittest.TestCase):
         d = Deferred()
 
         def check(*args, **kwargs):
-            eq_(self.metrics.gauge.call_args[1]['tags'], ["source:Direct"])
+            eq_(self.metrics.increment.call_args[1]['tags'], ["source:Direct"])
             ok_(self.proto.force_retry.called)
             ok_(self.send_mock.called)
             d.callback(True)

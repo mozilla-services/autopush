@@ -441,6 +441,11 @@ class WebPushHandler(BaseWebHandler):
                             "authorization")
     cors_response_headers = ("location", "www-authenticate")
 
+    def initialize(self):
+        """Must run on initialization to set ahead of validation"""
+        super(WebPushHandler, self).initialize()
+        self._handling_message = True
+
     @threaded_validate(WebPushRequestSchema)
     def post(self,
              subscription,  # type: Dict[str, Any]
@@ -502,7 +507,9 @@ class WebPushHandler(BaseWebHandler):
                                uaid_record=dump_uaid(uaid_data),
                                client_info=self._client_info)
                 d = deferToThread(self.db.router.drop_user, uaid_data["uaid"])
-                d.addCallback(lambda x: self._router_response(response))
+                d.addCallback(lambda x: self._router_response(response,
+                                                              router_type,
+                                                              vapid))
                 return d
             # The router data needs to be updated to include any changes
             # requested by the bridge system
@@ -520,7 +527,6 @@ class WebPushHandler(BaseWebHandler):
             return d
         else:
             # No changes are requested by the bridge system, proceed as normal
-            dest = 'Direct'
             if response.status_code == 200 or response.logged_status == 200:
                 self.log.debug(format="Successful delivery",
                                client_info=self._client_info)
@@ -528,16 +534,8 @@ class WebPushHandler(BaseWebHandler):
                 self.log.debug(
                     format="Router miss, message stored.",
                     client_info=self._client_info)
-                dest = 'Stored'
             self.metrics.timing("notification.request_time",
                                 duration=time_diff)
-            self.metrics.increment('notification.message.success',
-                                   tags=make_tags(
-                                       destination=dest,
-                                       router=router_type,
-                                       vapid=(vapid is not None))
-                                   )
-
             response.response_body = (
                 response.response_body + " " + warning).strip()
-            self._router_response(response)
+            self._router_response(response, router_type, vapid)

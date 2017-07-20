@@ -193,11 +193,11 @@ class GCMRouter(object):
                                   log_exception=False)
 
         self.metrics.increment("notification.bridge.sent",
-                               self._base_tags)
-        self.metrics.gauge("notification.message_data",
-                           notification.data_length,
-                           tags=make_tags(self._base_tags,
-                                          destination='Direct'))
+                               tags=self._base_tags)
+        self.metrics.increment("notification.message_data",
+                               notification.data_length,
+                               tags=make_tags(self._base_tags,
+                                              destination='Direct'))
         location = "%s/m/%s" % (self.ap_settings.endpoint_url,
                                 notification.version)
         return RouterResponse(status_code=201, response_body="",
