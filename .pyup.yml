@@ -3,6 +3,7 @@ schedule: "every day"
 search: False
 requirements:
   - requirements.txt
+    update: insecure
 branch_prefix: chore/pyup/
 assignees:
  - bbangert
