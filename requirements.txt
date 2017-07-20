@@ -37,7 +37,7 @@ marshmallow==2.13.5
 objgraph==3.1.0
 pyasn1-modules==0.0.9     # via service-identity
 pyasn1==0.2.3
-pycparser==2.17           # via cffi
+pycparser==2.18           # via cffi
 pyfcm==1.3.1
 pyopenssl==17.1.0
 python-dateutil==2.6.1    # via botocore
