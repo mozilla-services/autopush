@@ -11,4 +11,4 @@ psutil
 pycrypto==2.6.1
 pympler==0.5
 python-jose==1.3.2
-websocket-client
+websocket-client==0.44.0
