@@ -1,5 +1,5 @@
 -r requirements.txt
-coverage
+coverage==4.4.1
 ecdsa==0.13
 flake8==3.3.0
 funcsigs==1.0.2
