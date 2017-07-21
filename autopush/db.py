@@ -53,6 +53,7 @@ from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.table import Table, Item
 from boto.dynamodb2.types import NUMBER
 from typing import (  # noqa
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -77,6 +78,10 @@ from autopush.utils import (
     normalize_id,
     WebPushNotification,
 )
+
+if TYPE_CHECKING:  # pragma: nocover
+    from autopush.settings import AutopushSettings  # noqa
+
 
 # Typing
 T = TypeVar('T')  # noqa
@@ -863,13 +868,24 @@ class DatabaseManager(object):
     metrics = attrib()  # type: IMetrics
 
     message_tables = attrib(default=Factory(dict))  # type: Dict[str, Message]
-    current_msg_month = attrib(default=None)        # type: Optional[str]
-    current_month = attrib(default=None)            # type: Optional[int]
+    current_msg_month = attrib(init=False)          # type: Optional[str]
+    current_month = attrib(init=False)              # type: Optional[int]
 
-    _message_prefix = attrib(default="message")  # type: str
+    _message_prefix = attrib(default="message")     # type: str
+
+    def __attrs_post_init__(self):
+        """Initialize sane defaults"""
+        today = datetime.date.today()
+        self.current_month = today.month
+        self.current_msg_month = make_rotating_tablename(
+            self._message_prefix,
+            date=today
+        )
 
     @classmethod
-    def from_settings(cls, settings):
+    def from_settings(cls, settings, **kwargs):
+        # type: (AutopushSettings, **Any) -> DatabaseManager
+        """Create a DatabaseManager from the given settings"""
         router_table = get_router_table(
             settings.router_tablename,
             settings.router_read_throughput,
@@ -890,7 +906,8 @@ class DatabaseManager(object):
             storage=Storage(storage_table, metrics),
             router=Router(router_table, metrics),
             message_prefix=settings.message_tablename,
-            metrics=metrics
+            metrics=metrics,
+            **kwargs
         )
 
     def setup(self, preflight_uaid):
