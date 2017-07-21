@@ -7,7 +7,7 @@ autobahn[twisted]==17.6.2
 automat==0.6.0            # via twisted
 boto3==1.4.4
 boto==2.48.0
-botocore==1.5.82          # via boto3, s3transfer
+botocore==1.5.86          # via boto3, s3transfer
 certifi==2017.4.17        # via requests
 cffi==1.10.0
 chardet==3.0.4            # via requests
