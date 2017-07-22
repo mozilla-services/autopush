@@ -22,9 +22,11 @@ from typing import (  # noqa
     Tuple,
 )
 from ua_parser import user_agent_parser
+import ecdsa
+from jose import jwt
 
 from autopush.exceptions import (InvalidTokenException, VapidAuthException)
-from autopush.jwt import repad, VerifyJWT as jwt
+from autopush.jwt import repad, VerifyJWT
 from autopush.types import ItemLike  # noqa
 from autopush.web.base import AUTH_SCHEMES
 
@@ -188,17 +190,31 @@ def decipher_public_key(key_data):
     raise ValueError("Unknown public key format specified")
 
 
-def extract_jwt(token, crypto_key, is_trusted=False):
+def extract_jwt(token, crypto_key, is_trusted=False, use_crypto=False):
     # type: (str, str, bool) -> Dict[str, str]
     """Extract the claims from the validated JWT. """
     # first split and convert the jwt.
     if not token or not crypto_key:
         return {}
     if is_trusted:
-        return jwt.extract_assertion(token)
-    return jwt.validate_and_extract_assertion(
-        token,
-        decipher_public_key(crypto_key.encode('utf8')))
+        return VerifyJWT.extract_assertion(token)
+    if use_crypto:
+        return VerifyJWT.validate_and_extract_assertion(
+            token,
+            decipher_public_key(crypto_key.encode('utf8')))
+    else:
+        key = ecdsa.VerifyingKey.from_string(
+            base64.urlsafe_b64decode(
+                repad(crypto_key.encode('utf8')))[-64:],
+            curve=ecdsa.NIST256p
+        )
+        return jwt.decode(token,
+                          dict(keys=[key]),
+                          options=dict(
+                              verify_aud=False,
+                              verify_sub=False,
+                              verify_exp=False,
+                          ))
 
 
 def parse_user_agent(agent_string):

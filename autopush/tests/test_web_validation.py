@@ -856,8 +856,9 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         eq_(errors, {})
         ok_("jwt" in result)
 
-    def test_valid_vapid_crypto_header_webpush(self):
+    def test_valid_vapid_crypto_header_webpush(self, use_crypto=False):
         schema = self._make_fut()
+        schema.context["settings"].use_cryptography = use_crypto
 
         header = {"typ": "JWT", "alg": "ES256"}
         payload = {"aud": "https://pusher_origin.example.com",
@@ -886,6 +887,9 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         result, errors = schema.load(info)
         eq_(errors, {})
         ok_("jwt" in result)
+
+    def test_valid_vapid_crypto_header_webpush_crypto(self):
+        self.test_valid_vapid_crypto_header_webpush(use_crypto=True)
 
     def test_valid_vapid_02_crypto_header_webpush(self):
         schema = self._make_fut()
@@ -985,6 +989,8 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
     def test_invalid_vapid_draft2_crypto_header(self):
         schema = self._make_fut()
+        schema.context["settings"].use_cryptography = True
+
         header = {"typ": "JWT", "alg": "ES256"}
         payload = {"aud": "https://pusher_origin.example.com",
                    "exp": int(time.time()) + 86400,
@@ -1018,6 +1024,8 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
     @patch("autopush.web.webpush.extract_jwt")
     def test_invalid_vapid_crypto_header(self, mock_jwt):
         schema = self._make_fut()
+        schema.context["settings"].use_cryptography = True
+
         mock_jwt.side_effect = ValueError("Unknown public key "
                                           "format specified")
 
@@ -1154,6 +1162,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
     @patch("autopush.web.webpush.extract_jwt")
     def test_invalid_encryption_jwt(self, mock_jwt):
         schema = self._make_fut()
+        schema.context['settings'].use_cryptography = True
         # use a deeply superclassed error to make sure that it gets picked up.
         mock_jwt.side_effect = InvalidSignature("invalid signature")
 
@@ -1225,6 +1234,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
     def test_expired_vapid_header(self):
         schema = self._make_fut()
+        schema.context["settings"].use_cryptography = True
 
         header = {"typ": "JWT", "alg": "ES256"}
         payload = {"aud": "https://pusher_origin.example.com",
@@ -1291,6 +1301,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
     def test_bogus_vapid_header(self):
         schema = self._make_fut()
+        schema.context["settings"].use_cryptography = True
 
         header = {"typ": "JWT", "alg": "ES256"}
         payload = {

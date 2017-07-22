@@ -99,6 +99,10 @@ def add_shared_args(parser):
                         help="Enable the debug _memusage API on Port",
                         type=int, default=None,
                         env_var='MEMUSAGE_PORT')
+    parser.add_argument('--use_cryptography',
+                        help="Use the cryptography library vs. JOSE",
+                        action="store_true",
+                        default=False, env_var="USE_CRYPTOGRAPHY")
     # No ENV because this is for humans
     _add_external_router_args(parser)
     _obsolete_args(parser)

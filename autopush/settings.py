@@ -127,6 +127,9 @@ class AutopushSettings(object):
     # generate legacy data.
     _notification_legacy = attrib(default=False)  # type: bool
 
+    # Use the cryptography library
+    use_cryptography = attrib(default=False)  # type: bool
+
     def __attrs_post_init__(self):
         """Initialize the Settings object"""
         # Setup hosts/ports/urls
