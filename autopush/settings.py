@@ -129,6 +129,8 @@ class AutopushSettings(object):
 
     # Use the cryptography library
     use_cryptography = attrib(default=False)  # type: bool
+    # Allow Simplepush Protocol (deprecated)
+    enable_simplepush = attrib(default=False)  # type: bool
 
     def __attrs_post_init__(self):
         """Initialize the Settings object"""
@@ -280,6 +282,8 @@ class AutopushSettings(object):
             ssl_key=ns.ssl_key,
             ssl_cert=ns.ssl_cert,
             ssl_dh_param=ns.ssl_dh_param,
+            use_cryptography=ns.use_cryptography,
+            enable_simplepush=ns.enable_simplepush,
             **kwargs
         )
 

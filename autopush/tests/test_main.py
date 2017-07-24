@@ -271,6 +271,8 @@ class EndpointMainTestCase(unittest.TestCase):
 
         proxy_protocol_port = None
         memusage_port = None
+        enable_simplepush = False
+        use_cryptography = False
 
     def setUp(self):
         patchers = [

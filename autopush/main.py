@@ -208,7 +208,6 @@ class EndpointApplication(AutopushMultiService):
             cors=not ns.no_cors,
             bear_hash_key=ns.auth_key,
             proxy_protocol_port=ns.proxy_protocol_port,
-            use_cryptography=ns.use_cryptography,
         )
 
 
@@ -282,5 +281,4 @@ class ConnectionApplication(AutopushMultiService):
             auto_ping_timeout=ns.auto_ping_timeout,
             max_connections=ns.max_connections,
             close_handshake_timeout=ns.close_handshake_timeout,
-            use_cryptography=ns.use_cryptography,
         )

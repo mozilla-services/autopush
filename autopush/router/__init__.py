@@ -17,8 +17,8 @@ from autopush.router.webpush import WebPushRouter
 from autopush.router.fcm import FCMRouter
 from autopush.settings import AutopushSettings  # noqa
 
-__all__ = ["APNSRouter", "FCMRouter", "GCMRouter", "SimpleRouter",
-           "WebPushRouter"]
+__all__ = ["APNSRouter", "FCMRouter", "GCMRouter", "WebPushRouter",
+           "SimpleRouter"]
 
 
 def routers_from_settings(settings, db, agent):
@@ -26,10 +26,11 @@ def routers_from_settings(settings, db, agent):
     """Create a dict of IRouters for the given settings"""
     router_conf = settings.router_conf
     routers = dict(
-        simplepush=SimpleRouter(
-            settings, router_conf.get("simplepush"), db, agent),
         webpush=WebPushRouter(settings, None, db, agent)
     )
+    if settings.enable_simplepush:
+        routers['simplepush'] = SimpleRouter(
+            settings, router_conf.get("simplepush"), db, agent)
     if 'apns' in router_conf:
         routers["apns"] = APNSRouter(settings, router_conf["apns"], db.metrics)
     if 'gcm' in router_conf:
