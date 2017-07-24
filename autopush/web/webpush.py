@@ -23,6 +23,7 @@ from typing import (  # noqa
     Dict,
     Optional
 )
+from jose import JOSEError, JWTError
 
 from autopush.crypto_key import CryptoKey
 from autopush.db import DatabaseManager  # noqa
@@ -356,6 +357,14 @@ class WebPushRequestSchema(Schema):
         return d
 
     def validate_auth(self, d):
+        crypto_exceptions = [KeyError, ValueError, TypeError,
+                             VapidAuthException]
+
+        if self.context['settings'].use_cryptography:
+            crypto_exceptions.append(InvalidSignature)
+        else:
+            crypto_exceptions.extend([JOSEError, JWTError, AssertionError])
+
         auth = d["headers"].get("authorization")
         needs_auth = d["token_info"]["api_ver"] == "v2"
         if not needs_auth and not auth:
@@ -372,10 +381,10 @@ class WebPushRequestSchema(Schema):
             jwt = extract_jwt(
                 token,
                 public_key,
-                is_trusted=self.context['settings'].enable_tls_auth
+                is_trusted=self.context['settings'].enable_tls_auth,
+                use_crypto=self.context['settings'].use_cryptography
             )
-        except (KeyError, ValueError, InvalidSignature, TypeError,
-                VapidAuthException):
+        except tuple(crypto_exceptions):
             raise InvalidRequest("Invalid Authorization Header",
                                  status_code=401, errno=109,
                                  headers={"www-authenticate": PREF_SCHEME})

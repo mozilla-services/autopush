@@ -17,6 +17,7 @@ objgraph
 pyasn1
 pyfcm
 pyopenssl
+python-jose
 raven
 requests
 service-identity

@@ -347,6 +347,7 @@ class IntegrationBase(unittest.TestCase):
         router_tablename=ROUTER_TABLE,
         storage_tablename=STORAGE_TABLE,
         message_tablename=MESSAGE_TABLE,
+        use_cryptography=True,
     )
 
     _conn_defaults = dict(
@@ -359,6 +360,7 @@ class IntegrationBase(unittest.TestCase):
         router_tablename=ROUTER_TABLE,
         storage_tablename=STORAGE_TABLE,
         message_tablename=MESSAGE_TABLE,
+        use_cryptography=True,
     )
 
     def setUp(self):

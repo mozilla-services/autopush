@@ -37,6 +37,7 @@ class TestWebpushHandler(unittest.TestCase):
         self.ap_settings = settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,
+            use_cryptography=True,
         )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
 
