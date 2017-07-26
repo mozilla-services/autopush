@@ -103,6 +103,10 @@ def add_shared_args(parser):
                         help="Use the cryptography library vs. JOSE",
                         action="store_true",
                         default=False, env_var="USE_CRYPTOGRAPHY")
+    parser.add_argument('--enable_simplepush',
+                        help="Enable the deprecated Simplepush protocol",
+                        action="store_true", default=True,
+                        env_var="ENABLE_SIMPLEPUSH")
     # No ENV because this is for humans
     _add_external_router_args(parser)
     _obsolete_args(parser)

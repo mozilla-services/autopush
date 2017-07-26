@@ -348,6 +348,7 @@ class IntegrationBase(unittest.TestCase):
         storage_tablename=STORAGE_TABLE,
         message_tablename=MESSAGE_TABLE,
         use_cryptography=True,
+        enable_simplepush=True,
     )
 
     _conn_defaults = dict(
@@ -361,6 +362,7 @@ class IntegrationBase(unittest.TestCase):
         storage_tablename=STORAGE_TABLE,
         message_tablename=MESSAGE_TABLE,
         use_cryptography=True,
+        enable_simplepush=True,
     )
 
     def setUp(self):

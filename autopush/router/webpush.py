@@ -6,23 +6,165 @@ table for retrieval by the client.
 
 """
 import json
+from urllib import urlencode
 import time
 from StringIO import StringIO
+from typing import Any  # noqa
 
+import requests
+from boto.dynamodb2.exceptions import ItemNotFound
+from boto.exception import JSONResponseError
 from twisted.internet.threads import deferToThread
 from twisted.web.client import FileBodyProducer
+from twisted.internet.defer import (
+    inlineCallbacks,
+    returnValue,
+    CancelledError,
+)
+from twisted.internet.error import (
+    ConnectError,
+    ConnectionClosed,
+    ConnectionRefusedError,
+)
+from twisted.logger import Logger
+from twisted.web._newclient import ResponseFailed
 
 from autopush.exceptions import RouterException
 from autopush.metrics import make_tags
 from autopush.protocol import IgnoreBody
 from autopush.router.interface import RouterResponse
-from autopush.router.simple import SimpleRouter
 
 TTL_URL = "https://webpush-wg.github.io/webpush-protocol/#rfc.section.6.2"
 
 
-class WebPushRouter(SimpleRouter):
-    """SimpleRouter subclass to store individual messages appropriately"""
+class WebPushRouter(object):
+    """Implements :class: `autopush.router.interface.IRouter` for internal
+    routing to an autopush node
+
+    """
+    log = Logger()
+
+    def __init__(self, ap_settings, router_conf, db, agent):
+        """Create a new Router"""
+        self.ap_settings = ap_settings
+        self.conf = router_conf
+        self.db = db
+        self.agent = agent
+        self.waker = None
+
+    @property
+    def metrics(self):
+        return self.db.metrics
+
+    def register(self, uaid, router_data, app_id, *args, **kwargs):
+        # type: (str, JSONDict, str, *Any, **Any) -> None
+        """No additional routing data"""
+
+    def amend_endpoint_response(self, response, router_data):
+        # type: (JSONDict, JSONDict) -> None
+        """Stubbed out for this router"""
+
+    @inlineCallbacks
+    def route_notification(self, notification, uaid_data):
+        """Route a notification to an internal node, and store it if the node
+        can't deliver immediately or is no longer a valid node
+        """
+        # Determine if they're connected at the moment
+        node_id = uaid_data.get("node_id")
+        uaid = uaid_data["uaid"]
+        self.udp = uaid_data.get("udp")
+        router = self.db.router
+
+        # Node_id is present, attempt delivery.
+        # - Send Notification to node
+        #   - Success: Done, return 200
+        #   - Error (Node busy): Jump to Save notification below
+        #   - Error (Client gone, node gone/dead): Clear node entry for user
+        #       - Both: Done, return 503
+        if node_id:
+            result = None
+            try:
+                result = yield self._send_notification(uaid, node_id,
+                                                       notification)
+            except (ConnectError, ConnectionClosed, ResponseFailed,
+                    CancelledError) as exc:
+                self.metrics.increment("updates.client.host_gone")
+                yield deferToThread(router.clear_node,
+                                    uaid_data).addErrback(self._eat_db_err)
+                if isinstance(exc, ConnectionRefusedError):
+                    # Occurs if an IP record is now used by some other node
+                    # in AWS or if the connection timesout.
+                    self.log.debug("Could not route message: {exc}", exc=exc)
+            if result and result.code == 200:
+                returnValue(self.delivered_response(notification))
+
+        # Save notification, node is not present or busy
+        # - Save notification
+        #   - Success (older version): Done, return 202
+        #   - Error (db error): Done, return 503
+        try:
+            result = yield self._save_notification(uaid_data, notification)
+            if result is False:
+                returnValue(self.stored_response(notification))
+        except JSONResponseError:
+            raise RouterException("Error saving to database",
+                                  status_code=503,
+                                  response_body="Retry Request",
+                                  errno=201)
+
+        # - Lookup client
+        #   - Success (node found): Notify node of new notification
+        #     - Success: Done, return 200
+        #     - Error (no client): Done, return 202
+        #     - Error (no node): Clear node entry
+        #       - Both: Done, return 202
+        #   - Success (no node): Done, return 202
+        #   - Error (db error): Done, return 202
+        #   - Error (no client) : Done, return 404
+        try:
+            uaid_data = yield deferToThread(router.get_uaid, uaid)
+        except JSONResponseError:
+            returnValue(self.stored_response(notification))
+        except ItemNotFound:
+            self.metrics.increment("updates.client.deleted")
+            raise RouterException("User was deleted",
+                                  status_code=410,
+                                  response_body="Invalid UAID",
+                                  log_exception=False,
+                                  errno=105)
+
+        # Verify there's a node_id in here, if not we're done
+        node_id = uaid_data.get("node_id")
+        if not node_id:
+            returnValue(self.stored_response(notification))
+        try:
+            result = yield self._send_notification_check(uaid, node_id)
+        except (ConnectError, ConnectionClosed, ResponseFailed) as exc:
+            self.metrics.increment("updates.client.host_gone")
+            if isinstance(exc, ConnectionRefusedError):
+                self.log.debug("Could not route message: {exc}", exc=exc)
+            yield deferToThread(
+                router.clear_node,
+                uaid_data).addErrback(self._eat_db_err)
+            returnValue(self.stored_response(notification))
+
+        if result.code == 200:
+            returnValue(self.delivered_response(notification))
+        else:
+            ret_val = self.stored_response(notification)
+            if self.udp is not None and "server" in self.conf:
+                # Attempt to send off the UDP wake request.
+                try:
+                    yield deferToThread(
+                        requests.post(
+                            self.conf["server"],
+                            data=urlencode(self.udp["data"]),
+                            cert=self.conf.get("cert"),
+                            timeout=self.conf.get("server_timeout", 3)))
+                except Exception as exc:
+                    self.log.debug("Could not send UDP wake request: {exc}",
+                                   exc=exc)
+            returnValue(ret_val)
 
     def delivered_response(self, notification):
         self.metrics.increment("notification.message_data",
@@ -46,6 +188,10 @@ class WebPushRouter(SimpleRouter):
                                        "TTL": notification.ttl},
                               logged_status=202)
 
+    #############################################################
+    #                    Blocking Helper Functions
+    #############################################################
+
     def _send_notification(self, uaid, node_id, notification):
         """Send a notification to a specific node_id
 
@@ -65,6 +211,14 @@ class WebPushRouter(SimpleRouter):
         )
         request.addCallback(IgnoreBody.ignore)
         return request
+
+    def _send_notification_check(self, uaid, node_id):
+        """Send a command to the node to check for notifications"""
+        url = node_id + "/notif/" + uaid
+        return self.agent.request(
+            "PUT",
+            url.encode("utf8"),
+        ).addCallback(IgnoreBody.ignore)
 
     def _save_notification(self, uaid_data, notification):
         """Saves a notification, returns a deferred.
@@ -99,3 +253,10 @@ class WebPushRouter(SimpleRouter):
             self.db.message_tables[month_table].store_message,
             notification=notification,
         )
+
+    #############################################################
+    #                    Error Callbacks
+    #############################################################
+    def _eat_db_err(self, fail):
+        """errBack for ignoring provisioned throughput errors"""
+        fail.trap(JSONResponseError)

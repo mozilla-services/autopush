@@ -133,8 +133,6 @@ class BaseHTTPFactory(cyclone.web.Application):
 class EndpointHTTPFactory(BaseHTTPFactory):
 
     ap_handlers = (
-        (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
-         SimplePushHandler),
         (r"/wpush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
          WebPushHandler),
         (r"/m/(?P<message_id>[^\/]+)", MessageHandler),
@@ -160,6 +158,12 @@ class EndpointHTTPFactory(BaseHTTPFactory):
                  routers,      # type: Dict[str, IRouter]
                  **kwargs):
         # type: (...) -> None
+        if ap_settings.enable_simplepush:
+            self.ap_handlers += (
+                (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
+                 SimplePushHandler),
+            )
+        self.ap_handlers = tuple(self.ap_handlers)
         BaseHTTPFactory.__init__(self, ap_settings, db=db, **kwargs)
         self.routers = routers
 

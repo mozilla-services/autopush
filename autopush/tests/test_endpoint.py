@@ -63,6 +63,7 @@ class MessageTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
             crypto_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
+            enable_simplepush=True,
         )
         db = test_db()
         self.message_mock = db.message = Mock(spec=Message)
@@ -150,6 +151,7 @@ class RegistrationTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
             bear_hash_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
+            enable_simplepush=True,
         )
         self.fernet_mock = settings.fernet = Mock(spec=Fernet)
 
@@ -551,12 +553,12 @@ class RegistrationTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_put_bad_router_register(self):
-        frouter = self.routers["test"]
+        frouter = self.routers["simplepush"]
         rexc = RouterException("invalid", status_code=402, errno=107)
         frouter.register = Mock(side_effect=rexc)
 
         resp = yield self.client.put(
-            self.url(router_type='test', uaid=dummy_uaid.hex),
+            self.url(router_type='simplepush', uaid=dummy_uaid.hex),
             headers={"Authorization": self.auth},
             body=json.dumps(dict(token="blah"))
         )
