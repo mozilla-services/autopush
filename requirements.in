@@ -5,8 +5,7 @@ boto
 boto3
 click
 configargparse
-# Include https://github.com/pyca/cryptography/pull/3732 until it is released.
--e git+https://github.com/pyca/cryptography.git@f21ffff2d2bc916b70e66810b4582a604f03965f#egg=cryptography
+cryptography
 cyclone
 datadog
 gcm-client
