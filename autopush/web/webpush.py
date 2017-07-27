@@ -34,6 +34,7 @@ from autopush.exceptions import (
     InvalidTokenException,
     VapidAuthException,
 )
+from autopush.types import JSONDict  # noqa
 from autopush.utils import (
     base64url_encode,
     extract_jwt,
@@ -459,7 +460,7 @@ class WebPushHandler(BaseWebHandler):
     def post(self,
              subscription,  # type: Dict[str, Any]
              notification,  # type: WebPushNotification
-             jwt=None,      # type: Optional[Dict[str, str]]
+             jwt=None,      # type: Optional[JSONDict]
              **kwargs       # type: Any
              ):
         # type: (...) -> Deferred

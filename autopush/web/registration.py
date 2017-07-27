@@ -41,11 +41,9 @@ class PathUUID(fields.Field):
     throw a 404"""
     def _deserialize(self, value, attr, data):
         try:
-            new_uuid = uuid.UUID(value)
+            return uuid.UUID(value)
         except ValueError:
             raise InvalidRequest("Invalid Path", status_code=404)
-        else:
-            return new_uuid
 
 
 #############################################################
@@ -317,7 +315,7 @@ class BaseRegistrationHandler(BaseWebHandler):
         self.log.info("Register",
                       client_info=self._client_info,
                       endpoint=endpoint,
-                      uaid_hash=hasher(uaid))
+                      uaid_hash=hasher(uaid.hex))
         self.finish()
 
     def _success(self, result):
@@ -355,7 +353,7 @@ class NewRegistrationHandler(BaseRegistrationHandler):
         return d
 
     def _register_user_and_channel(self, uaid, chid, router_type, router_data):
-        # type: (uuid.UUID, str, str, JSONDict, Optional[str]) -> str
+        # type: (uuid.UUID, str, str, JSONDict) -> str
         """Register a new user/channel, return its endpoint"""
         self._register_user(uaid, router_type, router_data)
         return self._register_channel(uaid, chid, router_data.get("key"))
@@ -455,7 +453,7 @@ class ChannelRegistrationHandler(BaseRegistrationHandler):
 
     @threaded_validate(UnregisterChidSchema)
     def delete(self, uaid, chid):
-        # type: (uuid.UUID, str) -> Deferred
+        # type: (uuid.UUID, uuid.UUID) -> Deferred
         self.metrics.increment("ua.command.unregister",
                                tags=self.base_tags())
         d = deferToThread(self._delete_channel, uaid, chid)
@@ -465,12 +463,13 @@ class ChannelRegistrationHandler(BaseRegistrationHandler):
         return d
 
     def _delete_channel(self, uaid, chid):
-        if not self.db.message.unregister_channel(uaid.hex, chid):
+        # type: (uuid.UUID, uuid.UUID) -> None
+        if not self.db.message.unregister_channel(uaid.hex, chid.hex):
             raise ItemNotFound("ChannelID not found")
         self.log.info("Unregister",
                       client_info=self._client_info,
-                      channel_id=chid,
-                      uaid_hash=hasher(uaid))
+                      channel_id=chid.hex,
+                      uaid_hash=hasher(uaid.hex))
 
     def _chid_not_found_err(self, fail):
         """errBack for unknown chid"""
