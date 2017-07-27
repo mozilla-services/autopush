@@ -1,3 +1,34 @@
+<a name="1.34.0"></a>
+## 1.34.0 (2017-07-26)
+
+
+#### Breaking Changes
+
+*   make simplepush protocol optional ([876c9593](https://github.com/mozilla-services/autopush/commit/876c9593618dd9817c19816d48cadc414b3cacea), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+
+#### Features
+
+*   make simplepush protocol optional ([876c9593](https://github.com/mozilla-services/autopush/commit/876c9593618dd9817c19816d48cadc414b3cacea), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+*   make cryptography lib optional ([c96fea9b](https://github.com/mozilla-services/autopush/commit/c96fea9bd1ad25fc43479603d570f3fa0c9c6e77), closes [#979](https://github.com/mozilla-services/autopush/issues/979))
+
+#### Bug Fixes
+
+*   move metric increments to lowest callbacks ([637e246f](https://github.com/mozilla-services/autopush/commit/637e246fd0dce1fc47e430f386279a708426d8cc), closes [#958](https://github.com/mozilla-services/autopush/issues/958))
+
+#### Refactor
+
+*   give DatabaseManager some saner defaults ([d5c9136a](https://github.com/mozilla-services/autopush/commit/d5c9136a38f2d38e9d468f7150407e8e8cd09ed3))
+
+#### Chore
+
+*   upgrade to latest cryptography ([e0ae4cb9](https://github.com/mozilla-services/autopush/commit/e0ae4cb97ff6a89c249826d13bea2299079b32b0))
+*   fix syntax ([2d77393e](https://github.com/mozilla-services/autopush/commit/2d77393eedf35c2eb0e906f680803f095cc37a16))
+*   upgrade travis to trusty ([abbf7afe](https://github.com/mozilla-services/autopush/commit/abbf7afec781cb0734f7a6f6a286d9d6f229aac4))
+*   explicitly set update on requirements.txt ([9c2d8434](https://github.com/mozilla-services/autopush/commit/9c2d84349e4b618eb4246fc4e5cc40ea54ec92d3))
+*   add a pyup config file ([8c634423](https://github.com/mozilla-services/autopush/commit/8c63442362a640ef5d607b1c613efec28d215ab2))
+
+
+
 <a name="1.33.0"></a>
 ## 1.33.0 (2017-07-12)
 
