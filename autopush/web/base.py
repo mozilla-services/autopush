@@ -6,7 +6,11 @@ from attr import attrs, attrib
 from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from boto.exception import BotoServerError
 from marshmallow.schema import UnmarshalResult  # noqa
-from typing import Any, Callable  # noqa
+from typing import (  # noqa
+    Any,
+    Callable,
+    Sequence
+)
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
@@ -142,8 +146,8 @@ class Notification(object):
 class BaseWebHandler(BaseHandler):
     """Common overrides for Push web API's"""
     cors_methods = ""
-    cors_request_headers = ()
-    cors_response_headers = ()
+    cors_request_headers = ()   # type: Sequence[str]
+    cors_response_headers = ()  # type: Sequence[str]
 
     #############################################################
     #                    Cyclone API Methods
