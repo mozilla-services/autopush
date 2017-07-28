@@ -137,7 +137,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
         from autopush.web.simplepush import SimplePushRequestSchema
         schema = SimplePushRequestSchema()
         schema.context.update(
-            settings=Mock(),
+            conf=Mock(),
             metrics=SinkMetrics(),
             db=test_db(),
             routers=Mock(),
@@ -157,7 +157,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
 
     def test_valid_data(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -172,7 +172,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
 
     def test_valid_data_in_body(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -189,7 +189,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
 
     def test_valid_version(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -207,7 +207,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
 
     def test_invalid_router_type(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -223,7 +223,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
 
     def test_invalid_uaid_not_found(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -245,7 +245,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
         def throw_item(*args, **kwargs):
             raise InvalidTokenException("Not found")
 
-        schema.context["settings"].parse_endpoint.side_effect = throw_item
+        schema.context["conf"].parse_endpoint.side_effect = throw_item
 
         with assert_raises(InvalidRequest) as cm:
             schema.load(self._make_test_data())
@@ -254,7 +254,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
 
     def test_invalid_data_size(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -262,7 +262,7 @@ class TestSimplePushRequestSchema(unittest.TestCase):
         schema.context["db"].router.get_uaid.return_value = dict(
             router_type="simplepush",
         )
-        schema.context["settings"].max_data = 1
+        schema.context["conf"].max_data = 1
 
         with assert_raises(InvalidRequest) as cm:
             schema.load(self._make_test_data(body="version=&data=asdfasdf"))
@@ -275,7 +275,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         from autopush.web.webpush import WebPushRequestSchema
         schema = WebPushRequestSchema()
         schema.context.update(
-            settings=Mock(),
+            conf=Mock(),
             metrics=SinkMetrics(),
             db=test_db(),
             routers=Mock(),
@@ -295,7 +295,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_valid_data(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -311,7 +311,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_no_headers(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -331,7 +331,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_invalid_simplepush_user(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -351,7 +351,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         def throw_item(*args, **kwargs):
             raise InvalidTokenException("Not found")
 
-        schema.context["settings"].parse_endpoint.side_effect = throw_item
+        schema.context["conf"].parse_endpoint.side_effect = throw_item
 
         with assert_raises(InvalidRequest) as cm:
             schema.load(self._make_test_data())
@@ -364,7 +364,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         def throw_item(*args, **kwargs):
             raise InvalidToken
 
-        schema.context["settings"].parse_endpoint.side_effect = throw_item
+        schema.context["conf"].parse_endpoint.side_effect = throw_item
 
         with assert_raises(InvalidRequest) as cm:
             schema.load(self._make_test_data())
@@ -373,7 +373,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_invalid_uaid_not_found(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -391,7 +391,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_critical_failure(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -408,7 +408,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_invalid_header_combo(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -432,7 +432,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_invalid_header_combo_04(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -459,7 +459,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_missing_encryption_salt(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -484,7 +484,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_missing_encryption_salt_04(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -509,7 +509,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_missing_encryption_key_dh(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -534,7 +534,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_missing_crypto_key_dh(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -560,7 +560,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_invalid_data_size(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -570,7 +570,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             uaid=dummy_uaid,
             router_data=dict(creds=dict(senderID="bogus")),
         )
-        schema.context["settings"].max_data = 1
+        schema.context["conf"].max_data = 1
 
         with assert_raises(InvalidRequest) as cm:
             schema.load(self._make_test_data(
@@ -584,7 +584,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_invalid_data_must_have_crypto_headers(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -601,7 +601,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_valid_data_crypto_padding_stripped(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -628,7 +628,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_invalid_dh_value_for_01_crypto(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -659,7 +659,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_invalid_vapid_crypto_header(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -687,7 +687,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_invalid_topic(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -728,7 +728,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
     def test_no_current_month(self):
         schema = self._make_fut()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -750,7 +750,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
     def test_old_current_month(self):
         schema = self._make_fut()
         schema.context["db"].message_tables = dict()
-        schema.context["settings"].parse_endpoint.return_value = dict(
+        schema.context["conf"].parse_endpoint.return_value = dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="",
@@ -775,14 +775,14 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
     def _make_fut(self):
         from autopush.config import AutopushConfig
         from autopush.web.webpush import WebPushRequestSchema
-        settings = AutopushConfig(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
         db = test_db()
         schema = WebPushRequestSchema()
         schema.context.update(
-            settings=settings,
+            conf=conf,
             metrics=SinkMetrics(),
             db=db,
             routers=Mock(),
@@ -793,7 +793,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             uaid=dummy_uaid,
             router_data=dict(creds=dict(senderID="bogus")),
         )
-        settings.fernet = self.fernet_mock = Mock()
+        conf.fernet = self.fernet_mock = Mock()
         return schema
 
     def _make_test_data(self, headers=None, body="", path_args=None,
@@ -846,7 +846,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
     def test_valid_vapid_crypto_header_webpush(self, use_crypto=False):
         schema = self._make_fut()
-        schema.context["settings"].use_cryptography = use_crypto
+        schema.context["conf"].use_cryptography = use_crypto
 
         header = {"typ": "JWT", "alg": "ES256"}
         payload = {"aud": "https://pusher_origin.example.com",
@@ -977,7 +977,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
     def test_invalid_vapid_draft2_crypto_header(self):
         schema = self._make_fut()
-        schema.context["settings"].use_cryptography = True
+        schema.context["conf"].use_cryptography = True
 
         header = {"typ": "JWT", "alg": "ES256"}
         payload = {"aud": "https://pusher_origin.example.com",
@@ -1012,7 +1012,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
     @patch("autopush.web.webpush.extract_jwt")
     def test_invalid_vapid_crypto_header(self, mock_jwt):
         schema = self._make_fut()
-        schema.context["settings"].use_cryptography = True
+        schema.context["conf"].use_cryptography = True
 
         mock_jwt.side_effect = ValueError("Unknown public key "
                                           "format specified")
@@ -1150,7 +1150,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
     @patch("autopush.web.webpush.extract_jwt")
     def test_invalid_encryption_jwt(self, mock_jwt):
         schema = self._make_fut()
-        schema.context['settings'].use_cryptography = True
+        schema.context['conf'].use_cryptography = True
         # use a deeply superclassed error to make sure that it gets picked up.
         mock_jwt.side_effect = InvalidSignature("invalid signature")
 
@@ -1222,7 +1222,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
     def test_expired_vapid_header(self):
         schema = self._make_fut()
-        schema.context["settings"].use_cryptography = True
+        schema.context["conf"].use_cryptography = True
 
         header = {"typ": "JWT", "alg": "ES256"}
         payload = {"aud": "https://pusher_origin.example.com",
@@ -1289,7 +1289,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
 
     def test_bogus_vapid_header(self):
         schema = self._make_fut()
-        schema.context["settings"].use_cryptography = True
+        schema.context["conf"].use_cryptography = True
 
         header = {"typ": "JWT", "alg": "ES256"}
         payload = {

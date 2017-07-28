@@ -114,18 +114,18 @@ class DatadogMetrics(object):
                             host=self._host, **kwargs)
 
 
-def from_config(settings):
+def from_config(conf):
     # type: (AutopushConfig) -> IMetrics
     """Create an IMetrics from the given config"""
-    if settings.datadog_api_key:
+    if conf.datadog_api_key:
         return DatadogMetrics(
-            hostname=get_ec2_instance_id() if settings.ami_id else
-            settings.hostname,
-            api_key=settings.datadog_api_key,
-            app_key=settings.datadog_app_key,
-            flush_interval=settings.datadog_flush_interval,
+            hostname=get_ec2_instance_id() if conf.ami_id else
+            conf.hostname,
+            api_key=conf.datadog_api_key,
+            app_key=conf.datadog_app_key,
+            flush_interval=conf.datadog_flush_interval,
         )
-    elif settings.statsd_host:
-        return TwistedMetrics(settings.statsd_host, settings.statsd_port)
+    elif conf.statsd_host:
+        return TwistedMetrics(conf.statsd_host, conf.statsd_port)
     else:
         return SinkMetrics()

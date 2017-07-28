@@ -60,7 +60,7 @@ class ThreadedValidate(object):
         }
         schema = self.schema()
         schema.context.update(
-            settings=request_handler.conf,
+            conf=request_handler.conf,
             metrics=request_handler.metrics,
             db=request_handler.db,
             routers=request_handler.routers,

@@ -22,7 +22,7 @@ from cryptography.hazmat.primitives import constant_time
 
 import autopush.db as db
 from autopush.exceptions import (
-    InvalidSettings,
+    InvalidConfig,
     InvalidTokenException,
     VapidAuthException
 )
@@ -233,22 +233,21 @@ class AutopushConfig(object):
             try:
                 router_conf["apns"] = json.loads(ns.apns_creds)
             except (ValueError, TypeError):
-                raise InvalidSettings(
+                raise InvalidConfig(
                     "Invalid JSON specified for APNS config options")
         if ns.gcm_enabled:
             # Create a common gcmclient
             try:
                 sender_ids = json.loads(ns.senderid_list)
             except (ValueError, TypeError):
-                raise InvalidSettings(
-                    "Invalid JSON specified for senderid_list")
+                raise InvalidConfig("Invalid JSON specified for senderid_list")
             try:
                 # This is an init check to verify that things are
                 # configured correctly. Otherwise errors may creep in
                 # later that go unaccounted.
                 sender_ids[sender_ids.keys()[0]]
             except (IndexError, TypeError):
-                raise InvalidSettings("No GCM SenderIDs specified or found.")
+                raise InvalidConfig("No GCM SenderIDs specified or found.")
             router_conf["gcm"] = {"ttl": ns.gcm_ttl,
                                   "dryrun": ns.gcm_dryrun,
                                   "max_data": ns.max_data,
@@ -261,31 +260,30 @@ class AutopushConfig(object):
             try:
                 client_certs_arg = json.loads(ns.client_certs)
             except (ValueError, TypeError):
-                raise InvalidSettings(
-                    "Invalid JSON specified for client_certs")
+                raise InvalidConfig("Invalid JSON specified for client_certs")
             if client_certs_arg:
                 if not ns.ssl_key:
-                    raise InvalidSettings("client_certs specified without SSL "
-                                          "enabled (no ssl_key specified)")
+                    raise InvalidConfig("client_certs specified without SSL "
+                                        "enabled (no ssl_key specified)")
                 client_certs = {}
                 for name, sigs in client_certs_arg.iteritems():
                     if not isinstance(sigs, list):
-                        raise InvalidSettings(
+                        raise InvalidConfig(
                             "Invalid JSON specified for client_certs")
                     for sig in sigs:
                         sig = sig.upper()
                         if (not name or not CLIENT_SHA256_RE.match(sig) or
                                 sig in client_certs):
-                            raise InvalidSettings(
+                            raise InvalidConfig(
                                 "Invalid client_certs argument")
                         client_certs[sig] = name
 
         if ns.fcm_enabled:
             # Create a common gcmclient
             if not ns.fcm_auth:
-                raise InvalidSettings("No Authorization Key found for FCM")
+                raise InvalidConfig("No Authorization Key found for FCM")
             if not ns.fcm_senderid:
-                raise InvalidSettings("No SenderID found for FCM")
+                raise InvalidConfig("No SenderID found for FCM")
             router_conf["fcm"] = {"ttl": ns.fcm_ttl,
                                   "dryrun": ns.fcm_dryrun,
                                   "max_data": ns.max_data,

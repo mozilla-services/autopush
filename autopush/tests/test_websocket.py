@@ -100,18 +100,18 @@ class WebsocketTestCase(unittest.TestCase):
         from twisted.logger import Logger
         twisted.internet.base.DelayedCall.debug = True
 
-        self.conf = settings = AutopushConfig(
+        self.conf = conf = AutopushConfig(
             hostname="localhost",
             port=8080,
             statsd_host=None,
             env="test",
         )
-        db = DatabaseManager.from_config(settings)
+        db = DatabaseManager.from_config(conf)
         self.metrics = db.metrics = Mock(spec=SinkMetrics)
         db.setup_tables()
 
         self.mock_agent = agent = Mock(spec=Agent)
-        self.factory = PushServerFactory(settings, db, agent, {})
+        self.factory = PushServerFactory(conf, db, agent, {})
         self.proto = self.factory.buildProtocol(('localhost', 8080))
         self.proto._log_exc = False
         self.proto.log = Mock(spec=Logger)
@@ -1914,14 +1914,11 @@ class RouterHandlerTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
 
-        self.conf = settings = AutopushConfig(
+        self.conf = conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
-        self.app = InternalRouterHTTPFactory.for_handler(
-            RouterHandler,
-            settings
-        )
+        self.app = InternalRouterHTTPFactory.for_handler(RouterHandler, conf)
         self.client = Client(self.app)
 
     def url(self, **kwargs):
@@ -1955,13 +1952,13 @@ class NotificationHandlerTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
 
-        self.conf = settings = AutopushConfig(
+        self.conf = conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
         self.app = InternalRouterHTTPFactory.for_handler(
             NotificationHandler,
-            settings
+            conf
         )
         self.client = Client(self.app)
 

@@ -102,7 +102,7 @@ class BaseHTTPFactory(cyclone.web.Application):
         """Create a cyclone app around a specific handler_cls for tests.
 
         Creates an uninitialized (no setup() called) DatabaseManager
-        from settings if one isn't specified.
+        from conf if one isn't specified.
 
         handler_cls must be included in ap_handlers or a ValueError is
         thrown.
@@ -175,8 +175,8 @@ class EndpointHTTPFactory(BaseHTTPFactory):
         values.
 
         """
-        settings = self.conf
-        return settings.ssl.cf(require_peer_certs=settings.enable_tls_auth)
+        conf = self.conf
+        return conf.ssl.cf(require_peer_certs=conf.enable_tls_auth)
 
     @classmethod
     def _for_handler(cls, conf, db, routers=None, **kwargs):
@@ -238,11 +238,11 @@ class QuietClientFactory(_HTTP11ClientFactory):
     noisy = False
 
 
-def agent_from_config(settings):
+def agent_from_config(conf):
     # type: (AutopushConfig) -> Agent
     """Create a twisted.web.client Agent from the given config"""
     # Use a persistent connection pool for HTTP requests.
     pool = HTTPConnectionPool(reactor)
-    if not settings.debug:
+    if not conf.debug:
         pool._factory = QuietClientFactory
-    return Agent(reactor, connectTimeout=settings.connect_timeout, pool=pool)
+    return Agent(reactor, connectTimeout=conf.connect_timeout, pool=pool)

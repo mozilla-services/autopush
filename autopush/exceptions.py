@@ -62,5 +62,5 @@ class LogCheckError(Exception):
     pass
 
 
-class InvalidSettings(Exception):
+class InvalidConfig(Exception):
     """Error in initialization of AutopushConfig"""

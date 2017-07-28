@@ -23,18 +23,18 @@ class TestWebpushHandler(unittest.TestCase):
     def setUp(self):
         from autopush.web.webpush import WebPushHandler
 
-        self.conf = settings = AutopushConfig(
+        self.conf = conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
             use_cryptography=True,
         )
-        self.fernet_mock = settings.fernet = Mock(spec=Fernet)
+        self.fernet_mock = conf.fernet = Mock(spec=Fernet)
 
         self.db = db = test_db()
         self.message_mock = db.message = Mock(spec=Message)
         self.message_mock.all_channels.return_value = (True, [dummy_chid])
 
-        app = EndpointHTTPFactory.for_handler(WebPushHandler, settings, db=db)
+        app = EndpointHTTPFactory.for_handler(WebPushHandler, conf, db=db)
         self.wp_router_mock = app.routers["webpush"] = Mock(spec=IRouter)
         self.client = Client(app)
 

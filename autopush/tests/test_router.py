@@ -44,7 +44,7 @@ class RouterInterfaceTestCase(TestCase):
     def test_not_implemented(self):
         assert_raises(NotImplementedError, IRouter, None, None)
 
-        def init(self, settings, router_conf):
+        def init(self, conf, router_conf):
             pass
         IRouter.__init__ = init
         ir = IRouter(None, None)
@@ -74,7 +74,7 @@ class APNSRouterTestCase(unittest.TestCase):
     @patch('hyper.tls', spec=hyper.tls)
     def setUp(self, mt, mc):
         from twisted.logger import Logger
-        settings = AutopushConfig(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -88,7 +88,7 @@ class APNSRouterTestCase(unittest.TestCase):
         }
         self.mock_connection = mc
         mc.return_value = mc
-        self.router = APNSRouter(settings, apns_config, SinkMetrics())
+        self.router = APNSRouter(conf, apns_config, SinkMetrics())
         self.mock_response = Mock()
         self.mock_response.status = 200
         mc.get_response.return_value = self.mock_response
@@ -295,7 +295,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
     @patch("gcmclient.gcm.GCM", spec=gcmclient.gcm.GCM)
     def setUp(self, fgcm):
-        settings = AutopushConfig(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -304,7 +304,7 @@ class GCMRouterTestCase(unittest.TestCase):
                            'senderIDs': {'test123':
                                          {"auth": "12345678abcdefg"}}}
         self.gcm = fgcm
-        self.router = GCMRouter(settings, self.gcm_config, SinkMetrics())
+        self.router = GCMRouter(conf, self.gcm_config, SinkMetrics())
         self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
@@ -339,12 +339,12 @@ class GCMRouterTestCase(unittest.TestCase):
         self.flushLoggedErrors()
 
     def test_init(self):
-        settings = AutopushConfig(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
         with assert_raises(IOError):
-            GCMRouter(settings, {"senderIDs": {}}, SinkMetrics())
+            GCMRouter(conf, {"senderIDs": {}}, SinkMetrics())
 
     def test_register(self):
         router_data = {"token": "test123"}
@@ -368,13 +368,13 @@ class GCMRouterTestCase(unittest.TestCase):
     @patch("gcmclient.GCM")
     def test_gcmclient_fail(self, fgcm):
         fgcm.side_effect = Exception
-        settings = AutopushConfig(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
         with assert_raises(IOError):
             GCMRouter(
-                settings,
+                conf,
                 {"senderIDs": {"test123": {"auth": "abcd"}}},
                 SinkMetrics()
             )
@@ -627,7 +627,7 @@ class FCMRouterTestCase(unittest.TestCase):
 
     @patch("pyfcm.FCMNotification", spec=pyfcm.FCMNotification)
     def setUp(self, ffcm):
-        settings = AutopushConfig(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -636,7 +636,7 @@ class FCMRouterTestCase(unittest.TestCase):
                            'senderID': 'test123',
                            "auth": "12345678abcdefg"}
         self.fcm = ffcm
-        self.router = FCMRouter(settings, self.fcm_config, SinkMetrics())
+        self.router = FCMRouter(conf, self.fcm_config, SinkMetrics())
         self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
@@ -671,7 +671,7 @@ class FCMRouterTestCase(unittest.TestCase):
 
     @patch("pyfcm.FCMNotification", spec=pyfcm.FCMNotification)
     def test_init(self, ffcm):
-        settings = AutopushConfig(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -681,7 +681,7 @@ class FCMRouterTestCase(unittest.TestCase):
 
         ffcm.side_effect = throw_auth
         with assert_raises(IOError):
-            FCMRouter(settings, {}, SinkMetrics())
+            FCMRouter(conf, {}, SinkMetrics())
 
     def test_register(self):
         router_data = {"token": "test123"}
@@ -911,7 +911,7 @@ class FCMRouterTestCase(unittest.TestCase):
 class SimplePushRouterTestCase(unittest.TestCase):
     def setUp(self):
         from twisted.logger import Logger
-        settings = AutopushConfig(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -919,7 +919,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
         db = test_db(metrics=metrics)
 
         self.agent_mock = agent = Mock(spec=Agent)
-        self.router = SimpleRouter(settings, {}, db, agent)
+        self.router = SimpleRouter(conf, {}, db, agent)
         self.router.log = Mock(spec=Logger)
         self.notif = Notification(10, "data", dummy_chid)
         mock_result = Mock(spec=gcmclient.gcm.Result)
@@ -1149,7 +1149,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
 
 class WebPushRouterTestCase(unittest.TestCase):
     def setUp(self):
-        settings = AutopushConfig(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -1162,7 +1162,7 @@ class WebPushRouterTestCase(unittest.TestCase):
             "crypto-key": "niftykey"
         }
         self.agent_mock = agent = Mock(spec=Agent)
-        self.router = WebPushRouter(settings, {}, db, agent)
+        self.router = WebPushRouter(conf, {}, db, agent)
         self.notif = WebPushNotification(
             uaid=uuid.UUID(dummy_uaid),
             channel_id=uuid.UUID(dummy_chid),
@@ -1179,7 +1179,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         mock_result.needs_retry.return_value = False
         self.router_mock = db.router
         self.message_mock = db.message = Mock(spec=Message)
-        self.settings = settings
+        self.conf = conf
 
     def test_route_to_busy_node_saves_looks_up_and_sends_check_201(self):
         self.agent_mock.request.return_value = response_mock = Mock()

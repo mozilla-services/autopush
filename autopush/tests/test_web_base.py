@@ -36,7 +36,7 @@ class TestBase(unittest.TestCase):
     def setUp(self):
         from autopush.web.base import BaseWebHandler
 
-        settings = AutopushConfig(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -46,8 +46,7 @@ class TestBase(unittest.TestCase):
                                  host='example.com:8080')
 
         self.base = BaseWebHandler(
-            EndpointHTTPFactory(settings, db=test_db(SinkMetrics()),
-                                routers=None),
+            EndpointHTTPFactory(conf, db=test_db(SinkMetrics()), routers=None),
             self.request_mock
         )
         self.status_mock = self.base.set_status = Mock()

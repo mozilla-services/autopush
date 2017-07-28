@@ -158,11 +158,11 @@ class AuthorizationCheckSchema(Schema):
                                  errno=109,
                                  headers=request_pref_header)
 
-        settings = self.context['settings']
+        conf = self.context['conf']
         uaid = data["path_kwargs"]["uaid"]
-        if settings.bear_hash_key:
+        if conf.bear_hash_key:
             is_valid = False
-            for key in settings.bear_hash_key:
+            for key in conf.bear_hash_key:
                 test_token = generate_hash(key, uaid.hex)
                 is_valid |= constant_time.bytes_eq(bytes(test_token),
                                                    bytes(auth_token))

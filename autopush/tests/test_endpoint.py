@@ -47,7 +47,7 @@ class FileConsumer(object):  # pragma: no cover
 class MessageTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
-        settings = AutopushConfig(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
             crypto_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
@@ -55,9 +55,9 @@ class MessageTestCase(unittest.TestCase):
         )
         db = test_db()
         self.message_mock = db.message = Mock(spec=Message)
-        self.fernet_mock = settings.fernet = Mock(spec=Fernet)
+        self.fernet_mock = conf.fernet = Mock(spec=Fernet)
 
-        app = EndpointHTTPFactory.for_handler(MessageHandler, settings, db=db)
+        app = EndpointHTTPFactory.for_handler(MessageHandler, conf, db=db)
         self.client = Client(app)
 
     def url(self, **kwargs):
@@ -135,13 +135,13 @@ class RegistrationTestCase(unittest.TestCase):
 
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
-        settings = AutopushConfig(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
             bear_hash_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
             enable_simplepush=True,
         )
-        self.fernet_mock = settings.fernet = Mock(spec=Fernet)
+        self.fernet_mock = conf.fernet = Mock(spec=Fernet)
 
         self.db = db = test_db()
         db.router.register_user.return_value = (True, {}, {})
@@ -151,17 +151,17 @@ class RegistrationTestCase(unittest.TestCase):
         }
         db.create_initial_message_tables()
 
-        self.routers = routers = routers_from_config(settings, db, Mock())
+        self.routers = routers = routers_from_config(conf, db, Mock())
         routers["test"] = Mock(spec=IRouter)
-        app = EndpointHTTPFactory(settings, db=db, routers=routers)
+        app = EndpointHTTPFactory(conf, db=db, routers=routers)
         self.client = Client(app)
 
         self.request_mock = Mock(body=b'', arguments={}, headers={})
         self.reg = NewRegistrationHandler(app, self.request_mock)
         self.auth = ("WebPush %s" %
-                     generate_hash(settings.bear_hash_key[0], dummy_uaid.hex))
+                     generate_hash(conf.bear_hash_key[0], dummy_uaid.hex))
 
-        self.settings = settings
+        self.conf = conf
 
     def url(self, router_token='test', **kwargs):
         urlfmt = '/v1/{router_type}/{router_token}/registration'
@@ -206,17 +206,17 @@ class RegistrationTestCase(unittest.TestCase):
         d = self.reg._init_info()
         eq_(d["remote_ip"], "local2")
 
-    def test_settings_crypto_key(self):
+    def test_conf_crypto_key(self):
         fake = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
-        settings = AutopushConfig(crypto_key=fake)
-        eq_(settings.fernet._fernets[0]._encryption_key,
+        conf = AutopushConfig(crypto_key=fake)
+        eq_(conf.fernet._fernets[0]._encryption_key,
             '\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
 
         fake2 = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB='
-        settings = AutopushConfig(crypto_key=[fake, fake2])
-        eq_(settings.fernet._fernets[0]._encryption_key,
+        conf = AutopushConfig(crypto_key=[fake, fake2])
+        eq_(conf.fernet._fernets[0]._encryption_key,
             '\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
-        eq_(settings.fernet._fernets[1]._encryption_key,
+        eq_(conf.fernet._fernets[1]._encryption_key,
             '\x10A\x04\x10A\x04\x10A\x04\x10A\x04\x10A\x04\x10')
 
     def test_cors(self):
@@ -287,7 +287,7 @@ class RegistrationTestCase(unittest.TestCase):
         from autopush.router.gcm import GCMRouter
         sids = {"182931248179192": {"auth": "aailsjfilajdflijdsilfjsliaj"}}
         gcm = GCMRouter(
-            self.settings,
+            self.conf,
             {"dryrun": True, "senderIDs": sids},
             SinkMetrics()
         )

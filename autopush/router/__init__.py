@@ -21,18 +21,18 @@ __all__ = ["APNSRouter", "FCMRouter", "GCMRouter", "WebPushRouter",
            "SimpleRouter"]
 
 
-def routers_from_config(settings, db, agent):
+def routers_from_config(conf, db, agent):
     # type: (AutopushConfig, DatabaseManager, Agent) -> Dict[str, IRouter]
     """Create a dict of IRouters for the given config"""
-    router_conf = settings.router_conf
+    router_conf = conf.router_conf
     routers = dict(
-        webpush=WebPushRouter(settings, None, db, agent)
+        webpush=WebPushRouter(conf, None, db, agent)
     )
-    if settings.enable_simplepush:
+    if conf.enable_simplepush:
         routers['simplepush'] = SimpleRouter(
-            settings, router_conf.get("simplepush"), db, agent)
+            conf, router_conf.get("simplepush"), db, agent)
     if 'apns' in router_conf:
-        routers["apns"] = APNSRouter(settings, router_conf["apns"], db.metrics)
+        routers["apns"] = APNSRouter(conf, router_conf["apns"], db.metrics)
     if 'gcm' in router_conf:
-        routers["gcm"] = GCMRouter(settings, router_conf["gcm"], db.metrics)
+        routers["gcm"] = GCMRouter(conf, router_conf["gcm"], db.metrics)
     return routers
