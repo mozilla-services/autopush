@@ -11,7 +11,7 @@ from datadog import ThreadStats
 from autopush.utils import get_ec2_instance_id
 
 if TYPE_CHECKING:  # pragma: nocover
-    from autopush.settings import AutopushSettings  # noqa
+    from autopush.settings import AutopushConfig  # noqa
 
 
 class IMetrics(object):
@@ -115,7 +115,7 @@ class DatadogMetrics(object):
 
 
 def from_settings(settings):
-    # type: (AutopushSettings) -> IMetrics
+    # type: (AutopushConfig) -> IMetrics
     """Create an IMetrics from the given settings"""
     if settings.datadog_api_key:
         return DatadogMetrics(

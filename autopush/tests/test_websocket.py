@@ -29,7 +29,7 @@ import autopush.db as db
 from autopush.db import DatabaseManager
 from autopush.http import InternalRouterHTTPFactory
 from autopush.metrics import SinkMetrics
-from autopush.settings import AutopushSettings
+from autopush.settings import AutopushConfig
 from autopush.tests import MockAssist
 from autopush.utils import WebPushNotification
 from autopush.tests.client import Client
@@ -100,7 +100,7 @@ class WebsocketTestCase(unittest.TestCase):
         from twisted.logger import Logger
         twisted.internet.base.DelayedCall.debug = True
 
-        self.ap_settings = settings = AutopushSettings(
+        self.ap_settings = settings = AutopushConfig(
             hostname="localhost",
             port=8080,
             statsd_host=None,
@@ -1915,7 +1915,7 @@ class RouterHandlerTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
 
-        self.ap_settings = settings = AutopushSettings(
+        self.ap_settings = settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -1956,7 +1956,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
 
-        self.ap_settings = settings = AutopushSettings(
+        self.ap_settings = settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )

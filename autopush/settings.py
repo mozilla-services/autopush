@@ -92,7 +92,7 @@ class DDBTableConfig(object):
 
 
 @attrs
-class AutopushSettings(object):
+class AutopushConfig(object):
     """Main Autopush Settings Object"""
 
     debug = attrib(default=False)  # type: bool
@@ -216,7 +216,7 @@ class AutopushSettings(object):
 
     @classmethod
     def from_argparse(cls, ns, **kwargs):
-        # type: (Namespace, **Any) -> AutopushSettings
+        # type: (Namespace, **Any) -> AutopushConfig
         """Create an instance from argparse/additional kwargs"""
         router_conf = {}
         if ns.key_hash:

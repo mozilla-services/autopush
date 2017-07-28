@@ -81,7 +81,7 @@ from autopush.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: nocover
-    from autopush.settings import AutopushSettings, DDBTableConfig  # noqa
+    from autopush.settings import AutopushConfig, DDBTableConfig  # noqa
 
 
 # Typing
@@ -886,7 +886,7 @@ class DatabaseManager(object):
 
     @classmethod
     def from_settings(cls, settings, **kwargs):
-        # type: (AutopushSettings, **Any) -> DatabaseManager
+        # type: (AutopushConfig, **Any) -> DatabaseManager
         """Create a DatabaseManager from the given settings"""
         metrics = autopush.metrics.from_settings(settings)
         return cls(

@@ -21,7 +21,7 @@ from autopush.base import BaseHandler
 from autopush.db import DatabaseManager
 from autopush.router import routers_from_settings
 from autopush.router.interface import IRouter  # noqa
-from autopush.settings import AutopushSettings  # noqa
+from autopush.settings import AutopushConfig  # noqa
 from autopush.ssl import AutopushSSLContextFactory  # noqa
 from autopush.web.health import (
     HealthHandler,
@@ -65,7 +65,7 @@ class BaseHTTPFactory(cyclone.web.Application):
     )
 
     def __init__(self,
-                 ap_settings,    # type: AutopushSettings
+                 ap_settings,    # type: AutopushConfig
                  db,             # type: DatabaseManager
                  handlers=None,  # type: APHandlers
                  log_function=skip_request_logging,  # type: CycloneLogger
@@ -95,7 +95,7 @@ class BaseHTTPFactory(cyclone.web.Application):
     @classmethod
     def for_handler(cls,
                     handler_cls,    # Type[BaseHTTPFactory]
-                    ap_settings,    # type: AutopushSettings
+                    ap_settings,    # type: AutopushConfig
                     db=None,        # type: Optional[DatabaseManager]
                     **kwargs):
         # type: (...) -> BaseHTTPFactory
@@ -125,7 +125,7 @@ class BaseHTTPFactory(cyclone.web.Application):
 
     @classmethod
     def _for_handler(cls, ap_settings, **kwargs):
-        # type: (AutopushSettings, **Any) -> BaseHTTPFactory
+        # type: (AutopushConfig, **Any) -> BaseHTTPFactory
         """Create an instance w/ default kwargs for for_handler"""
         raise NotImplementedError  # pragma: nocover
 
@@ -153,7 +153,7 @@ class EndpointHTTPFactory(BaseHTTPFactory):
     protocol = LimitedHTTPConnection
 
     def __init__(self,
-                 ap_settings,  # type: AutopushSettings
+                 ap_settings,  # type: AutopushConfig
                  db,           # type: DatabaseManager
                  routers,      # type: Dict[str, IRouter]
                  **kwargs):
@@ -197,7 +197,7 @@ class InternalRouterHTTPFactory(BaseHTTPFactory):
     )
 
     def __init__(self,
-                 ap_settings,  # type: AutopushSettings
+                 ap_settings,  # type: AutopushConfig
                  db,           # type: DatabaseManager
                  clients,      # type: Dict[str, PushServerProtocol]
                  **kwargs):
@@ -239,7 +239,7 @@ class QuietClientFactory(_HTTP11ClientFactory):
 
 
 def agent_from_settings(settings):
-    # type: (AutopushSettings) -> Agent
+    # type: (AutopushConfig) -> Agent
     """Create a twisted.web.client Agent from settings"""
     # Use a persistent connection pool for HTTP requests.
     pool = HTTPConnectionPool(reactor)

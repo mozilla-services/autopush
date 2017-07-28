@@ -40,7 +40,7 @@ from autopush.db import (
 )
 from autopush.logging import begin_or_register
 from autopush.main import ConnectionApplication, EndpointApplication
-from autopush.settings import AutopushSettings
+from autopush.settings import AutopushConfig
 from autopush.utils import base64url_encode
 from autopush.metrics import SinkMetrics, DatadogMetrics
 from autopush.tests.support import TestingLogObserver
@@ -295,7 +295,7 @@ MESSAGE_TABLE = os.environ.get("MESSAGE_TABLE", "message_int_test")
 
 class IntegrationBase(unittest.TestCase):
     track_objects = True
-    track_objects_excludes = [AutopushSettings, PushServerFactory]
+    track_objects_excludes = [AutopushConfig, PushServerFactory]
 
     endpoint_port = 9020
 
@@ -332,11 +332,11 @@ class IntegrationBase(unittest.TestCase):
         self.addCleanup(globalLogPublisher.removeObserver, self.logs)
 
         crypto_key = Fernet.generate_key()
-        ep_settings = AutopushSettings(
+        ep_settings = AutopushConfig(
             crypto_key=crypto_key,
             **self.endpoint_kwargs()
         )
-        conn_settings = AutopushSettings(
+        conn_settings = AutopushConfig(
             crypto_key=crypto_key,
             **self.conn_kwargs()
         )

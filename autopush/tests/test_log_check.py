@@ -8,7 +8,7 @@ from twisted.trial import unittest
 
 from autopush.http import EndpointHTTPFactory
 from autopush.logging import begin_or_register
-from autopush.settings import AutopushSettings
+from autopush.settings import AutopushConfig
 from autopush.tests.client import Client
 from autopush.tests.support import TestingLogObserver
 from autopush.web.log_check import LogCheckHandler
@@ -19,7 +19,7 @@ class LogCheckTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
 
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )

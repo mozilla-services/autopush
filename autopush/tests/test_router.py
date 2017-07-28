@@ -34,7 +34,7 @@ from autopush.router import (
     FCMRouter,
 )
 from autopush.router.interface import RouterResponse, IRouter
-from autopush.settings import AutopushSettings
+from autopush.settings import AutopushConfig
 from autopush.tests import MockAssist
 from autopush.tests.support import test_db
 from autopush.web.base import Notification
@@ -74,7 +74,7 @@ class APNSRouterTestCase(unittest.TestCase):
     @patch('hyper.tls', spec=hyper.tls)
     def setUp(self, mt, mc):
         from twisted.logger import Logger
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -295,7 +295,7 @@ class GCMRouterTestCase(unittest.TestCase):
 
     @patch("gcmclient.gcm.GCM", spec=gcmclient.gcm.GCM)
     def setUp(self, fgcm):
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -339,7 +339,7 @@ class GCMRouterTestCase(unittest.TestCase):
         self.flushLoggedErrors()
 
     def test_init(self):
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -368,7 +368,7 @@ class GCMRouterTestCase(unittest.TestCase):
     @patch("gcmclient.GCM")
     def test_gcmclient_fail(self, fgcm):
         fgcm.side_effect = Exception
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -627,7 +627,7 @@ class FCMRouterTestCase(unittest.TestCase):
 
     @patch("pyfcm.FCMNotification", spec=pyfcm.FCMNotification)
     def setUp(self, ffcm):
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -671,7 +671,7 @@ class FCMRouterTestCase(unittest.TestCase):
 
     @patch("pyfcm.FCMNotification", spec=pyfcm.FCMNotification)
     def test_init(self, ffcm):
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -911,7 +911,7 @@ class FCMRouterTestCase(unittest.TestCase):
 class SimplePushRouterTestCase(unittest.TestCase):
     def setUp(self):
         from twisted.logger import Logger
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -1149,7 +1149,7 @@ class SimplePushRouterTestCase(unittest.TestCase):
 
 class WebPushRouterTestCase(unittest.TestCase):
     def setUp(self):
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )

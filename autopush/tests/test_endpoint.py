@@ -21,7 +21,7 @@ from autopush.http import EndpointHTTPFactory
 from autopush.metrics import SinkMetrics
 from autopush.router import routers_from_settings
 from autopush.router.interface import IRouter
-from autopush.settings import AutopushSettings
+from autopush.settings import AutopushConfig
 from autopush.tests.client import Client
 from autopush.tests.test_db import make_webpush_notification
 from autopush.tests.support import test_db
@@ -47,7 +47,7 @@ class FileConsumer(object):  # pragma: no cover
 class MessageTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
             crypto_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
@@ -135,7 +135,7 @@ class RegistrationTestCase(unittest.TestCase):
 
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
             bear_hash_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
@@ -208,12 +208,12 @@ class RegistrationTestCase(unittest.TestCase):
 
     def test_settings_crypto_key(self):
         fake = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
-        settings = AutopushSettings(crypto_key=fake)
+        settings = AutopushConfig(crypto_key=fake)
         eq_(settings.fernet._fernets[0]._encryption_key,
             '\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
 
         fake2 = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB='
-        settings = AutopushSettings(crypto_key=[fake, fake2])
+        settings = AutopushConfig(crypto_key=[fake, fake2])
         eq_(settings.fernet._fernets[0]._encryption_key,
             '\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
         eq_(settings.fernet._fernets[1]._encryption_key,

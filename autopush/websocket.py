@@ -95,7 +95,7 @@ from autopush.exceptions import MessageOverloadException
 from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
 from autopush.metrics import IMetrics, make_tags  # noqa
-from autopush.settings import AutopushSettings  # noqa
+from autopush.settings import AutopushConfig  # noqa
 from autopush.ssl import AutopushSSLContextFactory  # noqa
 from autopush.types import JSONDict  # noqa
 from autopush.utils import (
@@ -332,7 +332,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     @property
     def ap_settings(self):
-        # type: () -> AutopushSettings
+        # type: () -> AutopushConfig
         return self.factory.ap_settings
 
     @property
@@ -1525,7 +1525,7 @@ class PushServerFactory(WebSocketServerFactory):
     protocol = PushServerProtocol
 
     def __init__(self, ap_settings, db, agent, clients):
-        # type: (AutopushSettings, DatabaseManager, Agent, Dict) -> None
+        # type: (AutopushConfig, DatabaseManager, Agent, Dict) -> None
         WebSocketServerFactory.__init__(self, ap_settings.ws_url)
         self.ap_settings = ap_settings
         self.db = db
@@ -1615,7 +1615,7 @@ class ConnectionWSSite(Site):
     """The Websocket Site"""
 
     def __init__(self, ap_settings, ws_factory):
-        # type: (AutopushSettings, PushServerFactory) -> None
+        # type: (AutopushConfig, PushServerFactory) -> None
         self.ap_settings = ap_settings
         self.noisy = ap_settings.debug
 

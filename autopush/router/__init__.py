@@ -15,14 +15,14 @@ from autopush.router.interface import IRouter  # noqa
 from autopush.router.simple import SimpleRouter
 from autopush.router.webpush import WebPushRouter
 from autopush.router.fcm import FCMRouter
-from autopush.settings import AutopushSettings  # noqa
+from autopush.settings import AutopushConfig  # noqa
 
 __all__ = ["APNSRouter", "FCMRouter", "GCMRouter", "WebPushRouter",
            "SimpleRouter"]
 
 
 def routers_from_settings(settings, db, agent):
-    # type: (AutopushSettings, DatabaseManager, Agent) -> Dict[str, IRouter]
+    # type: (AutopushConfig, DatabaseManager, Agent) -> Dict[str, IRouter]
     """Create a dict of IRouters for the given settings"""
     router_conf = settings.router_conf
     routers = dict(

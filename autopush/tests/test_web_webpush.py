@@ -10,7 +10,7 @@ from twisted.trial import unittest
 from autopush.db import Message
 from autopush.http import EndpointHTTPFactory
 from autopush.router.interface import IRouter, RouterResponse
-from autopush.settings import AutopushSettings
+from autopush.settings import AutopushConfig
 from autopush.tests.client import Client
 from autopush.tests.support import test_db
 
@@ -23,7 +23,7 @@ class TestWebpushHandler(unittest.TestCase):
     def setUp(self):
         from autopush.web.webpush import WebPushHandler
 
-        self.ap_settings = settings = AutopushSettings(
+        self.ap_settings = settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
             use_cryptography=True,

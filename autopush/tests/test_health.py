@@ -13,7 +13,7 @@ from autopush.db import DatabaseManager
 from autopush.exceptions import MissingTableException
 from autopush.http import EndpointHTTPFactory
 from autopush.logging import begin_or_register
-from autopush.settings import AutopushSettings
+from autopush.settings import AutopushConfig
 from autopush.tests.client import Client
 from autopush.tests.support import TestingLogObserver
 from autopush.web.health import HealthHandler, StatusHandler
@@ -24,7 +24,7 @@ class HealthTestCase(unittest.TestCase):
         self.timeout = 0.5
         twisted.internet.base.DelayedCall.debug = True
 
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -124,7 +124,7 @@ class HealthTestCase(unittest.TestCase):
 class StatusTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )

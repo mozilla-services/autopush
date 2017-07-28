@@ -12,7 +12,7 @@ from twisted.trial import unittest
 from autopush.db import ProvisionedThroughputExceededException
 from autopush.http import EndpointHTTPFactory
 from autopush.exceptions import InvalidRequest
-from autopush.settings import AutopushSettings
+from autopush.settings import AutopushConfig
 from autopush.metrics import SinkMetrics
 from autopush.tests.support import test_db
 
@@ -36,7 +36,7 @@ class TestBase(unittest.TestCase):
     def setUp(self):
         from autopush.web.base import BaseWebHandler
 
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )

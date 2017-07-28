@@ -34,7 +34,7 @@ from autopush.haproxy import HAProxyServerEndpoint
 from autopush.logging import PushLogger
 from autopush.main_argparse import parse_connection, parse_endpoint
 from autopush.router import routers_from_settings
-from autopush.settings import AutopushSettings
+from autopush.settings import AutopushConfig
 from autopush.websocket import (
     ConnectionWSSite,
     PushServerFactory,
@@ -59,7 +59,7 @@ class AutopushMultiService(MultiService):
     THREAD_POOL_SIZE = 50
 
     def __init__(self, settings):
-        # type: (AutopushSettings) -> None
+        # type: (AutopushConfig) -> None
         super(AutopushMultiService, self).__init__()
         self.settings = settings
         self.db = DatabaseManager.from_settings(settings)
@@ -112,7 +112,7 @@ class AutopushMultiService(MultiService):
         """Create an instance from argparse/additional kwargs"""
         # Add some entropy to prevent potential conflicts.
         postfix = os.urandom(4).encode('hex').ljust(8, '0')
-        settings = AutopushSettings.from_argparse(
+        settings = AutopushConfig.from_argparse(
             ns,
             debug=ns.debug,
             preflight_uaid="deadbeef000000000deadbeef" + postfix,
@@ -165,7 +165,7 @@ class EndpointApplication(AutopushMultiService):
     endpoint_factory = EndpointHTTPFactory
 
     def __init__(self, settings):
-        # type: (AutopushSettings) -> None
+        # type: (AutopushConfig) -> None
         super(EndpointApplication, self).__init__(settings)
         self.routers = routers_from_settings(settings, self.db, self.agent)
 
@@ -231,7 +231,7 @@ class ConnectionApplication(AutopushMultiService):
     websocket_site_factory = ConnectionWSSite
 
     def __init__(self, settings):
-        # type: (AutopushSettings) -> None
+        # type: (AutopushConfig) -> None
         super(ConnectionApplication, self).__init__(settings)
         self.clients = {}  # type: Dict[str, PushServerProtocol]
 

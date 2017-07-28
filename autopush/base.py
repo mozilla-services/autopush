@@ -9,7 +9,7 @@ from twisted.python import failure
 if TYPE_CHECKING:  # pragma: nocover
     from autopush.db import DatabaseManager  # noqa
     from autopush.metrics import IMetrics  # noqa
-    from autopush.settings import AutopushSettings  # noqa
+    from autopush.settings import AutopushConfig  # noqa
 
 
 class BaseHandler(cyclone.web.RequestHandler):
@@ -23,7 +23,7 @@ class BaseHandler(cyclone.web.RequestHandler):
 
     @property
     def ap_settings(self):
-        # type: () -> AutopushSettings
+        # type: () -> AutopushConfig
         return self.application.ap_settings
 
     @property

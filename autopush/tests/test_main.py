@@ -21,7 +21,7 @@ from autopush.main import (
     ConnectionApplication,
     EndpointApplication,
 )
-from autopush.settings import AutopushSettings
+from autopush.settings import AutopushConfig
 from autopush.tests.support import test_db
 from autopush.utils import resolve_ip
 
@@ -32,7 +32,7 @@ endpoint_main = EndpointApplication.main
 class SettingsTestCase(unittest.TestCase):
     def test_resolve_host(self):
         ip = resolve_ip("example.com")
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="example.com", resolve_hostname=True)
         eq_(settings.hostname, ip)
 
@@ -62,7 +62,7 @@ class SettingsTestCase(unittest.TestCase):
 class SettingsAsyncTestCase(trialtest.TestCase):
     def test_update_rotating_tables(self):
         from autopush.db import get_month
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="example.com", resolve_hostname=True)
         db = DatabaseManager.from_settings(settings)
         db.create_initial_message_tables()
@@ -117,7 +117,7 @@ class SettingsAsyncTestCase(trialtest.TestCase):
                                      month=next_month,
                                      day=1)
 
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="example.com", resolve_hostname=True)
         db = DatabaseManager.from_settings(settings)
         db._tomorrow = Mock(return_value=tomorrow)
@@ -145,7 +145,7 @@ class SettingsAsyncTestCase(trialtest.TestCase):
 
     def test_update_not_needed(self):
         from autopush.db import get_month
-        settings = AutopushSettings(
+        settings = AutopushConfig(
             hostname="google.com", resolve_hostname=True)
         db = DatabaseManager.from_settings(settings)
         db.create_initial_message_tables()
@@ -330,7 +330,7 @@ class EndpointMainTestCase(unittest.TestCase):
 
     @patch('hyper.tls', spec=hyper.tls)
     def test_client_certs_parse(self, mock):
-        settings = AutopushSettings.from_argparse(self.TestArg)
+        settings = AutopushConfig.from_argparse(self.TestArg)
         eq_(settings.client_certs["1A:"*31 + "F9"], 'partner1')
         eq_(settings.client_certs["2B:"*31 + "E8"], 'partner2')
         eq_(settings.client_certs["3C:"*31 + "D7"], 'partner2')
@@ -356,7 +356,7 @@ class EndpointMainTestCase(unittest.TestCase):
            spec=hyper.HTTP20Connection)
     @patch('hyper.tls', spec=hyper.tls)
     def test_settings(self, *args):
-        settings = AutopushSettings.from_argparse(self.TestArg)
+        settings = AutopushConfig.from_argparse(self.TestArg)
         app = EndpointApplication(settings)
         # verify that the hostname is what we said.
         eq_(settings.hostname, self.TestArg.hostname)
@@ -369,7 +369,7 @@ class EndpointMainTestCase(unittest.TestCase):
         old_list = self.TestArg.senderid_list
         self.TestArg.senderid_list = "{}"
         with assert_raises(InvalidSettings):
-            AutopushSettings.from_argparse(self.TestArg)
+            AutopushConfig.from_argparse(self.TestArg)
         self.TestArg.senderid_list = old_list
 
     def test_bad_fcm_senders(self):
@@ -377,11 +377,11 @@ class EndpointMainTestCase(unittest.TestCase):
         old_senderid = self.TestArg.fcm_senderid
         self.TestArg.fcm_auth = ""
         with assert_raises(InvalidSettings):
-            AutopushSettings.from_argparse(self.TestArg)
+            AutopushConfig.from_argparse(self.TestArg)
         self.TestArg.fcm_auth = old_auth
         self.TestArg.fcm_senderid = ""
         with assert_raises(InvalidSettings):
-            AutopushSettings.from_argparse(self.TestArg)
+            AutopushConfig.from_argparse(self.TestArg)
         self.TestArg.fcm_senderid = old_senderid
 
     def test_gcm_start(self):
@@ -400,5 +400,5 @@ class EndpointMainTestCase(unittest.TestCase):
 
         request_mock.return_value = MockReply
         self.TestArg.no_aws = False
-        settings = AutopushSettings.from_argparse(self.TestArg)
+        settings = AutopushConfig.from_argparse(self.TestArg)
         eq_(settings.ami_id, "ami_123")
