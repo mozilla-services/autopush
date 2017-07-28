@@ -70,7 +70,7 @@ class TestBase(unittest.TestCase):
         ch3 = "Access-Control-Allow-Headers"
         ch4 = "Access-Control-Expose-Headers"
         base = self.base
-        base.ap_settings.cors = False
+        base.conf.cors = False
         ok_(base._headers.get(ch1) != "*")
         ok_(base._headers.get(ch2) != self.CORS_METHODS)
         ok_(base._headers.get(ch3) != self.CORS_HEADERS)
@@ -78,7 +78,7 @@ class TestBase(unittest.TestCase):
 
         base.clear_header(ch1)
         base.clear_header(ch2)
-        base.ap_settings.cors = True
+        base.conf.cors = True
         self.base.prepare()
         eq_(base._headers[ch1], "*")
         eq_(base._headers[ch2], self.CORS_METHODS)
@@ -91,7 +91,7 @@ class TestBase(unittest.TestCase):
         ch3 = "Access-Control-Allow-Headers"
         ch4 = "Access-Control-Expose-Headers"
         base = self.base
-        base.ap_settings.cors = True
+        base.conf.cors = True
         base.prepare()
         args = {"api_ver": "v1", "token": "test"}
         base.head(args)
@@ -109,7 +109,7 @@ class TestBase(unittest.TestCase):
         # autopush.main.endpoint_main
         args = {"api_ver": "v1", "token": "test"}
         base = self.base
-        base.ap_settings.cors = True
+        base.conf.cors = True
         base.prepare()
         base.options(args)
         eq_(base._headers[ch1], "*")

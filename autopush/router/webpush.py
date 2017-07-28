@@ -45,9 +45,9 @@ class WebPushRouter(object):
     """
     log = Logger()
 
-    def __init__(self, ap_settings, router_conf, db, agent):
+    def __init__(self, conf, router_conf, db, agent):
         """Create a new Router"""
-        self.ap_settings = ap_settings
+        self.conf = conf
         self.router_conf = router_conf
         self.db = db
         self.agent = agent
@@ -171,8 +171,7 @@ class WebPushRouter(object):
         self.metrics.increment("notification.message_data",
                                notification.data_length,
                                tags=make_tags(destination='Stored'))
-        location = "%s/m/%s" % (self.ap_settings.endpoint_url,
-                                notification.location)
+        location = "%s/m/%s" % (self.conf.endpoint_url, notification.location)
         return RouterResponse(status_code=201, response_body="",
                               headers={"Location": location,
                                        "TTL": notification.ttl or 0},
@@ -182,8 +181,7 @@ class WebPushRouter(object):
         self.metrics.increment("notification.message_data",
                                notification.data_length,
                                tags=make_tags(destination='Direct'))
-        location = "%s/m/%s" % (self.ap_settings.endpoint_url,
-                                notification.location)
+        location = "%s/m/%s" % (self.conf.endpoint_url, notification.location)
         return RouterResponse(status_code=201, response_body="",
                               headers={"Location": location,
                                        "TTL": notification.ttl},
@@ -243,7 +241,7 @@ class WebPushRouter(object):
                 log_exception=False,
             )
         if notification.ttl == 0:
-            location = "%s/m/%s" % (self.ap_settings.endpoint_url,
+            location = "%s/m/%s" % (self.conf.endpoint_url,
                                     notification.version)
             raise RouterException("Finished Routing", status_code=201,
                                   log_exception=False,

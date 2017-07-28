@@ -223,13 +223,13 @@ class RegistrationTestCase(unittest.TestCase):
         ch1 = "Access-Control-Allow-Origin"
         ch2 = "Access-Control-Allow-Methods"
         reg = self.reg
-        reg.ap_settings.cors = False
+        reg.conf.cors = False
         ok_(reg._headers.get(ch1) != "*")
         ok_(reg._headers.get(ch2) != self.CORS_HEAD)
 
         reg.clear_header(ch1)
         reg.clear_header(ch2)
-        reg.ap_settings.cors = True
+        reg.conf.cors = True
         reg.prepare()
         eq_(reg._headers[ch1], "*")
         eq_(reg._headers[ch2], self.CORS_HEAD)
@@ -238,7 +238,7 @@ class RegistrationTestCase(unittest.TestCase):
         ch1 = "Access-Control-Allow-Origin"
         ch2 = "Access-Control-Allow-Methods"
         reg = self.reg
-        reg.ap_settings.cors = True
+        reg.conf.cors = True
         reg.prepare()
         reg.head(None)
         eq_(reg._headers[ch1], "*")
@@ -248,7 +248,7 @@ class RegistrationTestCase(unittest.TestCase):
         ch1 = "Access-Control-Allow-Origin"
         ch2 = "Access-Control-Allow-Methods"
         reg = self.reg
-        reg.ap_settings.cors = True
+        reg.conf.cors = True
         reg.prepare()
         reg.options(None)
         eq_(reg._headers[ch1], "*")

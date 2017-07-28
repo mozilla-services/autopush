@@ -63,7 +63,7 @@ class TestThreadedValidate(unittest.TestCase):
         app.ui_methods = dict()
         vr = ValidateRequest(app, request)
         vr._timings = dict()
-        vr.ap_settings = Mock()
+        vr.conf = Mock()
         vr.metrics = Mock()
         vr.db = Mock()
         vr.routers = Mock()

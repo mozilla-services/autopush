@@ -101,9 +101,9 @@ class FCMRouter(object):
         }
     }
 
-    def __init__(self, ap_settings, router_conf, metrics):
+    def __init__(self, conf, router_conf, metrics):
         """Create a new FCM router and connect to FCM"""
-        self.ap_settings = ap_settings
+        self.conf = conf
         self.router_conf = router_conf
         self.metrics = metrics
         self.min_ttl = router_conf.get("ttl", 60)
@@ -272,8 +272,7 @@ class FCMRouter(object):
                                notification.data_length,
                                tags=make_tags(self._base_tags,
                                               destination="Direct"))
-        location = "%s/m/%s" % (self.ap_settings.endpoint_url,
-                                notification.version)
+        location = "%s/m/%s" % (self.conf.endpoint_url, notification.version)
         return RouterResponse(status_code=201, response_body="",
                               headers={"TTL": ttl,
                                        "Location": location},

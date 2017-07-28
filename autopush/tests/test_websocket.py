@@ -100,7 +100,7 @@ class WebsocketTestCase(unittest.TestCase):
         from twisted.logger import Logger
         twisted.internet.base.DelayedCall.debug = True
 
-        self.ap_settings = settings = AutopushConfig(
+        self.conf = settings = AutopushConfig(
             hostname="localhost",
             port=8080,
             statsd_host=None,
@@ -268,7 +268,7 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(self.factory.externalPort, 80)
 
     def test_handshake_nosub(self):
-        self.ap_settings.port = self.factory.externalPort = 80
+        self.conf.port = self.factory.externalPort = 80
 
         def check_subbed(s):
             eq_(self.factory.externalPort, 80)
@@ -474,7 +474,7 @@ class WebsocketTestCase(unittest.TestCase):
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2015, 12, 15)
         msg_date = "{}_{}_{}".format(
-            self.ap_settings.message_table.tablename,
+            self.conf.message_table.tablename,
             msg_day.year,
             msg_day.month)
         msg_data = {
@@ -542,7 +542,7 @@ class WebsocketTestCase(unittest.TestCase):
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2016, 3, 1)
         msg_date = "{}_{}_{}".format(
-            self.ap_settings.message_table.tablename,
+            self.conf.message_table.tablename,
             msg_day.year,
             msg_day.month)
         msg_data = {
@@ -601,7 +601,7 @@ class WebsocketTestCase(unittest.TestCase):
         target_day = datetime.date(2016, 2, 29)
         msg_day = datetime.date(2016, 3, 1)
         msg_date = "{}_{}_{}".format(
-            self.ap_settings.message_table.tablename,
+            self.conf.message_table.tablename,
             msg_day.year,
             msg_day.month)
         msg_data = {
@@ -870,7 +870,7 @@ class WebsocketTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_hello_timeout(self):
         connected = time.time()
-        self.proto.ap_settings.hello_timeout = 3
+        self.proto.conf.hello_timeout = 3
         self._connect()
         close_args = yield self._wait_for_close()
         _, kwargs = close_args
@@ -879,8 +879,8 @@ class WebsocketTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_hello_timeout_with_wake_timeout(self):
-        self.proto.ap_settings.hello_timeout = 3
-        self.proto.ap_settings.wake_timeout = 3
+        self.proto.conf.hello_timeout = 3
+        self.proto.conf.wake_timeout = 3
 
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[],
@@ -1076,7 +1076,7 @@ class WebsocketTestCase(unittest.TestCase):
         def echo(string):
             return string.encode('hex')
 
-        self.proto.ap_settings.fernet.encrypt = echo
+        self.proto.conf.fernet.encrypt = echo
 
         yield self.proto.process_register(
             dict(channelID=chid,
@@ -1145,8 +1145,7 @@ class WebsocketTestCase(unittest.TestCase):
         def throw_error(*args, **kwargs):
             raise Exception("Crypto explosion")
 
-        self.proto.ap_settings.fernet = Mock(
-            **{"encrypt.side_effect": throw_error})
+        self.proto.conf.fernet = Mock(**{"encrypt.side_effect": throw_error})
         self._send_message(dict(messageType="register",
                                 channelID=str(uuid.uuid4())))
         msg = yield self.get_response()
@@ -1724,7 +1723,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_notif_finished_with_too_many_messages(self):
         self._connect()
-        self.ap_settings.msg_limit = 2
+        self.conf.msg_limit = 2
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ps.use_webpush = True
         self.proto.ps._check_notifications = True
@@ -1915,7 +1914,7 @@ class RouterHandlerTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
 
-        self.ap_settings = settings = AutopushConfig(
+        self.conf = settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -1956,7 +1955,7 @@ class NotificationHandlerTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
 
-        self.ap_settings = settings = AutopushConfig(
+        self.conf = settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )

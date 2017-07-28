@@ -23,7 +23,7 @@ class TestWebpushHandler(unittest.TestCase):
     def setUp(self):
         from autopush.web.webpush import WebPushHandler
 
-        self.ap_settings = settings = AutopushConfig(
+        self.conf = settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
             use_cryptography=True,
@@ -43,7 +43,7 @@ class TestWebpushHandler(unittest.TestCase):
 
     @inlineCallbacks
     def test_router_needs_update(self):
-        self.ap_settings.parse_endpoint = Mock(return_value=dict(
+        self.conf.parse_endpoint = Mock(return_value=dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="asdfasdf",
@@ -70,7 +70,7 @@ class TestWebpushHandler(unittest.TestCase):
 
     @inlineCallbacks
     def test_router_returns_data_without_detail(self):
-        self.ap_settings.parse_endpoint = Mock(return_value=dict(
+        self.conf.parse_endpoint = Mock(return_value=dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="asdfasdf",
