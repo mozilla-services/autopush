@@ -7,10 +7,10 @@ from nose.tools import eq_, ok_
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial import unittest
 
+from autopush.config import AutopushConfig
 from autopush.db import Message
 from autopush.http import EndpointHTTPFactory
 from autopush.router.interface import IRouter, RouterResponse
-from autopush.settings import AutopushConfig
 from autopush.tests.client import Client
 from autopush.tests.support import test_db
 

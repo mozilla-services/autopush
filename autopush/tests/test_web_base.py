@@ -9,10 +9,10 @@ from twisted.logger import Logger
 from twisted.python.failure import Failure
 from twisted.trial import unittest
 
+from autopush.config import AutopushConfig
 from autopush.db import ProvisionedThroughputExceededException
 from autopush.http import EndpointHTTPFactory
 from autopush.exceptions import InvalidRequest
-from autopush.settings import AutopushConfig
 from autopush.metrics import SinkMetrics
 from autopush.tests.support import test_db
 

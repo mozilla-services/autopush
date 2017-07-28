@@ -9,11 +9,11 @@ from twisted.logger import globalLogPublisher
 from twisted.trial import unittest
 
 from autopush import __version__
+from autopush.config import AutopushConfig
 from autopush.db import DatabaseManager
 from autopush.exceptions import MissingTableException
 from autopush.http import EndpointHTTPFactory
 from autopush.logging import begin_or_register
-from autopush.settings import AutopushConfig
 from autopush.tests.client import Client
 from autopush.tests.support import TestingLogObserver
 from autopush.web.health import HealthHandler, StatusHandler

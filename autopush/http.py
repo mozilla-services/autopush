@@ -18,10 +18,10 @@ from twisted.web.client import (
 )
 
 from autopush.base import BaseHandler
+from autopush.config import AutopushConfig  # noqa
 from autopush.db import DatabaseManager
 from autopush.router import routers_from_settings
 from autopush.router.interface import IRouter  # noqa
-from autopush.settings import AutopushConfig  # noqa
 from autopush.ssl import AutopushSSLContextFactory  # noqa
 from autopush.web.health import (
     HealthHandler,

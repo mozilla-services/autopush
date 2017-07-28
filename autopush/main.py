@@ -28,13 +28,13 @@ from autopush.http import (
 )
 import autopush.utils as utils
 import autopush.logging as logging
-from autopush.exceptions import InvalidSettings
+from autopush.config import AutopushConfig
 from autopush.db import DatabaseManager
+from autopush.exceptions import InvalidSettings
 from autopush.haproxy import HAProxyServerEndpoint
 from autopush.logging import PushLogger
 from autopush.main_argparse import parse_connection, parse_endpoint
 from autopush.router import routers_from_settings
-from autopush.settings import AutopushConfig
 from autopush.websocket import (
     ConnectionWSSite,
     PushServerFactory,

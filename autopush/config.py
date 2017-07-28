@@ -1,4 +1,4 @@
-"""Autopush Settings Object and Setup"""
+"""Autopush Config Object and Setup"""
 import json
 import socket
 from argparse import Namespace  # noqa

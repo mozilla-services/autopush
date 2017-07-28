@@ -19,6 +19,7 @@ import gcmclient
 import pyfcm
 from hyper.http20.exceptions import HTTP20Error
 
+from autopush.config import AutopushConfig
 from autopush.db import (
     Message,
     ProvisionedThroughputExceededException,
@@ -34,7 +35,6 @@ from autopush.router import (
     FCMRouter,
 )
 from autopush.router.interface import RouterResponse, IRouter
-from autopush.settings import AutopushConfig
 from autopush.tests import MockAssist
 from autopush.tests.support import test_db
 from autopush.web.base import Notification

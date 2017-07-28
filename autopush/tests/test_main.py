@@ -14,6 +14,7 @@ import hyper
 import hyper.tls
 
 import autopush.db
+from autopush.config import AutopushConfig
 from autopush.db import DatabaseManager, get_rotating_message_table
 from autopush.exceptions import InvalidSettings
 from autopush.http import skip_request_logging
@@ -21,7 +22,6 @@ from autopush.main import (
     ConnectionApplication,
     EndpointApplication,
 )
-from autopush.settings import AutopushConfig
 from autopush.tests.support import test_db
 from autopush.utils import resolve_ip
 

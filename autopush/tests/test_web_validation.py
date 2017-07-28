@@ -773,8 +773,8 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
 class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
     def _make_fut(self):
+        from autopush.config import AutopushConfig
         from autopush.web.webpush import WebPushRequestSchema
-        from autopush.settings import AutopushConfig
         settings = AutopushConfig(
             hostname="localhost",
             statsd_host=None,

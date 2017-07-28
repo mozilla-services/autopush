@@ -8,6 +8,7 @@ from typing import Dict  # noqa
 
 from twisted.web.client import Agent  # noqa
 
+from autopush.config import AutopushConfig  # noqa
 from autopush.db import DatabaseManager  # noqa
 from autopush.router.apnsrouter import APNSRouter
 from autopush.router.gcm import GCMRouter
@@ -15,7 +16,6 @@ from autopush.router.interface import IRouter  # noqa
 from autopush.router.simple import SimpleRouter
 from autopush.router.webpush import WebPushRouter
 from autopush.router.fcm import FCMRouter
-from autopush.settings import AutopushConfig  # noqa
 
 __all__ = ["APNSRouter", "FCMRouter", "GCMRouter", "WebPushRouter",
            "SimpleRouter"]

@@ -34,13 +34,13 @@ from twisted.web.http_headers import Headers
 
 import autopush.db as db
 from autopush import __version__
+from autopush.config import AutopushConfig
 from autopush.db import (
     get_month,
     has_connected_this_month
 )
 from autopush.logging import begin_or_register
 from autopush.main import ConnectionApplication, EndpointApplication
-from autopush.settings import AutopushConfig
 from autopush.utils import base64url_encode
 from autopush.metrics import SinkMetrics, DatadogMetrics
 from autopush.tests.support import TestingLogObserver

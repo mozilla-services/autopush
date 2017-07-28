@@ -6,9 +6,9 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.logger import globalLogPublisher
 from twisted.trial import unittest
 
+from autopush.config import AutopushConfig
 from autopush.http import EndpointHTTPFactory
 from autopush.logging import begin_or_register
-from autopush.settings import AutopushConfig
 from autopush.tests.client import Client
 from autopush.tests.support import TestingLogObserver
 from autopush.web.log_check import LogCheckHandler

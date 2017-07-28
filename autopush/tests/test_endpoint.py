@@ -10,6 +10,7 @@ from twisted.trial import unittest
 
 
 import autopush.utils as utils
+from autopush.config import AutopushConfig
 from autopush.db import (
     ProvisionedThroughputExceededException,
     Message,
@@ -21,7 +22,6 @@ from autopush.http import EndpointHTTPFactory
 from autopush.metrics import SinkMetrics
 from autopush.router import routers_from_settings
 from autopush.router.interface import IRouter
-from autopush.settings import AutopushConfig
 from autopush.tests.client import Client
 from autopush.tests.test_db import make_webpush_notification
 from autopush.tests.support import test_db

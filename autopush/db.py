@@ -81,7 +81,7 @@ from autopush.utils import (
 )
 
 if TYPE_CHECKING:  # pragma: nocover
-    from autopush.settings import AutopushConfig, DDBTableConfig  # noqa
+    from autopush.config import AutopushConfig, DDBTableConfig  # noqa
 
 
 # Typing

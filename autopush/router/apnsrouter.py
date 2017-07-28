@@ -53,7 +53,7 @@ class APNSRouter(object):
         """Create a new APNS router and connect to APNS
 
         :param ap_settings: Configuration settings
-        :type ap_settings: autopush.settings.AutopushConfig
+        :type ap_settings: autopush.config.AutopushConfig
         :param router_conf: Router specific configuration
         :type router_conf: dict
         :param load_connections: (used for testing)

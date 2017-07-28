@@ -26,10 +26,10 @@ from twisted.trial import unittest
 from twisted.web.client import Agent
 
 import autopush.db as db
+from autopush.config import AutopushConfig
 from autopush.db import DatabaseManager
 from autopush.http import InternalRouterHTTPFactory
 from autopush.metrics import SinkMetrics
-from autopush.settings import AutopushConfig
 from autopush.tests import MockAssist
 from autopush.utils import WebPushNotification
 from autopush.tests.client import Client

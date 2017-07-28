@@ -11,7 +11,7 @@ from datadog import ThreadStats
 from autopush.utils import get_ec2_instance_id
 
 if TYPE_CHECKING:  # pragma: nocover
-    from autopush.settings import AutopushConfig  # noqa
+    from autopush.config import AutopushConfig  # noqa
 
 
 class IMetrics(object):

@@ -84,6 +84,7 @@ from zope.interface import implementer
 
 from autopush import __version__
 from autopush.base import BaseHandler
+from autopush.config import AutopushConfig  # noqa
 from autopush.db import (
     has_connected_this_month,
     hasher,
@@ -95,7 +96,6 @@ from autopush.exceptions import MessageOverloadException
 from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
 from autopush.metrics import IMetrics, make_tags  # noqa
-from autopush.settings import AutopushConfig  # noqa
 from autopush.ssl import AutopushSSLContextFactory  # noqa
 from autopush.types import JSONDict  # noqa
 from autopush.utils import (

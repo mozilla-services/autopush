@@ -6,10 +6,10 @@ import re
 import configargparse
 from twisted.logger import Logger
 
+from autopush.config import AutopushConfig
 from autopush.db import DatabaseManager
 from autopush.main import AutopushMultiService
 from autopush.main_argparse import add_shared_args
-from autopush.settings import AutopushConfig
 
 
 PUSH_RE = re.compile(r"push/(?:(?P<api_ver>v\d+)/)?(?P<token>[^/]+)")

@@ -7,9 +7,9 @@ from twisted.logger import Logger
 from twisted.python import failure
 
 if TYPE_CHECKING:  # pragma: nocover
+    from autopush.config import AutopushConfig  # noqa
     from autopush.db import DatabaseManager  # noqa
     from autopush.metrics import IMetrics  # noqa
-    from autopush.settings import AutopushConfig  # noqa
 
 
 class BaseHandler(cyclone.web.RequestHandler):
