@@ -22,7 +22,7 @@ from autopush.db import DatabaseManager
 from autopush.router import routers_from_settings
 from autopush.router.interface import IRouter  # noqa
 from autopush.settings import AutopushSettings  # noqa
-from autopush.ssl import AutopushSSLContextFactory
+from autopush.ssl import AutopushSSLContextFactory  # noqa
 from autopush.web.health import (
     HealthHandler,
     MemUsageHandler,
@@ -176,14 +176,7 @@ class EndpointHTTPFactory(BaseHTTPFactory):
 
         """
         settings = self.ap_settings
-        if not settings.ssl_key:
-            return None
-        return AutopushSSLContextFactory(
-            settings.ssl_key,
-            settings.ssl_cert,
-            dh_file=settings.ssl_dh_param,
-            require_peer_certs=settings.enable_tls_auth
-        )
+        return settings.ssl.cf(require_peer_certs=settings.enable_tls_auth)
 
     @classmethod
     def _for_handler(cls, ap_settings, db, routers=None, **kwargs):
@@ -224,14 +217,7 @@ class InternalRouterHTTPFactory(BaseHTTPFactory):
         values.
 
         """
-        settings = self.ap_settings
-        if not settings.router_ssl_key:
-            return None
-        return AutopushSSLContextFactory(
-            settings.router_ssl_key,
-            settings.router_ssl_cert,
-            dh_file=settings.ssl_dh_param
-        )
+        return self.ap_settings.router_ssl.cf()
 
     @classmethod
     def _for_handler(cls, ap_settings, db, clients=None, **kwargs):

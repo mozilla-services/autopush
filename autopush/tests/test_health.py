@@ -10,6 +10,7 @@ from twisted.logger import globalLogPublisher
 from twisted.trial import unittest
 
 from autopush import __version__
+from autopush.db import DatabaseManager
 from autopush.exceptions import MissingTableException
 from autopush.http import EndpointHTTPFactory
 from autopush.logging import begin_or_register
@@ -32,13 +33,15 @@ class HealthTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
+        db = DatabaseManager.from_settings(settings)
+        db.setup_tables()
 
         # ignore logging
         logs = TestingLogObserver()
         begin_or_register(logs)
         self.addCleanup(globalLogPublisher.removeObserver, logs)
 
-        app = EndpointHTTPFactory.for_handler(HealthHandler, settings)
+        app = EndpointHTTPFactory.for_handler(HealthHandler, settings, db=db)
         self.router_table = app.db.router.table
         self.storage_table = app.db.storage.table
         self.client = Client(app)
@@ -125,13 +128,7 @@ class HealthTestCase(unittest.TestCase):
 
 class StatusTestCase(unittest.TestCase):
     def setUp(self):
-        self.timeout = 0.5
         twisted.internet.base.DelayedCall.debug = True
-
-        self.mock_dynamodb2 = mock_dynamodb2()
-        self.mock_dynamodb2.start()
-        self.addCleanup(self.mock_dynamodb2.stop)
-
         settings = AutopushSettings(
             hostname="localhost",
             statsd_host=None,

@@ -136,7 +136,10 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         eq_(len(db.message_tables), 3)
 
         # Grab next month's table name and remove it
-        next_month = get_rotating_message_table(db._message_prefix, delta=1)
+        next_month = get_rotating_message_table(
+            settings.message_table.tablename,
+            delta=1
+        )
         db.message_tables.pop(next_month.table_name)
 
         # Get the deferred back

@@ -3,17 +3,13 @@ import uuid
 
 from boto.exception import BotoServerError
 from mock import Mock, patch
-from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
 from twisted.internet.defer import Deferred
 from twisted.logger import Logger
 from twisted.python.failure import Failure
 from twisted.trial import unittest
 
-from autopush.db import (
-    create_rotating_message_table,
-    ProvisionedThroughputExceededException,
-)
+from autopush.db import ProvisionedThroughputExceededException
 from autopush.http import EndpointHTTPFactory
 from autopush.exceptions import InvalidRequest
 from autopush.settings import AutopushSettings
@@ -23,16 +19,6 @@ from autopush.tests.support import test_db
 dummy_request_id = "11111111-1234-1234-1234-567812345678"
 dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
 dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
-mock_dynamodb2 = mock_dynamodb2()
-
-
-def setUp():
-    mock_dynamodb2.start()
-    create_rotating_message_table()
-
-
-def tearDown():
-    mock_dynamodb2.stop()
 
 
 class TestBase(unittest.TestCase):

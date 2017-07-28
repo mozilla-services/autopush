@@ -8,6 +8,7 @@ from typing import (  # noqa
     Dict,
     List,
     Optional,
+    Type,
     Union
 )
 
@@ -25,6 +26,7 @@ from autopush.exceptions import (
     InvalidTokenException,
     VapidAuthException
 )
+from autopush.ssl import AutopushSSLContextFactory
 from autopush.types import JSONDict  # noqa
 from autopush.utils import (
     CLIENT_SHA256_RE,
@@ -44,6 +46,49 @@ def _init_crypto_key(ck):
     if ck is None:
         return [Fernet.generate_key()]
     return ck if isinstance(ck, list) else [ck]
+
+
+def _nested(cls, **kwargs):
+    # type: (Type, **Any) -> Any
+    """Defines an attr cls nested within another attr.
+
+    This attribute constructs the nested attr from a dict argument
+    (representing its kwargs) unless already an instance of cls.
+
+    """
+    def converter(arg):
+        return arg if isinstance(arg, cls) else cls(**arg)
+    return attrib(convert=converter, **kwargs)
+
+
+@attrs
+class SSLConfig(object):
+    """AutopushSSLContextFactory configuration"""
+
+    key = attrib(default=None)  # type: Optional[str]
+    cert = attrib(default=None)  # type: Optional[str]
+    dh_param = attrib(default=None)  # type: Optional[str]
+
+    def cf(self, **kwargs):
+        # type: (**Any) -> Optional[AutopushSSLContextFactory]
+        """Build our AutopushSSLContextFactory (if configured)"""
+        if not self.key:
+            return None
+        return AutopushSSLContextFactory(
+            self.key,
+            self.cert,
+            dh_file=self.dh_param,
+            **kwargs
+        )
+
+
+@attrs
+class DDBTableConfig(object):
+    """A DynamoDB Table's configuration"""
+
+    tablename = attrib()  # type: str
+    read_throughput = attrib(default=5)  # type: int
+    write_throughput = attrib(default=5)  # type: int
 
 
 @attrs
@@ -80,25 +125,25 @@ class AutopushSettings(object):
     datadog_app_key = attrib(default=None)  # type: Optional[str]
     datadog_flush_interval = attrib(default=None)  # type: Optional[int]
 
-    router_tablename = attrib(default="router")  # type: str
-    router_read_throughput = attrib(default=5)  # type: int
-    router_write_throughput = attrib(default=5)  # type: int
-    storage_tablename = attrib(default="storage")  # type: str
-    storage_read_throughput = attrib(default=5)  # type: int
-    storage_write_throughput = attrib(default=5)  # type: int
-    message_tablename = attrib(default="message")  # type: str
-    message_read_throughput = attrib(default=5)  # type: int
-    message_write_throughput = attrib(default=5)  # type: int
+    router_table = _nested(
+        DDBTableConfig,
+        default=dict(tablename="router")
+    )  # type: DDBTableConfig
+    storage_table = _nested(
+        DDBTableConfig,
+        default=dict(tablename="storage")
+    )  # type: DDBTableConfig
+    message_table = _nested(
+        DDBTableConfig,
+        default=dict(tablename="message")
+    )  # type: DDBTableConfig
+
     preflight_uaid = attrib(
         default="deadbeef00000000deadbeef00000000")  # type: str
 
-    ssl_key = attrib(default=None)  # type: Optional[str]
-    ssl_cert = attrib(default=None)  # type: Optional[str]
-    ssl_dh_param = attrib(default=None)  # type: Optional[str]
-
-    router_ssl_key = attrib(default=None)  # type: Optional[str]
-    router_ssl_cert = attrib(default=None)  # type: Optional[str]
-
+    ssl = _nested(SSLConfig, default=Factory(SSLConfig))  # type: SSLConfig
+    router_ssl = _nested(
+        SSLConfig, default=Factory(SSLConfig))  # type: SSLConfig
     client_certs = attrib(default=None)  # type: Optional[Dict[str, str]]
 
     router_url = attrib(init=False)  # type: str
@@ -157,7 +202,7 @@ class AutopushSettings(object):
         )
         # not accurate under autoendpoint (like router_url)
         self.ws_url = "{}://{}:{}/".format(
-            'wss' if self.ssl_key else 'ws',
+            'wss' if self.ssl.key else 'ws',
             self.hostname,
             self.port
         )
@@ -263,15 +308,6 @@ class AutopushSettings(object):
             statsd_host=ns.statsd_host,
             statsd_port=ns.statsd_port,
             router_conf=router_conf,
-            router_tablename=ns.router_tablename,
-            storage_tablename=ns.storage_tablename,
-            storage_read_throughput=ns.storage_read_throughput,
-            storage_write_throughput=ns.storage_write_throughput,
-            message_tablename=ns.message_tablename,
-            message_read_throughput=ns.message_read_throughput,
-            message_write_throughput=ns.message_write_throughput,
-            router_read_throughput=ns.router_read_throughput,
-            router_write_throughput=ns.router_write_throughput,
             resolve_hostname=ns.resolve_hostname,
             wake_timeout=ns.wake_timeout,
             ami_id=ami_id,
@@ -279,11 +315,28 @@ class AutopushSettings(object):
             msg_limit=ns.msg_limit,
             connect_timeout=ns.connection_timeout,
             memusage_port=ns.memusage_port,
-            ssl_key=ns.ssl_key,
-            ssl_cert=ns.ssl_cert,
-            ssl_dh_param=ns.ssl_dh_param,
             use_cryptography=ns.use_cryptography,
             enable_simplepush=ns.enable_simplepush,
+            router_table=dict(
+                tablename=ns.router_tablename,
+                read_throughput=ns.router_read_throughput,
+                write_throughput=ns.router_write_throughput
+            ),
+            storage_table=dict(
+                tablename=ns.storage_tablename,
+                read_throughput=ns.storage_read_throughput,
+                write_throughput=ns.storage_write_throughput
+            ),
+            message_table=dict(
+                tablename=ns.message_tablename,
+                read_throughput=ns.message_read_throughput,
+                write_throughput=ns.message_write_throughput
+            ),
+            ssl=dict(
+                key=ns.ssl_key,
+                cert=ns.ssl_cert,
+                dh_param=ns.ssl_dh_param
+            ),
             **kwargs
         )
 

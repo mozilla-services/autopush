@@ -19,17 +19,12 @@ class EndpointDiagnosticCLI(object):
     log = Logger()
 
     def __init__(self, sysargs, use_files=True):
-        args = self._load_args(sysargs, use_files)
-        self._settings = settings = AutopushSettings(
-            crypto_key=args.crypto_key,
-            router_tablename=args.router_tablename,
-            storage_tablename=args.storage_tablename,
-            message_tablename=args.message_tablename,
-            statsd_host=None,
-        )
+        ns = self._load_args(sysargs, use_files)
+        self._settings = settings = AutopushSettings.from_argparse(ns)
+        settings.statsd_host = None
         self.db = DatabaseManager.from_settings(settings)
         self.db.setup(settings.preflight_uaid)
-        self._endpoint = args.endpoint
+        self._endpoint = ns.endpoint
         self._pp = pprint.PrettyPrinter(indent=4)
 
     def _load_args(self, sysargs, use_files):
