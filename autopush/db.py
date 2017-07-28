@@ -885,10 +885,10 @@ class DatabaseManager(object):
         )
 
     @classmethod
-    def from_settings(cls, settings, **kwargs):
+    def from_config(cls, settings, **kwargs):
         # type: (AutopushConfig, **Any) -> DatabaseManager
-        """Create a DatabaseManager from the given settings"""
-        metrics = autopush.metrics.from_settings(settings)
+        """Create a DatabaseManager from the given config"""
+        metrics = autopush.metrics.from_config(settings)
         return cls(
             storage_conf=settings.storage_table,
             router_conf=settings.router_table,

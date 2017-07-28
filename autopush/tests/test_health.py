@@ -28,7 +28,7 @@ class HealthTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
-        db = DatabaseManager.from_settings(settings)
+        db = DatabaseManager.from_config(settings)
         db.setup_tables()
 
         # ignore logging

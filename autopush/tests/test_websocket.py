@@ -106,7 +106,7 @@ class WebsocketTestCase(unittest.TestCase):
             statsd_host=None,
             env="test",
         )
-        db = DatabaseManager.from_settings(settings)
+        db = DatabaseManager.from_config(settings)
         self.metrics = db.metrics = Mock(spec=SinkMetrics)
         db.setup_tables()
 

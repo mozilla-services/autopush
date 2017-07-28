@@ -64,7 +64,7 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         from autopush.db import get_month
         settings = AutopushConfig(
             hostname="example.com", resolve_hostname=True)
-        db = DatabaseManager.from_settings(settings)
+        db = DatabaseManager.from_config(settings)
         db.create_initial_message_tables()
 
         # Erase the tables it has on init, and move current month back one
@@ -119,7 +119,7 @@ class SettingsAsyncTestCase(trialtest.TestCase):
 
         settings = AutopushConfig(
             hostname="example.com", resolve_hostname=True)
-        db = DatabaseManager.from_settings(settings)
+        db = DatabaseManager.from_config(settings)
         db._tomorrow = Mock(return_value=tomorrow)
         db.create_initial_message_tables()
 
@@ -147,7 +147,7 @@ class SettingsAsyncTestCase(trialtest.TestCase):
         from autopush.db import get_month
         settings = AutopushConfig(
             hostname="google.com", resolve_hostname=True)
-        db = DatabaseManager.from_settings(settings)
+        db = DatabaseManager.from_config(settings)
         db.create_initial_message_tables()
 
         # Erase the tables it has on init, and move current month back one

@@ -20,7 +20,7 @@ from autopush.db import (
 from autopush.exceptions import RouterException
 from autopush.http import EndpointHTTPFactory
 from autopush.metrics import SinkMetrics
-from autopush.router import routers_from_settings
+from autopush.router import routers_from_config
 from autopush.router.interface import IRouter
 from autopush.tests.client import Client
 from autopush.tests.test_db import make_webpush_notification
@@ -151,7 +151,7 @@ class RegistrationTestCase(unittest.TestCase):
         }
         db.create_initial_message_tables()
 
-        self.routers = routers = routers_from_settings(settings, db, Mock())
+        self.routers = routers = routers_from_config(settings, db, Mock())
         routers["test"] = Mock(spec=IRouter)
         app = EndpointHTTPFactory(settings, db=db, routers=routers)
         self.client = Client(app)

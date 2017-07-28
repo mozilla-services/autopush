@@ -114,9 +114,9 @@ class DatadogMetrics(object):
                             host=self._host, **kwargs)
 
 
-def from_settings(settings):
+def from_config(settings):
     # type: (AutopushConfig) -> IMetrics
-    """Create an IMetrics from the given settings"""
+    """Create an IMetrics from the given config"""
     if settings.datadog_api_key:
         return DatadogMetrics(
             hostname=get_ec2_instance_id() if settings.ami_id else

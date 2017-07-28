@@ -22,7 +22,7 @@ class EndpointDiagnosticCLI(object):
         ns = self._load_args(sysargs, use_files)
         self._settings = settings = AutopushConfig.from_argparse(ns)
         settings.statsd_host = None
-        self.db = DatabaseManager.from_settings(settings)
+        self.db = DatabaseManager.from_config(settings)
         self.db.setup(settings.preflight_uaid)
         self._endpoint = ns.endpoint
         self._pp = pprint.PrettyPrinter(indent=4)

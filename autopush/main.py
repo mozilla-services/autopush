@@ -24,7 +24,7 @@ from autopush.http import (
     InternalRouterHTTPFactory,
     EndpointHTTPFactory,
     MemUsageHTTPFactory,
-    agent_from_settings
+    agent_from_config
 )
 import autopush.utils as utils
 import autopush.logging as logging
@@ -34,7 +34,7 @@ from autopush.exceptions import InvalidSettings
 from autopush.haproxy import HAProxyServerEndpoint
 from autopush.logging import PushLogger
 from autopush.main_argparse import parse_connection, parse_endpoint
-from autopush.router import routers_from_settings
+from autopush.router import routers_from_config
 from autopush.websocket import (
     ConnectionWSSite,
     PushServerFactory,
@@ -62,8 +62,8 @@ class AutopushMultiService(MultiService):
         # type: (AutopushConfig) -> None
         super(AutopushMultiService, self).__init__()
         self.settings = settings
-        self.db = DatabaseManager.from_settings(settings)
-        self.agent = agent_from_settings(settings)
+        self.db = DatabaseManager.from_config(settings)
+        self.agent = agent_from_config(settings)
 
     @staticmethod
     def parse_args(config_files, args):
@@ -167,7 +167,7 @@ class EndpointApplication(AutopushMultiService):
     def __init__(self, settings):
         # type: (AutopushConfig) -> None
         super(EndpointApplication, self).__init__(settings)
-        self.routers = routers_from_settings(settings, self.db, self.agent)
+        self.routers = routers_from_config(settings, self.db, self.agent)
 
     def setup(self, rotate_tables=True):
         self.db.setup(self.settings.preflight_uaid)

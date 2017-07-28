@@ -29,7 +29,7 @@ class DiagnosticCLITestCase(unittest.TestCase):
         ok_(returncode not in (None, 0))
 
     @patch("autopush.diagnostic_cli.AutopushConfig")
-    @patch("autopush.diagnostic_cli.DatabaseManager.from_settings")
+    @patch("autopush.diagnostic_cli.DatabaseManager.from_config")
     def test_successfull_lookup(self, mock_db_cstr, mock_settings_class):
         from autopush.diagnostic_cli import run_endpoint_diagnostic_cli
         mock_settings_class.return_value = mock_settings = Mock()

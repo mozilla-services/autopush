@@ -20,7 +20,7 @@ from twisted.web.client import (
 from autopush.base import BaseHandler
 from autopush.config import AutopushConfig  # noqa
 from autopush.db import DatabaseManager
-from autopush.router import routers_from_settings
+from autopush.router import routers_from_config
 from autopush.router.interface import IRouter  # noqa
 from autopush.ssl import AutopushSSLContextFactory  # noqa
 from autopush.web.health import (
@@ -113,7 +113,7 @@ class BaseHTTPFactory(cyclone.web.Application):
         for pattern, handler in cls.ap_handlers + cls.health_ap_handlers:
             if handler is handler_cls:
                 if db is None:
-                    db = DatabaseManager.from_settings(ap_settings)
+                    db = DatabaseManager.from_config(ap_settings)
                 return cls._for_handler(
                     ap_settings,
                     db=db,
@@ -181,10 +181,10 @@ class EndpointHTTPFactory(BaseHTTPFactory):
     @classmethod
     def _for_handler(cls, ap_settings, db, routers=None, **kwargs):
         if routers is None:
-            routers = routers_from_settings(
+            routers = routers_from_config(
                 ap_settings,
                 db=db,
-                agent=agent_from_settings(ap_settings)
+                agent=agent_from_config(ap_settings)
             )
         return cls(ap_settings, db=db, routers=routers, **kwargs)
 
@@ -238,9 +238,9 @@ class QuietClientFactory(_HTTP11ClientFactory):
     noisy = False
 
 
-def agent_from_settings(settings):
+def agent_from_config(settings):
     # type: (AutopushConfig) -> Agent
-    """Create a twisted.web.client Agent from settings"""
+    """Create a twisted.web.client Agent from the given config"""
     # Use a persistent connection pool for HTTP requests.
     pool = HTTPConnectionPool(reactor)
     if not settings.debug:

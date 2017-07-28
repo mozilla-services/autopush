@@ -21,9 +21,9 @@ __all__ = ["APNSRouter", "FCMRouter", "GCMRouter", "WebPushRouter",
            "SimpleRouter"]
 
 
-def routers_from_settings(settings, db, agent):
+def routers_from_config(settings, db, agent):
     # type: (AutopushConfig, DatabaseManager, Agent) -> Dict[str, IRouter]
-    """Create a dict of IRouters for the given settings"""
+    """Create a dict of IRouters for the given config"""
     router_conf = settings.router_conf
     routers = dict(
         webpush=WebPushRouter(settings, None, db, agent)
