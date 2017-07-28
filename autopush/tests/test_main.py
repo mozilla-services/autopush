@@ -360,9 +360,9 @@ class EndpointMainTestCase(unittest.TestCase):
         app = EndpointApplication(settings)
         # verify that the hostname is what we said.
         eq_(settings.hostname, self.TestArg.hostname)
-        eq_(app.routers["gcm"].config['collapsekey'], "collapse")
-        eq_(app.routers["apns"]._config['firefox']['cert'], "cert.file")
-        eq_(app.routers["apns"]._config['firefox']['key'], "key.file")
+        eq_(app.routers["gcm"].router_conf['collapsekey'], "collapse")
+        eq_(app.routers["apns"].router_conf['firefox']['cert'], "cert.file")
+        eq_(app.routers["apns"].router_conf['firefox']['key'], "key.file")
         eq_(settings.wake_timeout, 10)
 
     def test_bad_senders(self):

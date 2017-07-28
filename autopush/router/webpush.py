@@ -48,7 +48,7 @@ class WebPushRouter(object):
     def __init__(self, ap_settings, router_conf, db, agent):
         """Create a new Router"""
         self.ap_settings = ap_settings
-        self.conf = router_conf
+        self.router_conf = router_conf
         self.db = db
         self.agent = agent
         self.waker = None
@@ -153,15 +153,15 @@ class WebPushRouter(object):
             returnValue(self.delivered_response(notification))
         else:
             ret_val = self.stored_response(notification)
-            if self.udp is not None and "server" in self.conf:
+            if self.udp is not None and "server" in self.router_conf:
                 # Attempt to send off the UDP wake request.
                 try:
                     yield deferToThread(
                         requests.post(
-                            self.conf["server"],
+                            self.router_conf["server"],
                             data=urlencode(self.udp["data"]),
-                            cert=self.conf.get("cert"),
-                            timeout=self.conf.get("server_timeout", 3)))
+                            cert=self.router_conf.get("cert"),
+                            timeout=self.router_conf.get("server_timeout", 3)))
                 except Exception as exc:
                     self.log.debug("Could not send UDP wake request: {exc}",
                                    exc=exc)

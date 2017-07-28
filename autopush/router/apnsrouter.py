@@ -36,7 +36,7 @@ class APNSRouter(object):
 
         """
         default_topic = "com.mozilla.org." + rel_channel
-        cert_info = self._config[rel_channel]
+        cert_info = self.router_conf[rel_channel]
         return APNSClient(
             cert_file=cert_info.get("cert"),
             key_file=cert_info.get("key"),
@@ -61,11 +61,11 @@ class APNSRouter(object):
 
         """
         self.ap_settings = ap_settings
-        self._config = router_conf
+        self.router_conf = router_conf
         self.metrics = metrics
         self._base_tags = ["platform:apns"]
         self.apns = dict()
-        for rel_channel in self._config:
+        for rel_channel in router_conf:
             self.apns[rel_channel] = self._connect(rel_channel,
                                                    load_connections)
         self.ap_settings = ap_settings
