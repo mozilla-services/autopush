@@ -158,11 +158,11 @@ class AuthorizationCheckSchema(Schema):
                                  errno=109,
                                  headers=request_pref_header)
 
-        settings = self.context['settings']
+        conf = self.context['conf']
         uaid = data["path_kwargs"]["uaid"]
-        if settings.bear_hash_key:
+        if conf.bear_hash_key:
             is_valid = False
-            for key in settings.bear_hash_key:
+            for key in conf.bear_hash_key:
                 test_token = generate_hash(key, uaid.hex)
                 is_valid |= constant_time.bytes_eq(bytes(test_token),
                                                    bytes(auth_token))
@@ -283,7 +283,7 @@ class BaseRegistrationHandler(BaseWebHandler):
         # type: (uuid.UUID, str, Optional[str]) -> str
         """Register a new channel and create/return its endpoint"""
         self.db.message.register_channel(uaid.hex, chid)
-        return self.ap_settings.make_endpoint(uaid.hex, chid, app_server_key)
+        return self.conf.make_endpoint(uaid.hex, chid, app_server_key)
 
     def _register_user(self, uaid, router_type, router_data):
         # type: (uuid.UUID, str, JSONDict) -> None
@@ -303,9 +303,8 @@ class BaseRegistrationHandler(BaseWebHandler):
         response = dict(channelID=chid, endpoint=endpoint)
         if new_uaid:
             secret = None
-            if self.ap_settings.bear_hash_key:
-                secret = generate_hash(
-                    self.ap_settings.bear_hash_key[0], uaid.hex)
+            if self.conf.bear_hash_key:
+                secret = generate_hash(self.conf.bear_hash_key[0], uaid.hex)
             response.update(uaid=uaid.hex, secret=secret)
             # Apply any router specific fixes to the outbound response.
             router = self.routers[router_type]

@@ -35,7 +35,7 @@ class SimplePushSubscriptionSchema(Schema):
     @pre_load
     def extract_subscription(self, d):
         try:
-            result = self.context["settings"].parse_endpoint(
+            result = self.context["conf"].parse_endpoint(
                 self.context["metrics"],
                 token=d["token"],
                 version=d["api_ver"],
@@ -66,7 +66,7 @@ class SimplePushRequestSchema(Schema):
 
     @validates('data')
     def validate_data(self, value):
-        max_data = self.context["settings"].max_data
+        max_data = self.context["conf"].max_data
         if value and len(value) > max_data:
             raise InvalidRequest(
                 "Data payload must be smaller than {}".format(max_data),

@@ -63,7 +63,7 @@ class WebPushSubscriptionSchema(Schema):
     @pre_load
     def extract_subscription(self, d):
         try:
-            result = self.context["settings"].parse_endpoint(
+            result = self.context["conf"].parse_endpoint(
                 self.context["metrics"],
                 token=d["token"],
                 version=d["api_ver"],
@@ -340,7 +340,7 @@ class WebPushRequestSchema(Schema):
 
     @validates('body')
     def validate_data(self, value):
-        max_data = self.context["settings"].max_data
+        max_data = self.context["conf"].max_data
         if value and len(value) > max_data:
             raise InvalidRequest(
                 "Data payload must be smaller than {}".format(max_data),
@@ -361,7 +361,7 @@ class WebPushRequestSchema(Schema):
         crypto_exceptions = [KeyError, ValueError, TypeError,
                              VapidAuthException]
 
-        if self.context['settings'].use_cryptography:
+        if self.context['conf'].use_cryptography:
             crypto_exceptions.append(InvalidSignature)
         else:
             crypto_exceptions.extend([JOSEError, JWTError, AssertionError])
@@ -382,8 +382,8 @@ class WebPushRequestSchema(Schema):
             jwt = extract_jwt(
                 token,
                 public_key,
-                is_trusted=self.context['settings'].enable_tls_auth,
-                use_crypto=self.context['settings'].use_cryptography
+                is_trusted=self.context['conf'].enable_tls_auth,
+                use_crypto=self.context['conf'].use_cryptography
             )
         except tuple(crypto_exceptions):
             raise InvalidRequest("Invalid Authorization Header",
@@ -436,8 +436,8 @@ class WebPushRequestSchema(Schema):
 
         # Set the notification based on the validated request schema data
         d["notification"] = WebPushNotification.from_webpush_request_schema(
-            data=d, fernet=self.context["settings"].fernet,
-            legacy=self.context["settings"]._notification_legacy,
+            data=d, fernet=self.context["conf"].fernet,
+            legacy=self.context["conf"]._notification_legacy,
         )
 
         return d

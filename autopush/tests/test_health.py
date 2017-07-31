@@ -9,11 +9,11 @@ from twisted.logger import globalLogPublisher
 from twisted.trial import unittest
 
 from autopush import __version__
+from autopush.config import AutopushConfig
 from autopush.db import DatabaseManager
 from autopush.exceptions import MissingTableException
 from autopush.http import EndpointHTTPFactory
 from autopush.logging import begin_or_register
-from autopush.settings import AutopushSettings
 from autopush.tests.client import Client
 from autopush.tests.support import TestingLogObserver
 from autopush.web.health import HealthHandler, StatusHandler
@@ -24,11 +24,11 @@ class HealthTestCase(unittest.TestCase):
         self.timeout = 0.5
         twisted.internet.base.DelayedCall.debug = True
 
-        settings = AutopushSettings(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
-        db = DatabaseManager.from_settings(settings)
+        db = DatabaseManager.from_config(conf)
         db.setup_tables()
 
         # ignore logging
@@ -36,7 +36,7 @@ class HealthTestCase(unittest.TestCase):
         begin_or_register(logs)
         self.addCleanup(globalLogPublisher.removeObserver, logs)
 
-        app = EndpointHTTPFactory.for_handler(HealthHandler, settings, db=db)
+        app = EndpointHTTPFactory.for_handler(HealthHandler, conf, db=db)
         self.router_table = app.db.router.table
         self.storage_table = app.db.storage.table
         self.client = Client(app)
@@ -124,13 +124,13 @@ class HealthTestCase(unittest.TestCase):
 class StatusTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
-        settings = AutopushSettings(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
         self.request_mock = Mock()
         self.status = StatusHandler(
-            EndpointHTTPFactory(settings, db=None, routers=None),
+            EndpointHTTPFactory(conf, db=None, routers=None),
             self.request_mock
         )
         self.write_mock = self.status.write = Mock()

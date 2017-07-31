@@ -2,13 +2,13 @@ from mock import Mock
 from twisted.logger import ILogObserver
 from zope.interface import implementer
 
+from autopush.config import DDBTableConfig
 from autopush.db import (
     DatabaseManager,
     Router,
     Storage
 )
 from autopush.metrics import SinkMetrics
-from autopush.settings import DDBTableConfig
 
 
 @implementer(ILogObserver)

@@ -17,7 +17,7 @@ class MessageSchema(Schema):
         try:
             notif = WebPushNotification.from_message_id(
                 bytes(message_id),
-                fernet=self.context['settings'].fernet,
+                fernet=self.context['conf'].fernet,
             )
         except (InvalidToken, InvalidTokenException):
             raise InvalidRequest("Invalid message ID",

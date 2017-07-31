@@ -34,13 +34,13 @@ from twisted.web.http_headers import Headers
 
 import autopush.db as db
 from autopush import __version__
+from autopush.config import AutopushConfig
 from autopush.db import (
     get_month,
     has_connected_this_month
 )
 from autopush.logging import begin_or_register
 from autopush.main import ConnectionApplication, EndpointApplication
-from autopush.settings import AutopushSettings
 from autopush.utils import base64url_encode
 from autopush.metrics import SinkMetrics, DatadogMetrics
 from autopush.tests.support import TestingLogObserver
@@ -295,7 +295,7 @@ MESSAGE_TABLE = os.environ.get("MESSAGE_TABLE", "message_int_test")
 
 class IntegrationBase(unittest.TestCase):
     track_objects = True
-    track_objects_excludes = [AutopushSettings, PushServerFactory]
+    track_objects_excludes = [AutopushConfig, PushServerFactory]
 
     endpoint_port = 9020
 
@@ -332,23 +332,23 @@ class IntegrationBase(unittest.TestCase):
         self.addCleanup(globalLogPublisher.removeObserver, self.logs)
 
         crypto_key = Fernet.generate_key()
-        ep_settings = AutopushSettings(
+        ep_conf = AutopushConfig(
             crypto_key=crypto_key,
             **self.endpoint_kwargs()
         )
-        conn_settings = AutopushSettings(
+        conn_conf = AutopushConfig(
             crypto_key=crypto_key,
             **self.conn_kwargs()
         )
 
         # Endpoint HTTP router
-        self.ep = ep = EndpointApplication(ep_settings)
+        self.ep = ep = EndpointApplication(ep_conf)
         ep.setup(rotate_tables=False)
         ep.startService()
         self.addCleanup(ep.stopService)
 
         # Websocket server
-        self.conn = conn = ConnectionApplication(conn_settings)
+        self.conn = conn = ConnectionApplication(conn_conf)
         conn.setup(rotate_tables=False)
         conn.startService()
         self.addCleanup(conn.stopService)
@@ -376,9 +376,9 @@ class IntegrationBase(unittest.TestCase):
 
     @contextmanager
     def legacy_endpoint(self):
-        self.ep.settings._notification_legacy = True
+        self.ep.conf._notification_legacy = True
         yield
-        self.ep.settings._notification_legacy = False
+        self.ep.conf._notification_legacy = False
 
 
 class SSLEndpointMixin(object):
@@ -732,7 +732,7 @@ class TestWebPush(IntegrationBase):
 
     @property
     def _ws_url(self):
-        return self.conn.settings.ws_url
+        return self.conn.conf.ws_url
 
     @inlineCallbacks
     def test_hello_only_has_three_calls(self):
@@ -1311,7 +1311,7 @@ class TestWebPush(IntegrationBase):
 
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
-            prefix=self.conn.settings.message_table.tablename, delta=-1)
+            prefix=self.conn.conf.message_table.tablename, delta=-1)
         lm_message = self.conn.db.message_tables[last_month]
         yield deferToThread(
             self.conn.db.router.update_message_month,
@@ -1422,7 +1422,7 @@ class TestWebPush(IntegrationBase):
 
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
-            prefix=self.conn.settings.message_table.tablename, delta=-1)
+            prefix=self.conn.conf.message_table.tablename, delta=-1)
         lm_message = self.conn.db.message_tables[last_month]
         yield deferToThread(
             self.conn.db.router.update_message_month,
@@ -1519,7 +1519,7 @@ class TestWebPush(IntegrationBase):
 
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
-            prefix=self.conn.settings.message_table.tablename, delta=-1)
+            prefix=self.conn.conf.message_table.tablename, delta=-1)
         yield deferToThread(
             self.conn.db.router.update_message_month,
             client.uaid,
@@ -1759,7 +1759,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
     def _add_router(self):
         from autopush.router.gcm import GCMRouter
         gcm = GCMRouter(
-            self.ep.settings,
+            self.ep.conf,
             {
                 "ttl": 0,
                 "dryrun": True,
@@ -1786,7 +1786,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
-            self.ep.settings.endpoint_url,
+            self.ep.conf.endpoint_url,
             "gcm",
             self.senderID,
         )
@@ -1834,7 +1834,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
-            self.ep.settings.endpoint_url,
+            self.ep.conf.endpoint_url,
             "gcm",
             self.senderID,
         )
@@ -1876,7 +1876,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
-            self.ep.settings.endpoint_url,
+            self.ep.conf.endpoint_url,
             "gcm",
             self.senderID,
         )
@@ -1928,7 +1928,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
-            self.ep.settings.endpoint_url,
+            self.ep.conf.endpoint_url,
             "gcm",
             self.senderID,
         )
@@ -1948,7 +1948,7 @@ class TestFCMBridgeIntegration(IntegrationBase):
     def _add_router(self):
         from autopush.router.fcm import FCMRouter
         fcm = FCMRouter(
-            self.ep.settings,
+            self.ep.conf,
             {
                 "ttl": 0,
                 "dryrun": True,
@@ -1978,7 +1978,7 @@ class TestFCMBridgeIntegration(IntegrationBase):
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
-            self.ep.settings.endpoint_url,
+            self.ep.conf.endpoint_url,
             "fcm",
             self.senderID,
         )
@@ -2031,7 +2031,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
     def _add_router(self):
         from autopush.router.apnsrouter import APNSRouter
         apns = APNSRouter(
-            self.ep.settings,
+            self.ep.conf,
             {
                 "firefox": {
                     "cert": "/home/user/certs/SimplePushDemo.p12_cert.pem",
@@ -2058,7 +2058,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
-            self.ep.settings.endpoint_url,
+            self.ep.conf.endpoint_url,
             "apns",
             "firefox",
         )
@@ -2108,7 +2108,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
-            self.ep.settings.endpoint_url,
+            self.ep.conf.endpoint_url,
             "apns",
             "firefox",
         )
@@ -2122,7 +2122,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
-            self.ep.settings.endpoint_url,
+            self.ep.conf.endpoint_url,
             "apns",
             "firefox",
         )
@@ -2179,7 +2179,7 @@ class TestProxyProtocol(IntegrationBase):
 
     @inlineCallbacks
     def test_proxy_protocol(self):
-        port = self.ep.settings.proxy_protocol_port
+        port = self.ep.conf.proxy_protocol_port
         ip = '198.51.100.22'
         proto_line = 'PROXY TCP4 {} 203.0.113.7 35646 80\r\n'.format(ip)
         # the proxy proto. line comes before the request: we can sneak
@@ -2197,7 +2197,7 @@ class TestProxyProtocol(IntegrationBase):
     def test_no_proxy_protocol(self):
         response, body = yield _agent(
             'GET',
-            "http://localhost:{}/v1/err".format(self.ep.settings.port),
+            "http://localhost:{}/v1/err".format(self.ep.conf.port),
         )
         eq_(response.code, 418)
         payload = json.loads(body)
@@ -2234,7 +2234,7 @@ class TestProxyProtocolSSL(SSLEndpointMixin, IntegrationBase):
                     return self.context.wrap_socket(sock, *args, **kwargs)
 
             http = httplib.HTTPSConnection(
-                "localhost:{}".format(self.ep.settings.proxy_protocol_port),
+                "localhost:{}".format(self.ep.conf.proxy_protocol_port),
                 context=SSLContextWrapper(self._create_context(None)))
             try:
                 http.request('GET', '/v1/err')
@@ -2260,7 +2260,7 @@ class TestMemUsage(IntegrationBase):
 
     @inlineCallbacks
     def test_memusage(self):
-        port = self.ep.settings.memusage_port
+        port = self.ep.conf.memusage_port
         response, body = yield _agent(
             'GET',
             "http://localhost:{}/_memusage".format(port),

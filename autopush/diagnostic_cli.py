@@ -6,10 +6,10 @@ import re
 import configargparse
 from twisted.logger import Logger
 
+from autopush.config import AutopushConfig
 from autopush.db import DatabaseManager
 from autopush.main import AutopushMultiService
 from autopush.main_argparse import add_shared_args
-from autopush.settings import AutopushSettings
 
 
 PUSH_RE = re.compile(r"push/(?:(?P<api_ver>v\d+)/)?(?P<token>[^/]+)")
@@ -20,10 +20,10 @@ class EndpointDiagnosticCLI(object):
 
     def __init__(self, sysargs, use_files=True):
         ns = self._load_args(sysargs, use_files)
-        self._settings = settings = AutopushSettings.from_argparse(ns)
-        settings.statsd_host = None
-        self.db = DatabaseManager.from_settings(settings)
-        self.db.setup(settings.preflight_uaid)
+        self._conf = conf = AutopushConfig.from_argparse(ns)
+        conf.statsd_host = None
+        self.db = DatabaseManager.from_config(conf)
+        self.db.setup(conf.preflight_uaid)
         self._endpoint = ns.endpoint
         self._pp = pprint.PrettyPrinter(indent=4)
 
@@ -54,7 +54,7 @@ class EndpointDiagnosticCLI(object):
         md = match.groupdict()
         api_ver, token = md.get("api_ver", "v1"), md["token"]
 
-        parsed = self._settings.parse_endpoint(
+        parsed = self._conf.parse_endpoint(
             self.db.metrics,
             token=token,
             version=api_ver,

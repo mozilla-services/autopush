@@ -45,10 +45,10 @@ class WebPushRouter(object):
     """
     log = Logger()
 
-    def __init__(self, ap_settings, router_conf, db, agent):
+    def __init__(self, conf, router_conf, db, agent):
         """Create a new Router"""
-        self.ap_settings = ap_settings
-        self.conf = router_conf
+        self.conf = conf
+        self.router_conf = router_conf
         self.db = db
         self.agent = agent
         self.waker = None
@@ -153,15 +153,15 @@ class WebPushRouter(object):
             returnValue(self.delivered_response(notification))
         else:
             ret_val = self.stored_response(notification)
-            if self.udp is not None and "server" in self.conf:
+            if self.udp is not None and "server" in self.router_conf:
                 # Attempt to send off the UDP wake request.
                 try:
                     yield deferToThread(
                         requests.post(
-                            self.conf["server"],
+                            self.router_conf["server"],
                             data=urlencode(self.udp["data"]),
-                            cert=self.conf.get("cert"),
-                            timeout=self.conf.get("server_timeout", 3)))
+                            cert=self.router_conf.get("cert"),
+                            timeout=self.router_conf.get("server_timeout", 3)))
                 except Exception as exc:
                     self.log.debug("Could not send UDP wake request: {exc}",
                                    exc=exc)
@@ -171,8 +171,7 @@ class WebPushRouter(object):
         self.metrics.increment("notification.message_data",
                                notification.data_length,
                                tags=make_tags(destination='Stored'))
-        location = "%s/m/%s" % (self.ap_settings.endpoint_url,
-                                notification.location)
+        location = "%s/m/%s" % (self.conf.endpoint_url, notification.location)
         return RouterResponse(status_code=201, response_body="",
                               headers={"Location": location,
                                        "TTL": notification.ttl or 0},
@@ -182,8 +181,7 @@ class WebPushRouter(object):
         self.metrics.increment("notification.message_data",
                                notification.data_length,
                                tags=make_tags(destination='Direct'))
-        location = "%s/m/%s" % (self.ap_settings.endpoint_url,
-                                notification.location)
+        location = "%s/m/%s" % (self.conf.endpoint_url, notification.location)
         return RouterResponse(status_code=201, response_body="",
                               headers={"Location": location,
                                        "TTL": notification.ttl},
@@ -243,7 +241,7 @@ class WebPushRouter(object):
                 log_exception=False,
             )
         if notification.ttl == 0:
-            location = "%s/m/%s" % (self.ap_settings.endpoint_url,
+            location = "%s/m/%s" % (self.conf.endpoint_url,
                                     notification.version)
             raise RouterException("Finished Routing", status_code=201,
                                   log_exception=False,
