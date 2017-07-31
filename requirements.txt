@@ -52,6 +52,7 @@ s3transfer==0.1.10        # via boto3
 service-identity==17.0.0
 simplejson==3.11.1
 six==1.10.0               # via autobahn, automat, cryptography, pyopenssl, python-dateutil, python-jose, txaio
+snaek==0.1.1
 twisted==17.5.0
 txaio==2.8.0              # via autobahn
 typing==3.6.1

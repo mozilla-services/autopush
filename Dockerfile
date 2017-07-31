@@ -4,6 +4,7 @@ RUN mkdir -p /app
 ADD . /app
 
 WORKDIR /app
+ENV PATH=$PATH:/root/.cargo/bin
 
 RUN \
     apt-get update && \
