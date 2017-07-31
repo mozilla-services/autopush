@@ -3,8 +3,6 @@ import json
 import logging
 import os
 import random
-import signal
-import subprocess
 import sys
 import time
 import urlparse
@@ -18,9 +16,7 @@ from unittest.case import SkipTest
 
 from zope.interface import implementer
 
-import boto
 import ecdsa
-import psutil
 import twisted.internet.base
 import websocket
 from cryptography.fernet import Fernet
@@ -39,7 +35,6 @@ from twisted.web.http_headers import Headers
 import autopush.db as db
 from autopush import __version__
 from autopush.db import (
-    create_rotating_message_table,
     get_month,
     has_connected_this_month
 )
@@ -52,48 +47,14 @@ from autopush.tests.support import TestingLogObserver
 from autopush.websocket import PushServerFactory
 
 log = logging.getLogger(__name__)
-here_dir = os.path.abspath(os.path.dirname(__file__))
-root_dir = os.path.dirname(os.path.dirname(here_dir))
-ddb_dir = os.path.join(root_dir, "ddb")
-ddb_lib_dir = os.path.join(ddb_dir, "DynamoDBLocal_lib")
-ddb_jar = os.path.join(ddb_dir, "DynamoDBLocal.jar")
-ddb_process = None
 
 twisted.internet.base.DelayedCall.debug = True
 
 
 def setUp():
     logging.getLogger('boto').setLevel(logging.CRITICAL)
-    boto_path = os.path.join(root_dir, "automock", "boto.cfg")
-    boto.config.load_from_path(boto_path)
     if "SKIP_INTEGRATION" in os.environ:  # pragma: nocover
         raise SkipTest("Skipping integration tests")
-    global ddb_process
-    cmd = " ".join([
-        "java", "-Djava.library.path=%s" % ddb_lib_dir,
-        "-jar", ddb_jar, "-sharedDb", "-inMemory"
-    ])
-    ddb_process = subprocess.Popen(cmd, shell=True, env=os.environ)
-
-    # Setup the necessary message tables
-    message_table = os.environ.get("MESSAGE_TABLE", "message_int_test")
-    create_rotating_message_table(prefix=message_table, delta=-1)
-    create_rotating_message_table(prefix=message_table)
-
-
-def tearDown():
-    global ddb_process
-    # This kinda sucks, but its the only way to nuke the child procs
-    proc = psutil.Process(pid=ddb_process.pid)
-    child_procs = proc.children(recursive=True)
-    for p in [proc] + child_procs:
-        os.kill(p.pid, signal.SIGTERM)
-    ddb_process.wait()
-
-    # Clear out the boto config that was loaded so the rest of the tests run
-    # fine
-    for section in boto.config.sections():
-        boto.config.remove_section(section)
 
 
 def _get_vapid(key=None, payload=None):

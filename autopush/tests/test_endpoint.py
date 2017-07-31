@@ -14,7 +14,6 @@ from autopush.db import (
     ProvisionedThroughputExceededException,
     Message,
     ItemNotFound,
-    create_rotating_message_table,
     has_connected_this_month,
 )
 from autopush.exceptions import RouterException
@@ -35,17 +34,6 @@ from autopush.web.registration import NewRegistrationHandler
 dummy_uaid = uuid.UUID("abad1dea00000000aabbccdd00000000")
 dummy_chid = uuid.UUID("deadbeef00000000decafbad00000000")
 dummy_token = dummy_uaid.hex + ":" + str(dummy_chid)
-
-
-def setUp():
-    from .test_integration import setUp
-    setUp()
-    create_rotating_message_table()
-
-
-def tearDown():
-    from .test_integration import tearDown
-    tearDown()
 
 
 class FileConsumer(object):  # pragma: no cover
