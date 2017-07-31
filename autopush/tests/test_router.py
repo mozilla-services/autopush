@@ -7,7 +7,6 @@ import decimal
 
 from autopush.utils import WebPushNotification
 from mock import Mock, PropertyMock, patch
-from moto import mock_dynamodb2
 from nose.tools import eq_, ok_, assert_raises
 from twisted.trial import unittest
 from twisted.internet.error import ConnectError, ConnectionRefusedError
@@ -24,7 +23,6 @@ from autopush.db import (
     Message,
     ProvisionedThroughputExceededException,
     ItemNotFound,
-    create_rotating_message_table,
 )
 from autopush.exceptions import RouterException
 from autopush.metrics import SinkMetrics
@@ -40,18 +38,6 @@ from autopush.settings import AutopushSettings
 from autopush.tests import MockAssist
 from autopush.tests.support import test_db
 from autopush.web.base import Notification
-
-
-mock_dynamodb2 = mock_dynamodb2()
-
-
-def setUp():
-    mock_dynamodb2.start()
-    create_rotating_message_table()
-
-
-def tearDown():
-    mock_dynamodb2.stop()
 
 
 class RouterInterfaceTestCase(TestCase):

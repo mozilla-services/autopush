@@ -12,12 +12,10 @@ from cryptography.exceptions import InvalidSignature
 from jose import jws
 from marshmallow import Schema, fields
 from mock import Mock, patch
-from moto import mock_dynamodb2
 from nose.tools import eq_, ok_, assert_raises
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial import unittest
 
-from autopush.db import create_rotating_message_table
 from autopush.metrics import SinkMetrics
 from autopush.exceptions import InvalidRequest, InvalidTokenException
 from autopush.tests.support import test_db
@@ -27,16 +25,6 @@ import autopush.utils as utils
 dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
 dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
 dummy_token = dummy_uaid + ":" + dummy_chid
-mock_dynamodb2 = mock_dynamodb2()
-
-
-def setUp():
-    mock_dynamodb2.start()
-    create_rotating_message_table()
-
-
-def tearDown():
-    mock_dynamodb2.stop()
 
 
 class InvalidSchema(Schema):

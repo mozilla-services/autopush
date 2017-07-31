@@ -26,7 +26,7 @@ from twisted.trial import unittest
 from twisted.web.client import Agent
 
 import autopush.db as db
-from autopush.db import DatabaseManager, create_rotating_message_table
+from autopush.db import DatabaseManager
 from autopush.http import InternalRouterHTTPFactory
 from autopush.metrics import SinkMetrics
 from autopush.settings import AutopushSettings
@@ -82,17 +82,6 @@ def dummy_notif(**kwargs):
     return WebPushNotification(**_kwargs)
 
 
-def setUp():
-    from .test_integration import setUp
-    setUp()
-    create_rotating_message_table()
-
-
-def tearDown():
-    from .test_integration import tearDown
-    tearDown()
-
-
 def assert_called_included(mock, **kwargs):  # pragma: nocover
     """Like assert_called_with but asserts a call was made including
     the specified kwargs (but allowing additional args/kwargs)"""
@@ -105,6 +94,7 @@ def assert_called_included(mock, **kwargs):  # pragma: nocover
 
 
 class WebsocketTestCase(unittest.TestCase):
+    _multiprocess_can_split_ = True
 
     def setUp(self):
         from twisted.logger import Logger
