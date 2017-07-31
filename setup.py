@@ -44,5 +44,10 @@ setup(name="AutoPush",
       [nose.plugins]
       object-tracker = autopush.noseplugin:ObjectTracker
       """,
+      setup_requires=['snaek'],
+      install_requires=['snaek'],
+      snaek_rust_modules=[
+          ('autopush_rs._native', 'autopush_rs/'),
+      ],
       **extra_options
       )
