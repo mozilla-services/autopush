@@ -35,16 +35,6 @@ dummy_uaid = str(uuid.UUID("abad1dea00000000aabbccdd00000000"))
 dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
 
 
-def setUp():
-    from .test_integration import setUp
-    setUp()
-
-
-def tearDown():
-    from .test_integration import tearDown
-    tearDown()
-
-
 def make_webpush_notification(uaid, chid, ttl=100):
     message_id = str(uuid.uuid4())
     return WebPushNotification(

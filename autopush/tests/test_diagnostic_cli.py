@@ -1,19 +1,7 @@
 import unittest
 
 from mock import Mock, patch
-from moto import mock_dynamodb2
 from nose.tools import eq_, ok_
-
-
-mock_dynamodb2 = mock_dynamodb2()
-
-
-def setUp():
-    mock_dynamodb2.start()
-
-
-def tearDown():
-    mock_dynamodb2.stop()
 
 
 class FakeDict(dict):

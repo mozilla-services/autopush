@@ -40,6 +40,15 @@ class TestUserAgentParser(unittest.TestCase):
         eq_(data['sub'], 'mailto:foo@example.com')
 
     @patch("requests.get")
+    def test_get_amid_unknown(self, request_mock):
+        import requests
+        from autopush.utils import get_amid
+
+        request_mock.side_effect = requests.HTTPError
+        result = get_amid()
+        eq_(result, "Unknown")
+
+    @patch("requests.get")
     def test_get_ec2_instance_id_unknown(self, request_mock):
         import requests
         from autopush.utils import get_ec2_instance_id

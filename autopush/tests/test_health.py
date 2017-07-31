@@ -3,7 +3,6 @@ import json
 import twisted.internet.base
 from boto.dynamodb2.exceptions import InternalServerError
 from mock import Mock
-from moto import mock_dynamodb2
 from nose.tools import eq_
 from twisted.internet.defer import inlineCallbacks
 from twisted.logger import globalLogPublisher
@@ -24,10 +23,6 @@ class HealthTestCase(unittest.TestCase):
     def setUp(self):
         self.timeout = 0.5
         twisted.internet.base.DelayedCall.debug = True
-
-        self.mock_dynamodb2 = mock_dynamodb2()
-        self.mock_dynamodb2.start()
-        self.addCleanup(self.mock_dynamodb2.stop)
 
         settings = AutopushSettings(
             hostname="localhost",

@@ -3,7 +3,6 @@ import datetime
 import json
 
 from mock import Mock, patch
-from moto import mock_dynamodb2
 from nose.tools import (
     assert_raises,
     eq_,
@@ -14,6 +13,7 @@ from twisted.trial import unittest as trialtest
 import hyper
 import hyper.tls
 
+import autopush.db
 from autopush.db import DatabaseManager, get_rotating_message_table
 from autopush.exceptions import InvalidSettings
 from autopush.http import skip_request_logging
@@ -27,15 +27,6 @@ from autopush.utils import resolve_ip
 
 connection_main = ConnectionApplication.main
 endpoint_main = EndpointApplication.main
-mock_dynamodb2 = mock_dynamodb2()
-
-
-def setUp():
-    mock_dynamodb2.start()
-
-
-def tearDown():
-    mock_dynamodb2.stop()
 
 
 class SettingsTestCase(unittest.TestCase):
@@ -292,6 +283,7 @@ class EndpointMainTestCase(unittest.TestCase):
     def tearDown(self):
         for mock in self.mocks.values():
             mock.stop()
+        autopush.db.key_hash = ""
 
     def test_basic(self):
         endpoint_main([
