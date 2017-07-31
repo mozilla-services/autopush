@@ -91,7 +91,7 @@ class WebPushServer(object):
         self.incoming = Queue.Queue()
         self.workers = []  # type: List[Thread]
         self.command_processor = CommandProcessor(settings, self.db)
-        # Setup the Rust server with its config, etc.
+        self.rust = AutopushServer(settings, self)
 
     def start(self, num_threads=10):
         # type: (int) -> None
@@ -102,13 +102,17 @@ class WebPushServer(object):
                     input_queue=self.incoming,
                 )
             )
-
-        # Start the Rust server, give it references to our queues
+        self.rust.startService()
         atexit.register(self.stop)
+
+    def handle(self, call):
+        # type: (AutopushCall) -> None
+        self.incoming.put((call, call.json()))
 
     def stop(self):
         for _ in self.workers:
             self.incoming.put((None, _STOP))
+        self.rust.stopService()
 
         while self.workers:
             self.workers.pop().join()
@@ -132,6 +136,7 @@ class WebPushServer(object):
                             error_msg=str(exc),
                         ))
                     finally:
+                        command.cancel()
                         input_queue.task_done()
                 except Queue.Empty:
                     continue

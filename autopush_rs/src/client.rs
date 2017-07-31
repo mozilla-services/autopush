@@ -4,9 +4,9 @@ use std::rc::Rc;
 use futures::future::{result, err, loop_fn, Loop, ok, Either};
 use futures::sync::mpsc;
 use futures::{Stream, Sink, Future, Poll, Async};
+use time;
 use uuid::Uuid;
 
-use call::PythonCall;
 use errors::*;
 use protocol::{ClientMessage, ServerMessage, Notification};
 use server::Server;
@@ -19,10 +19,8 @@ pub struct Client<T> {
 
 pub struct ClientState {
     pub uaid: Uuid,
-    pub use_webpush: bool,
     pub channel_ids: Vec<Uuid>,
     pub tx: mpsc::UnboundedSender<Notification>,
-    pub call: mpsc::UnboundedSender<PythonCall>,
 }
 
 pub struct Channel {
@@ -45,10 +43,8 @@ impl<T> Client<T>
     ///
     /// The `srv` argument is the server that this client is attached to and
     /// the various state behind the server.
-    pub fn new(ws: T,
-               tx: mpsc::UnboundedSender<PythonCall>,
-               srv: &Rc<Server>) -> Client<T> {
-        let client = Client::handshake(ws, tx);
+    pub fn new(ws: T, srv: &Rc<Server>) -> Client<T> {
+        let client = Client::handshake(ws, srv);
         let client = timeout(client, srv.opts.open_handshake_timeout, &srv.handle);
 
         let srv = srv.clone();
@@ -66,46 +62,67 @@ impl<T> Client<T>
         }
     }
 
-    fn handshake(ws: T, call: mpsc::UnboundedSender<PythonCall>)
+    fn handshake(ws: T, srv: &Rc<Server>)
         -> MyFuture<(T, ClientState, mpsc::UnboundedReceiver<Notification>)>
     {
-        Box::new(ws.into_future().then(move |res| -> MyFuture<_> {
+        let srv = srv.clone();
+        Box::new(ws.into_future().then(move |res| {
             let (msg, ws) = match res {
                 Ok(pair) => pair,
                 Err((e, _rx)) => {
-                    return Box::new(result(Err(e).chain_err(|| "recv error")))
+                    return Err(e).chain_err(|| "recv error")
                 }
             };
             let msg = match msg {
                 Some(msg) => msg,
-                None => return Box::new(err("terminated before handshake".into())),
+                None => return Err("terminated before handshake".into()),
             };
 
-            let (tx, rx) = mpsc::unbounded();
-            let client = match msg {
-                ClientMessage::Hello { uaid, channel_ids, use_webpush } => {
-                    ClientState {
-                        uaid: uaid.unwrap_or_else(Uuid::new_v4),
-                        use_webpush: use_webpush.unwrap_or(false),
-                        channel_ids: channel_ids.unwrap_or(Vec::new()),
-                        tx: tx,
-                        call: call,
-                    }
+            match msg {
+                ClientMessage::Hello { uaid, channel_ids, use_webpush: Some(true) } => {
+                    drop(channel_ids); // just ignore what the client says here
+                    Ok((ws, uaid))
                 }
-                _ => return Box::new(err("non-hello message before handshake".into())),
+                ClientMessage::Hello { .. } => {
+                    Err("use-webpush must be true".into())
+                }
+                _ => Err("non-hello message before handshake".into()),
+            }
+        }).and_then(move |(ws, uaid)| {
+            let now = time::now();
+            srv.hello(&now, uaid.as_ref()).map(move |response| {
+                (ws, uaid, response)
+            })
+        }).and_then(|(ws, uaid, response)| {
+            // If we get back a `None` uaid then the client had prior
+            // invalid data that we just wiped, so they need to try
+            // connecting again.
+            let response_uaid = match response.uaid {
+                Some(uuid) => uuid,
+                None => return Err("client needs to reconnect".into()),
             };
-            let (call, response) = PythonCall::new("verify-hello", client.uaid);
-            (&client.call).send(call).expect("python is gone?");
-            Box::new(response.and_then(|status| {
-                let response = ServerMessage::Hello {
-                    uaid: client.uaid,
-                    status: status,
-                    use_webpush: Some(client.use_webpush),
-                };
-                ws.send(response).map(|ws| {
-                    (ws, client, rx)
-                })
-            }))
+            if uaid == response.uaid {
+                Err("TRANSITION TO CHECK_STORAGE".into())
+            } else {
+                debug_assert!(!response.reset_uaid);
+                debug_assert!(!response.rotate_message_table);
+                Ok((ws, response_uaid))
+            }
+        }).and_then(|(ws, response_uaid)| {
+            let (tx, rx) = mpsc::unbounded();
+            let client = ClientState {
+                uaid: response_uaid,
+                channel_ids: Vec::new(),
+                tx: tx,
+            };
+            let response = ServerMessage::Hello {
+                uaid: client.uaid,
+                status: 200,
+                use_webpush: Some(true),
+            };
+            ws.send(response).map(|ws| {
+                (ws, client, rx)
+            })
         }))
     }
 

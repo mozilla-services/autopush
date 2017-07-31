@@ -24,15 +24,18 @@
 use std::cell::RefCell;
 use std::ffi::CStr;
 
-use errors::*;
 use futures::Future;
 use futures::sync::oneshot;
 use libc::c_char;
 use serde::de;
 use serde::ser;
 use serde_json;
+use time::Tm;
+use uuid::Uuid;
 
+use errors::*;
 use rt::{self, UnwindGuard, AutopushError};
+use server::Server;
 
 #[repr(C)]
 pub struct AutopushPythonCall {
@@ -126,23 +129,45 @@ impl<F: FnOnce(&str) + Send> FnBox for F {
     }
 }
 
+
+#[derive(Serialize)]
+#[serde(tag = "command", rename_all = "lowercase")]
+enum Call<'a> {
+    Hello {
+        connected_at: i64,
+        uaid: Option<&'a Uuid>,
+    }
+}
+
+#[derive(Deserialize)]
+pub struct HelloResponse {
+    pub uaid: Option<Uuid>,
+    pub message_month: String,
+    pub reset_uaid: bool,
+    pub rotate_message_table: bool,
+}
+
+impl Server {
+    pub fn hello(&self, connected_at: &Tm, uaid: Option<&Uuid>)
+        -> MyFuture<HelloResponse>
+    {
+        let (call, fut) = PythonCall::new(&Call::Hello {
+            connected_at: connected_at.to_timespec().sec,
+            uaid: uaid,
+        });
+        (&self.tx).send(call).expect("python has gone away?");
+        return fut
+    }
+}
+
 impl PythonCall {
-    pub fn new<T, U>(name: &str, args: T) -> (PythonCall, MyFuture<U>)
+    fn new<T, U>(input: &T) -> (PythonCall, MyFuture<U>)
         where T: ser::Serialize,
               U: for<'de> de::Deserialize<'de> + 'static,
     {
-        #[derive(Serialize)]
-        struct Input<'a, T> {
-            name: &'a str,
-            args: T,
-        }
-
         let (tx, rx) = oneshot::channel();
         let call = PythonCall {
-            input: serde_json::to_string(&Input {
-                name: name,
-                args: args,
-            }).unwrap(),
+            input: serde_json::to_string(input).unwrap(),
             output: Box::new(|json: &str| {
                 drop(tx.send(json.to_string()));
             }),

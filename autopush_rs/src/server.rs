@@ -27,7 +27,7 @@ use MyNotify;
 use call::{PythonCall, AutopushPythonCall};
 use client::{Client, ClientState, Channel};
 use errors::*;
-use protocol::{ClientMessage, ServerMessage, Notification, Update};
+use protocol::{ClientMessage, ServerMessage, Notification};
 use rt::{self, AutopushError, UnwindGuard};
 use util::{RcObject, timeout};
 
@@ -64,6 +64,7 @@ pub struct Server {
     channels: RefCell<HashMap<Uuid, Channel>>,
     uaids: RefCell<HashMap<Uuid, ClientState>>,
     open_connections: Cell<u32>,
+    pub tx: mpsc::UnboundedSender<PythonCall>,
     pub opts: ServerOptions,
     pub handle: Handle,
 }
@@ -89,14 +90,13 @@ pub extern "C" fn autopush_server_new(opts: *const AutopushServerOptions,
 {
     unsafe fn to_s<'a>(ptr: *const c_char) -> Option<&'a str> {
         if ptr.is_null() {
+            return None
+        }
+        let s = CStr::from_ptr(ptr).to_str().expect("invalid utf-8");
+        if s.is_empty() {
             None
         } else {
-            let s = CStr::from_ptr(ptr).to_str().expect("invalid utf-8");
-            if s.is_empty() {
-                None
-            } else {
-                Some(s)
-            }
+            Some(s)
         }
     }
 
@@ -120,7 +120,6 @@ pub extern "C" fn autopush_server_new(opts: *const AutopushServerOptions,
     rt::catch(err, || unsafe {
         let opts = &*opts;
 
-        // TODO: returning results to python?
         let inner = AutopushServerInner::new(ServerOptions {
             debug: opts.debug != 0,
             port: opts.port,
@@ -296,6 +295,7 @@ impl Server {
             uaids: RefCell::new(HashMap::new()),
             open_connections: Cell::new(0),
             handle: core.handle(),
+            tx: tx,
         });
         let addr = format!("127.0.0.1:{}", srv.opts.port);
         let ws_listener = TcpListener::bind(&addr.parse().unwrap(), &srv.handle)?;
@@ -328,12 +328,11 @@ impl Server {
                 let ws = timeout(ws, srv.opts.open_handshake_timeout, &handle);
 
                 // Once the handshake is done we'll start the main communication
-                // with the client, managing pings here and deferring to `Client` to
-                // start driving the internal state machine.
+                // with the client, managing pings here and deferring to
+                // `Client` to start driving the internal state machine.
                 let srv2 = srv.clone();
-                let tx = tx.clone();
                 let client = ws.and_then(move |ws| {
-                    PingManager::new(&srv2, tx, ws)
+                    PingManager::new(&srv2, ws)
                         .chain_err(|| "failed to make ping handler")
                 }).flatten();
 
@@ -425,18 +424,9 @@ impl Server {
 
         let mut uaids = self.uaids.borrow_mut();
         let uaid = uaids.get_mut(&channel.uaid).unwrap();
-        let notification = if uaid.use_webpush {
-            Notification::WebPush {
-                channel_id: *channel_id,
-                version: version.to_string(),
-            }
-        } else {
-            Notification::Simple {
-                updates: vec![Update {
-                    channel_id: *channel_id,
-                    version: version,
-                }],
-            }
+        let notification = Notification::WebPush {
+            channel_id: *channel_id,
+            version: version.to_string(),
         };
         (&uaid.tx).send(notification).unwrap();
     }
@@ -471,9 +461,7 @@ enum CloseState<T> {
 }
 
 impl PingManager {
-    fn new(srv: &Rc<Server>,
-           tx: mpsc::UnboundedSender<PythonCall>,
-           socket: WebSocketStream<TcpStream>)
+    fn new(srv: &Rc<Server>, socket: WebSocketStream<TcpStream>)
         -> io::Result<PingManager>
     {
         // The `socket` is itself a sink and a stream, and we've also got a sink
@@ -495,7 +483,7 @@ impl PingManager {
             ping_interval: Interval::new(srv.opts.auto_ping_interval, &srv.handle)?,
             timeout: TimeoutState::None,
             socket: socket.clone(),
-            client: CloseState::Exchange(Client::new(socket, tx, srv)),
+            client: CloseState::Exchange(Client::new(socket, srv)),
             srv: srv.clone(),
         })
     }

@@ -29,6 +29,8 @@ def ffi_from_buffer(s):
         return ffi.from_buffer(s)
 
 def free(obj, free_fn):
+    if obj.ffi is None:
+        return
     ffi.gc(obj.ffi, None)
     free_fn(obj.ffi)
     obj.ffi = None
@@ -100,16 +102,12 @@ class AutopushServer(service.Service):
 class AutopushCall:
     def __init__(self, ptr):
         self.ffi = ffi.gc(ptr, lib.autopush_python_call_free)
+
+    def json(self):
         msg_ptr = _call(lib.autopush_python_call_input_ptr, self.ffi)
         msg_len = _call(lib.autopush_python_call_input_len, self.ffi) - 1
         buf = ffi.buffer(msg_ptr, msg_len)
-        self._json = json.loads(str(buf[:]))
-
-    def name(self):
-        return self._json['name']
-
-    def args(self):
-        return self._json['args']
+        return json.loads(str(buf[:]))
 
     def complete(self, ret):
         s = json.dumps(ret)
