@@ -22,6 +22,7 @@ before_install:
 install:
 - ${DDB:+make ddb}
 - pip install tox ${CODECOV:+codecov}
+- curl https://sh.rustup.rs | sh -s -- -y
 script:
 - tox -- ${CODECOV:+--with-coverage --cover-xml --cover-package=autopush}
 after_success:
