@@ -93,36 +93,40 @@ impl<T> Client<T>
             srv.hello(&now, uaid.as_ref()).map(move |response| {
                 (ws, uaid, response)
             })
-        }).and_then(|(ws, uaid, response)| {
+        }).and_then(|(ws, uaid, response)| -> MyFuture<_> {
             // If we get back a `None` uaid then the client had prior
             // invalid data that we just wiped, so they need to try
             // connecting again.
             let response_uaid = match response.uaid {
                 Some(uuid) => uuid,
-                None => return Err("client needs to reconnect".into()),
+                None => return Box::new(err("client needs to reconnect".into())),
             };
+            let mut enter_check_storage_state = false;
             if uaid == response.uaid {
-                Err("TRANSITION TO CHECK_STORAGE".into())
+                enter_check_storage_state = true;
             } else {
                 debug_assert!(!response.reset_uaid);
                 debug_assert!(!response.rotate_message_table);
-                Ok((ws, response_uaid))
             }
-        }).and_then(|(ws, response_uaid)| {
-            let (tx, rx) = mpsc::unbounded();
-            let client = ClientState {
+            let msg = ServerMessage::Hello {
                 uaid: response_uaid,
-                channel_ids: Vec::new(),
-                tx: tx,
-            };
-            let response = ServerMessage::Hello {
-                uaid: client.uaid,
                 status: 200,
                 use_webpush: Some(true),
             };
-            ws.send(response).map(|ws| {
-                (ws, client, rx)
-            })
+            Box::new(ws.send(msg).map(move |ws| {
+                (ws, response, enter_check_storage_state)
+            }))
+        }).map(|(ws, response, enter_check_storage_state)| {
+            if enter_check_storage_state {
+                panic!("unimplemented!")
+            }
+            let (tx, rx) = mpsc::unbounded();
+            let client = ClientState {
+                uaid: response.uaid.unwrap(),
+                channel_ids: Vec::new(),
+                tx: tx,
+            };
+            (ws, client, rx)
         }))
     }
 
