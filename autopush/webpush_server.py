@@ -3,15 +3,16 @@
 """
 import Queue
 import atexit
-from threading import Thread
+from threading import Thread, Event
 from uuid import UUID, uuid4
 
+import attr
 from attr import (
     attrs,
     attrib,
 )
 from boto.dynamodb2.exceptions import ItemNotFound
-from typing import List, Optional  # noqa
+from typing import Dict, List, Optional  # noqa
 from twisted.logger import Logger
 
 from autopush.db import (  # noqa
@@ -44,10 +45,20 @@ def uaid_from_str(input):
         return None
 
 
+class AutopushCall(object):
+    """Placeholder object for real Rust binding one"""
+    called = Event()
+    val = None
+
+    def complete(self, ret):
+        self.val = ret
+        self.called.set()
+
+
 # Input messages off the incoming queue
 @attrs(slots=True)
 class InputCommand(object):
-    message_id = attrib()  # type: str
+    pass
 
 
 @attrs(slots=True)
@@ -59,12 +70,12 @@ class Hello(InputCommand):
 # Output messages serialized to the outgoing queue
 @attrs(slots=True)
 class OutputCommand(object):
-    message_id = attrib()  # type: str
+    pass
 
 
 @attrs(slots=True)
 class HelloResponse(OutputCommand):
-    uaid = attrib(convert=uaid_from_str)  # type: Optional[UUID]
+    uaid = attrib()  # type: Optional[str]
     message_month = attrib()  # type: str
     reset_uaid = attrib()  # type: bool
     rotate_message_table = attrib(default=False)  # type: bool
@@ -75,9 +86,9 @@ class WebPushServer(object):
         # type: (AutopushSettings) -> WebPushServer
         self.settings = settings
         self.db = DatabaseManager.from_settings(settings)
+        self.db.setup_tables()
         self.metrics = self.db.metrics
         self.incoming = Queue.Queue()
-        self.outgoing = Queue.Queue()
         self.workers = []  # type: List[Thread]
         self.command_processor = CommandProcessor(settings, self.db)
         # Setup the Rust server with its config, etc.
@@ -89,7 +100,6 @@ class WebPushServer(object):
                 self._create_thread_worker(
                     processor=self.command_processor,
                     input_queue=self.incoming,
-                    output_queue=self.outgoing,
                 )
             )
 
@@ -97,26 +107,30 @@ class WebPushServer(object):
         atexit.register(self.stop)
 
     def stop(self):
-        for queue in (self.incoming, self.outgoing):
-            queue.put(_STOP)
+        for _ in self.workers:
+            self.incoming.put((None, _STOP))
 
         while self.workers:
             self.workers.pop().join()
 
-    def _create_thread_worker(self, processor, input_queue, output_queue):
-        # type: (CommandProcessor, Queue.Queue, Queue.Queue) -> Thread
+    def _create_thread_worker(self, processor, input_queue):
+        # type: (CommandProcessor, Queue.Queue) -> Thread
         def _thread_worker():
             while True:
                 try:
-                    command = input_queue.get()
+                    call, command = input_queue.get()
                     try:
                         if command is _STOP:
                             break
                         result = processor.process_message(command)
-                        if result:
-                            output_queue.put(result)
-                    except Exception:
+                        call.complete(result)
+                    except Exception as exc:
                         log.error("Exception in worker queue thread")
+                        call.complete(dict(
+                            message_id=command["message_id"],
+                            error=True,
+                            error_msg=str(exc),
+                        ))
                     finally:
                         input_queue.task_done()
                 except Queue.Empty:
@@ -137,11 +151,11 @@ class CommandProcessor(object):
         self.db = db
         self.hello_processor = HelloCommand(settings=settings, db=db)
         self.deserialize = dict(
-            hello=self.hello_processor,
+            hello=Hello,
         )
         self.command_dict = dict(
-            hello=HelloCommand,
-        )
+            hello=self.hello_processor,
+        )  # type: Dict[str, ProcessorCommand]
 
     def process_message(self, input):
         # type: (JSONDict) -> JSONDict
@@ -149,13 +163,22 @@ class CommandProcessor(object):
         command = input.pop("command", None)  # type: str
         if command not in self.command_dict:
             log.critical("No command present: %s", command)
-            return None
+            return dict(
+                error=True,
+                error_msg="Command not found",
+            )
 
         command_obj = self.deserialize[command](**input)
-        return self.command_dict[command].process(command_obj).asdict()
+        return attr.asdict(self.command_dict[command].process(command_obj))
 
 
-class HelloCommand(object):
+class ProcessorCommand(object):
+    """Parent class for processor commands"""
+    def process(self, command):
+        raise NotImplementedError()
+
+
+class HelloCommand(ProcessorCommand):
     def __init__(self, settings, db):
         # type: (AutopushSettings, DatabaseManager) -> HelloCommand
         self.settings = settings
@@ -172,21 +195,13 @@ class HelloCommand(object):
             user_item = self.create_user(hello)
 
         # Save the UAID as register_user removes it
-        uaid = user_item["uaid"]
+        uaid = user_item["uaid"]  # type: str
         success, _ = self.db.router.register_user(user_item)
         if not success:
             # User has already connected more recently elsewhere
-            return HelloResponse(
-                message_id=hello.message_id,
-                uaid=None,
-                **flags
-            )
+            return HelloResponse(uaid=None, **flags)
 
-        return HelloResponse(
-            message_id=hello.message_id,
-            uaid=uaid,
-            **flags
-        )
+        return HelloResponse(uaid=uaid, **flags)
 
     def lookup_user(self, hello):
         # type: (Hello) -> (Optional[JSONDict], JSONDict)
