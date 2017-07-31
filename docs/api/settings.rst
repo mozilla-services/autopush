@@ -5,7 +5,7 @@
 
 .. automodule:: autopush.settings
 
-.. autoclass:: AutopushSettings
+.. autoclass:: AutopushConfig
     :members:
     :special-members: __init__
     :member-order: bysource

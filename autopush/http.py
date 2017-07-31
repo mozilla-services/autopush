@@ -18,10 +18,10 @@ from twisted.web.client import (
 )
 
 from autopush.base import BaseHandler
+from autopush.config import AutopushConfig  # noqa
 from autopush.db import DatabaseManager
-from autopush.router import routers_from_settings
+from autopush.router import routers_from_config
 from autopush.router.interface import IRouter  # noqa
-from autopush.settings import AutopushSettings  # noqa
 from autopush.ssl import AutopushSSLContextFactory  # noqa
 from autopush.web.health import (
     HealthHandler,
@@ -65,21 +65,21 @@ class BaseHTTPFactory(cyclone.web.Application):
     )
 
     def __init__(self,
-                 ap_settings,    # type: AutopushSettings
+                 conf,           # type: AutopushConfig
                  db,             # type: DatabaseManager
                  handlers=None,  # type: APHandlers
                  log_function=skip_request_logging,  # type: CycloneLogger
                  **kwargs):
         # type: (...) -> None
-        self.ap_settings = ap_settings
+        self.conf = conf
         self.db = db
-        self.noisy = ap_settings.debug
+        self.noisy = conf.debug
 
         cyclone.web.Application.__init__(
             self,
             handlers=self.ap_handlers if handlers is None else handlers,
             default_host=self._hostname,
-            debug=ap_settings.debug,
+            debug=conf.debug,
             log_function=log_function,
             **kwargs
         )
@@ -90,19 +90,19 @@ class BaseHTTPFactory(cyclone.web.Application):
 
     @property
     def _hostname(self):
-        return self.ap_settings.hostname
+        return self.conf.hostname
 
     @classmethod
     def for_handler(cls,
                     handler_cls,    # Type[BaseHTTPFactory]
-                    ap_settings,    # type: AutopushSettings
+                    conf,           # type: AutopushConfig
                     db=None,        # type: Optional[DatabaseManager]
                     **kwargs):
         # type: (...) -> BaseHTTPFactory
         """Create a cyclone app around a specific handler_cls for tests.
 
         Creates an uninitialized (no setup() called) DatabaseManager
-        from settings if one isn't specified.
+        from conf if one isn't specified.
 
         handler_cls must be included in ap_handlers or a ValueError is
         thrown.
@@ -113,9 +113,9 @@ class BaseHTTPFactory(cyclone.web.Application):
         for pattern, handler in cls.ap_handlers + cls.health_ap_handlers:
             if handler is handler_cls:
                 if db is None:
-                    db = DatabaseManager.from_settings(ap_settings)
+                    db = DatabaseManager.from_config(conf)
                 return cls._for_handler(
-                    ap_settings,
+                    conf,
                     db=db,
                     handlers=[(pattern, handler)],
                     **kwargs
@@ -124,8 +124,8 @@ class BaseHTTPFactory(cyclone.web.Application):
             handler_cls))  # pragma: nocover
 
     @classmethod
-    def _for_handler(cls, ap_settings, **kwargs):
-        # type: (AutopushSettings, **Any) -> BaseHTTPFactory
+    def _for_handler(cls, conf, **kwargs):
+        # type: (AutopushConfig, **Any) -> BaseHTTPFactory
         """Create an instance w/ default kwargs for for_handler"""
         raise NotImplementedError  # pragma: nocover
 
@@ -153,18 +153,18 @@ class EndpointHTTPFactory(BaseHTTPFactory):
     protocol = LimitedHTTPConnection
 
     def __init__(self,
-                 ap_settings,  # type: AutopushSettings
+                 conf,         # type: AutopushConfig
                  db,           # type: DatabaseManager
                  routers,      # type: Dict[str, IRouter]
                  **kwargs):
         # type: (...) -> None
-        if ap_settings.enable_simplepush:
+        if conf.enable_simplepush:
             self.ap_handlers += (
                 (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
                  SimplePushHandler),
             )
         self.ap_handlers = tuple(self.ap_handlers)
-        BaseHTTPFactory.__init__(self, ap_settings, db=db, **kwargs)
+        BaseHTTPFactory.__init__(self, conf, db=db, **kwargs)
         self.routers = routers
 
     def ssl_cf(self):
@@ -175,18 +175,18 @@ class EndpointHTTPFactory(BaseHTTPFactory):
         values.
 
         """
-        settings = self.ap_settings
-        return settings.ssl.cf(require_peer_certs=settings.enable_tls_auth)
+        conf = self.conf
+        return conf.ssl.cf(require_peer_certs=conf.enable_tls_auth)
 
     @classmethod
-    def _for_handler(cls, ap_settings, db, routers=None, **kwargs):
+    def _for_handler(cls, conf, db, routers=None, **kwargs):
         if routers is None:
-            routers = routers_from_settings(
-                ap_settings,
+            routers = routers_from_config(
+                conf,
                 db=db,
-                agent=agent_from_settings(ap_settings)
+                agent=agent_from_config(conf)
             )
-        return cls(ap_settings, db=db, routers=routers, **kwargs)
+        return cls(conf, db=db, routers=routers, **kwargs)
 
 
 class InternalRouterHTTPFactory(BaseHTTPFactory):
@@ -197,17 +197,17 @@ class InternalRouterHTTPFactory(BaseHTTPFactory):
     )
 
     def __init__(self,
-                 ap_settings,  # type: AutopushSettings
+                 conf,         # type: AutopushConfig
                  db,           # type: DatabaseManager
                  clients,      # type: Dict[str, PushServerProtocol]
                  **kwargs):
         # type: (...) -> None
-        BaseHTTPFactory.__init__(self, ap_settings, db, **kwargs)
+        BaseHTTPFactory.__init__(self, conf, db, **kwargs)
         self.clients = clients
 
     @property
     def _hostname(self):
-        return self.ap_settings.router_hostname
+        return self.conf.router_hostname
 
     def ssl_cf(self):
         # type: () -> Optional[AutopushSSLContextFactory]
@@ -217,13 +217,13 @@ class InternalRouterHTTPFactory(BaseHTTPFactory):
         values.
 
         """
-        return self.ap_settings.router_ssl.cf()
+        return self.conf.router_ssl.cf()
 
     @classmethod
-    def _for_handler(cls, ap_settings, db, clients=None, **kwargs):
+    def _for_handler(cls, conf, db, clients=None, **kwargs):
         if clients is None:
             clients = {}
-        return cls(ap_settings, db=db, clients=clients, **kwargs)
+        return cls(conf, db=db, clients=clients, **kwargs)
 
 
 class MemUsageHTTPFactory(BaseHTTPFactory):
@@ -238,11 +238,11 @@ class QuietClientFactory(_HTTP11ClientFactory):
     noisy = False
 
 
-def agent_from_settings(settings):
-    # type: (AutopushSettings) -> Agent
-    """Create a twisted.web.client Agent from settings"""
+def agent_from_config(conf):
+    # type: (AutopushConfig) -> Agent
+    """Create a twisted.web.client Agent from the given config"""
     # Use a persistent connection pool for HTTP requests.
     pool = HTTPConnectionPool(reactor)
-    if not settings.debug:
+    if not conf.debug:
         pool._factory = QuietClientFactory
-    return Agent(reactor, connectTimeout=settings.connect_timeout, pool=pool)
+    return Agent(reactor, connectTimeout=conf.connect_timeout, pool=pool)

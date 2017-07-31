@@ -14,14 +14,14 @@ import hyper
 import hyper.tls
 
 import autopush.db
+from autopush.config import AutopushConfig
 from autopush.db import DatabaseManager, get_rotating_message_table
-from autopush.exceptions import InvalidSettings
+from autopush.exceptions import InvalidConfig
 from autopush.http import skip_request_logging
 from autopush.main import (
     ConnectionApplication,
     EndpointApplication,
 )
-from autopush.settings import AutopushSettings
 from autopush.tests.support import test_db
 from autopush.utils import resolve_ip
 
@@ -29,12 +29,12 @@ connection_main = ConnectionApplication.main
 endpoint_main = EndpointApplication.main
 
 
-class SettingsTestCase(unittest.TestCase):
+class ConfigTestCase(unittest.TestCase):
     def test_resolve_host(self):
         ip = resolve_ip("example.com")
-        settings = AutopushSettings(
+        conf = AutopushConfig(
             hostname="example.com", resolve_hostname=True)
-        eq_(settings.hostname, ip)
+        eq_(conf.hostname, ip)
 
     @patch("autopush.utils.socket")
     def test_resolve_host_no_interface(self, mock_socket):
@@ -59,12 +59,12 @@ class SettingsTestCase(unittest.TestCase):
         eq_(len(db.message_tables), 3)
 
 
-class SettingsAsyncTestCase(trialtest.TestCase):
+class ConfigAsyncTestCase(trialtest.TestCase):
     def test_update_rotating_tables(self):
         from autopush.db import get_month
-        settings = AutopushSettings(
+        conf = AutopushConfig(
             hostname="example.com", resolve_hostname=True)
-        db = DatabaseManager.from_settings(settings)
+        db = DatabaseManager.from_config(conf)
         db.create_initial_message_tables()
 
         # Erase the tables it has on init, and move current month back one
@@ -117,9 +117,9 @@ class SettingsAsyncTestCase(trialtest.TestCase):
                                      month=next_month,
                                      day=1)
 
-        settings = AutopushSettings(
+        conf = AutopushConfig(
             hostname="example.com", resolve_hostname=True)
-        db = DatabaseManager.from_settings(settings)
+        db = DatabaseManager.from_config(conf)
         db._tomorrow = Mock(return_value=tomorrow)
         db.create_initial_message_tables()
 
@@ -128,7 +128,7 @@ class SettingsAsyncTestCase(trialtest.TestCase):
 
         # Grab next month's table name and remove it
         next_month = get_rotating_message_table(
-            settings.message_table.tablename,
+            conf.message_table.tablename,
             delta=1
         )
         db.message_tables.pop(next_month.table_name)
@@ -145,9 +145,9 @@ class SettingsAsyncTestCase(trialtest.TestCase):
 
     def test_update_not_needed(self):
         from autopush.db import get_month
-        settings = AutopushSettings(
+        conf = AutopushConfig(
             hostname="google.com", resolve_hostname=True)
-        db = DatabaseManager.from_settings(settings)
+        db = DatabaseManager.from_config(conf)
         db.create_initial_message_tables()
 
         # Erase the tables it has on init, and move current month back one
@@ -330,10 +330,10 @@ class EndpointMainTestCase(unittest.TestCase):
 
     @patch('hyper.tls', spec=hyper.tls)
     def test_client_certs_parse(self, mock):
-        settings = AutopushSettings.from_argparse(self.TestArg)
-        eq_(settings.client_certs["1A:"*31 + "F9"], 'partner1')
-        eq_(settings.client_certs["2B:"*31 + "E8"], 'partner2')
-        eq_(settings.client_certs["3C:"*31 + "D7"], 'partner2')
+        conf = AutopushConfig.from_argparse(self.TestArg)
+        eq_(conf.client_certs["1A:"*31 + "F9"], 'partner1')
+        eq_(conf.client_certs["2B:"*31 + "E8"], 'partner2')
+        eq_(conf.client_certs["3C:"*31 + "D7"], 'partner2')
 
     def test_bad_client_certs(self):
         cert = self.TestArg._client_certs['partner1'][0]
@@ -355,33 +355,33 @@ class EndpointMainTestCase(unittest.TestCase):
     @patch('autopush.router.apns2.HTTP20Connection',
            spec=hyper.HTTP20Connection)
     @patch('hyper.tls', spec=hyper.tls)
-    def test_settings(self, *args):
-        settings = AutopushSettings.from_argparse(self.TestArg)
-        app = EndpointApplication(settings)
+    def test_conf(self, *args):
+        conf = AutopushConfig.from_argparse(self.TestArg)
+        app = EndpointApplication(conf)
         # verify that the hostname is what we said.
-        eq_(settings.hostname, self.TestArg.hostname)
-        eq_(app.routers["gcm"].config['collapsekey'], "collapse")
-        eq_(app.routers["apns"]._config['firefox']['cert'], "cert.file")
-        eq_(app.routers["apns"]._config['firefox']['key'], "key.file")
-        eq_(settings.wake_timeout, 10)
+        eq_(conf.hostname, self.TestArg.hostname)
+        eq_(app.routers["gcm"].router_conf['collapsekey'], "collapse")
+        eq_(app.routers["apns"].router_conf['firefox']['cert'], "cert.file")
+        eq_(app.routers["apns"].router_conf['firefox']['key'], "key.file")
+        eq_(conf.wake_timeout, 10)
 
     def test_bad_senders(self):
         old_list = self.TestArg.senderid_list
         self.TestArg.senderid_list = "{}"
-        with assert_raises(InvalidSettings):
-            AutopushSettings.from_argparse(self.TestArg)
+        with assert_raises(InvalidConfig):
+            AutopushConfig.from_argparse(self.TestArg)
         self.TestArg.senderid_list = old_list
 
     def test_bad_fcm_senders(self):
         old_auth = self.TestArg.fcm_auth
         old_senderid = self.TestArg.fcm_senderid
         self.TestArg.fcm_auth = ""
-        with assert_raises(InvalidSettings):
-            AutopushSettings.from_argparse(self.TestArg)
+        with assert_raises(InvalidConfig):
+            AutopushConfig.from_argparse(self.TestArg)
         self.TestArg.fcm_auth = old_auth
         self.TestArg.fcm_senderid = ""
-        with assert_raises(InvalidSettings):
-            AutopushSettings.from_argparse(self.TestArg)
+        with assert_raises(InvalidConfig):
+            AutopushConfig.from_argparse(self.TestArg)
         self.TestArg.fcm_senderid = old_senderid
 
     def test_gcm_start(self):
@@ -400,5 +400,5 @@ class EndpointMainTestCase(unittest.TestCase):
 
         request_mock.return_value = MockReply
         self.TestArg.no_aws = False
-        settings = AutopushSettings.from_argparse(self.TestArg)
-        eq_(settings.ami_id, "ami_123")
+        conf = AutopushConfig.from_argparse(self.TestArg)
+        eq_(conf.ami_id, "ami_123")

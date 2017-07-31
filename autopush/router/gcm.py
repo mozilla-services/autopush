@@ -19,10 +19,10 @@ class GCMRouter(object):
     collapseKey = "simplepush"
     MAX_TTL = 2419200
 
-    def __init__(self, ap_settings, router_conf, metrics):
+    def __init__(self, conf, router_conf, metrics):
         """Create a new GCM router and connect to GCM"""
-        self.ap_settings = ap_settings
-        self.config = router_conf
+        self.conf = conf
+        self.router_conf = router_conf
         self.metrics = metrics
         self.min_ttl = router_conf.get("ttl", 60)
         self.dryRun = router_conf.get("dryrun", False)
@@ -82,7 +82,7 @@ class GCMRouter(object):
         # Payload data is optional. The endpoint handler validates that the
         # correct encryption headers are included with the data.
         if notification.data:
-            mdata = self.config.get('max_data', 4096)
+            mdata = self.router_conf.get('max_data', 4096)
             if notification.data_length > mdata:
                 raise self._error("This message is intended for a " +
                                   "constrained device and is limited " +
@@ -198,8 +198,7 @@ class GCMRouter(object):
                                notification.data_length,
                                tags=make_tags(self._base_tags,
                                               destination='Direct'))
-        location = "%s/m/%s" % (self.ap_settings.endpoint_url,
-                                notification.version)
+        location = "%s/m/%s" % (self.conf.endpoint_url, notification.version)
         return RouterResponse(status_code=201, response_body="",
                               headers={"TTL": ttl,
                                        "Location": location},

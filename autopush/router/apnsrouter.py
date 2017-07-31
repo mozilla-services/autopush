@@ -36,7 +36,7 @@ class APNSRouter(object):
 
         """
         default_topic = "com.mozilla.org." + rel_channel
-        cert_info = self._config[rel_channel]
+        cert_info = self.router_conf[rel_channel]
         return APNSClient(
             cert_file=cert_info.get("cert"),
             key_file=cert_info.get("key"),
@@ -48,27 +48,25 @@ class APNSRouter(object):
             metrics=self.metrics,
             load_connections=load_connections)
 
-    def __init__(self, ap_settings, router_conf, metrics,
-                 load_connections=True):
+    def __init__(self, conf, router_conf, metrics, load_connections=True):
         """Create a new APNS router and connect to APNS
 
-        :param ap_settings: Configuration settings
-        :type ap_settings: autopush.settings.AutopushSettings
+        :param conf: Configuration settings
+        :type conf: autopush.config.AutopushConfig
         :param router_conf: Router specific configuration
         :type router_conf: dict
         :param load_connections: (used for testing)
         :type load_connections: bool
 
         """
-        self.ap_settings = ap_settings
-        self._config = router_conf
+        self.conf = conf
+        self.router_conf = router_conf
         self.metrics = metrics
         self._base_tags = ["platform:apns"]
         self.apns = dict()
-        for rel_channel in self._config:
+        for rel_channel in router_conf:
             self.apns[rel_channel] = self._connect(rel_channel,
                                                    load_connections)
-        self.ap_settings = ap_settings
         self.log.debug("Starting APNS router...")
 
     def register(self, uaid, router_data, app_id, *args, **kwargs):
@@ -166,8 +164,7 @@ class APNSRouter(object):
                 response_body="APNS returned an error processing request",
             )
 
-        location = "%s/m/%s" % (self.ap_settings.endpoint_url,
-                                notification.version)
+        location = "%s/m/%s" % (self.conf.endpoint_url, notification.version)
         self.metrics.increment("notification.bridge.sent",
                                tags=make_tags(self._base_tags,
                                               application=rel_channel))

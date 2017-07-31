@@ -24,17 +24,17 @@ from autopush.http import (
     InternalRouterHTTPFactory,
     EndpointHTTPFactory,
     MemUsageHTTPFactory,
-    agent_from_settings
+    agent_from_config
 )
 import autopush.utils as utils
 import autopush.logging as logging
-from autopush.exceptions import InvalidSettings
+from autopush.config import AutopushConfig
 from autopush.db import DatabaseManager
+from autopush.exceptions import InvalidConfig
 from autopush.haproxy import HAProxyServerEndpoint
 from autopush.logging import PushLogger
 from autopush.main_argparse import parse_connection, parse_endpoint
-from autopush.router import routers_from_settings
-from autopush.settings import AutopushSettings
+from autopush.router import routers_from_config
 from autopush.websocket import (
     ConnectionWSSite,
     PushServerFactory,
@@ -58,12 +58,12 @@ class AutopushMultiService(MultiService):
 
     THREAD_POOL_SIZE = 50
 
-    def __init__(self, settings):
-        # type: (AutopushSettings) -> None
+    def __init__(self, conf):
+        # type: (AutopushConfig) -> None
         super(AutopushMultiService, self).__init__()
-        self.settings = settings
-        self.db = DatabaseManager.from_settings(settings)
-        self.agent = agent_from_settings(settings)
+        self.conf = conf
+        self.db = DatabaseManager.from_config(conf)
+        self.agent = agent_from_config(conf)
 
     @staticmethod
     def parse_args(config_files, args):
@@ -91,9 +91,9 @@ class AutopushMultiService(MultiService):
 
     def add_memusage(self):
         """Add the memusage Service"""
-        factory = MemUsageHTTPFactory(self.settings, None)
+        factory = MemUsageHTTPFactory(self.conf, None)
         self.addService(
-            TCPServer(self.settings.memusage_port, factory, reactor=reactor))
+            TCPServer(self.conf.memusage_port, factory, reactor=reactor))
 
     def run(self):
         """Start the services and run the reactor"""
@@ -112,13 +112,13 @@ class AutopushMultiService(MultiService):
         """Create an instance from argparse/additional kwargs"""
         # Add some entropy to prevent potential conflicts.
         postfix = os.urandom(4).encode('hex').ljust(8, '0')
-        settings = AutopushSettings.from_argparse(
+        conf = AutopushConfig.from_argparse(
             ns,
             debug=ns.debug,
             preflight_uaid="deadbeef000000000deadbeef" + postfix,
             **kwargs
         )
-        return cls(settings)
+        return cls(conf)
 
     @classmethod
     def main(cls, args=None, use_files=True):
@@ -141,7 +141,7 @@ class AutopushMultiService(MultiService):
         )
         try:
             app = cls.from_argparse(ns)
-        except InvalidSettings as e:
+        except InvalidConfig as e:
             log.critical(str(e))
             return 1
 
@@ -164,16 +164,16 @@ class EndpointApplication(AutopushMultiService):
 
     endpoint_factory = EndpointHTTPFactory
 
-    def __init__(self, settings):
-        # type: (AutopushSettings) -> None
-        super(EndpointApplication, self).__init__(settings)
-        self.routers = routers_from_settings(settings, self.db, self.agent)
+    def __init__(self, conf):
+        # type: (AutopushConfig) -> None
+        super(EndpointApplication, self).__init__(conf)
+        self.routers = routers_from_config(conf, self.db, self.agent)
 
     def setup(self, rotate_tables=True):
-        self.db.setup(self.settings.preflight_uaid)
+        self.db.setup(self.conf.preflight_uaid)
 
         self.add_endpoint()
-        if self.settings.memusage_port:
+        if self.conf.memusage_port:
             self.add_memusage()
 
         # Start the table rotation checker/updater
@@ -182,18 +182,18 @@ class EndpointApplication(AutopushMultiService):
 
     def add_endpoint(self):
         """Start the Endpoint HTTP router"""
-        settings = self.settings
+        conf = self.conf
 
-        factory = self.endpoint_factory(settings, self.db, self.routers)
-        factory.protocol.maxData = settings.max_data
+        factory = self.endpoint_factory(conf, self.db, self.routers)
+        factory.protocol.maxData = conf.max_data
         factory.add_health_handlers()
         ssl_cf = factory.ssl_cf()
-        self.add_maybe_ssl(settings.port, factory, ssl_cf)
+        self.add_maybe_ssl(conf.port, factory, ssl_cf)
 
-        if settings.proxy_protocol_port:
+        if conf.proxy_protocol_port:
             ep = HAProxyServerEndpoint(
                 reactor,
-                settings.proxy_protocol_port,
+                conf.proxy_protocol_port,
                 ssl_cf
             )
             self.addService(StreamServerEndpointService(ep, factory))
@@ -230,16 +230,16 @@ class ConnectionApplication(AutopushMultiService):
     websocket_factory = PushServerFactory
     websocket_site_factory = ConnectionWSSite
 
-    def __init__(self, settings):
-        # type: (AutopushSettings) -> None
-        super(ConnectionApplication, self).__init__(settings)
+    def __init__(self, conf):
+        # type: (AutopushConfig) -> None
+        super(ConnectionApplication, self).__init__(conf)
         self.clients = {}  # type: Dict[str, PushServerProtocol]
 
     def setup(self, rotate_tables=True):
-        self.db.setup(self.settings.preflight_uaid)
+        self.db.setup(self.conf.preflight_uaid)
 
         self.add_internal_router()
-        if self.settings.memusage_port:
+        if self.conf.memusage_port:
             self.add_memusage()
 
         self.add_websocket()
@@ -251,18 +251,17 @@ class ConnectionApplication(AutopushMultiService):
     def add_internal_router(self):
         """Start the internal HTTP notification router"""
         factory = self.internal_router_factory(
-            self.settings, self.db, self.clients)
+            self.conf, self.db, self.clients)
         factory.add_health_handlers()
-        self.add_maybe_ssl(self.settings.router_port, factory,
-                           factory.ssl_cf())
+        self.add_maybe_ssl(self.conf.router_port, factory, factory.ssl_cf())
 
     def add_websocket(self):
         """Start the public WebSocket server"""
-        settings = self.settings
-        ws_factory = self.websocket_factory(settings, self.db, self.agent,
+        conf = self.conf
+        ws_factory = self.websocket_factory(conf, self.db, self.agent,
                                             self.clients)
-        site_factory = self.websocket_site_factory(settings, ws_factory)
-        self.add_maybe_ssl(settings.port, site_factory, site_factory.ssl_cf())
+        site_factory = self.websocket_site_factory(conf, ws_factory)
+        self.add_maybe_ssl(conf.port, site_factory, site_factory.ssl_cf())
 
     @classmethod
     def from_argparse(cls, ns):

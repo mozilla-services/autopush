@@ -7,10 +7,10 @@ from nose.tools import eq_, ok_
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial import unittest
 
+from autopush.config import AutopushConfig
 from autopush.db import Message
 from autopush.http import EndpointHTTPFactory
 from autopush.router.interface import IRouter, RouterResponse
-from autopush.settings import AutopushSettings
 from autopush.tests.client import Client
 from autopush.tests.support import test_db
 
@@ -23,18 +23,18 @@ class TestWebpushHandler(unittest.TestCase):
     def setUp(self):
         from autopush.web.webpush import WebPushHandler
 
-        self.ap_settings = settings = AutopushSettings(
+        self.conf = conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
             use_cryptography=True,
         )
-        self.fernet_mock = settings.fernet = Mock(spec=Fernet)
+        self.fernet_mock = conf.fernet = Mock(spec=Fernet)
 
         self.db = db = test_db()
         self.message_mock = db.message = Mock(spec=Message)
         self.message_mock.all_channels.return_value = (True, [dummy_chid])
 
-        app = EndpointHTTPFactory.for_handler(WebPushHandler, settings, db=db)
+        app = EndpointHTTPFactory.for_handler(WebPushHandler, conf, db=db)
         self.wp_router_mock = app.routers["webpush"] = Mock(spec=IRouter)
         self.client = Client(app)
 
@@ -43,7 +43,7 @@ class TestWebpushHandler(unittest.TestCase):
 
     @inlineCallbacks
     def test_router_needs_update(self):
-        self.ap_settings.parse_endpoint = Mock(return_value=dict(
+        self.conf.parse_endpoint = Mock(return_value=dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="asdfasdf",
@@ -70,7 +70,7 @@ class TestWebpushHandler(unittest.TestCase):
 
     @inlineCallbacks
     def test_router_returns_data_without_detail(self):
-        self.ap_settings.parse_endpoint = Mock(return_value=dict(
+        self.conf.parse_endpoint = Mock(return_value=dict(
             uaid=dummy_uaid,
             chid=dummy_chid,
             public_key="asdfasdf",

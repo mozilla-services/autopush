@@ -84,6 +84,7 @@ from zope.interface import implementer
 
 from autopush import __version__
 from autopush.base import BaseHandler
+from autopush.config import AutopushConfig  # noqa
 from autopush.db import (
     has_connected_this_month,
     hasher,
@@ -95,7 +96,6 @@ from autopush.exceptions import MessageOverloadException
 from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
 from autopush.metrics import IMetrics, make_tags  # noqa
-from autopush.settings import AutopushSettings  # noqa
 from autopush.ssl import AutopushSSLContextFactory  # noqa
 from autopush.types import JSONDict  # noqa
 from autopush.utils import (
@@ -331,9 +331,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     sent_notification_count = 0
 
     @property
-    def ap_settings(self):
-        # type: () -> AutopushSettings
-        return self.factory.ap_settings
+    def conf(self):
+        # type: () -> AutopushConfig
+        return self.factory.conf
 
     @property
     def db(self):
@@ -469,8 +469,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.transport.unregisterProducer()
             self.transport.registerProducer(self.ps, True)
 
-        if self.ap_settings.hello_timeout > 0:
-            self.setTimeout(self.ap_settings.hello_timeout)
+        if self.conf.hello_timeout > 0:
+            self.setTimeout(self.conf.hello_timeout)
 
     #############################################################
     #                    Connection Methods
@@ -480,7 +480,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         """Disable host port checking on nonstandard ports since some
         clients are buggy and don't provide it"""
         track_object(self, msg="processHandshake")
-        port = self.ap_settings.port
+        port = self.conf.port
         hide = port != 80 and port != 443
         old_port = self.factory.externalPort
         try:
@@ -783,7 +783,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.stats.uaid_reset = True
             user_item = dict(
                 uaid=self.ps.uaid,
-                node_id=self.ap_settings.router_url,
+                node_id=self.conf.router_url,
                 connected_at=self.ps.connected_at,
                 router_type=self.ps.router_type,
                 last_connect=generate_last_connect(),
@@ -854,7 +854,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.reset_uaid = True
 
         # Update the node_id, connected_at for this node/connected_at
-        record["node_id"] = self.ap_settings.router_url
+        record["node_id"] = self.conf.router_url
         record["connected_at"] = self.ps.connected_at
         return record
 
@@ -892,7 +892,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             # Get the previous information returned from dynamodb.
             node_id = previous["node_id"]
             last_connect = previous.get("connected_at")
-            if last_connect and node_id != self.ap_settings.router_url:
+            if last_connect and node_id != self.conf.router_url:
                 url = "%s/notif/%s/%s" % (node_id, self.ps.uaid, last_connect)
                 d = self.factory.agent.request(
                     "DELETE",
@@ -904,7 +904,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         # UDP clients are done at this point and timed out to ensure they
         # drop their connection
-        timeout = self.ap_settings.wake_timeout if self.ps.wake_data else None
+        timeout = self.conf.wake_timeout if self.ps.wake_data else None
         self.setTimeout(timeout)
         self.finish_hello(previous)
 
@@ -918,7 +918,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if self.autoPingInterval:
             msg["ping"] = self.autoPingInterval
 
-        msg['env'] = self.ap_settings.env
+        msg['env'] = self.conf.env
         self.factory.clients[self.ps.uaid] = self
         self.sendJSON(msg)
         self.log.debug(format="hello", uaid_hash=self.ps.uaid_hash,
@@ -1098,7 +1098,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             msg = notif.websocket_format()
             messages_sent = True
             self.sent_notification_count += 1
-            if self.sent_notification_count > self.ap_settings.msg_limit:
+            if self.sent_notification_count > self.conf.msg_limit:
                 raise MessageOverloadException()
             if notif.topic:
                 self.metrics.increment("ua.notification.topic")
@@ -1212,10 +1212,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.transport.pauseProducing()
 
         if self.ps.use_webpush:
-            d = self.deferToThread(self.ap_settings.make_endpoint,
+            d = self.deferToThread(self.conf.make_endpoint,
                                    self.ps.uaid, chid, data.get("key"))
         else:
-            d = self.deferToThread(self.ap_settings.make_simplepush_endpoint,
+            d = self.deferToThread(self.conf.make_simplepush_endpoint,
                                    self.ps.uaid, chid)
         d.addCallback(self.finish_register, chid)
         d.addErrback(self.trap_cancel)
@@ -1524,20 +1524,20 @@ class PushServerFactory(WebSocketServerFactory):
 
     protocol = PushServerProtocol
 
-    def __init__(self, ap_settings, db, agent, clients):
-        # type: (AutopushSettings, DatabaseManager, Agent, Dict) -> None
-        WebSocketServerFactory.__init__(self, ap_settings.ws_url)
-        self.ap_settings = ap_settings
+    def __init__(self, conf, db, agent, clients):
+        # type: (AutopushConfig, DatabaseManager, Agent, Dict) -> None
+        WebSocketServerFactory.__init__(self, conf.ws_url)
+        self.conf = conf
         self.db = db
         self.agent = agent
         self.clients = clients
         self.setProtocolOptions(
             webStatus=False,
             openHandshakeTimeout=5,
-            autoPingInterval=ap_settings.auto_ping_interval,
-            autoPingTimeout=ap_settings.auto_ping_timeout,
-            maxConnections=ap_settings.max_connections,
-            closeHandshakeTimeout=ap_settings.close_handshake_timeout,
+            autoPingInterval=conf.auto_ping_interval,
+            autoPingTimeout=conf.auto_ping_timeout,
+            maxConnections=conf.max_connections,
+            closeHandshakeTimeout=conf.close_handshake_timeout,
         )
 
 
@@ -1614,10 +1614,10 @@ class ConnectionWSSite(Site):
 
     """The Websocket Site"""
 
-    def __init__(self, ap_settings, ws_factory):
-        # type: (AutopushSettings, PushServerFactory) -> None
-        self.ap_settings = ap_settings
-        self.noisy = ap_settings.debug
+    def __init__(self, conf, ws_factory):
+        # type: (AutopushConfig, PushServerFactory) -> None
+        self.conf = conf
+        self.noisy = conf.debug
 
         resource = DefaultResource(WebSocketResource(ws_factory))
         resource.putChild("status", StatusResource())
@@ -1630,7 +1630,7 @@ class ConnectionWSSite(Site):
         Configured from the ssl_key/cert/dh_param values.
 
         """
-        return self.ap_settings.ssl.cf()
+        return self.conf.ssl.cf()
 
 
 class DefaultResource(Resource):

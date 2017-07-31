@@ -14,7 +14,7 @@ class TestLimitedHttpConnection(unittest.TestCase):
         mock_transport = Mock()
         conn = LimitedHTTPConnection()
         conn.factory = Mock()
-        conn.factory.settings = {}
+        conn.factory.conf = {}
         conn.makeConnection(mock_transport)
         conn._on_headers = Mock()
 
@@ -34,7 +34,7 @@ class TestLimitedHttpConnection(unittest.TestCase):
         mock_transport = Mock()
         conn = LimitedHTTPConnection()
         conn.factory = Mock()
-        conn.factory.settings = {}
+        conn.factory.conf = {}
         conn.makeConnection(mock_transport)
         conn._on_headers = Mock()
         conn._on_request_body = Mock()

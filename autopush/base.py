@@ -7,9 +7,9 @@ from twisted.logger import Logger
 from twisted.python import failure
 
 if TYPE_CHECKING:  # pragma: nocover
+    from autopush.config import AutopushConfig  # noqa
     from autopush.db import DatabaseManager  # noqa
     from autopush.metrics import IMetrics  # noqa
-    from autopush.settings import AutopushSettings  # noqa
 
 
 class BaseHandler(cyclone.web.RequestHandler):
@@ -22,9 +22,9 @@ class BaseHandler(cyclone.web.RequestHandler):
         self._client_info = self._init_info()
 
     @property
-    def ap_settings(self):
-        # type: () -> AutopushSettings
-        return self.application.ap_settings
+    def conf(self):
+        # type: () -> AutopushConfig
+        return self.application.conf
 
     @property
     def db(self):
@@ -38,7 +38,7 @@ class BaseHandler(cyclone.web.RequestHandler):
 
     def _init_info(self):
         return dict(
-            ami_id=self.ap_settings.ami_id,
+            ami_id=self.conf.ami_id,
             request_id=str(uuid.uuid4()),
             user_agent=self.request.headers.get('user-agent', ""),
             remote_ip=self.request.headers.get('x-forwarded-for',
@@ -78,7 +78,7 @@ class BaseHandler(cyclone.web.RequestHandler):
         if cert:
             cert_signature = cert.digest('sha256')
             cn = cert.get_subject().CN
-            auth = self.ap_settings.client_certs.get(cert_signature)
+            auth = self.conf.client_certs.get(cert_signature)
             if auth is not None:
                 # TLS authenticated
                 self._client_info.update(tls_auth=auth,

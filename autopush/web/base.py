@@ -60,7 +60,7 @@ class ThreadedValidate(object):
         }
         schema = self.schema()
         schema.context.update(
-            settings=request_handler.ap_settings,
+            conf=request_handler.conf,
             metrics=request_handler.metrics,
             db=request_handler.db,
             routers=request_handler.routers,
@@ -166,9 +166,9 @@ class BaseWebHandler(BaseHandler):
 
     def prepare(self):
         """Common request preparation"""
-        if self.ap_settings.enable_tls_auth:
+        if self.conf.enable_tls_auth:
             self.authenticate_peer_cert()
-        if self.ap_settings.cors:
+        if self.conf.cors:
             self.set_header("Access-Control-Allow-Origin", "*")
             self.set_header("Access-Control-Allow-Methods",
                             self.cors_methods)

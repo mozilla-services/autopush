@@ -6,9 +6,9 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.logger import globalLogPublisher
 from twisted.trial import unittest
 
+from autopush.config import AutopushConfig
 from autopush.http import EndpointHTTPFactory
 from autopush.logging import begin_or_register
-from autopush.settings import AutopushSettings
 from autopush.tests.client import Client
 from autopush.tests.support import TestingLogObserver
 from autopush.web.log_check import LogCheckHandler
@@ -19,7 +19,7 @@ class LogCheckTestCase(unittest.TestCase):
     def setUp(self):
         twisted.internet.base.DelayedCall.debug = True
 
-        settings = AutopushSettings(
+        conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
@@ -28,7 +28,7 @@ class LogCheckTestCase(unittest.TestCase):
         begin_or_register(self.logs, discardBuffer=True)
         self.addCleanup(globalLogPublisher.removeObserver, self.logs)
 
-        app = EndpointHTTPFactory.for_handler(LogCheckHandler, settings)
+        app = EndpointHTTPFactory.for_handler(LogCheckHandler, conf)
         self.client = Client(app)
 
     @inlineCallbacks
