@@ -1,0 +1,71 @@
+digraph g{
+    ranksep="1.7 equally"
+    nodesep="0.9 equally"
+
+    START -> CONNECTION_ESTABLISHED [label="on_connect"];
+
+    subgraph level0 {
+        DISCONNECT;
+    }
+
+    subgraph cluster_unauthenticated {
+        label = "UNAUTHENTICATED";
+        PROCESS_HELLO [ color = "red", penwidth = 2];
+        CONNECTION_ESTABLISHED;
+        PROCESS_HELLO;
+    }
+
+    subgraph cluster_authenticated {
+        label = "AUTHENTICATED";
+        AWAIT_COMMAND [ color = "blue"];
+        RUN_COMMAND;
+        WAIT_FOR_ACKS [ color = "blue"];
+        DELIVER_NOTIFICATIONS;
+        INC_STORAGE_POSITION [ color = "red", penwidth = 2];
+        STORE_DIRECT_MESSAGES [ color = "red", penwidth = 2];
+        CHECK_STORAGE [ color = "red", penwidth = 2];
+        RUN_COMMAND [ color = "red", penwidth = 2];
+        MIGRATE_COMMAND [ color = "red", penwidth = 2];
+        DROP_COMMAND [ color = "red", penwidth = 2];
+        {rank=same; CHECK_STORAGE AWAIT_COMMAND}
+        {rank=same; INC_STORAGE_POSITION STORE_DIRECT_MESSAGES}
+    }
+
+    CHECK_STORAGE -> DELIVER_NOTIFICATIONS [label="messages \n set stored_flag"];
+    CHECK_STORAGE -> DROP_COMMAND [label="P1 empty\n w/reset_uaid_flag"];
+    CHECK_STORAGE -> MIGRATE_COMMAND [label="P2 empty\n w/rotate_message_table_flag\n clear check_flag"];
+    CHECK_STORAGE -> AWAIT_COMMAND [label="P3 empty\n clear check_flag"];
+
+    MIGRATE_COMMAND -> AWAIT_COMMAND [label="clear rotate_message_table_flag"];
+    DROP_COMMAND -> DISCONNECT;
+
+    DELIVER_NOTIFICATIONS -> WAIT_FOR_ACKS;
+
+    WAIT_FOR_ACKS -> INC_STORAGE_POSITION [label="all acked \n w/check_flag && stored_flag"];
+    WAIT_FOR_ACKS -> CHECK_STORAGE [label="all acked \n w/check_flag"];
+    WAIT_FOR_ACKS -> AWAIT_COMMAND [label="all acked \n no flags"];
+    WAIT_FOR_ACKS -> RUN_COMMAND [label="reg or unreg"];
+    WAIT_FOR_ACKS -> DISCONNECT [label="connection drop"];
+    WAIT_FOR_ACKS -> WAIT_FOR_ACKS [label="set check_flag", fontcolor="darkgreen", color="green"];
+    WAIT_FOR_ACKS -> STORE_DIRECT_MESSAGES [label="connection drop \n w/direct unacked messages"];
+
+    INC_STORAGE_POSITION -> CHECK_STORAGE [label="clear stored_flag"];
+    INC_STORAGE_POSITION -> STORE_DIRECT_MESSAGES [label="connection drop \n w/direct unacked messages"];
+    INC_STORAGE_POSITION -> DISCONNECT [label="connection drop"];
+
+    AWAIT_COMMAND -> CHECK_STORAGE [label="set check_flag", fontcolor="darkgreen", color="green"];
+    AWAIT_COMMAND -> RUN_COMMAND [label="reg or unreg"];
+    AWAIT_COMMAND -> DISCONNECT [label="connection drop"];
+    AWAIT_COMMAND -> DELIVER_NOTIFICATIONS [label="direct message", fontcolor="darkgreen", color="green"];
+
+    STORE_DIRECT_MESSAGES -> DISCONNECT;
+
+    RUN_COMMAND -> AWAIT_COMMAND [label="send response"];
+    RUN_COMMAND -> WAIT_FOR_ACKS [label="send response \n w/acks remaining"];
+
+    CONNECTION_ESTABLISHED -> PROCESS_HELLO [label="hello"];
+    CONNECTION_ESTABLISHED -> DISCONNECT [label="ELSE"];
+
+    PROCESS_HELLO -> CHECK_STORAGE [label="authenticate success \n set check_flag"];
+    PROCESS_HELLO -> AWAIT_COMMAND [label="ELSE"];
+}
