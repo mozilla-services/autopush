@@ -1,7 +1,6 @@
 """WebPush Server
 
 """
-import Queue
 import atexit
 from threading import Thread
 from uuid import UUID, uuid4
@@ -23,7 +22,7 @@ from autopush.db import (  # noqa
 from autopush.config import AutopushConfig  # noqa
 from autopush.types import JSONDict  # noqa
 from autopush.websocket import USER_RECORD_VERSION
-from autopush_rs import AutopushCall, AutopushServer  # noqa
+from autopush_rs import AutopushCall, AutopushServer, AutopushQueue  # noqa
 
 
 log = Logger()
@@ -79,7 +78,7 @@ class WebPushServer(object):
         self.db = DatabaseManager.from_config(conf)
         self.db.setup_tables()
         self.metrics = self.db.metrics
-        self.incoming = Queue.Queue()
+        self.incoming = AutopushQueue()
         self.workers = []  # type: List[Thread]
         self.command_processor = CommandProcessor(conf, self.db)
         self.rust = AutopushServer(conf, self.incoming)
@@ -97,35 +96,28 @@ class WebPushServer(object):
         atexit.register(self.stop)
 
     def stop(self):
-        for _ in self.workers:
-            self.incoming.put(_STOP)
         self.rust.stopService()
 
         while self.workers:
             self.workers.pop().join()
 
     def _create_thread_worker(self, processor, input_queue):
-        # type: (CommandProcessor, Queue.Queue) -> Thread
+        # type: (CommandProcessor, AutopushQueue) -> Thread
         def _thread_worker():
             while True:
+                call = input_queue.recv()
                 try:
-                    call = input_queue.get()
-                    try:
-                        if call is _STOP:
-                            break
-                        command = call.json()
-                        result = processor.process_message(command)
-                        call.complete(result)
-                    except Exception as exc:
-                        log.error("Exception in worker queue thread")
-                        call.complete(dict(
-                            error=True,
-                            error_msg=str(exc),
-                        ))
-                    finally:
-                        input_queue.task_done()
-                except Queue.Empty:
-                    continue
+                    if call is None:
+                        break
+                    command = call.json()
+                    result = processor.process_message(command)
+                    call.complete(result)
+                except Exception as exc:
+                    log.error("Exception in worker queue thread")
+                    call.complete(dict(
+                        error=True,
+                        error_msg=str(exc),
+                    ))
         return self.spawn(_thread_worker)
 
     def spawn(self, func, *args, **kwargs):

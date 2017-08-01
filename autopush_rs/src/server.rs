@@ -21,10 +21,10 @@ use tokio_tungstenite::{accept_async, WebSocketStream};
 use tungstenite::Message;
 use uuid::Uuid;
 
-use call::AutopushPythonCall;
 use client::{Client, ClientState, Channel};
 use errors::*;
 use protocol::{ClientMessage, ServerMessage, Notification};
+use queue::{self, AutopushQueue};
 use rt::{self, AutopushError, UnwindGuard};
 use util::{RcObject, timeout};
 
@@ -55,13 +55,11 @@ pub struct AutopushServerOptions {
     pub close_handshake_timeout: u32,
 }
 
-type PythonCallback = unsafe extern fn(*mut AutopushPythonCall) -> *mut AutopushPythonCall;
-
 pub struct Server {
     channels: RefCell<HashMap<Uuid, Channel>>,
     uaids: RefCell<HashMap<Uuid, ClientState>>,
     open_connections: Cell<u32>,
-    pub call_python: PythonCallback,
+    pub tx: queue::Sender,
     pub opts: Arc<ServerOptions>,
     pub handle: Handle,
 }
@@ -149,11 +147,12 @@ pub extern "C" fn autopush_server_new(opts: *const AutopushServerOptions,
 
 #[no_mangle]
 pub extern "C" fn autopush_server_start(srv: *mut AutopushServer,
-                                        cb: PythonCallback,
+                                        queue: *mut AutopushQueue,
                                         err: &mut AutopushError) -> i32 {
     unsafe {
         (*srv).inner.catch(err, |srv| {
-            let (tx, thread) = Server::start(&srv.opts, cb)
+            let tx = (*queue).tx();
+            let (tx, thread) = Server::start(&srv.opts, tx)
                 .expect("failed to start server");
             srv.tx.set(Some(tx));
             srv.thread.set(Some(thread));
@@ -203,7 +202,7 @@ impl Server {
     /// separate thread for the tokio reactor. The returned
     /// `AutopushServerInner` is a handle to the spawned thread and can be used
     /// to interact with it (e.g. shut it down).
-    fn start(opts: &Arc<ServerOptions>, cb: PythonCallback)
+    fn start(opts: &Arc<ServerOptions>, tx: queue::Sender)
         -> io::Result<(oneshot::Sender<()>, thread::JoinHandle<()>)>
     {
         let (donetx, donerx) = oneshot::channel();
@@ -215,7 +214,7 @@ impl Server {
         assert!(opts.ssl_dh_param.is_none(), "ssl not supported");
 
         let thread = thread::spawn(move || {
-            let (srv, mut core) = match Server::new(&opts, cb) {
+            let (srv, mut core) = match Server::new(&opts, tx) {
                 Ok(core) => {
                     inittx.send(None).unwrap();
                     core
@@ -253,7 +252,7 @@ impl Server {
         }
     }
 
-    fn new(opts: &Arc<ServerOptions>, cb: PythonCallback)
+    fn new(opts: &Arc<ServerOptions>, tx: queue::Sender)
         -> io::Result<(Rc<Server>, Core)>
     {
         let core = Core::new()?;
@@ -263,7 +262,7 @@ impl Server {
             uaids: RefCell::new(HashMap::new()),
             open_connections: Cell::new(0),
             handle: core.handle(),
-            call_python: cb,
+            tx: tx,
         });
         let addr = format!("127.0.0.1:{}", srv.opts.port);
         let ws_listener = TcpListener::bind(&addr.parse().unwrap(), &srv.handle)?;
@@ -406,6 +405,13 @@ impl Server {
         for id in uaids.remove(uaid).expect("uaid not registered").channel_ids {
             channels.remove(&id).expect("uaid pointed to missing channel");
         }
+    }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        // we're done sending messages, close out the queue
+        drop(self.tx.send(None));
     }
 }
 

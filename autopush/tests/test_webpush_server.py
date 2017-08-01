@@ -88,14 +88,11 @@ class TestWebPushServer(unittest.TestCase):
         try:
             hello = HelloFactory()
             call = AutopushCall()
-            call.payload = dict(
+            result = ws.command_processor.process_message(dict(
                 command="hello",
                 uaid=hello.uaid.hex,
                 connected_at=hello.connected_at,
-            )
-            ws.incoming.put(call)
-            call.called.wait()
-            result = call.val
+            ))
             ok_("error" not in result)
             ok_(hello.uaid.hex != result["uaid"])
         finally:

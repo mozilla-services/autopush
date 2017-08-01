@@ -166,15 +166,7 @@ impl Server {
     }
 
     fn send_to_python(&self, call: PythonCall) {
-        let call = Box::new(AutopushPythonCall::new(call));
-        unsafe {
-            let ptr = (self.call_python)(Box::into_raw(call));
-            if ptr.is_null() {
-                return
-            }
-            drop(Box::from_raw(ptr));
-            panic!("python rejected a call!");
-        }
+        self.tx.send(Some(call)).expect("python went away?");
     }
 }
 

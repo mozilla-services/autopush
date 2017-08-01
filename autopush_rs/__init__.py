@@ -3,22 +3,6 @@ from twisted.application import service
 from twisted.internet import reactor
 import json
 
-# TODO: can this global state be avoided? Need to figure out how to have some
-#       contextual data referenced on a foreign thread and passed to
-#       `_dispatch_server_ready_to_reactor` above. Unsure if this is actually
-#       safe to do at all.
-global_queue = None
-
-# TODO: should use the new `ffi.def_extern` style callbacks, requires changes to
-#       snaek.
-@ffi.callback("AutopushPythonCall*(AutopushPythonCall*)")
-def _dispatch_to_global_queue(ptr):
-    global global_queue
-    if global_queue is None:
-        return ptr
-    global_queue.put(AutopushCall(ptr))
-    return ffi.NULL
-
 def ffi_from_buffer(s):
     if s is None:
         return ffi.NULL
@@ -34,7 +18,7 @@ def free(obj, free_fn):
 
 class AutopushServer(service.Service):
     def __init__(self, settings, queue):
-        # type: (AutopushSettings, Queue) -> AutopushServer
+        # type: (AutopushSettings, AutopushQueue) -> AutopushServer
         cfg = ffi.new('AutopushServerOptions*')
         cfg.auto_ping_interval = settings.auto_ping_interval
         cfg.auto_ping_timeout = settings.auto_ping_timeout
@@ -52,22 +36,19 @@ class AutopushServer(service.Service):
         self.queue = queue
 
     def startService(self):
-        global global_queue
-        assert(global_queue is None)
-        global_queue = self.queue
         _call(lib.autopush_server_start,
               self.ffi,
-              _dispatch_to_global_queue)
+              self.queue.ffi)
 
     def stopService(self):
-        global global_queue
-        assert(global_queue is not None)
+        if self.ffi is None:
+            return
         _call(lib.autopush_server_stop, self.ffi)
         self._free_ffi()
-        global_queue = None
 
     def _free_ffi(self):
         free(self, lib.autopush_server_free)
+
 
 class AutopushCall:
     def __init__(self, ptr):
@@ -89,6 +70,25 @@ class AutopushCall:
 
     def _free_ffi(self):
         free(self, lib.autopush_python_call_free)
+
+
+class AutopushQueue:
+    def __init__(self):
+        ptr = _call(lib.autopush_queue_new)
+        self.ffi = ffi.gc(ptr, lib.autopush_queue_free)
+
+    def recv(self):
+        if self.ffi is None:
+            return None
+        ret = _call(lib.autopush_queue_recv, self.ffi)
+        if ffi.cast('size_t', ret) == 1:
+            self._free_ffi()
+            return None
+        else:
+            return AutopushCall(ret)
+
+    def _free_ffi(self):
+        free(self, lib.autopush_queue_free)
 
 last_err = None
 
