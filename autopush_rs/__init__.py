@@ -82,13 +82,9 @@ class AutopushQueue:
             return None
         ret = _call(lib.autopush_queue_recv, self.ffi)
         if ffi.cast('size_t', ret) == 1:
-            self._free_ffi()
             return None
         else:
             return AutopushCall(ret)
-
-    def _free_ffi(self):
-        free(self, lib.autopush_queue_free)
 
 last_err = None
 
