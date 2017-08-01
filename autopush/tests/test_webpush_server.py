@@ -70,10 +70,11 @@ class TestWebPushServer(unittest.TestCase):
             close_handshake_timeout=10,
             max_connections=2000000,
         )
+        self.db = DatabaseManager.from_config(self.conf)
 
     def _makeFUT(self):
         from autopush.webpush_server import WebPushServer
-        return WebPushServer(self.conf)
+        return WebPushServer(self.conf, self.db)
 
     def test_start_stop(self):
         ws = self._makeFUT()
@@ -87,7 +88,6 @@ class TestWebPushServer(unittest.TestCase):
         ws.start(num_threads=2)
         try:
             hello = HelloFactory()
-            call = AutopushCall()
             result = ws.command_processor.process_message(dict(
                 command="hello",
                 uaid=hello.uaid.hex,

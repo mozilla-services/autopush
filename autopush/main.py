@@ -35,6 +35,7 @@ from autopush.haproxy import HAProxyServerEndpoint
 from autopush.logging import PushLogger
 from autopush.main_argparse import parse_connection, parse_endpoint
 from autopush.router import routers_from_config
+from autopush.webpush_server import WebPushServer
 from autopush.websocket import (
     ConnectionWSSite,
     PushServerFactory,
@@ -287,3 +288,87 @@ class ConnectionApplication(AutopushMultiService):
             max_connections=ns.max_connections,
             close_handshake_timeout=ns.close_handshake_timeout,
         )
+
+
+
+class RustConnectionApplication(AutopushMultiService):
+    """The autopush application"""
+
+    config_files = AutopushMultiService.shared_config_files + (
+        '/etc/autopush_connection.ini',
+        'configs/autopush_connection.ini',
+        '~/.autopush_connection.ini',
+        '.autopush_connection.ini'
+    )
+
+    parse_args = staticmethod(parse_connection)  # type: ignore
+    logger_name = "AutopushRust"
+    push_server = None
+
+    def __init__(self, conf):
+        # type: (AutopushConfig) -> None
+        super(RustConnectionApplication, self).__init__(conf)
+
+    def setup(self, rotate_tables=True):
+        self.db.setup(self.conf.preflight_uaid)
+
+        if self.conf.memusage_port:
+            self.add_memusage()
+
+        self.push_server = WebPushServer(self.conf, self.db)
+
+    def run(self):
+        self.push_server.start(num_threads=10)
+
+    @classmethod
+    def from_argparse(cls, ns):
+        # type: (Namespace) -> AutopushMultiService
+        return super(RustConnectionApplication, cls)._from_argparse(
+            ns,
+            port=ns.port,
+            endpoint_scheme=ns.endpoint_scheme,
+            endpoint_hostname=ns.endpoint_hostname,
+            endpoint_port=ns.endpoint_port,
+            router_scheme="https" if ns.router_ssl_key else "http",
+            router_hostname=ns.router_hostname,
+            router_port=ns.router_port,
+            env=ns.env,
+            hello_timeout=ns.hello_timeout,
+            router_ssl=dict(
+                key=ns.router_ssl_key,
+                cert=ns.router_ssl_cert,
+                dh_param=ns.ssl_dh_param
+            ),
+            auto_ping_interval=ns.auto_ping_interval,
+            auto_ping_timeout=ns.auto_ping_timeout,
+            max_connections=ns.max_connections,
+            close_handshake_timeout=ns.close_handshake_timeout,
+        )
+
+    @classmethod
+    def main(cls, args=None, use_files=True):
+        # type: (Sequence[str], bool) -> Any
+        """Entry point to autopush's main command line scripts.
+
+        aka autopush/autoendpoint.
+
+        """
+        ns = cls.parse_args(cls.config_files if use_files else [], args)
+        if not ns.no_aws:
+            logging.HOSTNAME = utils.get_ec2_instance_id()
+        PushLogger.setup_logging(
+            cls.logger_name,
+            log_level=ns.log_level or ("debug" if ns.debug else "info"),
+            log_format="text" if ns.human_logs else "json",
+            log_output=ns.log_output,
+            sentry_dsn=bool(os.environ.get("SENTRY_DSN")),
+            firehose_delivery_stream=ns.firehose_stream_name
+        )
+        try:
+            app = cls.from_argparse(ns)
+        except InvalidConfig as e:
+            log.critical(str(e))
+            return 1
+
+        app.setup()
+        app.run()

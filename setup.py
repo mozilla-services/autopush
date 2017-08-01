@@ -38,6 +38,7 @@ setup(name="AutoPush",
       [console_scripts]
       autopush = autopush.main:ConnectionApplication.main
       autoendpoint = autopush.main:EndpointApplication.main
+      autopush_rs = autopush.main:RustConnectionApplication.main
       autokey = autokey:main
       endpoint_diagnostic = autopush.diagnostic_cli:run_endpoint_diagnostic_cli
       drop_users = autopush.scripts.drop_user:drop_users

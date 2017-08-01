@@ -72,10 +72,10 @@ class HelloResponse(OutputCommand):
 
 
 class WebPushServer(object):
-    def __init__(self, conf):
+    def __init__(self, conf, db):
         # type: (AutopushConfig) -> WebPushServer
         self.conf = conf
-        self.db = DatabaseManager.from_config(conf)
+        self.db = db
         self.db.setup_tables()
         self.metrics = self.db.metrics
         self.incoming = AutopushQueue()
