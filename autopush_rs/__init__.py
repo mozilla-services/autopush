@@ -49,9 +49,9 @@ class AutopushServer(service.Service):
         cfg.max_connections = settings.max_connections
         cfg.open_handshake_timeout = 5
         cfg.port = settings.port
-        cfg.ssl_cert = ffi_from_buffer(settings.ssl_cert)
-        cfg.ssl_dh_param = ffi_from_buffer(settings.ssl_dh_param)
-        cfg.ssl_key = ffi_from_buffer(settings.ssl_key)
+        cfg.ssl_cert = ffi_from_buffer(settings.ssl.cert)
+        cfg.ssl_dh_param = ffi_from_buffer(settings.ssl.dh_param)
+        cfg.ssl_key = ffi_from_buffer(settings.ssl.key)
         cfg.url = ffi_from_buffer(settings.ws_url)
 
         ptr = _call(lib.autopush_server_new, cfg)

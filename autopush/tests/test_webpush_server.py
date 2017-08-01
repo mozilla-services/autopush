@@ -61,6 +61,10 @@ class TestWebPushServer(unittest.TestCase):
             port=8080,
             statsd_host=None,
             env="test",
+            auto_ping_interval=float(300),
+            auto_ping_timeout=float(10),
+            close_handshake_timeout=10,
+            max_connections=2000000,
         )
 
     def _makeFUT(self):

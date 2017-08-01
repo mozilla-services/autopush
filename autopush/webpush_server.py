@@ -82,7 +82,7 @@ class WebPushServer(object):
         self.incoming = Queue.Queue()
         self.workers = []  # type: List[Thread]
         self.command_processor = CommandProcessor(conf, self.db)
-        self.rust = AutopushServer(conf, self)
+        self.rust = AutopushServer(conf, self.incoming)
 
     def start(self, num_threads=10):
         # type: (int) -> None
@@ -127,7 +127,6 @@ class WebPushServer(object):
                             error_msg=str(exc),
                         ))
                     finally:
-                        call.cancel()
                         input_queue.task_done()
                 except Queue.Empty:
                     continue
