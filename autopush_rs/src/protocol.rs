@@ -1,3 +1,12 @@
+//! Definition of WebSocket protocol messages
+//!
+//! This module is a structured definition of the WebSocket protocol. Both
+//! messages received from the client and messages sent from the server are
+//! defined here. The `derive(Deserialize)` and `derive(Serialize)` annotations
+//! are used to generate the ability to serialize these structures to JSON,
+//! using the `serde` crate. More docs for serde can be found at
+//! https://serde.rs
+
 use uuid::Uuid;
 
 #[derive(Deserialize)]

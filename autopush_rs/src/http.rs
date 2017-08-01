@@ -1,3 +1,8 @@
+//! Dummy module that's very likely to get entirely removed
+//!
+//! For now just a small HTTP server used to send notifications to our dummy
+//! clients.
+
 use std::str;
 use std::rc::Rc;
 

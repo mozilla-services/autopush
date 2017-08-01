@@ -1,7 +1,35 @@
-extern crate futures;
-extern crate libc;
-extern crate tokio_core;
-extern crate tokio_tungstenite;
+//! Runtime support for calling in and out of Python
+//!
+//! This module provides a number of utilities for interfacing with Python in a
+//! safe fashion. It's primarily used to handle *panics* in Rust which otherwise
+//! could cause segfaults or strange crashes if otherwise unhandled.
+//!
+//! The current protocol for Python calling into Rust looks like so:
+//!
+//! * Primarily, all panics are caught in Rust. Panics are intended to be
+//!   translated to exceptions in Python to indicate a fatal error happened in
+//!   Rust.
+//!
+//! * Almost all FFI functions take a `&mut AutopushError` as their last
+//!   argument. This argument is used to capture the reason of a panic so it can
+//!   later be introspected in Python to generate a runtime assertion. The
+//!   handling of `AutopushError` is intended to be relatively transparent by
+//!   just needing to pass it to some functions in this module.
+//!
+//! * A `UnwindGuard` is provided for stateful objects persisted across FFI
+//!   function calls. If a Rust function panics it's typically not intended to
+//!   be rerun at a later date with the same arguments, so what `UnwindGuard`
+//!   will do is only provide access to the internals *until* a panic happens.
+//!   After a panic then access to the internals will be gated and forbidden
+//!   until destruction. This should help prevent bugs from becoming worse bugs
+//!   quickly (in theory).
+//!
+//!   All Rust objects shared with Python have an `UnwindGuard` internally which
+//!   protects all of the state that Rust is fiddling with.
+//!
+//! Typically you can just look at some other examples of `#[no_mangle]`
+//! functions throughout this crate and copy those idioms, otherwise there's
+//! documentation on each specific function here.
 
 use std::panic;
 use std::ptr;
@@ -9,6 +37,11 @@ use std::mem;
 use std::any::Any;
 use std::cell::Cell;
 
+/// Generic error which is used on all function calls from Python into Rust.
+///
+/// This is allocated in Python and reused across function calls when possible.
+/// It effectively stores a `Box<Any>` which is what's created whenever a Rust
+/// thread panics. This `Box<Any>` may store an object, a string, etc.
 #[repr(C)]
 pub struct AutopushError {
     p1: usize,
@@ -16,12 +49,17 @@ pub struct AutopushError {
 }
 
 impl AutopushError {
+    /// Attempts to extract the error message out of this inernal `Box<Any>`.
+    /// This may fail if the `Any` doesn't look like it can be stringified
+    /// though.
     fn string(&self) -> Option<&str> {
         assert!(self.p1 != 0);
         assert!(self.p2 != 0);
         let any: &Any = unsafe {
             mem::transmute((self.p1, self.p2))
         };
+        // Similar to what libstd does, only check for `&'static str` and
+        // `String`.
         any.downcast_ref::<&'static str>()
             .map(|s| &s[..])
             .or_else(|| {
@@ -43,6 +81,7 @@ impl AutopushError {
         }
     }
 
+    /// Deallocates the internal `Box<Any>`, freeing the resources behind it.
     unsafe fn cleanup(&mut self) {
         mem::transmute::<_, Box<Any+Send>>((self.p1, self.p2));
         self.p1 = 0;
@@ -50,6 +89,8 @@ impl AutopushError {
     }
 }
 
+/// Acquires the length of the error message in this error, or returns 0 if
+/// there is no error message.
 #[no_mangle]
 pub extern "C" fn autopush_error_msg_len(err: *const AutopushError) -> usize {
     abort_on_panic(|| unsafe {
@@ -57,6 +98,8 @@ pub extern "C" fn autopush_error_msg_len(err: *const AutopushError) -> usize {
     })
 }
 
+/// Returns the data pointer of the error message, if any. If not present
+/// returns null.
 #[no_mangle]
 pub extern "C" fn autopush_error_msg_ptr(err: *const AutopushError) -> *const u8 {
     abort_on_panic(|| unsafe {
@@ -64,6 +107,9 @@ pub extern "C" fn autopush_error_msg_ptr(err: *const AutopushError) -> *const u8
     })
 }
 
+/// Deallocates the internal `Box<Any>`, freeing any resources it contains.
+///
+/// The error itself can continue to be reused for future function calls.
 #[no_mangle]
 pub unsafe extern "C" fn autopush_error_cleanup(err: *mut AutopushError) {
     abort_on_panic(|| {
@@ -86,6 +132,20 @@ impl<T> UnwindGuard<T> {
         }
     }
 
+    /// This function is intended to be immediately called in an FFI callback,
+    /// and will execute the closure `f` catching panics.
+    ///
+    /// The `err` provided will be filled in if the function panics.
+    ///
+    /// The closure `f` will execute with the state this `UnwindGuard` is
+    /// internally protecting, allowing it shared access to the various pieces.
+    /// The closure's return value is then also automatically converted to an
+    /// FFI-safe value through the `AbiInto` trait. Various impls for this trait
+    /// can be found below (possible types to return).
+    ///
+    /// Note that if this `UnwindGuard` previously caught a panic then the
+    /// closure `f` will not be executed. This function will immediately return
+    /// with the "null" return value to propagate the panic again.
     pub fn catch<F, R>(&self, err: &mut AutopushError, f: F) -> R::AbiRet
         where F: FnOnce(&T) -> R,
               R: AbiInto,
@@ -112,6 +172,10 @@ impl<T> UnwindGuard<T> {
     }
 }
 
+/// Catches a panic within the closure `f`, filling in `err` if a panic happens.
+///
+/// This is typically only used for constructors where there's no state
+/// persisted across calls.
 pub fn catch<T, F>(err: &mut AutopushError, f: F) -> T::AbiRet
     where F: panic::UnwindSafe + FnOnce() -> T,
           T: AbiInto,
@@ -129,6 +193,11 @@ pub fn catch<T, F>(err: &mut AutopushError, f: F) -> T::AbiRet
     }
 }
 
+/// Helper to *abort* on panics rather than catch them and communicate to
+/// python.
+///
+/// This should be rarely used but is used when executing destructors in Rust,
+/// which should be infallible (and this is just a double-check that they are).
 pub fn abort_on_panic<F, R>(f: F) -> R
     where F: FnOnce() -> R,
 {

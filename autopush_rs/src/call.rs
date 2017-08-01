@@ -1,25 +1,17 @@
 //! Implementation of calling methods/objects in python
 //!
-//! The main `AutopushServer` has a channel that goes back to the main python
-//! thread, and that's used to send instances of `PythonCall` from the Tokio
-//! thread to the Python thread. A `PythonCall` is constructed via the
-//! `new` constructor and will sling a json-serialized form of the arguments
-//! and output to/from Python.
+//! The main `Server` has a channel that goes back to the main python thread,
+//! and that's used to send instances of `PythonCall` from the Rust thread to
+//! the Python thread. Typically you won't work with `PythonCall` directly
+//! though but rather the various methods on the `Server` struct, documented
+//! below. Each method will return a `MyFuture` of the result, representing the
+//! decoded value from Python.
 //!
-//! The main python thread will receive these messages and dispatch them
-//! appropriately, completing the message when the value is ready.
-//!
-//! # Examples
-//!
-//! ```
-//! use call::PythonCall;
-//!
-//! let (call, rx) = PythonCall::new("add", (1, 2));
-//! send_to_python_thread(call);
-//!
-//! // rx is now a future of the `add` call with the arguments (1, 2),
-//! // and it'll get completed from python.
-//! ```
+//! Implementation-wise what's happening here is that each function call into
+//! Python creates a `futures::sync::oneshot`. The `Sender` half of this oneshot
+//! is sent to Python while the `Receiver` half stays in Rust. Arguments sent to
+//! Python are serialized as JSON and arguments are received from Python as JSON
+//! as well, meaning that they're deserialized in Rust from JSON as well.
 
 use std::cell::RefCell;
 use std::ffi::CStr;

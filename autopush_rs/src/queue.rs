@@ -1,3 +1,10 @@
+//! Thread-safe MPMC queue for working with Python and Rust
+//!
+//! This is created in Python and shared amongst a number of worker threads for
+//! the receiving side, and then the sending side is done by the Rust thread
+//! pushing requests over to Python. A `Sender` here is saved off in the
+//! `Server` for sending messages.
+
 use std::sync::mpsc;
 use std::sync::Mutex;
 

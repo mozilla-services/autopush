@@ -1,3 +1,5 @@
+//! Various small utilities accumulated over time for the WebPush server
+
 use std::time::Duration;
 
 use futures::future::{Either, Future, IntoFuture};
@@ -11,6 +13,12 @@ mod rc;
 pub use self::send_all::MySendAll;
 pub use self::rc::RcObject;
 
+/// Convenience future to time out the resolution of `f` provided within the
+/// duration provided.
+///
+/// If the `dur` is `None` then the returned future is equivalent to `f` (no
+/// timeout) and otherwise the returned future will cancel `f` and resolve to an
+/// error if the `dur` timeout elapses before `f` resolves.
 pub fn timeout<F>(f: F, dur: Option<Duration>, handle: &Handle) -> MyFuture<F::Item>
     where F: Future + 'static,
           F::Error: Into<Error>,
