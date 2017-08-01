@@ -1,3 +1,10 @@
+//! Managment of connected clients to a WebPush server
+//!
+//! This module is a pretty heavy work in progress. The intention is that
+//! this'll house all the various state machine transitions and state managment
+//! of connected clients. Note that it's expected there'll be a lot of connected
+//! clients, so this may appears relatively heavily optimized!
+
 use std::marker;
 use std::rc::Rc;
 
@@ -35,16 +42,17 @@ impl<T> Client<T>
 {
     /// Spins up a new client communicating over the websocket `ws` specified.
     ///
-    /// The `ws` specified already has ping/pong stuff managed elsewhere, and
-    /// this struct is only expected to deal with webpush-specific messages.
-    ///
-    /// The `tx` provided is a way to communicate with the python thread and
-    /// ask it to execute various operations for the tokio thread.
+    /// The `ws` specified already has ping/pong parts of the websocket
+    /// protocol managed elsewhere, and this struct is only expected to deal
+    /// with webpush-specific messages.
     ///
     /// The `srv` argument is the server that this client is attached to and
-    /// the various state behind the server.
+    /// the various state behind the server. This provides transitive access to
+    /// various configuration options of the server as well as the ability to
+    /// call back into Python.
     pub fn new(ws: T, srv: &Rc<Server>) -> Client<T> {
         let client = Client::handshake(ws, srv);
+        // TODO: is this the right thing to time out?
         let client = timeout(client, srv.opts.open_handshake_timeout, &srv.handle);
 
         let srv = srv.clone();
@@ -62,6 +70,13 @@ impl<T> Client<T>
         }
     }
 
+    /// Performs the WebPush handshake for a client, resolving only when that's
+    /// completed.
+    ///
+    /// This'll wait for the `Hello` message from the client and then do all
+    /// relevant processing on the server for that `Hello` message and respond.
+    /// After this happens no more `Hello` messages should either be sent or
+    /// received.
     fn handshake(ws: T, srv: &Rc<Server>)
         -> MyFuture<(T, ClientState, mpsc::UnboundedReceiver<Notification>)>
     {
@@ -135,6 +150,8 @@ impl<T> Client<T>
                srv: Rc<Server>,
                rx: mpsc::UnboundedReceiver<Notification>) -> MyFuture<()>
     {
+        // This'll probably entirely change as more of Python is translated to
+        // Rust.
         let uaid = state.uaid;
         srv.connect_client(state);
 
@@ -204,6 +221,8 @@ impl<T> Future for Client<T>
     }
 }
 
+/// Helper future to wait for the first item on one of two streams, returning
+/// the item and the two streams when done.
 struct StreamNext<S1, S2> {
     left: Option<S1>,
     right: Option<S2>,

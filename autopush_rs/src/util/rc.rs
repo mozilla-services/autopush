@@ -3,7 +3,11 @@ use std::cell::{RefCell, RefMut};
 
 use futures::{Stream, Sink, StartSend, Poll};
 
-// Helper object to turn `Rc<RefCell<T>>` into a `Stream` and `Sink`
+/// Helper object to turn `Rc<RefCell<T>>` into a `Stream` and `Sink`
+///
+/// This is basically just a helper to allow multiple "owning" references to a
+/// `T` which is both a `Stream` and a `Sink`. Similar to `Stream::split` in the
+/// futures crate, but doesn't actually split it (and allows internal access).
 pub struct RcObject<T>(Rc<RefCell<T>>);
 
 impl<T> RcObject<T> {

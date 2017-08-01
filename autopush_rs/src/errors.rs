@@ -1,3 +1,28 @@
+//! Error handling for Rust
+//!
+//! This module defines various utilities for handling errors in the Rust
+//! thread. This uses the `error-chain` crate to ergonomically define errors,
+//! enable them for usage with `?`, and otherwise give us some nice utilities.
+//! It's expected that this module is always glob imported:
+//!
+//!     use errors::*;
+//!
+//! And functions in general should then return `Result<()>`. You can add extra
+//! error context via `chain_err`:
+//!
+//!     let e = some_function_returning_a_result().chain_err(|| {
+//!         "some extra context here to make a nicer error"
+//!     })?;
+//!
+//! And you can also use the `MyFuture` type alias for "nice" uses of futures
+//!
+//!     fn add(a: i32) -> MyFuture<u32> {
+//!         // ..
+//!     }
+//!
+//! You can find some more documentation about this in the `error-chain` crate
+//! online.
+
 use std::any::Any;
 use std::error;
 use std::io;
