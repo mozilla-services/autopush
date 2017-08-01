@@ -1,13 +1,14 @@
-from autopush_rs._native import ffi, lib
-from twisted.application import service
-from twisted.internet import reactor
 import json
+
+from autopush_rs._native import ffi, lib
+
 
 def ffi_from_buffer(s):
     if s is None:
         return ffi.NULL
     else:
         return ffi.from_buffer(s)
+
 
 def free(obj, free_fn):
     if obj.ffi is None:
@@ -16,7 +17,8 @@ def free(obj, free_fn):
     free_fn(obj.ffi)
     obj.ffi = None
 
-class AutopushServer(service.Service):
+
+class AutopushServer(object):
     def __init__(self, settings, queue):
         # type: (AutopushSettings, AutopushQueue) -> AutopushServer
         cfg = ffi.new('AutopushServerOptions*')
@@ -82,7 +84,6 @@ class AutopushQueue:
             return None
         ret = _call(lib.autopush_queue_recv, self.ffi)
         if ffi.cast('size_t', ret) == 1:
-            self._free_ffi()
             return None
         else:
             return AutopushCall(ret)
@@ -90,7 +91,9 @@ class AutopushQueue:
     def _free_ffi(self):
         free(self, lib.autopush_queue_free)
 
+
 last_err = None
+
 
 def _call(f, *args):
     # We cache errors across invocations of `_call` to avoid allocating a new
@@ -130,4 +133,3 @@ def _call(f, *args):
     lib.autopush_error_cleanup(my_err)
     last_err = my_err
     raise exn
-

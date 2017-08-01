@@ -79,8 +79,10 @@ class TestWebPushServer(unittest.TestCase):
     def test_start_stop(self):
         ws = self._makeFUT()
         ws.start(num_threads=2)
-        eq_(len(ws.workers), 2)
-        ws.stop()
+        try:
+            eq_(len(ws.workers), 2)
+        finally:
+            ws.stop()
         eq_(len(ws.workers), 0)
 
     def test_hello_process(self):
