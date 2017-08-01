@@ -3,23 +3,21 @@ from twisted.application import service
 from twisted.internet import reactor
 import json
 
-# TODO: should use the new `ffi.def_extern` style callbacks, requires changes to
-#       snaek.
-@ffi.callback("void(size_t)")
-def _dispatch_server_ready_to_reactor(id):
-    reactor.callFromThread(_reactor_server_ready, id)
-
 # TODO: can this global state be avoided? Need to figure out how to have some
 #       contextual data referenced on a foreign thread and passed to
 #       `_dispatch_server_ready_to_reactor` above. Unsure if this is actually
 #       safe to do at all.
-global_server = None
+global_queue = None
 
-def _reactor_server_ready(id):
-    global global_server
-    if global_server is None:
-        return
-    global_server._poll_calls()
+# TODO: should use the new `ffi.def_extern` style callbacks, requires changes to
+#       snaek.
+@ffi.callback("AutopushPythonCall*(AutopushPythonCall*)")
+def _dispatch_to_global_queue(ptr):
+    global global_queue
+    if global_queue is None:
+        return ptr
+    global_queue.put(AutopushCall(ptr))
+    return ffi.NULL
 
 def ffi_from_buffer(s):
     if s is None:
@@ -34,14 +32,9 @@ def free(obj, free_fn):
     free_fn(obj.ffi)
     obj.ffi = None
 
-class Dispatch:
-    def handle(self, call):
-        # type: (AutopushCall) -> None
-        pass
-
 class AutopushServer(service.Service):
-    def __init__(self, settings, dispatch):
-        # type: (AutopushSettings, Dispatch) -> AutopushServer
+    def __init__(self, settings, queue):
+        # type: (AutopushSettings, Queue) -> AutopushServer
         cfg = ffi.new('AutopushServerOptions*')
         cfg.auto_ping_interval = settings.auto_ping_interval
         cfg.auto_ping_timeout = settings.auto_ping_timeout
@@ -56,44 +49,22 @@ class AutopushServer(service.Service):
 
         ptr = _call(lib.autopush_server_new, cfg)
         self.ffi = ffi.gc(ptr, lib.autopush_server_free)
-        self.dispatch = dispatch
+        self.queue = queue
 
     def startService(self):
-        global global_server
-        assert(global_server is None)
-        global_server = self
+        global global_queue
+        assert(global_queue is None)
+        global_queue = self.queue
         _call(lib.autopush_server_start,
               self.ffi,
-              _dispatch_server_ready_to_reactor)
-        self._poll_calls()
+              _dispatch_to_global_queue)
 
     def stopService(self):
-        global global_server
-        assert(global_server is not None)
+        global global_queue
+        assert(global_queue is not None)
         _call(lib.autopush_server_stop, self.ffi)
         self._free_ffi()
-        global_server = None
-
-    def _poll_calls(self):
-        while True:
-            call = self._poll_call()
-            if call is None:
-                break
-            self.dispatch.handle(call)
-
-    # Attempt to accept a client.
-    #
-    # If `None` is returned then no client was ready to be accepted. When a
-    # client is ready to be accepted the global
-    # `dispatch_server_ready_to_reactor` callback will be invoked.
-    #
-    # Otherwise if a client is accepted then this returns an instance of
-    # `AutopushClient`
-    def _poll_call(self):
-        ret = _call(lib.autopush_server_next_call, self.ffi)
-        if ffi.cast('size_t', ret) == 1:
-            return None
-        return AutopushCall(ret)
+        global_queue = None
 
     def _free_ffi(self):
         free(self, lib.autopush_server_free)

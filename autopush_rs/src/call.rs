@@ -161,8 +161,20 @@ impl Server {
             connected_at: connected_at.to_timespec().sec,
             uaid: uaid,
         });
-        (&self.tx).send(call).expect("python has gone away?");
+        self.send_to_python(call);
         return fut
+    }
+
+    fn send_to_python(&self, call: PythonCall) {
+        let call = Box::new(AutopushPythonCall::new(call));
+        unsafe {
+            let ptr = (self.call_python)(Box::into_raw(call));
+            if ptr.is_null() {
+                return
+            }
+            drop(Box::from_raw(ptr));
+            panic!("python rejected a call!");
+        }
     }
 }
 

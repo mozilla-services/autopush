@@ -10,8 +10,6 @@ use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 
-use futures::executor::{spawn, Spawn};
-use futures::sync::mpsc;
 use futures::sync::oneshot;
 use futures::task::{self, Task};
 use futures::{Stream, Future, Sink, Async, Poll, AsyncSink, StartSend};
@@ -23,8 +21,7 @@ use tokio_tungstenite::{accept_async, WebSocketStream};
 use tungstenite::Message;
 use uuid::Uuid;
 
-use MyNotify;
-use call::{PythonCall, AutopushPythonCall};
+use call::AutopushPythonCall;
 use client::{Client, ClientState, Channel};
 use errors::*;
 use protocol::{ClientMessage, ServerMessage, Notification};
@@ -37,9 +34,7 @@ pub struct AutopushServer {
 }
 
 struct AutopushServerInner {
-    notify: RefCell<Arc<MyNotify>>,
-    rx: RefCell<Spawn<mpsc::UnboundedReceiver<PythonCall>>>,
-
+    opts: Arc<ServerOptions>,
     // Used when shutting down a server
     tx: Cell<Option<oneshot::Sender<()>>>,
     thread: Cell<Option<thread::JoinHandle<()>>>,
@@ -60,12 +55,14 @@ pub struct AutopushServerOptions {
     pub close_handshake_timeout: u32,
 }
 
+type PythonCallback = unsafe extern fn(*mut AutopushPythonCall) -> *mut AutopushPythonCall;
+
 pub struct Server {
     channels: RefCell<HashMap<Uuid, Channel>>,
     uaids: RefCell<HashMap<Uuid, ClientState>>,
     open_connections: Cell<u32>,
-    pub tx: mpsc::UnboundedSender<PythonCall>,
-    pub opts: ServerOptions,
+    pub call_python: PythonCallback,
+    pub opts: Arc<ServerOptions>,
     pub handle: Handle,
 }
 
@@ -120,7 +117,7 @@ pub extern "C" fn autopush_server_new(opts: *const AutopushServerOptions,
     rt::catch(err, || unsafe {
         let opts = &*opts;
 
-        let inner = AutopushServerInner::new(ServerOptions {
+        let opts = ServerOptions {
             debug: opts.debug != 0,
             port: opts.port,
             url: to_s(opts.url).expect("url must be specified").to_string(),
@@ -138,21 +135,28 @@ pub extern "C" fn autopush_server_new(opts: *const AutopushServerOptions,
                 Some(opts.max_connections)
             },
             open_handshake_timeout: ito_dur(opts.open_handshake_timeout),
-        }).expect("failed to start");
+        };
 
         Box::new(AutopushServer {
-            inner: UnwindGuard::new(inner),
+            inner: UnwindGuard::new(AutopushServerInner {
+                opts: Arc::new(opts),
+                tx: Cell::new(None),
+                thread: Cell::new(None),
+            }),
         })
     })
 }
 
 #[no_mangle]
 pub extern "C" fn autopush_server_start(srv: *mut AutopushServer,
-                                        cb: extern fn(usize),
+                                        cb: PythonCallback,
                                         err: &mut AutopushError) -> i32 {
     unsafe {
         (*srv).inner.catch(err, |srv| {
-            *srv.notify.borrow_mut() = Arc::new(MyNotify(cb));
+            let (tx, thread) = Server::start(&srv.opts, cb)
+                .expect("failed to start server");
+            srv.tx.set(Some(tx));
+            srv.thread.set(Some(thread));
         })
     }
 }
@@ -168,45 +172,50 @@ pub extern "C" fn autopush_server_stop(srv: *mut AutopushServer,
 }
 
 #[no_mangle]
-pub extern "C" fn autopush_server_next_call(srv: *mut AutopushServer,
-                                            err: &mut AutopushError)
-    -> *mut AutopushPythonCall
-{
-    unsafe {
-        (*srv).inner.catch(err, |srv| {
-            srv.poll_call().map(|call| {
-                Box::new(AutopushPythonCall::new(call))
-            })
-        })
-    }
-}
-
-#[no_mangle]
 pub extern "C" fn autopush_server_free(srv: *mut AutopushServer) {
     rt::abort_on_panic(|| unsafe {
-        println!("free server");
         Box::from_raw(srv);
     })
 }
 
 impl AutopushServerInner {
+    /// Blocks execution of the calling thread until the helper thread with the
+    /// tokio reactor has exited.
+    fn stop(&self) -> Result<()> {
+        drop(self.tx.take());
+        if let Some(thread) = self.thread.take() {
+            thread.join().map_err(ErrorKind::Thread)?;
+        }
+        Ok(())
+    }
+}
+
+impl Drop for AutopushServerInner {
+    fn drop(&mut self) {
+        drop(self.stop());
+    }
+}
+
+impl Server {
     /// Creates a new server handle to send to python.
     ///
     /// This will spawn a new server with the `opts` specified, spinning up a
     /// separate thread for the tokio reactor. The returned
     /// `AutopushServerInner` is a handle to the spawned thread and can be used
     /// to interact with it (e.g. shut it down).
-    fn new(opts: ServerOptions) -> io::Result<AutopushServerInner> {
+    fn start(opts: &Arc<ServerOptions>, cb: PythonCallback)
+        -> io::Result<(oneshot::Sender<()>, thread::JoinHandle<()>)>
+    {
         let (donetx, donerx) = oneshot::channel();
         let (inittx, initrx) = oneshot::channel();
-        let (tx, rx) = mpsc::unbounded();
 
+        let opts = opts.clone();
         assert!(opts.ssl_key.is_none(), "ssl not supported");
         assert!(opts.ssl_cert.is_none(), "ssl not supported");
         assert!(opts.ssl_dh_param.is_none(), "ssl not supported");
 
         let thread = thread::spawn(move || {
-            let (srv, mut core) = match Server::new(opts, tx) {
+            let (srv, mut core) = match Server::new(&opts, cb) {
                 Ok(core) => {
                     inittx.send(None).unwrap();
                     core
@@ -239,63 +248,22 @@ impl AutopushServerInner {
 
         match initrx.wait() {
             Ok(Some(e)) => Err(e),
-            Ok(None) => {
-                extern fn dummy(_: usize) {}
-
-                Ok(AutopushServerInner {
-                    rx: RefCell::new(spawn(rx)),
-                    tx: Cell::new(Some(donetx)),
-                    thread: Cell::new(Some(thread)),
-                    notify: RefCell::new(Arc::new(MyNotify(dummy))),
-                })
-            }
-            Err(_) => {
-                panic::resume_unwind(thread.join().unwrap_err());
-            }
+            Ok(None) => Ok((donetx, thread)),
+            Err(_) => panic::resume_unwind(thread.join().unwrap_err()),
         }
     }
 
-    /// Check to see if there's any requests to call into python, returning if
-    /// any have been found.
-    fn poll_call(&self) -> Option<PythonCall> {
-        let mut rx = self.rx.borrow_mut();
-        let notify = self.notify.borrow();
-        match rx.poll_stream_notify(&*notify, 0).expect("streams cannot error") {
-            Async::Ready(Some(call)) => Some(call),
-            Async::Ready(None) => panic!("I/O thread is gone"),
-            Async::NotReady => None,
-        }
-    }
-
-    /// Blocks execution of the calling thread until the helper thread with the
-    /// tokio reactor has exited.
-    fn stop(&self) -> Result<()> {
-        drop(self.tx.take());
-        if let Some(thread) = self.thread.take() {
-            thread.join().map_err(ErrorKind::Thread)?;
-        }
-        Ok(())
-    }
-}
-
-impl Drop for AutopushServerInner {
-    fn drop(&mut self) {
-        drop(self.stop());
-    }
-}
-
-impl Server {
-    fn new(opts: ServerOptions, tx: mpsc::UnboundedSender<PythonCall>)
+    fn new(opts: &Arc<ServerOptions>, cb: PythonCallback)
         -> io::Result<(Rc<Server>, Core)>
     {
         let core = Core::new()?;
         let srv = Rc::new(Server {
-            opts: opts,
+            opts: opts.clone(),
             channels: RefCell::new(HashMap::new()),
             uaids: RefCell::new(HashMap::new()),
             open_connections: Cell::new(0),
             handle: core.handle(),
-            tx: tx,
+            call_python: cb,
         });
         let addr = format!("127.0.0.1:{}", srv.opts.port);
         let ws_listener = TcpListener::bind(&addr.parse().unwrap(), &srv.handle)?;

@@ -16,8 +16,6 @@ extern crate uuid;
 #[macro_use]
 extern crate error_chain;
 
-use futures::executor::Notify;
-
 mod client;
 mod errors;
 mod http;
@@ -28,11 +26,3 @@ mod util;
 pub mod rt;
 pub mod call;
 pub mod server;
-
-pub struct MyNotify(extern fn(usize));
-
-impl Notify for MyNotify {
-    fn notify(&self, id: usize) {
-        (self.0)(id);
-    }
-}
