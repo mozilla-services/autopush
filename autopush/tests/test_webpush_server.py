@@ -25,10 +25,14 @@ class AutopushCall(object):
     """Placeholder object for real Rust binding one"""
     called = Event()
     val = None
+    payload = None
 
     def complete(self, ret):
         self.val = ret
         self.called.set()
+
+    def json(self):
+        return self.payload
 
 
 class UserItemFactory(factory.Factory):
@@ -84,12 +88,12 @@ class TestWebPushServer(unittest.TestCase):
         try:
             hello = HelloFactory()
             call = AutopushCall()
-            payload = dict(
+            call.payload = dict(
                 command="hello",
                 uaid=hello.uaid.hex,
                 connected_at=hello.connected_at,
             )
-            ws.incoming.put((call, payload))
+            ws.incoming.put(call)
             call.called.wait()
             result = call.val
             ok_("error" not in result)

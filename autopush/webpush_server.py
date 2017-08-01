@@ -23,7 +23,7 @@ from autopush.db import (  # noqa
 from autopush.config import AutopushConfig  # noqa
 from autopush.types import JSONDict  # noqa
 from autopush.websocket import USER_RECORD_VERSION
-from autopush_rs import AutopushServer
+from autopush_rs import AutopushCall, AutopushServer  # noqa
 
 
 log = Logger()
@@ -96,13 +96,9 @@ class WebPushServer(object):
         self.rust.startService()
         atexit.register(self.stop)
 
-    def handle(self, call):
-        # type: (AutopushCall) -> None
-        self.incoming.put((call, call.json()))
-
     def stop(self):
         for _ in self.workers:
-            self.incoming.put((None, _STOP))
+            self.incoming.put(_STOP)
         self.rust.stopService()
 
         while self.workers:
@@ -113,11 +109,11 @@ class WebPushServer(object):
         def _thread_worker():
             while True:
                 try:
-                    call, command = input_queue.get()
+                    call = input_queue.get()
                     try:
-                        if command is _STOP:
-                            assert(call is None)
+                        if call is _STOP:
                             break
+                        command = call.json()
                         result = processor.process_message(command)
                         call.complete(result)
                     except Exception as exc:
