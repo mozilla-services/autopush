@@ -23,6 +23,7 @@ from autopush.db import (  # noqa
 from autopush.settings import AutopushSettings  # noqa
 from autopush.types import JSONDict  # noqa
 from autopush.websocket import USER_RECORD_VERSION
+from autopush_rs import AutopushServer
 
 
 log = Logger()
@@ -125,18 +126,18 @@ class WebPushServer(object):
                     call, command = input_queue.get()
                     try:
                         if command is _STOP:
+                            assert(call is None)
                             break
                         result = processor.process_message(command)
                         call.complete(result)
                     except Exception as exc:
                         log.error("Exception in worker queue thread")
                         call.complete(dict(
-                            message_id=command["message_id"],
                             error=True,
                             error_msg=str(exc),
                         ))
                     finally:
-                        command.cancel()
+                        call.cancel()
                         input_queue.task_done()
                 except Queue.Empty:
                     continue

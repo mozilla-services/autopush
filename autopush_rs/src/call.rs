@@ -140,6 +140,12 @@ enum Call<'a> {
 }
 
 #[derive(Deserialize)]
+struct PythonError {
+    pub error: bool,
+    pub error_msg: String,
+}
+
+#[derive(Deserialize)]
 pub struct HelloResponse {
     pub uaid: Option<Uuid>,
     pub message_month: String,
@@ -169,15 +175,25 @@ impl PythonCall {
         let call = PythonCall {
             input: serde_json::to_string(input).unwrap(),
             output: Box::new(|json: &str| {
-                drop(tx.send(json.to_string()));
+                drop(tx.send(json_or_error(json)));
             }),
         };
         let rx = Box::new(rx.then(|res| {
             match res {
-                Ok(s) => Ok(serde_json::from_str(&s)?),
+                Ok(Ok(s)) => Ok(serde_json::from_str(&s)?),
+                Ok(Err(e)) => Err(e),
                 Err(_) => Err("call canceled from python".into()),
             }
         }));
         (call, rx)
     }
+}
+
+fn json_or_error(json: &str) -> Result<String> {
+    if let Ok(err) = serde_json::from_str::<PythonError>(json) {
+        if err.error {
+            return Err(format!("python exception: {}", err.error_msg).into())
+        }
+    }
+    Ok(json.to_string())
 }
