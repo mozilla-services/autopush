@@ -23,6 +23,7 @@ from autopush.db import (  # noqa
 from autopush.settings import AutopushSettings  # noqa
 from autopush.types import JSONDict  # noqa
 from autopush.websocket import USER_RECORD_VERSION
+from autopush_rs import AutopushServer
 
 
 log = Logger()
