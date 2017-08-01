@@ -88,9 +88,6 @@ class AutopushQueue:
         else:
             return AutopushCall(ret)
 
-    def _free_ffi(self):
-        free(self, lib.autopush_queue_free)
-
 
 last_err = None
 
