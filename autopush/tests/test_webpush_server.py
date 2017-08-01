@@ -1,8 +1,8 @@
 import time
 import unittest
+from threading import Event
 from uuid import uuid4
 
-import attr
 import factory
 from mock import Mock
 from nose.tools import ok_, eq_
@@ -13,13 +13,22 @@ from autopush.db import (
     generate_last_connect,
 )
 from autopush.metrics import SinkMetrics
-from autopush.settings import AutopushSettings
+from autopush.config import AutopushConfig
 from autopush.websocket import USER_RECORD_VERSION
 from autopush.webpush_server import (
-    AutopushCall,
     Hello,
     HelloResponse,
 )
+
+
+class AutopushCall(object):
+    """Placeholder object for real Rust binding one"""
+    called = Event()
+    val = None
+
+    def complete(self, ret):
+        self.val = ret
+        self.called.set()
 
 
 class UserItemFactory(factory.Factory):
@@ -47,7 +56,7 @@ class HelloFactory(factory.Factory):
 
 class TestWebPushServer(unittest.TestCase):
     def setUp(self):
-        self.settings = settings = AutopushSettings(
+        self.conf = AutopushConfig(
             hostname="localhost",
             port=8080,
             statsd_host=None,
@@ -56,7 +65,7 @@ class TestWebPushServer(unittest.TestCase):
 
     def _makeFUT(self):
         from autopush.webpush_server import WebPushServer
-        return WebPushServer(self.settings)
+        return WebPushServer(self.conf)
 
     def test_start_stop(self):
         ws = self._makeFUT()
@@ -87,19 +96,19 @@ class TestWebPushServer(unittest.TestCase):
 
 class TestHelloProcessor(unittest.TestCase):
     def setUp(self):
-        self.settings = settings = AutopushSettings(
+        self.conf = conf = AutopushConfig(
             hostname="localhost",
             port=8080,
             statsd_host=None,
             env="test",
         )
-        self.db = db = DatabaseManager.from_settings(settings)
+        self.db = db = DatabaseManager.from_config(conf)
         self.metrics = db.metrics = Mock(spec=SinkMetrics)
         db.setup_tables()
 
     def _makeFUT(self):
         from autopush.webpush_server import HelloCommand
-        return HelloCommand(self.settings, self.db)
+        return HelloCommand(self.conf, self.db)
 
     def test_nonexisting_uaid(self):
         p = self._makeFUT()

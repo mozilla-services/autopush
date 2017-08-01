@@ -3,7 +3,7 @@
 """
 import Queue
 import atexit
-from threading import Thread, Event
+from threading import Thread
 from uuid import UUID, uuid4
 
 import attr
@@ -20,7 +20,7 @@ from autopush.db import (  # noqa
     has_connected_this_month,
     generate_last_connect,
 )
-from autopush.settings import AutopushSettings  # noqa
+from autopush.config import AutopushConfig  # noqa
 from autopush.types import JSONDict  # noqa
 from autopush.websocket import USER_RECORD_VERSION
 from autopush_rs import AutopushServer
@@ -44,16 +44,6 @@ def uaid_from_str(input):
         return uuid
     except (TypeError, ValueError):
         return None
-
-
-class AutopushCall(object):
-    """Placeholder object for real Rust binding one"""
-    called = Event()
-    val = None
-
-    def complete(self, ret):
-        self.val = ret
-        self.called.set()
 
 
 # Input messages off the incoming queue
@@ -83,16 +73,16 @@ class HelloResponse(OutputCommand):
 
 
 class WebPushServer(object):
-    def __init__(self, settings):
-        # type: (AutopushSettings) -> WebPushServer
-        self.settings = settings
-        self.db = DatabaseManager.from_settings(settings)
+    def __init__(self, conf):
+        # type: (AutopushConfig) -> WebPushServer
+        self.conf = conf
+        self.db = DatabaseManager.from_config(conf)
         self.db.setup_tables()
         self.metrics = self.db.metrics
         self.incoming = Queue.Queue()
         self.workers = []  # type: List[Thread]
-        self.command_processor = CommandProcessor(settings, self.db)
-        self.rust = AutopushServer(settings, self)
+        self.command_processor = CommandProcessor(conf, self.db)
+        self.rust = AutopushServer(conf, self)
 
     def start(self, num_threads=10):
         # type: (int) -> None
@@ -151,11 +141,11 @@ class WebPushServer(object):
 
 
 class CommandProcessor(object):
-    def __init__(self, settings, db):
-        # type: (AutopushSettings, DatabaseManager) -> CommandProcessor
-        self.settings = settings
+    def __init__(self, conf, db):
+        # type: (AutopushConfig, DatabaseManager) -> CommandProcessor
+        self.conf = conf
         self.db = db
-        self.hello_processor = HelloCommand(settings=settings, db=db)
+        self.hello_processor = HelloCommand(conf=conf, db=db)
         self.deserialize = dict(
             hello=Hello,
         )
@@ -185,9 +175,9 @@ class ProcessorCommand(object):
 
 
 class HelloCommand(ProcessorCommand):
-    def __init__(self, settings, db):
-        # type: (AutopushSettings, DatabaseManager) -> HelloCommand
-        self.settings = settings
+    def __init__(self, conf, db):
+        # type: (AutopushConfig, DatabaseManager) -> HelloCommand
+        self.conf = conf
         self.db = db
 
     def process(self, hello):
@@ -251,7 +241,7 @@ class HelloCommand(ProcessorCommand):
             flags["reset_uaid"] = True
 
         # Update the node_id, connected_at for this node/connected_at
-        record["node_id"] = self.settings.router_url
+        record["node_id"] = self.conf.router_url
         record["connected_at"] = hello.connected_at
         return record, flags
 
@@ -259,7 +249,7 @@ class HelloCommand(ProcessorCommand):
         # type: (Hello) -> JSONDict
         return dict(
             uaid=uuid4().hex,
-            node_id=self.settings.router_url,
+            node_id=self.conf.router_url,
             connected_at=hello.connected_at,
             router_type="webpush",
             last_connect=generate_last_connect(),

@@ -1,7 +1,6 @@
 from autopush_rs._native import ffi, lib
 from twisted.application import service
 from twisted.internet import reactor
-from autopush.websocket import PushServerProtocol
 import json
 
 # TODO: should use the new `ffi.def_extern` style callbacks, requires changes to
