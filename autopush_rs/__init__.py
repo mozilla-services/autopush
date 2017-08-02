@@ -19,19 +19,19 @@ def free(obj, free_fn):
 
 
 class AutopushServer(object):
-    def __init__(self, settings, queue):
-        # type: (AutopushSettings, AutopushQueue) -> AutopushServer
+    def __init__(self, conf, queue):
+        # type: (AutopushConfig, AutopushQueue) -> AutopushServer
         cfg = ffi.new('AutopushServerOptions*')
-        cfg.auto_ping_interval = settings.auto_ping_interval
-        cfg.auto_ping_timeout = settings.auto_ping_timeout
-        cfg.close_handshake_timeout = settings.close_handshake_timeout
-        cfg.max_connections = settings.max_connections
+        cfg.auto_ping_interval = conf.auto_ping_interval
+        cfg.auto_ping_timeout = conf.auto_ping_timeout
+        cfg.close_handshake_timeout = conf.close_handshake_timeout
+        cfg.max_connections = conf.max_connections
         cfg.open_handshake_timeout = 5
-        cfg.port = settings.port
-        cfg.ssl_cert = ffi_from_buffer(settings.ssl.cert)
-        cfg.ssl_dh_param = ffi_from_buffer(settings.ssl.dh_param)
-        cfg.ssl_key = ffi_from_buffer(settings.ssl.key)
-        cfg.url = ffi_from_buffer(settings.ws_url)
+        cfg.port = conf.port
+        cfg.ssl_cert = ffi_from_buffer(conf.ssl.cert)
+        cfg.ssl_dh_param = ffi_from_buffer(conf.ssl.dh_param)
+        cfg.ssl_key = ffi_from_buffer(conf.ssl.key)
+        cfg.url = ffi_from_buffer(conf.ws_url)
 
         ptr = _call(lib.autopush_server_new, cfg)
         self.ffi = ffi.gc(ptr, lib.autopush_server_free)
