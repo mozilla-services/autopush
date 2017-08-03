@@ -157,11 +157,12 @@ class WebPushRouter(object):
                 # Attempt to send off the UDP wake request.
                 try:
                     yield deferToThread(
-                        requests.post(
-                            self.router_conf["server"],
-                            data=urlencode(self.udp["data"]),
-                            cert=self.router_conf.get("cert"),
-                            timeout=self.router_conf.get("server_timeout", 3)))
+                        requests.post,
+                        self.router_conf["server"],
+                        data=urlencode(self.udp["data"]),
+                        cert=self.router_conf.get("cert"),
+                        timeout=self.router_conf.get("server_timeout", 3)
+                    )
                 except Exception as exc:
                     self.log.debug("Could not send UDP wake request: {exc}",
                                    exc=exc)
