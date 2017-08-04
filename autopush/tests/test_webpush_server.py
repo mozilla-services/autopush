@@ -19,6 +19,7 @@ from autopush.utils import WebPushNotification
 from autopush.websocket import USER_RECORD_VERSION
 from autopush.webpush_server import (
     CheckStorage,
+    DeleteMessage,
     Hello,
     HelloResponse,
     IncStoragePosition,
@@ -286,3 +287,34 @@ class TestIncrementStorageProcessor(BaseSetup):
         )
         check_result = check_command.process(check)
         eq_(len(check_result.messages), 5)
+
+
+class TestDeleteMessageProcessor(BaseSetup):
+    def _makeFUT(self):
+        from autopush.webpush_server import DeleteMessageCommand
+        return DeleteMessageCommand(self.conf, self.db)
+
+    def test_delete_message(self):
+        from autopush.webpush_server import CheckStorageCommand
+        check_command = CheckStorageCommand(self.conf, self.db)
+        check = CheckStorageFactory(message_month=self.db.current_msg_month)
+        uaid = check.uaid
+        delete_command = self._makeFUT()
+
+        # Store some topic messages
+        self._store_messages(check.uaid, topic=True, num=7)
+
+        # Fetch them
+        results = check_command.process(check)
+        eq_(len(results.messages), 7)
+
+        # Delete 2 of them
+        for notif in results.messages[:2]:
+            delete_command.process(DeleteMessage(
+                message_month=self.db.current_msg_month,
+                message=notif,
+            ))
+
+        # Fetch messages again
+        results = check_command.process(check)
+        eq_(len(results.messages), 5)

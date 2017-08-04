@@ -45,6 +45,48 @@ def uaid_from_str(input):
         return None
 
 
+@attrs(slots=True)
+class WebPushMessage(object):
+    """Serializable version of attributes needed for message delivery"""
+    uaid = attrib()  # type: str
+    timestamp = attrib()  # type: int
+    channel_id = attrib()  # type: str
+    ttl = attrib()  # type: int
+    topic = attrib()  # type: str
+    version = attrib()  # type: str
+    sortkey_timestamp = attrib(default=None)  # type: Optional[int]
+    data = attrib(default=None)  # type: Optional[str]
+    headers = attrib(default=None)  # type: Optional[JSONDict]
+
+    @classmethod
+    def from_WebPushNotification(cls, notif):
+        # type: (WebPushNotification) -> WebPushMessage
+        p = notif.websocket_format()
+        del p["messageType"]
+        p["channel_id"] = p.pop("channelID")
+        return cls(
+            uaid=notif.uaid.hex,
+            timestamp=notif.timestamp,
+            sortkey_timestamp=notif.sortkey_timestamp,
+            ttl=notif.ttl,
+            topic=notif.topic,
+            **p
+        )
+
+    def to_WebPushNotification(self):
+        # type: () -> WebPushNotification
+        return WebPushNotification(
+            uaid=UUID(self.uaid),
+            channel_id=self.channel_id,
+            data=self.data,
+            headers=self.headers,
+            ttl=self.ttl,
+            topic=self.topic,
+            timestamp=self.timestamp,
+            message_id=self.version,
+        )
+
+
 ###############################################################################
 # Input messages off the incoming queue
 ###############################################################################
@@ -74,6 +116,12 @@ class IncStoragePosition(InputCommand):
     timestamp = attrib()  # type: int
 
 
+@attrs(slots=True)
+class DeleteMessage(InputCommand):
+    message_month = attrib()  # type: str
+    message = attrib()  # type: WebPushMessage
+
+
 ###############################################################################
 # Output messages serialized to the outgoing queue
 ###############################################################################
@@ -91,58 +139,21 @@ class HelloResponse(OutputCommand):
 
 
 @attrs(slots=True)
-class WebPushNotificationResponse(object):
-    """Serializable version of attributes needed for message delivery"""
-    uaid = attrib()  # type: str
-    timestamp = attrib()  # type: int
-    sortkey_timestamp = attrib()  # type: Optional[int]
-    channel_id = attrib()  # type: str
-    ttl = attrib()  # type: int
-    topic = attrib()  # type: str
-    version = attrib()  # type: str
-    data = attrib(default=None)  # type: Optional[str]
-    headers = attrib(default=None)  # type: Optional[JSONDict]
-
-    @classmethod
-    def from_WebPushNotification(cls, notif):
-        # type: (WebPushNotification) -> WebPushNotificationResponse
-        p = notif.websocket_format()
-        del p["messageType"]
-        p["channel_id"] = p.pop("channelID")
-        return cls(
-            uaid=notif.uaid.hex,
-            timestamp=notif.timestamp,
-            sortkey_timestamp=notif.sortkey_timestamp,
-            ttl=notif.ttl,
-            topic=notif.topic,
-            **p
-        )
-
-    def to_WebPushNotification(self):
-        # type: () -> WebPushNotification
-        return WebPushNotification(
-            uaid=UUID(self.uaid),
-            channel_id=self.channel_id,
-            data=self.data,
-            headers=self.headers,
-            ttl=self.ttl,
-            topic=self.topic,
-            timestamp=self.timestamp,
-            message_id=self.version,
-        )
-
-
-@attrs(slots=True)
 class CheckStorageResponse(OutputCommand):
     include_topic = attrib()  # type: bool
     messages = attrib(
         default=attr.Factory(list)
-    )  # type: List[WebPushNotificationResponse]
+    )  # type: List[WebPushMessage]
     timestamp = attrib(default=None)  # type: Optional[int]
 
 
 @attrs(slots=True)
 class IncStoragePositionResponse(OutputCommand):
+    success = attrib(default=True)  # type: bool
+
+
+@attrs(slots=True)
+class DeleteMessageResponse(OutputCommand):
     success = attrib(default=True)  # type: bool
 
 
@@ -213,15 +224,18 @@ class CommandProcessor(object):
         self.hello_processor = HelloCommand(conf, db)
         self.check_storage_processor = CheckStorageCommand(conf, db)
         self.inc_storage_processor = IncrementStorageCommand(conf, db)
+        self.delete_message_processor = DeleteMessageCommand(conf, db)
         self.deserialize = dict(
             hello=Hello,
             check_storage=CheckStorage,
-            inc_storage_position=IncStoragePosition
+            inc_storage_position=IncStoragePosition,
+            delete_message=DeleteMessage,
         )
         self.command_dict = dict(
             hello=self.hello_processor,
             check_storage=self.check_storage_processor,
             inc_storage_position=self.inc_storage_processor,
+            delete_message=self.delete_message_processor,
         )  # type: Dict[str, ProcessorCommand]
 
     def process_message(self, input):
@@ -356,7 +370,7 @@ class CheckStorageCommand(ProcessorCommand):
             )
 
             # If we have topic messages, return them immediately
-            messages = [WebPushNotificationResponse.from_WebPushNotification(m)
+            messages = [WebPushMessage.from_WebPushNotification(m)
                         for m in messages]
             if messages:
                 return timestamp, messages, True
@@ -370,7 +384,7 @@ class CheckStorageCommand(ProcessorCommand):
                 uaid=command.uaid,
                 timestamp=command.timestamp,
             )
-        messages = [WebPushNotificationResponse.from_WebPushNotification(m)
+        messages = [WebPushMessage.from_WebPushNotification(m)
                     for m in messages]
         return timestamp, messages, False
 
@@ -386,3 +400,17 @@ class IncrementStorageCommand(ProcessorCommand):
         message = self.db.message_tables[command.message_month]
         message.update_last_message_read(command.uaid, command.timestamp)
         return IncStoragePositionResponse()
+
+
+class DeleteMessageCommand(ProcessorCommand):
+    def __init__(self, conf, db):
+        # type: (AutopushConfig, DatabaseManager) -> CheckStorageCommand
+        self.conf = conf
+        self.db = db
+
+    def process(self, command):
+        # type: (DeleteMessage) -> DeleteMessageResponse
+        notif = command.message.to_WebPushNotification()
+        message = self.db.message_tables[command.message_month]
+        message.delete_message(notif)
+        return DeleteMessageResponse()
