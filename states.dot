@@ -32,6 +32,7 @@ digraph g{
 
     CHECK_STORAGE -> DELIVER_NOTIIFCATIONS [label="messages \n Cond:include_topic_flag"];
     CHECK_STORAGE -> DELIVER_NOTIFICATIONS [label="messages \n Set:inc_storage_flag"];
+    CHECK_STORAGE -> CHECK_STORAGE [label="P0 empty\n Cond:include_topic_flag \n UnSet:include_topic_flag"];
     CHECK_STORAGE -> DROP_COMMAND [label="P1 empty\n Cond:reset_uaid_flag"];
     CHECK_STORAGE -> MIGRATE_COMMAND [label="P2 empty\n Cond:rotate_message_table_flag\n UnSet:check_flag"];
     CHECK_STORAGE -> AWAIT_COMMAND [label="P3 empty\n UnSet:check_flag"];
