@@ -122,6 +122,11 @@ class DeleteMessage(InputCommand):
     message = attrib()  # type: WebPushMessage
 
 
+@attrs(slots=True)
+class DropUser(InputCommand):
+    uaid = attrib(convert=uaid_from_str)  # type: UUID
+
+
 ###############################################################################
 # Output messages serialized to the outgoing queue
 ###############################################################################
@@ -154,6 +159,11 @@ class IncStoragePositionResponse(OutputCommand):
 
 @attrs(slots=True)
 class DeleteMessageResponse(OutputCommand):
+    success = attrib(default=True)  # type: bool
+
+
+@attrs(slots=True)
+class DropUserResponse(InputCommand):
     success = attrib(default=True)  # type: bool
 
 
@@ -225,17 +235,20 @@ class CommandProcessor(object):
         self.check_storage_processor = CheckStorageCommand(conf, db)
         self.inc_storage_processor = IncrementStorageCommand(conf, db)
         self.delete_message_processor = DeleteMessageCommand(conf, db)
+        self.drop_user_processor = DropUserCommand(conf, db)
         self.deserialize = dict(
             hello=Hello,
             check_storage=CheckStorage,
             inc_storage_position=IncStoragePosition,
             delete_message=DeleteMessage,
+            drop_user=DropUser,
         )
         self.command_dict = dict(
             hello=self.hello_processor,
             check_storage=self.check_storage_processor,
             inc_storage_position=self.inc_storage_processor,
             delete_message=self.delete_message_processor,
+            drop_user=self.drop_user_processor,
         )  # type: Dict[str, ProcessorCommand]
 
     def process_message(self, input):
@@ -255,16 +268,16 @@ class CommandProcessor(object):
 
 class ProcessorCommand(object):
     """Parent class for processor commands"""
+    def __init__(self, conf, db):
+        # type: (AutopushConfig, DatabaseManager) -> CheckStorageCommand
+        self.conf = conf
+        self.db = db
+
     def process(self, command):
         raise NotImplementedError()
 
 
 class HelloCommand(ProcessorCommand):
-    def __init__(self, conf, db):
-        # type: (AutopushConfig, DatabaseManager) -> HelloCommand
-        self.conf = conf
-        self.db = db
-
     def process(self, hello):
         # type: (Hello) -> HelloResponse
         user_item = None
@@ -344,11 +357,6 @@ class HelloCommand(ProcessorCommand):
 
 
 class CheckStorageCommand(ProcessorCommand):
-    def __init__(self, conf, db):
-        # type: (AutopushConfig, DatabaseManager) -> CheckStorageCommand
-        self.conf = conf
-        self.db = db
-
     def process(self, command):
         # type: (CheckStorage) -> CheckStorageResponse
 
@@ -390,11 +398,6 @@ class CheckStorageCommand(ProcessorCommand):
 
 
 class IncrementStorageCommand(ProcessorCommand):
-    def __init__(self, conf, db):
-        # type: (AutopushConfig, DatabaseManager) -> CheckStorageCommand
-        self.conf = conf
-        self.db = db
-
     def process(self, command):
         # type: (IncStoragePosition) -> IncStoragePositionResponse
         message = self.db.message_tables[command.message_month]
@@ -403,14 +406,16 @@ class IncrementStorageCommand(ProcessorCommand):
 
 
 class DeleteMessageCommand(ProcessorCommand):
-    def __init__(self, conf, db):
-        # type: (AutopushConfig, DatabaseManager) -> CheckStorageCommand
-        self.conf = conf
-        self.db = db
-
     def process(self, command):
         # type: (DeleteMessage) -> DeleteMessageResponse
         notif = command.message.to_WebPushNotification()
         message = self.db.message_tables[command.message_month]
         message.delete_message(notif)
         return DeleteMessageResponse()
+
+
+class DropUserCommand(ProcessorCommand):
+    def process(self, command):
+        # type: (DropUser) -> DropUserResponse
+        self.db.router.drop_user(command.uaid.hex)
+        return DropUserResponse()

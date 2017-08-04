@@ -5,8 +5,9 @@ from threading import Event
 from uuid import uuid4
 
 import factory
+from boto.dynamodb2.exceptions import ItemNotFound
 from mock import Mock
-from nose.tools import ok_, eq_
+from nose.tools import assert_raises, ok_, eq_
 
 from autopush.db import (
     DatabaseManager,
@@ -20,6 +21,7 @@ from autopush.websocket import USER_RECORD_VERSION
 from autopush.webpush_server import (
     CheckStorage,
     DeleteMessage,
+    DropUser,
     Hello,
     HelloResponse,
     IncStoragePosition,
@@ -318,3 +320,28 @@ class TestDeleteMessageProcessor(BaseSetup):
         # Fetch messages again
         results = check_command.process(check)
         eq_(len(results.messages), 5)
+
+
+class TestDropUserProcessor(BaseSetup):
+    def _makeFUT(self):
+        from autopush.webpush_server import DropUserCommand
+        return DropUserCommand(self.conf, self.db)
+
+    def test_drop_user(self):
+        drop_command = self._makeFUT()
+
+        # Create a user
+        user = UserItemFactory()
+        uaid = user["uaid"]
+        self.db.router.register_user(user)
+
+        # Check that its there
+        item = self.db.router.get_uaid(uaid)
+        ok_(item is not None)
+
+        # Drop it
+        drop_command.process(DropUser(uaid=uaid))
+
+        # Verify its gone
+        with assert_raises(ItemNotFound):
+            self.db.router.get_uaid(uaid)
