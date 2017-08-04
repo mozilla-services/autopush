@@ -19,9 +19,9 @@ from autopush.utils import WebPushNotification
 from autopush.websocket import USER_RECORD_VERSION
 from autopush.webpush_server import (
     CheckStorage,
-    CheckStorageResponse,
     Hello,
     HelloResponse,
+    IncStoragePosition,
 )
 
 
@@ -91,7 +91,7 @@ class CheckStorageFactory(factory.Factory):
     include_topic = True
 
 
-class TestWebPushServer(unittest.TestCase):
+class BaseSetup(unittest.TestCase):
     def setUp(self):
         self.conf = AutopushConfig(
             hostname="localhost",
@@ -103,8 +103,25 @@ class TestWebPushServer(unittest.TestCase):
             close_handshake_timeout=10,
             max_connections=2000000,
         )
-        self.db = DatabaseManager.from_config(self.conf)
+        self.db = db = DatabaseManager.from_config(self.conf)
+        self.metrics = db.metrics = Mock(spec=SinkMetrics)
+        db.setup_tables()
 
+    def _store_messages(self, uaid, topic=False, num=5):
+        messages = [WebPushNotificationFactory(uaid=uaid)
+                    for _ in range(num)]
+        channels = set([m.channel_id for m in messages])
+        for channel in channels:
+            self.db.message.register_channel(uaid.hex, channel.hex)
+        for idx, notif in enumerate(messages):
+            if topic:
+                notif.topic = "something_{}".format(idx)
+            notif.generate_message_id(self.conf.fernet)
+            self.db.message.store_message(notif)
+        return messages
+
+
+class TestWebPushServer(BaseSetup):
     def _makeFUT(self):
         from autopush.webpush_server import WebPushServer
         return WebPushServer(self.conf, self.db)
@@ -134,18 +151,7 @@ class TestWebPushServer(unittest.TestCase):
             ws.stop()
 
 
-class TestHelloProcessor(unittest.TestCase):
-    def setUp(self):
-        self.conf = conf = AutopushConfig(
-            hostname="localhost",
-            port=8080,
-            statsd_host=None,
-            env="test",
-        )
-        self.db = db = DatabaseManager.from_config(conf)
-        self.metrics = db.metrics = Mock(spec=SinkMetrics)
-        db.setup_tables()
-
+class TestHelloProcessor(BaseSetup):
     def _makeFUT(self):
         from autopush.webpush_server import HelloCommand
         return HelloCommand(self.conf, self.db)
@@ -179,34 +185,10 @@ class TestHelloProcessor(unittest.TestCase):
         eq_(result.uaid, None)
 
 
-class TestCheckStorageProcessor(unittest.TestCase):
-    def setUp(self):
-        self.conf = conf = AutopushConfig(
-            hostname="localhost",
-            port=8080,
-            statsd_host=None,
-            env="test",
-        )
-        self.db = db = DatabaseManager.from_config(conf)
-        self.metrics = db.metrics = Mock(spec=SinkMetrics)
-        db.setup_tables()
-
+class TestCheckStorageProcessor(BaseSetup):
     def _makeFUT(self):
         from autopush.webpush_server import CheckStorageCommand
         return CheckStorageCommand(self.conf, self.db)
-
-    def _store_messages(self, uaid, topic=False, num=5):
-        messages = [WebPushNotificationFactory(uaid=uaid)
-                    for _ in range(num)]
-        channels = set([m.channel_id for m in messages])
-        for channel in channels:
-            self.db.message.register_channel(uaid.hex, channel.hex)
-        for idx, notif in enumerate(messages):
-            if topic:
-                notif.topic = "something_{}".format(idx)
-            notif.generate_message_id(self.conf.fernet)
-            self.db.message.store_message(notif)
-        return messages
 
     def test_no_messages(self):
         p = self._makeFUT()
@@ -231,10 +213,10 @@ class TestCheckStorageProcessor(unittest.TestCase):
         """
         p = self._makeFUT()
         check = CheckStorageFactory(message_month=self.db.current_msg_month)
-        self._store_messages(check.uaid, topic=True, num=20)
+        self._store_messages(check.uaid, topic=True, num=22)
         self._store_messages(check.uaid, num=15)
         result = p.process(check)
-        eq_(len(result.messages), 9)
+        eq_(len(result.messages), 10)
 
         # Delete all the messages returned
         for msg in result.messages:
@@ -244,7 +226,7 @@ class TestCheckStorageProcessor(unittest.TestCase):
         check.timestamp = result.timestamp
         check.include_topic = result.include_topic
         result = p.process(check)
-        eq_(len(result.messages), 9)
+        eq_(len(result.messages), 10)
 
         # Delete all the messages returned
         for msg in result.messages:
@@ -270,3 +252,37 @@ class TestCheckStorageProcessor(unittest.TestCase):
         check.include_topic = result.include_topic
         result = p.process(check)
         eq_(len(result.messages), 5)
+
+
+class TestIncrementStorageProcessor(BaseSetup):
+    def _makeFUT(self):
+        from autopush.webpush_server import IncrementStorageCommand
+        return IncrementStorageCommand(self.conf, self.db)
+
+    def test_inc_storage(self):
+        from autopush.webpush_server import CheckStorageCommand
+        inc_command = self._makeFUT()
+        check_command = CheckStorageCommand(self.conf, self.db)
+        check = CheckStorageFactory(message_month=self.db.current_msg_month)
+        uaid = check.uaid
+
+        # First store/register some messages
+        self._store_messages(check.uaid, num=15)
+
+        # Pull 10 out
+        check_result = check_command.process(check)
+        eq_(len(check_result.messages), 10)
+
+        # We should now have an updated timestamp returned, increment it
+        inc = IncStoragePosition(uaid=uaid.hex,
+                                 message_month=self.db.current_msg_month,
+                                 timestamp=check_result.timestamp)
+        inc_command.process(inc)
+
+        # Create a new check command, and verify we resume from 10 in
+        check = CheckStorageFactory(
+            uaid=uaid.hex,
+            message_month=self.db.current_msg_month
+        )
+        check_result = check_command.process(check)
+        eq_(len(check_result.messages), 5)

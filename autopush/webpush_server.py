@@ -70,7 +70,8 @@ class CheckStorage(InputCommand):
 @attrs(slots=True)
 class IncStoragePosition(InputCommand):
     uaid = attrib(convert=uaid_from_str)  # type: UUID
-
+    message_month = attrib()  # type: str
+    timestamp = attrib()  # type: int
 
 
 ###############################################################################
@@ -140,6 +141,11 @@ class CheckStorageResponse(OutputCommand):
     timestamp = attrib(default=None)  # type: Optional[int]
 
 
+@attrs(slots=True)
+class IncStoragePositionResponse(OutputCommand):
+    success = attrib(default=True)  # type: bool
+
+
 ###############################################################################
 # Main push server class
 ###############################################################################
@@ -206,13 +212,16 @@ class CommandProcessor(object):
         self.db = db
         self.hello_processor = HelloCommand(conf, db)
         self.check_storage_processor = CheckStorageCommand(conf, db)
+        self.inc_storage_processor = IncrementStorageCommand(conf, db)
         self.deserialize = dict(
             hello=Hello,
             check_storage=CheckStorage,
+            inc_storage_position=IncStoragePosition
         )
         self.command_dict = dict(
             hello=self.hello_processor,
             check_storage=self.check_storage_processor,
+            inc_storage_position=self.inc_storage_processor,
         )  # type: Dict[str, ProcessorCommand]
 
     def process_message(self, input):
@@ -343,7 +352,7 @@ class CheckStorageCommand(ProcessorCommand):
         message = self.db.message_tables[command.message_month]
         if command.include_topic:
             timestamp, messages = message.fetch_messages(
-                uaid=command.uaid
+                uaid=command.uaid, limit=11,
             )
 
             # If we have topic messages, return them immediately
@@ -364,3 +373,16 @@ class CheckStorageCommand(ProcessorCommand):
         messages = [WebPushNotificationResponse.from_WebPushNotification(m)
                     for m in messages]
         return timestamp, messages, False
+
+
+class IncrementStorageCommand(ProcessorCommand):
+    def __init__(self, conf, db):
+        # type: (AutopushConfig, DatabaseManager) -> CheckStorageCommand
+        self.conf = conf
+        self.db = db
+
+    def process(self, command):
+        # type: (IncStoragePosition) -> IncStoragePositionResponse
+        message = self.db.message_tables[command.message_month]
+        message.update_last_message_read(command.uaid, command.timestamp)
+        return IncStoragePositionResponse()
