@@ -1,3 +1,4 @@
+import random
 import time
 import unittest
 from threading import Event
@@ -14,8 +15,11 @@ from autopush.db import (
 )
 from autopush.metrics import SinkMetrics
 from autopush.config import AutopushConfig
+from autopush.utils import WebPushNotification
 from autopush.websocket import USER_RECORD_VERSION
 from autopush.webpush_server import (
+    CheckStorage,
+    CheckStorageResponse,
     Hello,
     HelloResponse,
 )
@@ -50,12 +54,41 @@ class UserItemFactory(factory.Factory):
     )
 
 
+def generate_random_headers():
+    return dict(
+        encryption="aesgcm128",
+        encryption_key="someneatkey",
+        crypto_key="anotherneatkey",
+    )
+
+
+class WebPushNotificationFactory(factory.Factory):
+    class Meta:
+        model = WebPushNotification
+
+    uaid = factory.LazyFunction(uuid4)
+    channel_id = factory.LazyFunction(uuid4)
+    ttl = 86400
+    data = factory.LazyFunction(
+        lambda: random.randint(30, 4096) * "*"
+    )
+    headers = factory.LazyFunction(generate_random_headers)
+
+
 class HelloFactory(factory.Factory):
     class Meta:
         model = Hello
 
     uaid = factory.LazyFunction(lambda: uuid4().hex)
     connected_at = factory.LazyFunction(lambda: int(time.time() * 1000))
+
+
+class CheckStorageFactory(factory.Factory):
+    class Meta:
+        model = CheckStorage
+
+    uaid = factory.LazyFunction(lambda: uuid4().hex)
+    include_topic = True
 
 
 class TestWebPushServer(unittest.TestCase):
@@ -144,3 +177,60 @@ class TestHelloProcessor(unittest.TestCase):
         result = p.process(hello)  # type: HelloResponse
         ok_(isinstance(result, HelloResponse))
         eq_(result.uaid, None)
+
+
+class TestCheckStorageProcessor(unittest.TestCase):
+    def setUp(self):
+        self.conf = conf = AutopushConfig(
+            hostname="localhost",
+            port=8080,
+            statsd_host=None,
+            env="test",
+        )
+        self.db = db = DatabaseManager.from_config(conf)
+        self.metrics = db.metrics = Mock(spec=SinkMetrics)
+        db.setup_tables()
+
+    def _makeFUT(self):
+        from autopush.webpush_server import CheckStorageCommand
+        return CheckStorageCommand(self.conf, self.db)
+
+    def _store_messages(self, uaid, num=5):
+        messages = [WebPushNotificationFactory(uaid=uaid)
+                    for _ in range(num)]
+        channels = set([m.channel_id for m in messages])
+        for channel in channels:
+            self.db.message.register_channel(uaid.hex, channel.hex)
+        for notif in messages:
+            notif.generate_message_id(self.conf.fernet)
+            self.db.message.store_message(notif)
+        return messages
+
+    def test_no_messages(self):
+        p = self._makeFUT()
+        check = CheckStorageFactory(message_month=self.db.current_msg_month)
+        result = p.process(check)
+        eq_(len(result.messages), 0)
+
+    def test_five_messages(self):
+        p = self._makeFUT()
+        check = CheckStorageFactory(message_month=self.db.current_msg_month)
+        self._store_messages(check.uaid, num=5)
+        result = p.process(check)
+        eq_(len(result.messages), 5)
+
+    def test_many_messages(self):
+        p = self._makeFUT()
+        check = CheckStorageFactory(message_month=self.db.current_msg_month)
+        self._store_messages(check.uaid, num=23)
+        result = p.process(check)
+        eq_(len(result.messages), 10)
+
+        check.timestamp = result.timestamp
+        check.include_topic = False
+        result = p.process(check)
+        eq_(len(result.messages), 10)
+
+        check.timestamp = result.timestamp
+        result = p.process(check)
+        eq_(len(result.messages), 3)

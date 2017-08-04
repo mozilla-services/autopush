@@ -21,9 +21,9 @@ from autopush.db import (  # noqa
 )
 from autopush.config import AutopushConfig  # noqa
 from autopush.types import JSONDict  # noqa
+from autopush.utils import WebPushNotification
 from autopush.websocket import USER_RECORD_VERSION
 from autopush_rs import AutopushCall, AutopushServer, AutopushQueue  # noqa
-
 
 log = Logger()
 
@@ -45,7 +45,9 @@ def uaid_from_str(input):
         return None
 
 
+###############################################################################
 # Input messages off the incoming queue
+###############################################################################
 @attrs(slots=True)
 class InputCommand(object):
     pass
@@ -57,7 +59,17 @@ class Hello(InputCommand):
     uaid = attrib(default=None, convert=uaid_from_str)  # type: Optional[UUID]
 
 
+@attrs(slots=True)
+class CheckStorage(InputCommand):
+    uaid = attrib(convert=uaid_from_str)  # type: UUID
+    message_month = attrib()  # type: str
+    include_topic = attrib()  # type: bool
+    timestamp = attrib(default=None)  # type: Optional[int]
+
+
+###############################################################################
 # Output messages serialized to the outgoing queue
+###############################################################################
 @attrs(slots=True)
 class OutputCommand(object):
     pass
@@ -71,6 +83,42 @@ class HelloResponse(OutputCommand):
     rotate_message_table = attrib(default=False)  # type: bool
 
 
+@attrs(slots=True)
+class WebPushNotificationResponse(object):
+    """Serializable version of attributes needed for message delivery"""
+    timestamp = attrib()  # type: int
+    sortkey_timestamp = attrib()  # type: Optional[int]
+    channel_id = attrib()  # type: str
+    ttl = attrib()  # type: int
+    version = attrib()  # type: str
+    data = attrib(default=None)  # type: Optional[str]
+    headers = attrib(default=None)  # type: Optional[JSONDict]
+
+    @classmethod
+    def from_WebPushNotification(cls, notif):
+        # type: (WebPushNotification) -> WebPushNotificationResponse
+        p = notif.websocket_format()
+        del p["messageType"]
+        p["channel_id"] = p.pop("channelID")
+        return cls(
+            timestamp=notif.timestamp,
+            sortkey_timestamp=notif.sortkey_timestamp,
+            ttl=notif.ttl,
+            **p
+        )
+
+
+@attrs(slots=True)
+class CheckStorageResponse(OutputCommand):
+    messages = attrib(
+        default=attr.Factory(list)
+    )  # type: List[WebPushNotificationResponse]
+    timestamp = attrib(default=None)  # type: Optional[int]
+
+
+###############################################################################
+# Main push server class
+###############################################################################
 class WebPushServer(object):
     def __init__(self, conf, db):
         # type: (AutopushConfig) -> WebPushServer
@@ -132,12 +180,15 @@ class CommandProcessor(object):
         # type: (AutopushConfig, DatabaseManager) -> CommandProcessor
         self.conf = conf
         self.db = db
-        self.hello_processor = HelloCommand(conf=conf, db=db)
+        self.hello_processor = HelloCommand(conf, db)
+        self.check_storage_processor = CheckStorageCommand(conf, db)
         self.deserialize = dict(
             hello=Hello,
+            check_storage=CheckStorage,
         )
         self.command_dict = dict(
             hello=self.hello_processor,
+            check_storage=self.check_storage_processor,
         )  # type: Dict[str, ProcessorCommand]
 
     def process_message(self, input):
@@ -242,4 +293,44 @@ class HelloCommand(ProcessorCommand):
             last_connect=generate_last_connect(),
             record_version=USER_RECORD_VERSION,
             current_month=self.db.current_month,
+        )
+
+
+class CheckStorageCommand(ProcessorCommand):
+    def __init__(self, conf, db):
+        # type: (AutopushConfig, DatabaseManager) -> CheckStorageCommand
+        self.conf = conf
+        self.db = db
+
+    def process(self, command):
+        # type: (CheckStorage) -> CheckStorageResponse
+        timestamp = None
+        messages = []
+        message = self.db.message_tables[command.message_month]
+        if command.include_topic:
+            timestamp, messages = message.fetch_messages(
+                uaid=command.uaid
+            )
+
+            # If we have topic messages, return them immediately
+            if messages:
+                return CheckStorageResponse(
+                    timestamp=timestamp,
+                    messages=messages
+                )
+
+            # No messages, update the command to include the last timestamp
+            # that was ack'd
+            command.timestamp = timestamp
+
+        if not messages or command.timestamp:
+            timestamp, messages = message.fetch_timestamp_messages(
+                uaid=command.uaid,
+                timestamp=command.timestamp,
+            )
+        messages = [WebPushNotificationResponse.from_WebPushNotification(m)
+                    for m in messages]
+        return CheckStorageResponse(
+            timestamp=timestamp,
+            messages=messages
         )
