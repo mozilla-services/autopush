@@ -67,6 +67,12 @@ class CheckStorage(InputCommand):
     timestamp = attrib(default=None)  # type: Optional[int]
 
 
+@attrs(slots=True)
+class IncStoragePosition(InputCommand):
+    uaid = attrib(convert=uaid_from_str)  # type: UUID
+
+
+
 ###############################################################################
 # Output messages serialized to the outgoing queue
 ###############################################################################
@@ -86,10 +92,12 @@ class HelloResponse(OutputCommand):
 @attrs(slots=True)
 class WebPushNotificationResponse(object):
     """Serializable version of attributes needed for message delivery"""
+    uaid = attrib()  # type: str
     timestamp = attrib()  # type: int
     sortkey_timestamp = attrib()  # type: Optional[int]
     channel_id = attrib()  # type: str
     ttl = attrib()  # type: int
+    topic = attrib()  # type: str
     version = attrib()  # type: str
     data = attrib(default=None)  # type: Optional[str]
     headers = attrib(default=None)  # type: Optional[JSONDict]
@@ -101,15 +109,31 @@ class WebPushNotificationResponse(object):
         del p["messageType"]
         p["channel_id"] = p.pop("channelID")
         return cls(
+            uaid=notif.uaid.hex,
             timestamp=notif.timestamp,
             sortkey_timestamp=notif.sortkey_timestamp,
             ttl=notif.ttl,
+            topic=notif.topic,
             **p
+        )
+
+    def to_WebPushNotification(self):
+        # type: () -> WebPushNotification
+        return WebPushNotification(
+            uaid=UUID(self.uaid),
+            channel_id=self.channel_id,
+            data=self.data,
+            headers=self.headers,
+            ttl=self.ttl,
+            topic=self.topic,
+            timestamp=self.timestamp,
+            message_id=self.version,
         )
 
 
 @attrs(slots=True)
 class CheckStorageResponse(OutputCommand):
+    include_topic = attrib()  # type: bool
     messages = attrib(
         default=attr.Factory(list)
     )  # type: List[WebPushNotificationResponse]
@@ -313,10 +337,13 @@ class CheckStorageCommand(ProcessorCommand):
             )
 
             # If we have topic messages, return them immediately
+            messages = [WebPushNotificationResponse.from_WebPushNotification(m)
+                        for m in messages]
             if messages:
                 return CheckStorageResponse(
                     timestamp=timestamp,
-                    messages=messages
+                    messages=messages,
+                    include_topic=True,
                 )
 
             # No messages, update the command to include the last timestamp
@@ -332,5 +359,6 @@ class CheckStorageCommand(ProcessorCommand):
                     for m in messages]
         return CheckStorageResponse(
             timestamp=timestamp,
-            messages=messages
+            messages=messages,
+            include_topic=False,
         )

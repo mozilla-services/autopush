@@ -195,13 +195,15 @@ class TestCheckStorageProcessor(unittest.TestCase):
         from autopush.webpush_server import CheckStorageCommand
         return CheckStorageCommand(self.conf, self.db)
 
-    def _store_messages(self, uaid, num=5):
+    def _store_messages(self, uaid, topic=False, num=5):
         messages = [WebPushNotificationFactory(uaid=uaid)
                     for _ in range(num)]
         channels = set([m.channel_id for m in messages])
         for channel in channels:
             self.db.message.register_channel(uaid.hex, channel.hex)
-        for notif in messages:
+        for idx, notif in enumerate(messages):
+            if topic:
+                notif.topic = "something_{}".format(idx)
             notif.generate_message_id(self.conf.fernet)
             self.db.message.store_message(notif)
         return messages
@@ -220,17 +222,51 @@ class TestCheckStorageProcessor(unittest.TestCase):
         eq_(len(result.messages), 5)
 
     def test_many_messages(self):
+        """Test many messages to fill the batches with topics and non-topic
+
+        This is a long test, intended to ensure that all the topic messages
+        propperly come out and set whether to include the topic flag again or
+        proceed to get non-topic messages.
+
+        """
         p = self._makeFUT()
         check = CheckStorageFactory(message_month=self.db.current_msg_month)
-        self._store_messages(check.uaid, num=23)
+        self._store_messages(check.uaid, topic=True, num=20)
+        self._store_messages(check.uaid, num=15)
+        result = p.process(check)
+        eq_(len(result.messages), 9)
+
+        # Delete all the messages returned
+        for msg in result.messages:
+            notif = msg.to_WebPushNotification()
+            self.db.message.delete_message(notif)
+
+        check.timestamp = result.timestamp
+        check.include_topic = result.include_topic
+        result = p.process(check)
+        eq_(len(result.messages), 9)
+
+        # Delete all the messages returned
+        for msg in result.messages:
+            notif = msg.to_WebPushNotification()
+            self.db.message.delete_message(notif)
+
+        check.timestamp = result.timestamp
+        check.include_topic = result.include_topic
+        result = p.process(check)
+        eq_(len(result.messages), 2)
+
+        # Delete all the messages returned
+        for msg in result.messages:
+            notif = msg.to_WebPushNotification()
+            self.db.message.delete_message(notif)
+
+        check.timestamp = result.timestamp
+        check.include_topic = result.include_topic
         result = p.process(check)
         eq_(len(result.messages), 10)
 
         check.timestamp = result.timestamp
-        check.include_topic = False
+        check.include_topic = result.include_topic
         result = p.process(check)
-        eq_(len(result.messages), 10)
-
-        check.timestamp = result.timestamp
-        result = p.process(check)
-        eq_(len(result.messages), 3)
+        eq_(len(result.messages), 5)
