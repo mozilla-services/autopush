@@ -28,38 +28,36 @@ digraph g{
         MIGRATE_COMMAND [ color = "red", penwidth = 2];
         DROP_COMMAND [ color = "red", penwidth = 2];
         DELETE_MESSAGE_COMMAND [ color = "red", penwidth = 2];
-        {rank=same; CHECK_STORAGE AWAIT_COMMAND}
-        {rank=same; INC_STORAGE_POSITION STORE_DIRECT_MESSAGES}
     }
 
-    CHECK_STORAGE -> DELIVER_NOTIIFCATIONS [label="messages \n w/include_topic_flag"];
-    CHECK_STORAGE -> DELIVER_NOTIFICATIONS [label="messages \n set stored_flag"];
-    CHECK_STORAGE -> DROP_COMMAND [label="P1 empty\n w/reset_uaid_flag"];
-    CHECK_STORAGE -> MIGRATE_COMMAND [label="P2 empty\n w/rotate_message_table_flag\n clear check_flag"];
-    CHECK_STORAGE -> AWAIT_COMMAND [label="P3 empty\n clear check_flag"];
+    CHECK_STORAGE -> DELIVER_NOTIIFCATIONS [label="messages \n Cond:include_topic_flag"];
+    CHECK_STORAGE -> DELIVER_NOTIFICATIONS [label="messages \n Set:inc_storage_flag"];
+    CHECK_STORAGE -> DROP_COMMAND [label="P1 empty\n Cond:reset_uaid_flag"];
+    CHECK_STORAGE -> MIGRATE_COMMAND [label="P2 empty\n Cond:rotate_message_table_flag\n UnSet:check_flag"];
+    CHECK_STORAGE -> AWAIT_COMMAND [label="P3 empty\n UnSet:check_flag"];
 
-    MIGRATE_COMMAND -> AWAIT_COMMAND [label="clear rotate_message_table_flag"];
+    MIGRATE_COMMAND -> AWAIT_COMMAND [label="UnSet:(rotate_message_table_flag,inc_storage_flag,include_topic_flag)"];
     DROP_COMMAND -> DISCONNECT;
 
     DELIVER_NOTIFICATIONS -> WAIT_FOR_ACKS;
 
-    DELETE_MESSAGE_COMMAND -> WAIT_FOR_ACKS [label="acks remaining"];
-    DELETE_MESSAGE_COMMAND -> CHECK_STORAGE [label="all acked"];
+    DELETE_MESSAGE_COMMAND -> WAIT_FOR_ACKS [label="Cond:acks remaining"];
+    DELETE_MESSAGE_COMMAND -> CHECK_STORAGE [label="Cond:all acked"];
 
     WAIT_FOR_ACKS -> DELETE_MESSAGE_COMMAND [label="topic ack"];
-    WAIT_FOR_ACKS -> INC_STORAGE_POSITION [label="all acked \n w/check_flag && stored_flag"];
-    WAIT_FOR_ACKS -> CHECK_STORAGE [label="all acked \n w/check_flag"];
-    WAIT_FOR_ACKS -> AWAIT_COMMAND [label="all acked \n no flags"];
+    WAIT_FOR_ACKS -> INC_STORAGE_POSITION [label="all acked \n Cond:check_flag && Cond:inc_storage_flag"];
+    WAIT_FOR_ACKS -> CHECK_STORAGE [label="all acked \n Cond:check_flag"];
+    WAIT_FOR_ACKS -> AWAIT_COMMAND [label="all acked \n Cond:NO_FLAGS"];
     WAIT_FOR_ACKS -> RUN_COMMAND [label="reg or unreg"];
     WAIT_FOR_ACKS -> DISCONNECT [label="connection drop"];
-    WAIT_FOR_ACKS -> WAIT_FOR_ACKS [label="set check_flag", fontcolor="darkgreen", color="green"];
-    WAIT_FOR_ACKS -> STORE_DIRECT_MESSAGES [label="connection drop \n w/direct unacked messages"];
+    WAIT_FOR_ACKS -> WAIT_FOR_ACKS [label="Set:include_topic, Set:check_flag", fontcolor="darkgreen", color="green"];
+    WAIT_FOR_ACKS -> STORE_DIRECT_MESSAGES [label="connection drop \n Cond:direct unacked messages"];
 
-    INC_STORAGE_POSITION -> CHECK_STORAGE [label="clear stored_flag"];
-    INC_STORAGE_POSITION -> STORE_DIRECT_MESSAGES [label="connection drop \n w/direct unacked messages"];
+    INC_STORAGE_POSITION -> CHECK_STORAGE [label="UnSet:inc_storage_flag"];
+    INC_STORAGE_POSITION -> STORE_DIRECT_MESSAGES [label="connection drop \n Cond:direct unacked messages"];
     INC_STORAGE_POSITION -> DISCONNECT [label="connection drop"];
 
-    AWAIT_COMMAND -> FULL_CHECK [label="endpoint wants full check", fontcolor="darkgreen", color="green"];
+    AWAIT_COMMAND -> CHECK_STORAGE [label="endpoint wants full check \nSet:(include_topic,check_flag)", fontcolor="darkgreen", color="green"];
     AWAIT_COMMAND -> RUN_COMMAND [label="reg or unreg"];
     AWAIT_COMMAND -> DISCONNECT [label="connection drop"];
     AWAIT_COMMAND -> DELIVER_NOTIFICATIONS [label="direct message", fontcolor="darkgreen", color="green"];
@@ -67,13 +65,11 @@ digraph g{
     STORE_DIRECT_MESSAGES -> DISCONNECT;
 
     RUN_COMMAND -> AWAIT_COMMAND [label="send response"];
-    RUN_COMMAND -> WAIT_FOR_ACKS [label="send response \n w/acks remaining"];
+    RUN_COMMAND -> WAIT_FOR_ACKS [label="send response \n Cond:acks remaining"];
 
     CONNECTION_ESTABLISHED -> PROCESS_HELLO [label="hello"];
     CONNECTION_ESTABLISHED -> DISCONNECT [label="ELSE"];
 
-    FULL_CHECK -> CHECK_STORAGE [label="set include_topic, set check_flag"];
-
-    PROCESS_HELLO -> FULL_CHECK [label="authenticate success"];
+    PROCESS_HELLO -> CHECK_STORAGE [label="authenticate success \n Set:(include_topic,check_flag)"];
     PROCESS_HELLO -> AWAIT_COMMAND [label="ELSE"];
 }

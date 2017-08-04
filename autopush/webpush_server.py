@@ -328,6 +328,16 @@ class CheckStorageCommand(ProcessorCommand):
 
     def process(self, command):
         # type: (CheckStorage) -> CheckStorageResponse
+
+        # First, determine if there's any messages to retrieve
+        timestamp, messages, include_topic = self._check_storage(command)
+        return CheckStorageResponse(
+            timestamp=timestamp,
+            messages=messages,
+            include_topic=include_topic,
+        )
+
+    def _check_storage(self, command):
         timestamp = None
         messages = []
         message = self.db.message_tables[command.message_month]
@@ -340,11 +350,7 @@ class CheckStorageCommand(ProcessorCommand):
             messages = [WebPushNotificationResponse.from_WebPushNotification(m)
                         for m in messages]
             if messages:
-                return CheckStorageResponse(
-                    timestamp=timestamp,
-                    messages=messages,
-                    include_topic=True,
-                )
+                return timestamp, messages, True
 
             # No messages, update the command to include the last timestamp
             # that was ack'd
@@ -357,8 +363,4 @@ class CheckStorageCommand(ProcessorCommand):
             )
         messages = [WebPushNotificationResponse.from_WebPushNotification(m)
                     for m in messages]
-        return CheckStorageResponse(
-            timestamp=timestamp,
-            messages=messages,
-            include_topic=False,
-        )
+        return timestamp, messages, False
