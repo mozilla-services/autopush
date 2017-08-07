@@ -127,6 +127,12 @@ class DropUser(InputCommand):
     uaid = attrib(convert=uaid_from_str)  # type: UUID
 
 
+@attrs(slots=True)
+class MigrateUser(InputCommand):
+    uaid = attrib(convert=uaid_from_str)  # type: UUID
+    message_month = attrib()  # type: str
+
+
 ###############################################################################
 # Output messages serialized to the outgoing queue
 ###############################################################################
@@ -165,6 +171,11 @@ class DeleteMessageResponse(OutputCommand):
 @attrs(slots=True)
 class DropUserResponse(InputCommand):
     success = attrib(default=True)  # type: bool
+
+
+@attrs(slots=True)
+class MigrateUserResponse(InputCommand):
+    message_month = attrib()  # type: str
 
 
 ###############################################################################
@@ -236,12 +247,14 @@ class CommandProcessor(object):
         self.inc_storage_processor = IncrementStorageCommand(conf, db)
         self.delete_message_processor = DeleteMessageCommand(conf, db)
         self.drop_user_processor = DropUserCommand(conf, db)
+        self.migrate_user_proocessor = MigrateUserCommand(conf, db)
         self.deserialize = dict(
             hello=Hello,
             check_storage=CheckStorage,
             inc_storage_position=IncStoragePosition,
             delete_message=DeleteMessage,
             drop_user=DropUser,
+            migrate_user=MigrateUser,
         )
         self.command_dict = dict(
             hello=self.hello_processor,
@@ -249,6 +262,7 @@ class CommandProcessor(object):
             inc_storage_position=self.inc_storage_processor,
             delete_message=self.delete_message_processor,
             drop_user=self.drop_user_processor,
+            migrate_user=self.migrate_user_proocessor,
         )  # type: Dict[str, ProcessorCommand]
 
     def process_message(self, input):
@@ -419,3 +433,22 @@ class DropUserCommand(ProcessorCommand):
         # type: (DropUser) -> DropUserResponse
         self.db.router.drop_user(command.uaid.hex)
         return DropUserResponse()
+
+
+class MigrateUserCommand(ProcessorCommand):
+    def process(self, command):
+        # type: (MigrateUser) -> MigrateUserResponse
+        # Get the current channels for this month
+        message = self.db.message_tables[command.message_month]
+        _, channels = message.all_channels(command.uaid.hex)
+
+        # Get the current message month
+        cur_month = self.db.current_msg_month
+        if channels:
+            # Save the current channels into this months message table
+            msg_table = self.db.message_tables[cur_month]
+            msg_table.save_channels(command.uaid.hex, channels)
+
+        # Finally, update the route message month
+        self.db.router.update_message_month(command.uaid.hex, cur_month)
+        return MigrateUserResponse(message_month=cur_month)

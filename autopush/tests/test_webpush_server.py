@@ -2,7 +2,7 @@ import random
 import time
 import unittest
 from threading import Event
-from uuid import uuid4
+from uuid import uuid4, UUID
 
 import factory
 from boto.dynamodb2.exceptions import ItemNotFound
@@ -25,6 +25,7 @@ from autopush.webpush_server import (
     Hello,
     HelloResponse,
     IncStoragePosition,
+    MigrateUser,
 )
 
 
@@ -111,16 +112,21 @@ class BaseSetup(unittest.TestCase):
         db.setup_tables()
 
     def _store_messages(self, uaid, topic=False, num=5):
+        try:
+            item = self.db.router.get_uaid(uaid.hex)
+            message_table = self.db.message_tables[item["current_month"]]
+        except ItemNotFound:
+            message_table = self.db.message
         messages = [WebPushNotificationFactory(uaid=uaid)
                     for _ in range(num)]
         channels = set([m.channel_id for m in messages])
         for channel in channels:
-            self.db.message.register_channel(uaid.hex, channel.hex)
+            message_table.register_channel(uaid.hex, channel.hex)
         for idx, notif in enumerate(messages):
             if topic:
                 notif.topic = "something_{}".format(idx)
             notif.generate_message_id(self.conf.fernet)
-            self.db.message.store_message(notif)
+            message_table.store_message(notif)
         return messages
 
 
@@ -345,3 +351,41 @@ class TestDropUserProcessor(BaseSetup):
         # Verify its gone
         with assert_raises(ItemNotFound):
             self.db.router.get_uaid(uaid)
+
+
+
+class TestMigrateUserProcessor(BaseSetup):
+    def _makeFUT(self):
+        from autopush.webpush_server import MigrateUserCommand
+        return MigrateUserCommand(self.conf, self.db)
+
+    def test_migrate_user(self):
+        migrate_command = self._makeFUT()
+
+        # Create a user
+        last_month = make_rotating_tablename("message", delta=-1)
+        user = UserItemFactory(current_month=last_month)
+        uaid = user["uaid"]
+        self.db.router.register_user(user)
+
+        # Store some messages so we have some channels
+        self._store_messages(UUID(uaid), num=3)
+
+        # Check that its there
+        item = self.db.router.get_uaid(uaid)
+        _, channels = self.db.message_tables[last_month].all_channels(uaid)
+        ok_(item["current_month"] != self.db.current_msg_month)
+        ok_(item is not None)
+        eq_(len(channels), 3)
+
+        # Migrate it
+        migrate_command.process(
+            MigrateUser(uaid=uaid, message_month=last_month)
+        )
+
+        # Check that its in the new spot
+        item = self.db.router.get_uaid(uaid)
+        _, channels = self.db.message.all_channels(uaid)
+        eq_(item["current_month"], self.db.current_msg_month)
+        ok_(item is not None)
+        eq_(len(channels), 3)
