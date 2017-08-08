@@ -11,15 +11,18 @@ from attr import (
     attrib,
 )
 from boto.dynamodb2.exceptions import ItemNotFound
+from boto.exception import JSONResponseError
 from typing import Dict, List, Optional  # noqa
 from twisted.logger import Logger
 
 from autopush.db import (  # noqa
     DatabaseManager,
     has_connected_this_month,
+    hasher,
     generate_last_connect,
 )
 from autopush.config import AutopushConfig  # noqa
+from autopush.metrics import IMetrics  # noqa
 from autopush.types import JSONDict  # noqa
 from autopush.utils import WebPushNotification
 from autopush.websocket import USER_RECORD_VERSION
@@ -183,7 +186,7 @@ class MigrateUserResponse(InputCommand):
 ###############################################################################
 class WebPushServer(object):
     def __init__(self, conf, db):
-        # type: (AutopushConfig) -> WebPushServer
+        # type: (AutopushConfig, DatabaseManager) -> WebPushServer
         self.conf = conf
         self.db = db
         self.db.setup_tables()
@@ -283,9 +286,14 @@ class CommandProcessor(object):
 class ProcessorCommand(object):
     """Parent class for processor commands"""
     def __init__(self, conf, db):
-        # type: (AutopushConfig, DatabaseManager) -> CheckStorageCommand
+        # type: (AutopushConfig, DatabaseManager) -> None
         self.conf = conf
         self.db = db
+
+    @property
+    def metrics(self):
+        # type: () -> IMetrics
+        return self.db.metrics
 
     def process(self, command):
         raise NotImplementedError()
@@ -452,3 +460,115 @@ class MigrateUserCommand(ProcessorCommand):
         # Finally, update the route message month
         self.db.router.update_message_month(command.uaid.hex, cur_month)
         return MigrateUserResponse(message_month=cur_month)
+
+
+def _validate_chid(chid):
+    # type: (str) -> Tuple[bool, Optional[str]]
+    """Ensure valid channel id format for register/unregister"""
+    try:
+        result = UUID(chid)
+    except ValueError:
+        return False, "Invalid UUID specified"
+    if chid != str(result):
+        return False, "Bad UUID format, use lower case, dashed format"
+    return True, None
+
+
+@attrs(slots=True)
+class Register(InputCommand):
+    channel_id = attrib()  # type: str
+    uaid = attrib(convert=uaid_from_str)  # type: Optional[UUID]
+    message_month = attrib()  # type: str
+    key = attrib(default=None)  # type: str
+
+
+@attrs(slots=True)
+class RegisterResponse(OutputCommand):
+    endpoint = attrib()  # type: str
+
+
+@attrs(slots=True)
+class RegisterErrorResponse(OutputCommand):
+    error_msg = attrib()  # type: str
+    error = attrib(default=True)  # type: bool
+    status = attrib(default=401)  # type: int
+
+
+class RegisterCommand(ProcessorCommand):
+
+    def process(self, command):
+        # type: (Register) -> Union[RegisterResponse, RegisterErrorResponse]
+        valid, msg = _validate_chid(command.channel_id)
+        if not valid:
+            return RegisterErrorResponse(error_msg=msg)
+        # XXX: pauseProducing
+
+        endpoint = self.conf.make_endpoint(
+            command.uaid.hex,
+            command.channel_id,
+            command.key
+        )
+        message = self.db.message_tables[command.message_month]
+        try:
+            message.register_channel(command.uaid.hex, command.channel_id)
+        except JSONResponseError:
+            return RegisterErrorResponse(error_msg="overloaded", status=503)
+        # XXX: resumeProducing
+
+        self.metrics.increment('ua.command.register')
+        # XXX: user/raw_agent?
+        log.info(
+            "Register",
+            channel_id=command.channel_id,
+            endpoint=endpoint,
+            uaid_hash=hasher(command.uaid.hex),
+        )
+        return RegisterResponse(endpoint=endpoint)
+
+
+@attrs(slots=True)
+class Unregister(InputCommand):
+    channel_id = attrib()  # type: str
+    uaid = attrib(convert=uaid_from_str)  # type: Optional[UUID]
+    message_month = attrib()  # type: str
+    code = attrib(default=None)  # type: str
+
+
+@attrs(slots=True)
+class UnregisterResponse(OutputCommand):
+    success = attrib(default=True)  # type: bool
+
+
+@attrs(slots=True)
+class UnregisterErrorResponse(OutputCommand):
+    error_msg = attrib()  # type: str
+    error = attrib(default=True)  # type: bool
+    status = attrib(default=401)  # type: int
+
+
+class UnregisterCommand(ProcessorCommand):
+
+    def process(self,
+                command  # type: Unregister
+                ):
+        # type: (...) -> Union[UnregisterResponse, UnregisterErrorResponse]
+        valid, msg = _validate_chid(command.channel_id)
+        if not valid:
+            return UnregisterErrorResponse(error_msg=msg)
+
+        message = self.db.message_tables[command.message_month]
+        # XXX: JSONResponseError not handled (no force_retry)
+        message.unregister_channel(command.uaid.hex, command.channel_id)
+
+        # XXX: Clear out any existing tracked messages for this
+        # channel
+
+        self.metrics.increment('ua.command.unregister')
+        # XXX: user/raw_agent?
+        log.info(
+            "Unregister",
+            channel_id=command.channel_id,
+            uaid_hash=hasher(command.uaid.hex),
+            **dict(code=command.code) if command.code else {}
+        )
+        return UnregisterResponse()

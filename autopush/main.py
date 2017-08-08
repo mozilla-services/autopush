@@ -290,7 +290,6 @@ class ConnectionApplication(AutopushMultiService):
         )
 
 
-
 class RustConnectionApplication(AutopushMultiService):
     """The autopush application"""
 

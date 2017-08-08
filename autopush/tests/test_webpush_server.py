@@ -6,8 +6,10 @@ from uuid import uuid4, UUID
 
 import factory
 from boto.dynamodb2.exceptions import ItemNotFound
+from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from mock import Mock
 from nose.tools import assert_raises, ok_, eq_
+from twisted.logger import globalLogPublisher
 
 from autopush.db import (
     DatabaseManager,
@@ -16,6 +18,8 @@ from autopush.db import (
 )
 from autopush.metrics import SinkMetrics
 from autopush.config import AutopushConfig
+from autopush.logging import begin_or_register
+from autopush.tests.support import TestingLogObserver
 from autopush.utils import WebPushNotification
 from autopush.websocket import USER_RECORD_VERSION
 from autopush.webpush_server import (
@@ -26,6 +30,8 @@ from autopush.webpush_server import (
     HelloResponse,
     IncStoragePosition,
     MigrateUser,
+    Register,
+    Unregister
 )
 
 
@@ -107,6 +113,11 @@ class BaseSetup(unittest.TestCase):
             close_handshake_timeout=10,
             max_connections=2000000,
         )
+
+        self.logs = TestingLogObserver()
+        begin_or_register(self.logs)
+        self.addCleanup(globalLogPublisher.removeObserver, self.logs)
+
         self.db = db = DatabaseManager.from_config(self.conf)
         self.metrics = db.metrics = Mock(spec=SinkMetrics)
         db.setup_tables()
@@ -353,7 +364,6 @@ class TestDropUserProcessor(BaseSetup):
             self.db.router.get_uaid(uaid)
 
 
-
 class TestMigrateUserProcessor(BaseSetup):
     def _makeFUT(self):
         from autopush.webpush_server import MigrateUserCommand
@@ -389,3 +399,86 @@ class TestMigrateUserProcessor(BaseSetup):
         eq_(item["current_month"], self.db.current_msg_month)
         ok_(item is not None)
         eq_(len(channels), 3)
+
+
+class TestRegisterProcessor(BaseSetup):
+
+    def _makeFUT(self):
+        from autopush.webpush_server import RegisterCommand
+        return RegisterCommand(self.conf, self.db)
+
+    def test_register(self):
+        cmd = self._makeFUT()
+        chid = str(uuid4())
+        result = cmd.process(Register(
+            uaid=uuid4().hex,
+            channel_id=chid,
+            message_month=self.db.current_msg_month)
+        )
+        ok_(result.endpoint)
+        ok_(self.metrics.increment.called)
+        eq_(self.metrics.increment.call_args[0][0], 'ua.command.register')
+        ok_(self.logs.logged(
+            lambda e: (e['log_format'] == "Register" and
+                       e['channel_id'] == chid and
+                       e['endpoint'] == result.endpoint)
+        ))
+
+    def _test_invalid(self, chid, msg="use lower case, dashed format",
+                      status=401):
+        cmd = self._makeFUT()
+        result = cmd.process(Register(
+            uaid=uuid4().hex,
+            channel_id=chid,
+            message_month=self.db.current_msg_month)
+        )
+        ok_(result.error)
+        ok_(msg in result.error_msg)
+        eq_(status, result.status)
+
+    def test_register_bad_chid(self):
+        self._test_invalid("oof", "Invalid UUID")
+
+    def test_register_bad_chid_upper(self):
+        self._test_invalid(str(uuid4()).upper())
+
+    def test_register_bad_chid_nodash(self):
+        self._test_invalid(uuid4().hex)
+
+    def test_register_over_provisioning(self):
+        self.db.message.register_channel = Mock(
+            side_effect=ProvisionedThroughputExceededException(None, None))
+        self._test_invalid(str(uuid4()), "overloaded", 503)
+
+
+class TestUnregisterProcessor(BaseSetup):
+
+    def _makeFUT(self):
+        from autopush.webpush_server import UnregisterCommand
+        return UnregisterCommand(self.conf, self.db)
+
+    def test_unregister(self):
+        cmd = self._makeFUT()
+        chid = str(uuid4())
+        result = cmd.process(Unregister(
+            uaid=uuid4().hex,
+            channel_id=chid,
+            message_month=self.db.current_msg_month)
+        )
+        ok_(result.success)
+        ok_(self.metrics.increment.called)
+        eq_(self.metrics.increment.call_args[0][0], 'ua.command.unregister')
+        ok_(self.logs.logged(
+            lambda e: (e['log_format'] == "Unregister" and
+                       e['channel_id'] == chid)
+        ))
+
+    def test_unregister_bad_chid(self):
+        cmd = self._makeFUT()
+        result = cmd.process(Unregister(
+            uaid=uuid4().hex,
+            channel_id="quux",
+            message_month=self.db.current_msg_month)
+        )
+        ok_(result.error)
+        ok_("Invalid UUID" in result.error_msg)
