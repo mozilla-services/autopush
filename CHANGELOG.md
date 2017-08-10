@@ -1,3 +1,28 @@
+<a name="1.35.0"></a>
+## 1.35.0 (2017-08-10)
+
+
+#### Features
+
+*   remove use of moto dynamodb2 from tests ([6efb3669](https://github.com/mozilla-services/autopush/commit/6efb366911ae55f913abe88ef06dbb34d1a3a389))
+
+#### Refactor
+
+*   settings -> conf ([24c0ec85](https://github.com/mozilla-services/autopush/commit/24c0ec85411028ef2e03efc22474c7b71cc1d6b3))
+*   ap_settings -> conf ([e53a2ed7](https://github.com/mozilla-services/autopush/commit/e53a2ed7ced4ee5118ae9d40d46e565c6f82fe70))
+*   .conf -> .router_conf ([fe2259ba](https://github.com/mozilla-services/autopush/commit/fe2259bab488d3bb403070800ee3bdeeec1097a1))
+*   *from_settings -> from_config ([db44b4ab](https://github.com/mozilla-services/autopush/commit/db44b4ab95a56e575f2a6405cb2bd7b5971b26e8))
+*   autopush.settings -> autopush.config ([4707e57e](https://github.com/mozilla-services/autopush/commit/4707e57ee538f9e11e720030e4cba9e69d67a7a3))
+*   AutopushSettings -> AutopushConfig ([7ef7d732](https://github.com/mozilla-services/autopush/commit/7ef7d732f8f80e46a3a9e0fa7f2f9a8f973cec60))
+*   postpone any db table creation/lookup into db.setup() ([a75aec9a](https://github.com/mozilla-services/autopush/commit/a75aec9aa58b1d008f42e2b6bae20afb18e8ece2), closes [#956](https://github.com/mozilla-services/autopush/issues/956), [#928](https://github.com/mozilla-services/autopush/issues/928))
+
+#### Bug Fixes
+
+*   actually defer this requests.post call ([3cc67546](https://github.com/mozilla-services/autopush/commit/3cc6754648c465838905496670457a8e8a2af5c6), closes [#877](https://github.com/mozilla-services/autopush/issues/877))
+*   hasher doesn't take UUIDs ([69b91de5](https://github.com/mozilla-services/autopush/commit/69b91de5aaab4ba40abb8266406e2cb7e2659269), closes [#984](https://github.com/mozilla-services/autopush/issues/984))
+
+
+
 <a name="1.34.0"></a>
 ## 1.34.0 (2017-07-26)
 
