@@ -477,6 +477,9 @@ class WebPushHandler(BaseWebHandler):
         encoding = ''
         if notification.data and notification.headers:
             encoding = notification.headers.get('encoding', '')
+            self.metrics.increment(
+                "updates.notification.encoding.{}".format(encoding)
+            )
         self._client_info.update(
             message_id=notification.message_id,
             uaid_hash=hasher(user_data.get("uaid")),
