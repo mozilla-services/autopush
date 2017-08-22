@@ -158,7 +158,7 @@ class EndpointHTTPFactory(BaseHTTPFactory):
                  routers,      # type: Dict[str, IRouter]
                  **kwargs):
         # type: (...) -> None
-        if conf.enable_simplepush:
+        if not conf.disable_simplepush:
             self.ap_handlers += (
                 (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
                  SimplePushHandler),

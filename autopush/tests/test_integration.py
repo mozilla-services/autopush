@@ -116,12 +116,12 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         self.ws.send(msg)
         result = json.loads(self.ws.recv())
         log.debug("Recv: %s", result)
+        eq_(result["status"], 200)
         if self.uaid and self.uaid != result["uaid"]:  # pragma: nocover
             log.debug("Mismatch on re-using uaid. Old: %s, New: %s",
                       self.uaid, result["uaid"])
             self.channels = {}
         self.uaid = result["uaid"]
-        eq_(result["status"], 200)
         return result
 
     def register(self, chid=None, key=None):
@@ -309,7 +309,7 @@ class IntegrationBase(unittest.TestCase):
         storage_table=dict(tablename=STORAGE_TABLE),
         message_table=dict(tablename=MESSAGE_TABLE),
         use_cryptography=True,
-        enable_simplepush=True,
+        disable_simplepush=False,
     )
 
     _conn_defaults = dict(
@@ -323,7 +323,7 @@ class IntegrationBase(unittest.TestCase):
         storage_table=dict(tablename=STORAGE_TABLE),
         message_table=dict(tablename=MESSAGE_TABLE),
         use_cryptography=True,
-        enable_simplepush=True,
+        disable_simplepush=False,
     )
 
     def setUp(self):

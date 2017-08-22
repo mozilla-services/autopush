@@ -51,7 +51,7 @@ class MessageTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
             crypto_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-            enable_simplepush=True,
+            disable_simplepush=False,
         )
         db = test_db()
         self.message_mock = db.message = Mock(spec=Message)
@@ -139,7 +139,7 @@ class RegistrationTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
             bear_hash_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
-            enable_simplepush=True,
+            disable_simplepush=False,
         )
         self.fernet_mock = conf.fernet = Mock(spec=Fernet)
 
@@ -187,6 +187,11 @@ class RegistrationTestCase(unittest.TestCase):
         # previously failed
         tags = self.reg.base_tags()
         eq_(tags, ['user_agent:test', 'host:example.com:8080'])
+
+    def test_disable_simplepush(self):
+        self.conf.disable_simplepush = True
+        routers = routers_from_config(self.conf, self.db, Mock())
+        ok_("simplepush" not in routers)
 
     def _check_error(self, resp, code, errno, error, message=None):
         d = json.loads(resp.content)

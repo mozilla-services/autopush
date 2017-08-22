@@ -175,7 +175,7 @@ class AutopushConfig(object):
     # Use the cryptography library
     use_cryptography = attrib(default=False)  # type: bool
     # Allow Simplepush Protocol (deprecated)
-    enable_simplepush = attrib(default=False)  # type: bool
+    disable_simplepush = attrib(default=False)  # type: bool
 
     def __attrs_post_init__(self):
         """Initialize the Settings object"""
@@ -314,7 +314,7 @@ class AutopushConfig(object):
             connect_timeout=ns.connection_timeout,
             memusage_port=ns.memusage_port,
             use_cryptography=ns.use_cryptography,
-            enable_simplepush=ns.enable_simplepush,
+            disable_simplepush=ns.disable_simplepush,
             router_table=dict(
                 tablename=ns.router_tablename,
                 read_throughput=ns.router_read_throughput,

@@ -265,7 +265,7 @@ class EndpointMainTestCase(unittest.TestCase):
 
         proxy_protocol_port = None
         memusage_port = None
-        enable_simplepush = False
+        disable_simplepush = True
         use_cryptography = False
 
     def setUp(self):
