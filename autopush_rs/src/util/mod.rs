@@ -1,8 +1,12 @@
 //! Various small utilities accumulated over time for the WebPush server
 
 use std::time::Duration;
+use std::sync::atomic::{ATOMIC_BOOL_INIT, AtomicBool, Ordering};
 
+use env_logger;
 use futures::future::{Either, Future, IntoFuture};
+use log::LogRecord;
+use serde_json;
 use tokio_core::reactor::{Handle, Timeout};
 
 use errors::*;
@@ -36,4 +40,46 @@ pub fn timeout<F>(f: F, dur: Option<Duration>, handle: &Handle) -> MyFuture<F::I
             Err(Either::B((e, _item))) => Err(e.into()),
         }
     }))
+}
+
+static LOG_JSON: AtomicBool = ATOMIC_BOOL_INIT;
+
+pub fn init_logging(json: bool) {
+    // We only initialize once, so ignore initialization errors related to
+    // calling this function twice.
+    let mut builder = env_logger::LogBuilder::new();
+    builder.target(env_logger::LogTarget::Stdout)
+        .format(maybe_json_record);
+
+    if builder.init().is_ok() {
+        LOG_JSON.store(json, Ordering::SeqCst);
+    }
+}
+
+fn maybe_json_record(record: &LogRecord) -> String {
+    #[derive(Serialize)]
+    struct Message<'a> {
+        msg: String,
+        level: String,
+        target: &'a str,
+        module: &'a str,
+        file: &'a str,
+        line: u32,
+    }
+
+    if LOG_JSON.load(Ordering::SeqCst) {
+        serde_json::to_string(&Message {
+            msg: record.args().to_string(),
+            level: record.level().to_string(),
+            target: record.target(),
+            module: record.location().module_path(),
+            file: record.location().file(),
+            line: record.location().line(),
+        }).unwrap()
+    } else {
+        format!("{}:{}: {}",
+                record.level(),
+                record.location().module_path(),
+                record.args())
+    }
 }

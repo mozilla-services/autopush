@@ -60,10 +60,13 @@
 //!
 //! Otherwise be sure to check out each module for more documentation!
 
+extern crate env_logger;
 #[macro_use]
 extern crate futures;
 extern crate hyper;
 extern crate libc;
+#[macro_use]
+extern crate log;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;

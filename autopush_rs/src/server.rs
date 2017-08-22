@@ -26,7 +26,7 @@ use errors::*;
 use protocol::{ClientMessage, ServerMessage, Notification};
 use queue::{self, AutopushQueue};
 use rt::{self, AutopushError, UnwindGuard};
-use util::{RcObject, timeout};
+use util::{self, RcObject, timeout};
 
 #[repr(C)]
 pub struct AutopushServer {
@@ -53,6 +53,7 @@ pub struct AutopushServerOptions {
     pub auto_ping_timeout: f64,
     pub max_connections: u32,
     pub close_handshake_timeout: u32,
+    pub json_logging: i32,
 }
 
 pub struct Server {
@@ -114,6 +115,8 @@ pub extern "C" fn autopush_server_new(opts: *const AutopushServerOptions,
 
     rt::catch(err, || unsafe {
         let opts = &*opts;
+
+        util::init_logging(opts.json_logging != 0);
 
         let opts = ServerOptions {
             debug: opts.debug != 0,
@@ -237,7 +240,7 @@ impl Server {
                     Ok(())
                 });
                 core.handle().spawn(push_srv.then(|res| {
-                    println!("Http server {:?}", res);
+                    info!("Http server {:?}", res);
                     Ok(())
                 }));
             }
@@ -281,8 +284,8 @@ impl Server {
                 // websocket handshake.
                 let max = srv.opts.max_connections.unwrap_or(u32::max_value());
                 if srv.open_connections.get() >= max {
-                    println!("dropping {} as we already have too many open \
-                              connections", addr);
+                    info!("dropping {} as we already have too many open \
+                           connections", addr);
                     return Ok(())
                 }
                 srv.open_connections.set(srv.open_connections.get() + 1);
@@ -307,11 +310,12 @@ impl Server {
                 handle.spawn(client.then(move |res| {
                     srv.open_connections.set(srv.open_connections.get() - 1);
                     if let Err(e) = res {
-                        // TODO: log this? ignore this? unsure.
-                        println!("{}: {}", addr, e);
+                        let mut error = e.to_string();
                         for err in e.iter().skip(1) {
-                            println!("\t{}", err);
+                            error.push_str("\n");
+                            error.push_str(&err.to_string());
                         }
+                        error!("{}: {}", addr, error);
                     }
                     Ok(())
                 }));
@@ -320,7 +324,7 @@ impl Server {
             });
 
         core.handle().spawn(ws_srv.then(|res| {
-            println!("srv res: {:?}", res.map(drop));
+            debug!("srv res: {:?}", res.map(drop));
             Ok(())
         }));
 
