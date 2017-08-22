@@ -291,7 +291,7 @@ impl Server {
 
                 // Perform the websocket handshake on each connection, but don't let
                 // it take too long.
-                let ws = accept_async(socket).chain_err(|| "failed to accept client");
+                let ws = accept_async(socket, None).chain_err(|| "failed to accept client");
                 let ws = timeout(ws, srv.opts.open_handshake_timeout, &handle);
 
                 // Once the handshake is done we'll start the main communication

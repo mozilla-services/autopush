@@ -17,8 +17,8 @@ serde_json = "1.0"
 time = "0.1"
 tokio-core = "0.1"
 tokio-service = "0.1"
-tokio-tungstenite = { git = 'https://github.com/alexcrichton/tokio-tungstenite', branch = 'upgrade' }
-tungstenite = { git = 'https://github.com/snapview/tungstenite-rs' }
+tokio-tungstenite = "0.3"
+tungstenite = "0.4"
 uuid = { version = "0.5", features = ["serde", "v4"] }
 
 [profile.release]
