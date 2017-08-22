@@ -28,7 +28,7 @@ def routers_from_config(conf, db, agent):
     routers = dict(
         webpush=WebPushRouter(conf, None, db, agent)
     )
-    if conf.enable_simplepush:
+    if not conf.disable_simplepush:
         routers['simplepush'] = SimpleRouter(
             conf, router_conf.get("simplepush"), db, agent)
     if 'apns' in router_conf:

@@ -856,6 +856,16 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(msg["reason"], "already_connected")
 
     @inlineCallbacks
+    def test_hello_no_simplepush(self):
+        state = self.conf.disable_simplepush
+        self.conf.disable_simplepush = True
+        self._connect()
+        self._send_message(dict(messageType="hello", channelIDs=[]))
+        msg = yield self.get_response()
+        eq_(msg["status"], 401)
+        self.conf.disable_simplepush = state
+
+    @inlineCallbacks
     def test_hello_dupe(self):
         self._connect()
         self._send_message(dict(messageType="hello", channelIDs=[]))

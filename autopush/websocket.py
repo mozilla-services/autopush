@@ -735,8 +735,13 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if self.ps.uaid:
             return self.returnError("hello", "duplicate hello", 401)
 
-        conn_type = "webpush" if data.get("use_webpush", False) else \
-            "simplepush"
+        if data.get("use_webpush", False):
+            conn_type = "webpush"
+        else:
+            if self.conf.disable_simplepush:
+                return self.returnError("hello", "Simplepush not supported",
+                                        401)
+            conn_type = "simplepush"
         self.ps.set_connection_type(conn_type)
 
         uaid = data.get("uaid")
