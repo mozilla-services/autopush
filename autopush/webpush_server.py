@@ -185,20 +185,28 @@ class MigrateUserResponse(InputCommand):
 # Main push server class
 ###############################################################################
 class WebPushServer(object):
-    def __init__(self, conf, db):
+    def __init__(self, conf, db, num_threads=10):
         # type: (AutopushConfig, DatabaseManager) -> WebPushServer
         self.conf = conf
         self.db = db
         self.db.setup_tables()
+        self.num_threads = num_threads
         self.metrics = self.db.metrics
         self.incoming = AutopushQueue()
         self.workers = []  # type: List[Thread]
         self.command_processor = CommandProcessor(conf, self.db)
         self.rust = AutopushServer(conf, self.incoming)
+        self.running = False
 
-    def start(self, num_threads=10):
+    def run(self):
+        self.start()
+        for worker in self.workers:
+            worker.join()
+
+    def start(self):
         # type: (int) -> None
-        for _ in range(num_threads):
+        self.running = True
+        for _ in range(self.num_threads):
             self.workers.append(
                 self._create_thread_worker(
                     processor=self.command_processor,
@@ -206,18 +214,15 @@ class WebPushServer(object):
                 )
             )
         self.rust.startService()
-        atexit.register(self.stop)
 
     def stop(self):
+        self.running = False
         self.rust.stopService()
-
-        while self.workers:
-            self.workers.pop().join()
 
     def _create_thread_worker(self, processor, input_queue):
         # type: (CommandProcessor, AutopushQueue) -> Thread
         def _thread_worker():
-            while True:
+            while self.running:
                 call = input_queue.recv()
                 try:
                     if call is None:
@@ -226,6 +231,9 @@ class WebPushServer(object):
                     result = processor.process_message(command)
                     call.complete(result)
                 except Exception as exc:
+                    # XXX:
+                    import traceback
+                    traceback.print_exc()
                     log.error("Exception in worker queue thread")
                     call.complete(dict(
                         error=True,
@@ -235,7 +243,6 @@ class WebPushServer(object):
 
     def spawn(self, func, *args, **kwargs):
         t = Thread(target=func, args=args, kwargs=kwargs)
-        t.daemon = True
         t.start()
         return t
 
@@ -251,6 +258,8 @@ class CommandProcessor(object):
         self.delete_message_processor = DeleteMessageCommand(conf, db)
         self.drop_user_processor = DropUserCommand(conf, db)
         self.migrate_user_proocessor = MigrateUserCommand(conf, db)
+        self.register_process = RegisterCommand(conf, db)
+        self.unregister_process = UnregisterCommand(conf, db)
         self.deserialize = dict(
             hello=Hello,
             check_storage=CheckStorage,
@@ -258,6 +267,8 @@ class CommandProcessor(object):
             delete_message=DeleteMessage,
             drop_user=DropUser,
             migrate_user=MigrateUser,
+            register=Register,
+            unregister=Unregister,
         )
         self.command_dict = dict(
             hello=self.hello_processor,
@@ -266,6 +277,8 @@ class CommandProcessor(object):
             delete_message=self.delete_message_processor,
             drop_user=self.drop_user_processor,
             migrate_user=self.migrate_user_proocessor,
+            register=self.register_process,
+            unregister=self.unregister_process,
         )  # type: Dict[str, ProcessorCommand]
 
     def process_message(self, input):
@@ -273,12 +286,13 @@ class CommandProcessor(object):
         """Process incoming message from the Rust server"""
         command = input.pop("command", None)  # type: str
         if command not in self.command_dict:
-            log.critical("No command present: %s", command)
+            log.critical("No command present: %s" % command)
             return dict(
                 error=True,
                 error_msg="Command not found",
             )
-
+        from pprint import pformat
+        log.info('command: %r %r' % (pformat(command), input))
         command_obj = self.deserialize[command](**input)
         return attr.asdict(self.command_dict[command].process(command_obj))
 

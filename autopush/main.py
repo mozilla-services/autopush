@@ -314,10 +314,17 @@ class RustConnectionApplication(AutopushMultiService):
         if self.conf.memusage_port:
             self.add_memusage()
 
-        self.push_server = WebPushServer(self.conf, self.db)
+        self.push_server = WebPushServer(self.conf, self.db, num_threads=10)
 
     def run(self):
-        self.push_server.start(num_threads=10)
+        try:
+            self.push_server.run()
+        finally:
+            self.stopService()
+
+    @inlineCallbacks
+    def stopService(self):
+        yield super(RustConnectionApplication, self).stopService()
 
     @classmethod
     def from_argparse(cls, ns):
