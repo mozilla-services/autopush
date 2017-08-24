@@ -1,44 +1,94 @@
 //! Managment of connected clients to a WebPush server
 //!
 //! This module is a pretty heavy work in progress. The intention is that
-//! this'll house all the various state machine transitions and state managment
+//! this'll house all the various state machine transitions and state management
 //! of connected clients. Note that it's expected there'll be a lot of connected
 //! clients, so this may appears relatively heavily optimized!
 
+use std::io;
 use std::marker;
 use std::rc::Rc;
 
 use futures::future::{result, err, loop_fn, Loop, ok, Either};
 use futures::sync::mpsc;
 use futures::{Stream, Sink, Future, Poll, Async};
+use tokio_core::reactor::{Timeout};
 use time;
 use uuid::Uuid;
 
+use call;
 use errors::*;
 use protocol::{ClientMessage, ServerMessage, Notification};
 use server::Server;
 use util::timeout;
 
-pub struct Client<T> {
-    inner: MyFuture<()>,
-    _marker: marker::PhantomData<T>,
-}
-
-pub struct ClientState {
+pub struct RegisteredClient {
     pub uaid: Uuid,
-    pub channel_ids: Vec<Uuid>,
     pub tx: mpsc::UnboundedSender<Notification>,
 }
 
-pub struct Channel {
-    pub uaid: Uuid,
-    pub current_version: u64,
+// Represents a websocket client connection that may or may not be authenticated
+pub struct Client<T> {
+    webpush: Option<WebPushClient>,
+    state: ClientState,
+    srv: Rc<Server>,
+    ws: T,
+}
+
+// Represent the state for a valid WebPush client that is authenticated
+pub struct WebPushClient {
+    uaid: Uuid,
+    rx: mpsc::UnboundedReceiver<Notification>,
+    flags: ClientFlags,
+}
+
+pub struct ClientFlags {
+    include_topic: bool,
+    increment_storage: bool,
+    check: bool,
+    reset_uaid: bool,
+    rotate_message_table: bool,
+}
+
+impl ClientFlags {
+    fn new() -> ClientFlags {
+        ClientFlags {
+            include_topic: false,
+            increment_storage: false,
+            check: false,
+            reset_uaid: false,
+            rotate_message_table: false,
+        }
+    }
+
+    pub fn none(&self) -> bool {
+        // Indicate if none of the flags are true.
+        match *self {
+            ClientFlags {
+                include_topic: false,
+                increment_storage: false,
+                check: false,
+                reset_uaid: false,
+                rotate_message_table: false,
+            } => true,
+            _ => false,
+        }
+    }
+}
+
+pub enum ClientState {
+    WaitingForHello(Timeout),
+    WaitingForProcessHello(MyFuture<call::HelloResponse>),
+    FinishSend(Option<Box<ClientState>>),
+    Await,
+    Done,
 }
 
 impl<T> Client<T>
-    where T: Stream<Item = ClientMessage, Error = Error> +
-             Sink<SinkItem = ServerMessage, SinkError = Error> +
-             'static,
+where
+    T: Stream<Item = ClientMessage, Error = Error>
+        + Sink<SinkItem = ServerMessage, SinkError = Error>
+        + 'static,
 {
     /// Spins up a new client communicating over the websocket `ws` specified.
     ///
@@ -51,173 +101,121 @@ impl<T> Client<T>
     /// various configuration options of the server as well as the ability to
     /// call back into Python.
     pub fn new(ws: T, srv: &Rc<Server>) -> Client<T> {
-        let client = Client::handshake(ws, srv);
-        // TODO: is this the right thing to time out?
-        let client = timeout(client, srv.opts.open_handshake_timeout, &srv.handle);
-
         let srv = srv.clone();
-        let work  = client.and_then(move |(ws, client, rx)| {
-            let uaid = client.uaid;
-            Client::process(client, ws, srv.clone(), rx).then(move |res| {
-                srv.disconnet_client(&uaid);
-                return res
-            })
-        });
-
+        let mut timeout = Timeout::new(
+            srv.opts.open_handshake_timeout.unwrap(), &srv.handle)
+            .unwrap();
         Client {
-            inner: Box::new(work),
-            _marker: marker::PhantomData,
+            state: ClientState::WaitingForHello(timeout),
+            webpush: None,
+            srv: srv.clone(),
+            ws: ws,
         }
     }
 
-    /// Performs the WebPush handshake for a client, resolving only when that's
-    /// completed.
-    ///
-    /// This'll wait for the `Hello` message from the client and then do all
-    /// relevant processing on the server for that `Hello` message and respond.
-    /// After this happens no more `Hello` messages should either be sent or
-    /// received.
-    fn handshake(ws: T, srv: &Rc<Server>)
-        -> MyFuture<(T, ClientState, mpsc::UnboundedReceiver<Notification>)>
-    {
-        let srv = srv.clone();
-        Box::new(ws.into_future().then(move |res| {
-            let (msg, ws) = match res {
-                Ok(pair) => pair,
-                Err((e, _rx)) => {
-                    return Err(e).chain_err(|| "recv error")
+    fn transition(&mut self) -> Poll<ClientState, Error> {
+        let next_state = match self.state {
+            ClientState::WaitingForHello(ref mut timeout) => {
+                match try_ready!(input_with_timeout(&mut self.ws, timeout)) {
+                    ClientMessage::Hello {
+                        uaid: uaid,
+                        use_webpush: Some(true),
+                        ..
+                    } => {
+                        ClientState::WaitingForProcessHello(
+                             self.srv.hello(
+                                 &time::now(),
+                                 uaid.as_ref(),
+                             )
+                        )
+                    },
+                    _ => return Err("Invalid message, must be hello".into())
                 }
-            };
-            let msg = match msg {
-                Some(msg) => msg,
-                None => return Err("terminated before handshake".into()),
-            };
-
-            match msg {
-                ClientMessage::Hello { uaid, channel_ids, use_webpush: Some(true) } => {
-                    drop(channel_ids); // just ignore what the client says here
-                    Ok((ws, uaid))
-                }
-                ClientMessage::Hello { .. } => {
-                    Err("use-webpush must be true".into())
-                }
-                _ => Err("non-hello message before handshake".into()),
-            }
-        }).and_then(move |(ws, uaid)| {
-            let now = time::now();
-            srv.hello(&now, uaid.as_ref()).map(move |response| {
-                (ws, uaid, response)
-            })
-        }).and_then(|(ws, uaid, response)| -> MyFuture<_> {
-            // If we get back a `None` uaid then the client had prior
-            // invalid data that we just wiped, so they need to try
-            // connecting again.
-            let response_uaid = match response.uaid {
-                Some(uuid) => uuid,
-                None => return Box::new(err("client needs to reconnect".into())),
-            };
-            let mut enter_check_storage_state = false;
-            if uaid == response.uaid {
-                enter_check_storage_state = true;
-            } else {
-                debug_assert!(!response.reset_uaid);
-                debug_assert!(!response.rotate_message_table);
-            }
-            let msg = ServerMessage::Hello {
-                uaid: response_uaid,
-                status: 200,
-                use_webpush: Some(true),
-            };
-            Box::new(ws.send(msg).map(move |ws| {
-                (ws, response, enter_check_storage_state)
-            }))
-        }).map(|(ws, response, enter_check_storage_state)| {
-            if enter_check_storage_state {
-                panic!("unimplemented!")
-            }
-            let (tx, rx) = mpsc::unbounded();
-            let client = ClientState {
-                uaid: response.uaid.unwrap(),
-                channel_ids: Vec::new(),
-                tx: tx,
-            };
-            (ws, client, rx)
-        }))
-    }
-
-    fn process(state: ClientState,
-               ws: T,
-               srv: Rc<Server>,
-               rx: mpsc::UnboundedReceiver<Notification>) -> MyFuture<()>
-    {
-        // This'll probably entirely change as more of Python is translated to
-        // Rust.
-        let uaid = state.uaid;
-        srv.connect_client(state);
-
-        let rx = rx.map_err(|_| panic!());
-        Box::new(loop_fn((ws, rx), move |(ws, rx)| {
-            let srv = srv.clone();
-            StreamNext::new(ws, rx).then(move |res| -> MyFuture<_> {
-                let (msg, ws, rx) = match res {
-                    Ok(None) => return Box::new(ok(Loop::Break(()))),
-                    Ok(Some(res)) => res,
-                    Err(e) => {
-                        return Box::new(result(Err(e).chain_err(|| "recv error")))
-                    }
-                };
-
-                let response = match msg {
-                    Either::A(ClientMessage::Hello { .. }) => {
-                        return Box::new(err("double hello received".into()))
-                    }
-
-                    Either::A(ClientMessage::Register { channel_id }) => {
-                        let status = if srv.register_channel(&uaid, &channel_id) {
-                            200
-                        } else {
-                            409
-                        };
-                        ServerMessage::Register {
-                            status: status,
-                            channel_id: channel_id,
-                            push_endpoint: format!("http://localhost:8081/{}",
-                                                   channel_id),
-                        }
-                    }
-
-                    Either::A(ClientMessage::Unregister { channel_id }) => {
-                        srv.unregister_channel(&uaid, &channel_id);
-                        ServerMessage::Unregister {
+            },
+            ClientState::WaitingForProcessHello(ref mut response) => {
+                match try_ready!(response.poll()) {
+                    call::HelloResponse {
+                        uaid: Some(uaid),
+                        message_month: message_month,
+                        reset_uaid: reset_uaid,
+                        rotate_message_table: rotate_message_table,
+                    } => {
+                        let (tx, rx) = mpsc::unbounded();
+                        let mut flags = ClientFlags::new();
+                        flags.reset_uaid = reset_uaid;
+                        flags.rotate_message_table = rotate_message_table;
+                        self.webpush = Some(WebPushClient {
+                            uaid: uaid,
+                            flags: flags,
+                            rx: rx,
+                        });
+                        self.srv.connect_client(RegisteredClient {
+                            uaid: uaid,
+                            tx: tx,
+                            });
+                        let response = ServerMessage::Hello {
+                            uaid: uaid,
                             status: 200,
-                            channel_id: channel_id,
-                        }
+                            use_webpush: Some(true),
+                        };
+                        self.ws.start_send(response);
+                        ClientState::FinishSend(Some(Box::new(ClientState::Await)))
                     }
-
-                    // TODO: should handle this?
-                    Either::A(ClientMessage::Ack { .. }) => {
-                        return Box::new(ok(Loop::Continue((ws, rx))))
-                    }
-
-                    Either::B(n) => ServerMessage::Notification(n),
-                };
-                let ws = ws.send(response);
-                Box::new(ws.map(|ws| Loop::Continue((ws, rx))))
-            })
-        }))
+                    _ => return Err("Already connected elsewhere".into())
+                }
+            },
+            ClientState::FinishSend(ref mut next_state) => {
+                try_ready!(self.ws.poll_complete());
+                *next_state.take().unwrap()
+            },
+            ClientState::Await => {
+                match try_ready!(self.ws.poll()) {
+                    Some(msg) => return Err("shutdown".into()),
+                    None => return Err("client wanted to shutdown".into()),
+                }
+            },
+            _ => return Err("Transition didn't work".into())
+        };
+        Ok(next_state.into())
     }
 }
 
+fn input_with_timeout<T>(ws: &mut T, timeout: &mut Timeout) -> Poll<ClientMessage, Error>
+where
+    T: Stream<Item = ClientMessage, Error = Error>
+        + Sink<SinkItem = ServerMessage, SinkError = Error>
+        + 'static,
+{
+    let item = match timeout.poll()? {
+        Async::Ready(t) => return Err("Client timed out".into()),
+        Async::NotReady => {
+            match ws.poll()? {
+                Async::Ready(None) => return Err("Client dropped".into()),
+                Async::Ready(Some(msg)) => Async::Ready(msg),
+                Async::NotReady => Async::NotReady,
+            }
+        }
+    };
+    Ok(item)
+}
+
 impl<T> Future for Client<T>
-    where T: Stream<Item = ClientMessage, Error = Error> +
-             Sink<SinkItem = ServerMessage, SinkError = Error> +
-             'static,
+where
+    T: Stream<Item = ClientMessage, Error = Error>
+        + Sink<SinkItem = ServerMessage, SinkError = Error>
+        + 'static,
 {
     type Item = ();
     type Error = Error;
 
     fn poll(&mut self) -> Poll<(), Error> {
-        self.inner.poll()
+        loop {
+            if let ClientState::Done = self.state {
+                return Ok(().into())
+            }
+            let next_state = try_ready!(self.transition());
+            self.state = next_state;
+        }
     }
 }
 
@@ -229,8 +227,9 @@ struct StreamNext<S1, S2> {
 }
 
 impl<S1, S2> StreamNext<S1, S2>
-    where S1: Stream,
-          S2: Stream<Error = S1::Error>,
+where
+    S1: Stream,
+    S2: Stream<Error = S1::Error>,
 {
     fn new(s1: S1, s2: S2) -> StreamNext<S1, S2> {
         StreamNext {
@@ -241,8 +240,9 @@ impl<S1, S2> StreamNext<S1, S2>
 }
 
 impl<S1, S2> Future for StreamNext<S1, S2>
-    where S1: Stream,
-          S2: Stream<Error = S1::Error>,
+where
+    S1: Stream,
+    S2: Stream<Error = S1::Error>,
 {
     type Item = Option<(Either<S1::Item, S2::Item>, S1, S2)>;
     type Error = S1::Error;
@@ -263,8 +263,10 @@ impl<S1, S2> Future for StreamNext<S1, S2>
                 }
             }
         };
-        Ok(Async::Ready(Some((item,
-                              self.left.take().unwrap(),
-                              self.right.take().unwrap()))))
+        Ok(Async::Ready(Some((
+            item,
+            self.left.take().unwrap(),
+            self.right.take().unwrap(),
+        ))))
     }
 }

@@ -1,12 +1,13 @@
-//! Definition of WebSocket protocol messages
+//! Definition of Internal Router, Python, and Websocket protocol messages
 //!
-//! This module is a structured definition of the WebSocket protocol. Both
+//! This module is a structured definition of several protocol. Both
 //! messages received from the client and messages sent from the server are
 //! defined here. The `derive(Deserialize)` and `derive(Serialize)` annotations
 //! are used to generate the ability to serialize these structures to JSON,
 //! using the `serde` crate. More docs for serde can be found at
 //! https://serde.rs
 
+use std::collections::HashMap;
 use uuid::Uuid;
 
 #[derive(Deserialize)]
@@ -69,18 +70,16 @@ pub enum ServerMessage {
     Notification(Notification),
 }
 
-#[derive(Serialize)]
-#[serde(untagged)]
-pub enum Notification {
-    Simple {
-        updates: Vec<Update>,
-    },
-
-    WebPush {
-        #[serde(rename = "channelID")]
-        channel_id: Uuid,
-        version: String,
-    },
+#[derive(Serialize, Deserialize)]
+pub struct Notification {
+    #[serde(rename = "channelID")]
+    channel_id: Uuid,
+    version: String,
+    ttl: u32,
+    topic: Option<String>,
+    timestamp: u64,
+    data: Option<String>,
+    headers: Option<HashMap<String, String>>
 }
 
 #[derive(Serialize)]
