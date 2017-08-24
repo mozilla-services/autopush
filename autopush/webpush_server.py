@@ -392,7 +392,7 @@ class HelloCommand(ProcessorCommand):
             router_type="webpush",
             last_connect=generate_last_connect(),
             record_version=USER_RECORD_VERSION,
-            current_month=self.db.current_month,
+            current_month=self.db.current_msg_month,
         )
 
 
