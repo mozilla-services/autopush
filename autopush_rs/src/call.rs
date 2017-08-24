@@ -128,6 +128,13 @@ enum Call<'a> {
     Hello {
         connected_at: i64,
         uaid: Option<&'a Uuid>,
+    },
+
+    CheckStorage {
+        uaid: &'a Uuid,
+        message_month: String,
+        include_topic: bool,
+        timestamp: Option<i64>,
     }
 }
 
@@ -149,8 +156,10 @@ impl Server {
     pub fn hello(&self, connected_at: &Tm, uaid: Option<&Uuid>)
         -> MyFuture<HelloResponse>
     {
+        let ms = (connected_at.tm_sec as i64 * 1000) +
+                 (connected_at.tm_nsec as i64 / 1000 / 1000);
         let (call, fut) = PythonCall::new(&Call::Hello {
-            connected_at: connected_at.to_timespec().sec,
+            connected_at: ms,
             uaid: uaid,
         });
         self.send_to_python(call);

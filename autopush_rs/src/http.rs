@@ -6,15 +6,18 @@
 use std::str;
 use std::rc::Rc;
 
+use errors::*;
 use futures::future::err;
 use futures::{Stream, Future};
 use hyper::Method;
 use hyper;
+use serde_json;
 use time;
 use tokio_service::Service;
 use uuid::Uuid;
 
 use server::Server;
+use protocol::Notification;
 
 pub struct Push(pub Rc<Server>);
 
@@ -35,7 +38,7 @@ impl Service for Push {
             println!("empty uri path");
             return Box::new(err(hyper::Error::Incomplete))
         }
-        let channel_id = match req.uri().path()[1..].parse::<Uuid>() {
+        let uaid = match req.uri().path()[1..].parse::<Uuid>() {
             Ok(id) => id,
             Err(_) => {
                 println!("uri not uuid: {}", req.uri().path());
@@ -50,32 +53,21 @@ impl Service for Push {
         let body = req.body().concat2();
         let srv = self.0.clone();
         Box::new(body.and_then(move |body| {
-            let version = if body.len() == 0 {
-                time::now_utc().to_timespec().sec as u64
-            } else {
-                if !form_encoded {
-                    println!("bad content type");
-                    return Err(hyper::Error::Incomplete)
+            let s = String::from_utf8(body.to_vec()).unwrap();
+            if let Ok(msg) = serde_json::from_str(&s) {
+                match srv.notify_client(uaid, msg) {
+                    Ok(_) => return Ok(hyper::Response::new()
+                        .with_status(hyper::StatusCode::Ok)
+                    ),
+                    _ => return Ok(hyper::Response::new()
+                        .with_status(hyper::StatusCode::BadRequest)
+                        .with_body("Unable to decode body payload")
+                    )
                 }
-                let header = b"version=";
-                if !body.starts_with(header) {
-                    println!("bad body");
-                    return Err(hyper::Error::Incomplete)
-                }
-                let vers = str::from_utf8(&body[header.len()..]).ok()
-                    .and_then(|s| s.parse::<u64>().ok());
-                match vers {
-                    Some(vers) => vers,
-                    None => {
-                        println!("failed to parse version");
-                        return Err(hyper::Error::Incomplete)
-                    }
-                }
-            };
-
-            srv.notify_client(&channel_id, version);
-
-            Ok(hyper::Response::new())
+            }
+            Ok(hyper::Response::new()
+                .with_status(hyper::StatusCode::NotFound)
+            )
         }))
     }
 }

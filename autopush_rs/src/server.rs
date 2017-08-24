@@ -21,7 +21,7 @@ use tokio_tungstenite::{accept_async, WebSocketStream};
 use tungstenite::Message;
 use uuid::Uuid;
 
-use client::{Client, ClientState, Channel};
+use client::{Client, RegisteredClient};
 use errors::*;
 use protocol::{ClientMessage, ServerMessage, Notification};
 use queue::{self, AutopushQueue};
@@ -57,8 +57,7 @@ pub struct AutopushServerOptions {
 }
 
 pub struct Server {
-    channels: RefCell<HashMap<Uuid, Channel>>,
-    uaids: RefCell<HashMap<Uuid, ClientState>>,
+    uaids: RefCell<HashMap<Uuid, RegisteredClient>>,
     open_connections: Cell<u32>,
     pub tx: queue::Sender,
     pub opts: Arc<ServerOptions>,
@@ -261,7 +260,6 @@ impl Server {
         let core = Core::new()?;
         let srv = Rc::new(Server {
             opts: opts.clone(),
-            channels: RefCell::new(HashMap::new()),
             uaids: RefCell::new(HashMap::new()),
             open_connections: Cell::new(0),
             handle: core.handle(),
@@ -335,80 +333,25 @@ impl Server {
     ///
     /// For now just registers internal state by keeping track of the `client`,
     /// namely its channel to send notifications back.
-    pub fn connect_client(&self, client: ClientState) {
-        // TODO: handle already-present channels
-        for id in client.channel_ids.iter() {
-            assert!(self.channels.borrow_mut().insert(*id, Channel {
-                uaid: client.uaid,
-                current_version: 0,
-            }).is_none());
-        }
-
-        // TODO: if this is a duplicate we should respond by requesting the
-        //       client selects a new uaid
+    pub fn connect_client(&self, client: RegisteredClient) {
         assert!(self.uaids.borrow_mut().insert(client.uaid, client).is_none());
     }
 
-    /// The client specified by `uaid` has just started listening to the channel
-    /// identified as `channel_id`.
-    pub fn register_channel(&self, uaid: &Uuid, channel_id: &Uuid) -> bool {
+    /// A notification has come for the uaid
+    pub fn notify_client(&self, uaid: Uuid, notif: Notification) -> Result<()> {
         let mut uaids = self.uaids.borrow_mut();
-        let mut channels = self.channels.borrow_mut();
-        let client = uaids.get_mut(uaid).unwrap();
-        if channels.contains_key(channel_id) {
-            false
-        } else {
-            channels.insert(*channel_id, Channel {
-                uaid: *uaid,
-                current_version: 0,
-            });
-            client.channel_ids.push(*channel_id);
-            true
+        if let Some(client) = uaids.get_mut(&uaid) {
+            // TODO: Don't unwrap, handle error properly
+            (&client.tx).send(notif).unwrap();
+            return Ok(());
         }
-    }
-
-    /// The client specified by `uaid` has stopped listening to the channel
-    /// specified by `channel_id`.
-    pub fn unregister_channel(&self, uaid: &Uuid, channel_id: &Uuid) {
-        let mut uaids = self.uaids.borrow_mut();
-        let mut channels = self.channels.borrow_mut();
-        let client = uaids.get_mut(uaid).unwrap();
-        if channels.contains_key(channel_id) {
-            if channels[channel_id].uaid == *uaid {
-                channels.remove(channel_id);
-                client.channel_ids.retain(|c| {
-                    c != channel_id
-                });
-            }
-        }
-    }
-
-    /// A notification has come for the channel specified by `channel_id` and
-    /// the channel is now at the version specified as well.
-    pub fn notify_client(&self, channel_id: &Uuid, version: u64) {
-        let mut channels = self.channels.borrow_mut();
-        let channel = match channels.get_mut(&channel_id) {
-            Some(channel) => channel,
-            None => return,
-        };
-        channel.current_version = version;
-
-        let mut uaids = self.uaids.borrow_mut();
-        let uaid = uaids.get_mut(&channel.uaid).unwrap();
-        let notification = Notification::WebPush {
-            channel_id: *channel_id,
-            version: version.to_string(),
-        };
-        (&uaid.tx).send(notification).unwrap();
+        Err("User not connected".into())
     }
 
     /// The client specified by `uaid` has disconnected.
     pub fn disconnet_client(&self, uaid: &Uuid) {
         let mut uaids = self.uaids.borrow_mut();
-        let mut channels = self.channels.borrow_mut();
-        for id in uaids.remove(uaid).expect("uaid not registered").channel_ids {
-            channels.remove(&id).expect("uaid pointed to missing channel");
-        }
+        uaids.remove(uaid).expect("uaid not registered");
     }
 }
 
