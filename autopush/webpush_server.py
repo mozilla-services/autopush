@@ -303,7 +303,11 @@ class HelloCommand(ProcessorCommand):
     def process(self, hello):
         # type: (Hello) -> HelloResponse
         user_item = None
-        flags = {}
+        # XXX:
+        flags = dict(
+            message_month=self.db.current_msg_month,
+            reset_uaid=False
+        )
         if hello.uaid:
             user_item, flags = self.lookup_user(hello)
 
