@@ -135,6 +135,13 @@ enum Call<'a> {
         message_month: String,
         include_topic: bool,
         timestamp: Option<i64>,
+    },
+
+    Register {
+        uaid: String,
+        channel_id: String,
+        message_month: String,
+        key: Option<String>,
     }
 }
 
@@ -152,6 +159,11 @@ pub struct HelloResponse {
     pub rotate_message_table: bool,
 }
 
+#[derive(Deserialize)]
+pub struct RegisterResponse {
+    pub endpoint: String,
+}
+
 impl Server {
     pub fn hello(&self, connected_at: &Tm, uaid: Option<&Uuid>)
         -> MyFuture<HelloResponse>
@@ -161,6 +173,19 @@ impl Server {
         let (call, fut) = PythonCall::new(&Call::Hello {
             connected_at: ms,
             uaid: uaid,
+        });
+        self.send_to_python(call);
+        return fut
+    }
+
+    pub fn register(&self, uaid: String, message_month: String, channel_id: String, key: Option<String>)
+        -> MyFuture<RegisterResponse>
+    {
+        let (call, fut) = PythonCall::new(&Call::Register {
+            uaid: uaid,
+            message_month: message_month,
+            channel_id: channel_id,
+            key: key,
         });
         self.send_to_python(call);
         return fut

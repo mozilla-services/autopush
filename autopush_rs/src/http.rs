@@ -38,10 +38,11 @@ impl Service for Push {
             println!("empty uri path");
             return Box::new(err(hyper::Error::Incomplete))
         }
-        let uaid = match req.uri().path()[1..].parse::<Uuid>() {
+        let req_uaid = req.uri().path()[6..].to_string();
+        let uaid = match Uuid::parse_str(&req_uaid) {
             Ok(id) => id,
             Err(_) => {
-                println!("uri not uuid: {}", req.uri().path());
+                println!("uri not uuid: {}", req_uaid);
                 return Box::new(err(hyper::Error::Status))
             }
         };
@@ -49,6 +50,8 @@ impl Service for Push {
             Some(header) => **header == "application/x-www-form-urlencoded",
             None => false,
         };
+
+        debug!("Got a message, now to do something!");
 
         let body = req.body().concat2();
         let srv = self.0.clone();

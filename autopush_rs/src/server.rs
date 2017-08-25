@@ -341,8 +341,10 @@ impl Server {
     pub fn notify_client(&self, uaid: Uuid, notif: Notification) -> Result<()> {
         let mut uaids = self.uaids.borrow_mut();
         if let Some(client) = uaids.get_mut(&uaid) {
+            debug!("Found a client to deliver a notification to");
             // TODO: Don't unwrap, handle error properly
             (&client.tx).send(notif).unwrap();
+            debug!("Dropped notification in queue");
             return Ok(());
         }
         Err("User not connected".into())

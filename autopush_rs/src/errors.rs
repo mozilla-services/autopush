@@ -30,6 +30,7 @@ use std::io;
 use tungstenite;
 use serde_json;
 use futures::Future;
+use futures::sync::mpsc;
 
 error_chain! {
     foreign_links {

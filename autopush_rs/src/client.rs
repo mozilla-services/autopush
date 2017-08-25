@@ -40,6 +40,7 @@ pub struct WebPushClient {
     uaid: Uuid,
     rx: mpsc::UnboundedReceiver<Notification>,
     flags: ClientFlags,
+    message_month: String,
 }
 
 pub struct ClientFlags {
@@ -79,6 +80,7 @@ impl ClientFlags {
 pub enum ClientState {
     WaitingForHello(Timeout),
     WaitingForProcessHello(MyFuture<call::HelloResponse>),
+    WaitingForRegister(MyFuture<(Uuid, call::RegisterResponse)>),
     FinishSend(Option<Box<ClientState>>),
     Await,
     Done,
@@ -116,7 +118,7 @@ where
     fn transition(&mut self) -> Poll<ClientState, Error> {
         let next_state = match self.state {
             ClientState::WaitingForHello(ref mut timeout) => {
-                match try_ready!(input_with_timeout(&mut self.ws, timeout)) {
+                match try_ready!(Combinators::input_with_timeout(&mut self.ws, timeout)) {
                     ClientMessage::Hello {
                         uaid: uaid,
                         use_webpush: Some(true),
@@ -148,6 +150,7 @@ where
                             uaid: uaid,
                             flags: flags,
                             rx: rx,
+                            message_month: message_month,
                         });
                         self.srv.connect_client(RegisteredClient {
                             uaid: uaid,
@@ -169,34 +172,95 @@ where
                 *next_state.take().unwrap()
             },
             ClientState::Await => {
-                match try_ready!(self.ws.poll()) {
-                    Some(msg) => return Err("shutdown".into()),
-                    None => return Err("client wanted to shutdown".into()),
+                let webpush = self.webpush.as_mut().unwrap();
+                match try_ready!(Combinators::input_or_notif(&mut self.ws, &mut webpush.rx)) {
+                    Either::A(ClientMessage::Register {
+                            channel_id: channel_id,
+                            key: key,
+                        }) => {
+                        debug!("Got a register command!");
+                        let uaid = webpush.uaid.clone();
+                        let message_month = webpush.message_month.clone();
+                        let channel_id_str = channel_id.hyphenated().to_string();
+                        let fut = self.srv.register(
+                                uaid.simple().to_string(),
+                                message_month,
+                                channel_id_str,
+                                key);
+                        let fut = fut.map(move |resp| { (channel_id, resp) });
+                        ClientState::WaitingForRegister(
+                            Box::new(fut)
+                        )
+                    },
+                    Either::B(notif) => {
+                        debug!("Got a notification to send, sending!");
+                        self.ws.start_send(ServerMessage::Notification(notif));
+                        ClientState::FinishSend(Some(Box::new(ClientState::Await)))
+                    },
+                    Either::A(_) => return Err("Invalid message".into()),
                 }
             },
+            ClientState::WaitingForRegister(ref mut response) => {
+                match try_ready!(response.poll()) {
+                    (channel_id, call::RegisterResponse{endpoint: endpoint}) => {
+                        self.ws.start_send(
+                            ServerMessage::Register {
+                                channel_id: channel_id,
+                                status: 200,
+                                push_endpoint: endpoint,
+                            }
+                        );
+                        ClientState::FinishSend(Some(Box::new(ClientState::Await)))
+                    },
+                    _ => return Err("woopsies, malfunction".into())
+                }
+            }
             _ => return Err("Transition didn't work".into())
         };
         Ok(next_state.into())
     }
 }
 
-fn input_with_timeout<T>(ws: &mut T, timeout: &mut Timeout) -> Poll<ClientMessage, Error>
-where
-    T: Stream<Item = ClientMessage, Error = Error>
-        + Sink<SinkItem = ServerMessage, SinkError = Error>
+pub struct Combinators<T> {
+    _marker: marker::PhantomData<T>,
+}
+
+impl<T> Combinators<T>
+    where
+        T: Stream<Item=ClientMessage, Error=Error>
+        + Sink<SinkItem=ServerMessage, SinkError=Error>
         + 'static,
 {
-    let item = match timeout.poll()? {
-        Async::Ready(t) => return Err("Client timed out".into()),
-        Async::NotReady => {
-            match ws.poll()? {
-                Async::Ready(None) => return Err("Client dropped".into()),
-                Async::Ready(Some(msg)) => Async::Ready(msg),
-                Async::NotReady => Async::NotReady,
+    fn input_with_timeout(ws: &mut T, timeout: &mut Timeout) -> Poll<ClientMessage, Error> {
+        let item = match timeout.poll()? {
+            Async::Ready(t) => return Err("Client timed out".into()),
+            Async::NotReady => {
+                match ws.poll()? {
+                    Async::Ready(None) => return Err("Client dropped".into()),
+                    Async::Ready(Some(msg)) => Async::Ready(msg),
+                    Async::NotReady => Async::NotReady,
+                }
             }
-        }
-    };
-    Ok(item)
+        };
+        Ok(item)
+    }
+
+    fn input_or_notif(ws: &mut T, queue: &mut mpsc::UnboundedReceiver<Notification>)
+        -> Poll<Either<ClientMessage, Notification>, Error> {
+        let item = match queue.poll() {
+            Ok(Async::Ready(Some(notif))) => Either::B(notif),
+            Ok(Async::Ready(None)) => return Err("Sending side went byebye".into()),
+            Ok(Async::NotReady) => {
+                match ws.poll()? {
+                    Async::Ready(None) => return Err("Client dropped".into()),
+                    Async::Ready(Some(msg)) => Either::A(msg),
+                    Async::NotReady => return Ok(Async::NotReady),
+                }
+            },
+            _ => return Err("Woah".into()),
+        };
+        Ok(Async::Ready(item))
+    }
 }
 
 impl<T> Future for Client<T>
