@@ -43,6 +43,15 @@ pub struct WebPushClient {
     message_month: String,
 }
 
+// Client cleanup when the connection is dropped
+impl<T> Drop for Client<T> {
+    fn drop(&mut self) {
+        if self.webpush.is_some() {
+            self.srv.disconnet_client(&self.webpush.as_ref().unwrap().uaid);
+        }
+    }
+}
+
 pub struct ClientFlags {
     include_topic: bool,
     increment_storage: bool,

@@ -334,6 +334,7 @@ impl Server {
     /// For now just registers internal state by keeping track of the `client`,
     /// namely its channel to send notifications back.
     pub fn connect_client(&self, client: RegisteredClient) {
+        debug!("Connecting a client!");
         assert!(self.uaids.borrow_mut().insert(client.uaid, client).is_none());
     }
 
@@ -352,6 +353,7 @@ impl Server {
 
     /// The client specified by `uaid` has disconnected.
     pub fn disconnet_client(&self, uaid: &Uuid) {
+        debug!("Disconnecting client!");
         let mut uaids = self.uaids.borrow_mut();
         uaids.remove(uaid).expect("uaid not registered");
     }
