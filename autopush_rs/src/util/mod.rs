@@ -1,5 +1,5 @@
 //! Various small utilities accumulated over time for the WebPush server
-
+use std::env;
 use std::time::Duration;
 use std::sync::atomic::{ATOMIC_BOOL_INIT, AtomicBool, Ordering};
 
@@ -48,6 +48,11 @@ pub fn init_logging(json: bool) {
     // We only initialize once, so ignore initialization errors related to
     // calling this function twice.
     let mut builder = env_logger::LogBuilder::new();
+
+    if env::var("RUST_LOG").is_ok() {
+       builder.parse(&env::var("RUST_LOG").unwrap());
+    }
+
     builder.target(env_logger::LogTarget::Stdout)
         .format(maybe_json_record);
 

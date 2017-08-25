@@ -32,7 +32,7 @@ class AutopushServer(object):
         cfg.ssl_dh_param = ffi_from_buffer(conf.ssl.dh_param)
         cfg.ssl_key = ffi_from_buffer(conf.ssl.key)
         cfg.url = ffi_from_buffer(conf.ws_url)
-        cfg.json_logging = False
+        cfg.json_logging = True
 
         ptr = _call(lib.autopush_server_new, cfg)
         self.ffi = ffi.gc(ptr, lib.autopush_server_free)
