@@ -345,7 +345,7 @@ impl Server {
             debug!("Found a client to deliver a notification to");
             // TODO: Don't unwrap, handle error properly
             (&client.tx).send(notif).unwrap();
-            debug!("Dropped notification in queue");
+            info!("Dropped notification in queue");
             return Ok(());
         }
         Err("User not connected".into())

@@ -9,10 +9,11 @@ use std::io;
 use std::marker;
 use std::rc::Rc;
 
+use futures::AsyncSink;
 use futures::future::{result, err, loop_fn, Loop, ok, Either};
 use futures::sync::mpsc;
 use futures::{Stream, Sink, Future, Poll, Async};
-use tokio_core::reactor::{Timeout};
+use tokio_core::reactor::Timeout;
 use time;
 use uuid::Uuid;
 
@@ -41,15 +42,11 @@ pub struct WebPushClient {
     rx: mpsc::UnboundedReceiver<Notification>,
     flags: ClientFlags,
     message_month: String,
-}
-
-// Client cleanup when the connection is dropped
-impl<T> Drop for Client<T> {
-    fn drop(&mut self) {
-        if self.webpush.is_some() {
-            self.srv.disconnet_client(&self.webpush.as_ref().unwrap().uaid);
-        }
-    }
+    unacked_direct_notifs: Vec<Notification>,
+    unacked_stored_notifs: Vec<String>,
+    // Highest version from stored, retained for use with increment
+    // when all the unacked storeds are ack'd
+    unacked_stored_highest: Option<String>,
 }
 
 pub struct ClientFlags {
@@ -89,10 +86,12 @@ impl ClientFlags {
 pub enum ClientState {
     WaitingForHello(Timeout),
     WaitingForProcessHello(MyFuture<call::HelloResponse>),
-    WaitingForRegister(MyFuture<(Uuid, call::RegisterResponse)>),
-    FinishSend(Option<Box<ClientState>>),
+    WaitingForRegister(Uuid, MyFuture<call::RegisterResponse>),
+    WaitingForUnRegister(Uuid, MyFuture<call::UnRegisterResponse>),
+    FinishSend(Option<ServerMessage>, Option<Box<ClientState>>),
     Await,
     Done,
+    ShutdownCleanup(Option<Error>),
 }
 
 impl<T> Client<T>
@@ -113,9 +112,7 @@ where
     /// call back into Python.
     pub fn new(ws: T, srv: &Rc<Server>) -> Client<T> {
         let srv = srv.clone();
-        let mut timeout = Timeout::new(
-            srv.opts.open_handshake_timeout.unwrap(), &srv.handle)
-            .unwrap();
+        let timeout = Timeout::new(srv.opts.open_handshake_timeout.unwrap(), &srv.handle).unwrap();
         Client {
             state: ClientState::WaitingForHello(timeout),
             webpush: None,
@@ -134,13 +131,10 @@ where
                         ..
                     } => {
                         ClientState::WaitingForProcessHello(
-                             self.srv.hello(
-                                 &time::now(),
-                                 uaid.as_ref(),
-                             )
+                            self.srv.hello(&time::now(), uaid.as_ref()),
                         )
                     },
-                    _ => return Err("Invalid message, must be hello".into())
+                    _ => return Err("Invalid message, must be hello".into()),
                 }
             },
             ClientState::WaitingForProcessHello(ref mut response) => {
@@ -160,71 +154,145 @@ where
                             flags: flags,
                             rx: rx,
                             message_month: message_month,
+                            unacked_direct_notifs: Vec::new(),
+                            unacked_stored_notifs: Vec::new(),
+                            unacked_stored_highest: None,
                         });
-                        self.srv.connect_client(RegisteredClient {
-                            uaid: uaid,
-                            tx: tx,
-                            });
+                        self.srv.connect_client(
+                            RegisteredClient { uaid: uaid, tx: tx },
+                        );
                         let response = ServerMessage::Hello {
-                            uaid: uaid,
+                            uaid: uaid.hyphenated().to_string(),
                             status: 200,
                             use_webpush: Some(true),
                         };
-                        self.ws.start_send(response);
-                        ClientState::FinishSend(Some(Box::new(ClientState::Await)))
+                        ClientState::FinishSend(Some(response), Some(Box::new(ClientState::Await)))
                     }
-                    _ => return Err("Already connected elsewhere".into())
+                    _ => return Err("Already connected elsewhere".into()),
                 }
             },
-            ClientState::FinishSend(ref mut next_state) => {
+            ClientState::FinishSend(None, None) => {
+                return Err("Bad state, should not have nothing to do".into())
+            },
+            ClientState::FinishSend(None, ref mut next_state) => {
                 try_ready!(self.ws.poll_complete());
                 *next_state.take().unwrap()
+            }
+            ClientState::FinishSend(ref mut msg, ref mut next_state) => {
+                let item = msg.take().unwrap();
+                let ret = self.ws.start_send(item).chain_err(|| "unable to send")?;
+                match ret {
+                    AsyncSink::Ready => {
+                        ClientState::FinishSend(None, Some(next_state.take().unwrap()))
+                    },
+                    AsyncSink::NotReady(returned) => {
+                        *msg = Some(returned);
+                        return Ok(Async::NotReady);
+                    }
+                }
             },
             ClientState::Await => {
                 let webpush = self.webpush.as_mut().unwrap();
                 match try_ready!(Combinators::input_or_notif(&mut self.ws, &mut webpush.rx)) {
                     Either::A(ClientMessage::Register {
-                            channel_id: channel_id,
-                            key: key,
-                        }) => {
+                                  channel_id: channel_id,
+                                  key: key,
+                              }) => {
                         debug!("Got a register command!");
                         let uaid = webpush.uaid.clone();
                         let message_month = webpush.message_month.clone();
                         let channel_id_str = channel_id.hyphenated().to_string();
                         let fut = self.srv.register(
-                                uaid.simple().to_string(),
-                                message_month,
-                                channel_id_str,
-                                key);
-                        let fut = fut.map(move |resp| { (channel_id, resp) });
-                        ClientState::WaitingForRegister(
-                            Box::new(fut)
-                        )
+                            uaid.simple().to_string(),
+                            message_month,
+                            channel_id_str,
+                            key,
+                        );
+                        ClientState::WaitingForRegister(channel_id, fut)
+                    },
+                    Either::A(ClientMessage::Unregister {
+                                  channel_id: channel_id,
+                                  code: code,
+                              }) => {
+                        debug!("Got a uuregister command");
+                        let uaid = webpush.uaid.clone();
+                        let message_month = webpush.message_month.clone();
+                        let channel_id_str = channel_id.hyphenated().to_string();
+                        let fut = self.srv.unregister(
+                            uaid.simple().to_string(),
+                            message_month,
+                            channel_id_str,
+                            code.unwrap_or(200),
+                        );
+                        ClientState::WaitingForUnRegister(channel_id, fut)
+                    },
+                    Either::A(ClientMessage::Ack { updates: updates }) => {
+                        for notif in updates.iter() {
+                            if let Some(pos) = webpush.unacked_direct_notifs.iter().position(
+                                |v| {
+                                    v.channel_id == notif.channel_id && v.version == notif.version
+                                },
+                            )
+                            {
+                                webpush.unacked_direct_notifs.remove(pos);
+                                continue;
+                            };
+                            if let Some(pos) = webpush.unacked_stored_notifs.iter().position(
+                                |v| {
+                                    v == &notif.version
+                                },
+                            )
+                            {
+                                webpush.unacked_stored_notifs.remove(pos);
+                                continue;
+                            };
+                        }
+                        ClientState::Await
                     },
                     Either::B(notif) => {
+                        webpush.unacked_direct_notifs.push(notif.clone());
                         debug!("Got a notification to send, sending!");
-                        self.ws.start_send(ServerMessage::Notification(notif));
-                        ClientState::FinishSend(Some(Box::new(ClientState::Await)))
+                        ClientState::FinishSend(
+                            Some(ServerMessage::Notification(notif)),
+                            Some(Box::new(ClientState::Await)),
+                        )
                     },
                     Either::A(_) => return Err("Invalid message".into()),
                 }
             },
-            ClientState::WaitingForRegister(ref mut response) => {
+            ClientState::WaitingForRegister(channel_id, ref mut response) => {
                 match try_ready!(response.poll()) {
-                    (channel_id, call::RegisterResponse{endpoint: endpoint}) => {
-                        self.ws.start_send(
-                            ServerMessage::Register {
-                                channel_id: channel_id,
-                                status: 200,
-                                push_endpoint: endpoint,
-                            }
-                        );
-                        ClientState::FinishSend(Some(Box::new(ClientState::Await)))
+                    call::RegisterResponse { endpoint: endpoint } => {
+                        let msg = ServerMessage::Register {
+                            channel_id: channel_id,
+                            status: 200,
+                            push_endpoint: endpoint,
+                        };
+                        ClientState::FinishSend(Some(msg), Some(Box::new(ClientState::Await)))
                     },
-                    _ => return Err("woopsies, malfunction".into())
+                    _ => return Err("woopsies, malfunction".into()),
                 }
-            }
-            _ => return Err("Transition didn't work".into())
+            },
+            ClientState::WaitingForUnRegister(channel_id, ref mut response) => {
+                match try_ready!(response.poll()) {
+                    call::UnRegisterResponse{ status: status } => {
+                        let msg = ServerMessage::Unregister {
+                            channel_id: channel_id,
+                            status: status,
+                        };
+                        ClientState::FinishSend(Some(msg), Some(Box::new(ClientState::Await)))
+                    },
+                    _ => return Err("woopsies, malfunction".into()),
+                }
+            },
+            ClientState::ShutdownCleanup(ref err) => {
+                // If we made it past hello, do more cleanup
+                if let Some(WebPushClient { uaid: uaid, .. }) = self.webpush {
+                    self.srv.disconnet_client(&uaid);
+                };
+                ClientState::Done
+            },
+            _ => return Err("Transition didn't work".into()),
         };
         Ok(next_state.into())
     }
@@ -235,9 +303,9 @@ pub struct Combinators<T> {
 }
 
 impl<T> Combinators<T>
-    where
-        T: Stream<Item=ClientMessage, Error=Error>
-        + Sink<SinkItem=ServerMessage, SinkError=Error>
+where
+    T: Stream<Item = ClientMessage, Error = Error>
+        + Sink<SinkItem = ServerMessage, SinkError = Error>
         + 'static,
 {
     fn input_with_timeout(ws: &mut T, timeout: &mut Timeout) -> Poll<ClientMessage, Error> {
@@ -254,8 +322,10 @@ impl<T> Combinators<T>
         Ok(item)
     }
 
-    fn input_or_notif(ws: &mut T, queue: &mut mpsc::UnboundedReceiver<Notification>)
-        -> Poll<Either<ClientMessage, Notification>, Error> {
+    fn input_or_notif(
+        ws: &mut T,
+        queue: &mut mpsc::UnboundedReceiver<Notification>,
+    ) -> Poll<Either<ClientMessage, Notification>, Error> {
         let item = match queue.poll() {
             Ok(Async::Ready(Some(notif))) => Either::B(notif),
             Ok(Async::Ready(None)) => return Err("Sending side went byebye".into()),
@@ -284,10 +354,13 @@ where
     fn poll(&mut self) -> Poll<(), Error> {
         loop {
             if let ClientState::Done = self.state {
-                return Ok(().into())
+                return Ok(().into());
             }
-            let next_state = try_ready!(self.transition());
-            self.state = next_state;
+            match self.transition() {
+                Ok(Async::NotReady) => return Ok(Async::NotReady),
+                Ok(Async::Ready(next_state)) => self.state = next_state,
+                Err(e) => self.state = ClientState::ShutdownCleanup(Some(e)),
+            };
         }
     }
 }

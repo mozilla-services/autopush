@@ -30,6 +30,7 @@ pub enum ClientMessage {
     Unregister {
         #[serde(rename = "channelID")]
         channel_id: Uuid,
+        code: Option<i32>,
     },
 
     Ack {
@@ -48,7 +49,7 @@ pub struct ClientAck {
 #[serde(tag = "messageType", rename_all = "lowercase")]
 pub enum ServerMessage {
     Hello {
-        uaid: Uuid,
+        uaid: String,
         status: u32,
         #[serde(skip_serializing_if = "Option::is_none")]
         use_webpush: Option<bool>,
@@ -71,11 +72,11 @@ pub enum ServerMessage {
     Notification(Notification),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub struct Notification {
     #[serde(rename = "channelID")]
-    channel_id: Uuid,
-    version: String,
+    pub channel_id: Uuid,
+    pub version: String,
     ttl: u32,
     topic: Option<String>,
     timestamp: u64,

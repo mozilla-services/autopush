@@ -130,18 +130,18 @@ enum Call<'a> {
         uaid: Option<&'a Uuid>,
     },
 
-    CheckStorage {
-        uaid: &'a Uuid,
-        message_month: String,
-        include_topic: bool,
-        timestamp: Option<i64>,
-    },
-
     Register {
         uaid: String,
         channel_id: String,
         message_month: String,
         key: Option<String>,
+    },
+
+    UnRegister {
+        uaid: String,
+        channel_id: String,
+        message_month: String,
+        code: i32,
     }
 }
 
@@ -163,6 +163,12 @@ pub struct HelloResponse {
 pub struct RegisterResponse {
     pub endpoint: String,
 }
+
+#[derive(Deserialize)]
+pub struct UnRegisterResponse {
+    pub status: u32,
+}
+
 
 impl Server {
     pub fn hello(&self, connected_at: &Tm, uaid: Option<&Uuid>)
@@ -186,6 +192,19 @@ impl Server {
             message_month: message_month,
             channel_id: channel_id,
             key: key,
+        });
+        self.send_to_python(call);
+        return fut
+    }
+
+    pub fn unregister(&self, uaid: String, message_month: String, channel_id: String, status: i32)
+        -> MyFuture<UnRegisterResponse>
+    {
+        let (call, fut) = PythonCall::new(&Call::UnRegister {
+            uaid: uaid,
+            message_month: message_month,
+            channel_id: channel_id,
+            code: status,
         });
         self.send_to_python(call);
         return fut
