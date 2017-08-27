@@ -549,7 +549,7 @@ class Unregister(InputCommand):
     channel_id = attrib()  # type: str
     uaid = attrib(convert=uaid_from_str)  # type: Optional[UUID]
     message_month = attrib()  # type: str
-    code = attrib(default=None)  # type: str
+    code = attrib(default=None)  # type: int
 
 
 @attrs(slots=True)

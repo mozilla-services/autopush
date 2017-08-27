@@ -160,15 +160,32 @@ pub struct HelloResponse {
 }
 
 #[derive(Deserialize)]
-pub struct RegisterResponse {
-    pub endpoint: String,
+#[serde(untagged)]
+pub enum RegisterResponse {
+    Success {
+        endpoint: String,
+    },
+
+    Error {
+        error_msg: String,
+        error: bool,
+        status: u32,
+    }
 }
 
 #[derive(Deserialize)]
-pub struct UnRegisterResponse {
-    pub status: u32,
-}
+#[serde(untagged)]
+pub enum UnRegisterResponse {
+    Success {
+        success: bool,
+    },
 
+    Error {
+        error_msg: String,
+        error: bool,
+        status: u32,
+    }
+}
 
 impl Server {
     pub fn hello(&self, connected_at: &Tm, uaid: Option<&Uuid>)
@@ -197,14 +214,14 @@ impl Server {
         return fut
     }
 
-    pub fn unregister(&self, uaid: String, message_month: String, channel_id: String, status: i32)
+    pub fn unregister(&self, uaid: String, message_month: String, channel_id: String, code: i32)
         -> MyFuture<UnRegisterResponse>
     {
         let (call, fut) = PythonCall::new(&Call::UnRegister {
             uaid: uaid,
             message_month: message_month,
             channel_id: channel_id,
-            code: status,
+            code: code,
         });
         self.send_to_python(call);
         return fut

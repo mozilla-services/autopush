@@ -214,7 +214,7 @@ where
                                   channel_id: channel_id,
                                   code: code,
                               }) => {
-                        debug!("Got a uuregister command");
+                        debug!("Got a unregister command");
                         let uaid = webpush.uaid.clone();
                         let message_month = webpush.message_month.clone();
                         let channel_id_str = channel_id.hyphenated().to_string();
@@ -262,7 +262,7 @@ where
             },
             ClientState::WaitingForRegister(channel_id, ref mut response) => {
                 match try_ready!(response.poll()) {
-                    call::RegisterResponse { endpoint: endpoint } => {
+                    call::RegisterResponse::Success { endpoint: endpoint } => {
                         let msg = ServerMessage::Register {
                             channel_id: channel_id,
                             status: 200,
@@ -270,12 +270,31 @@ where
                         };
                         ClientState::FinishSend(Some(msg), Some(Box::new(ClientState::Await)))
                     },
+                    call::RegisterResponse::Error { error_msg: msg, status: status, .. } => {
+                        debug!("Got unregister fail, error: {}", msg);
+                        let msg = ServerMessage::Register {
+                            channel_id: channel_id,
+                            status: status,
+                            push_endpoint: "".into(),
+                        };
+                        ClientState::FinishSend(Some(msg), Some(Box::new(ClientState::Await)))
+                    },
                     _ => return Err("woopsies, malfunction".into()),
                 }
             },
             ClientState::WaitingForUnRegister(channel_id, ref mut response) => {
+                debug!("Attempting to wait for unregister");
                 match try_ready!(response.poll()) {
-                    call::UnRegisterResponse{ status: status } => {
+                    call::UnRegisterResponse::Success{ success: success } => {
+                        debug!("Got the unregister response");
+                        let msg = ServerMessage::Unregister {
+                            channel_id: channel_id,
+                            status: if success { 200 } else { 500 },
+                        };
+                        ClientState::FinishSend(Some(msg), Some(Box::new(ClientState::Await)))
+                    },
+                    call::UnRegisterResponse::Error { error_msg: msg, status: status, .. } => {
+                        debug!("Got unregister fail, error: {}", msg);
                         let msg = ServerMessage::Unregister {
                             channel_id: channel_id,
                             status: status,
@@ -285,7 +304,10 @@ where
                     _ => return Err("woopsies, malfunction".into()),
                 }
             },
-            ClientState::ShutdownCleanup(ref err) => {
+            ClientState::ShutdownCleanup(ref mut err) => {
+                if let Some(err_obj) = err.take() {
+                    debug!("Error for shutdown: {}", err_obj);
+                };
                 // If we made it past hello, do more cleanup
                 if let Some(WebPushClient { uaid: uaid, .. }) = self.webpush {
                     self.srv.disconnet_client(&uaid);
