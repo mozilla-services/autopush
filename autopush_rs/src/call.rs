@@ -124,11 +124,11 @@ impl<F: FnOnce(&str) + Send> FnBox for F {
 
 
 #[derive(Serialize)]
-#[serde(tag = "command", rename_all = "lowercase")]
-enum Call<'a> {
+#[serde(tag = "command", rename_all = "snake_case")]
+enum Call {
     Hello {
         connected_at: i64,
-        uaid: Option<&'a Uuid>,
+        uaid: Option<String>,
     },
 
     Register {
@@ -138,7 +138,7 @@ enum Call<'a> {
         key: Option<String>,
     },
 
-    UnRegister {
+    Unregister {
         uaid: String,
         channel_id: String,
         message_month: String,
@@ -149,12 +149,18 @@ enum Call<'a> {
         uaid: String,
         message_month: String,
         include_topic: bool,
-        timestamp: Option<i32>,
+        timestamp: Option<i64>,
     },
 
     DeleteMessage {
         message: protocol::Notification,
         message_month: String,
+    },
+
+    IncStoragePosition {
+        uaid: String,
+        message_month: String,
+        timestamp: i64,
     }
 }
 
@@ -204,7 +210,7 @@ pub enum UnRegisterResponse {
 pub struct CheckStorageResponse {
     pub include_topic: bool,
     pub messages: Vec<protocol::Notification>,
-    pub timestamp: Option<i32>,
+    pub timestamp: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -212,15 +218,19 @@ pub struct DeleteMessageResponse {
     pub success: bool,
 }
 
+#[derive(Deserialize)]
+pub struct IncStorageResponse {
+    pub success: bool,
+}
+
 impl Server {
-    pub fn hello(&self, connected_at: &Tm, uaid: Option<&Uuid>)
+    pub fn hello(&self, connected_at: &u64, uaid: Option<&Uuid>)
         -> MyFuture<HelloResponse>
     {
-        let ms = (connected_at.tm_sec as i64 * 1000) +
-                 (connected_at.tm_nsec as i64 / 1000 / 1000);
+        let ms = *connected_at as i64;
         let (call, fut) = PythonCall::new(&Call::Hello {
             connected_at: ms,
-            uaid: uaid,
+            uaid: if let Some(uuid) = uaid { Some(uuid.simple().to_string()) } else { None },
         });
         self.send_to_python(call);
         return fut
@@ -242,7 +252,7 @@ impl Server {
     pub fn unregister(&self, uaid: String, message_month: String, channel_id: String, code: i32)
         -> MyFuture<UnRegisterResponse>
     {
-        let (call, fut) = PythonCall::new(&Call::UnRegister {
+        let (call, fut) = PythonCall::new(&Call::Unregister {
             uaid: uaid,
             message_month: message_month,
             channel_id: channel_id,
@@ -252,13 +262,25 @@ impl Server {
         return fut
     }
 
-    pub fn check_storage(&self, uaid: String, message_month: String, include_topic: bool, timestamp: Option<i32>)
+    pub fn check_storage(&self, uaid: String, message_month: String, include_topic: bool, timestamp: Option<i64>)
         -> MyFuture<CheckStorageResponse>
     {
         let (call, fut) = PythonCall::new(&Call::CheckStorage {
             uaid: uaid,
             message_month: message_month,
             include_topic: include_topic,
+            timestamp: timestamp,
+        });
+        self.send_to_python(call);
+        return fut
+    }
+
+    pub fn increment_storage(&self, uaid: String, message_month: String, timestamp: i64)
+        -> MyFuture<IncStorageResponse>
+    {
+        let (call, fut) = PythonCall::new(&Call::IncStoragePosition {
+            uaid: uaid,
+            message_month: message_month,
             timestamp: timestamp,
         });
         self.send_to_python(call);

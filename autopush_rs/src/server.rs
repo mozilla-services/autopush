@@ -438,11 +438,17 @@ impl Future for PingManager {
             TimeoutState::None => {}
             TimeoutState::Close(ref mut timeout) => {
                 if timeout.poll()?.is_ready() {
+                    if let CloseState::Exchange(ref mut client) = self.client {
+                        client.shutdown();
+                    }
                     return Err("close handshake took too long".into())
                 }
             }
             TimeoutState::Ping(ref mut timeout) => {
                 if timeout.poll()?.is_ready() {
+                    if let CloseState::Exchange(ref mut client) = self.client {
+                        client.shutdown();
+                    }
                     return Err("pong not received within timeout".into())
                 }
             }

@@ -53,7 +53,7 @@ class WebPushMessage(object):
     """Serializable version of attributes needed for message delivery"""
     uaid = attrib()  # type: str
     timestamp = attrib()  # type: int
-    channel_id = attrib()  # type: str
+    channelID = attrib()  # type: str
     ttl = attrib()  # type: int
     topic = attrib()  # type: str
     version = attrib()  # type: str
@@ -66,12 +66,11 @@ class WebPushMessage(object):
         # type: (WebPushNotification) -> WebPushMessage
         p = notif.websocket_format()
         del p["messageType"]
-        p["channel_id"] = p.pop("channelID")
         return cls(
             uaid=notif.uaid.hex,
-            timestamp=notif.timestamp,
+            timestamp=int(notif.timestamp),
             sortkey_timestamp=notif.sortkey_timestamp,
-            ttl=notif.ttl,
+            ttl=int(notif.ttl) if notif.ttl else notif.ttl,
             topic=notif.topic,
             **p
         )
@@ -80,7 +79,7 @@ class WebPushMessage(object):
         # type: () -> WebPushNotification
         return WebPushNotification(
             uaid=UUID(self.uaid),
-            channel_id=self.channel_id,
+            channel_id=self.channelID,
             data=self.data,
             headers=self.headers,
             ttl=self.ttl,
@@ -294,7 +293,9 @@ class CommandProcessor(object):
         from pprint import pformat
         log.info('command: %r %r' % (pformat(command), input))
         command_obj = self.deserialize[command](**input)
-        return attr.asdict(self.command_dict[command].process(command_obj))
+        response = attr.asdict(self.command_dict[command].process(command_obj))
+        log.info('response: %s' % response)
+        return response
 
 
 class ProcessorCommand(object):
@@ -363,8 +364,8 @@ class HelloCommand(ProcessorCommand):
             return None, flags
 
         # Determine if message table rotation is needed
+        flags["message_month"] = record["current_month"]
         if record["current_month"] != self.db.current_msg_month:
-            flags["message_month"] = record["current_month"]
             flags["rotate_message_table"] = True
 
         # Include and update last_connect if needed, otherwise exclude

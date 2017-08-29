@@ -47,7 +47,7 @@ pub struct WebPushClient {
     unacked_stored_notifs: Vec<Notification>,
     // Highest version from stored, retained for use with increment
     // when all the unacked storeds are ack'd
-    unacked_stored_highest: Option<i32>,
+    unacked_stored_highest: Option<i64>,
 }
 
 impl WebPushClient {
@@ -97,6 +97,7 @@ pub enum ClientState {
     WaitingForUnRegister(Uuid, MyFuture<call::UnRegisterResponse>),
     WaitingForCheckStorage(MyFuture<call::CheckStorageResponse>),
     WaitingForDelete(MyFuture<call::DeleteMessageResponse>),
+    WaitingForIncrementStorage(MyFuture<call::IncStorageResponse>),
     FinishSend(Option<ServerMessage>, Option<Box<ClientState>>),
     SendMessages(Option<Vec<Notification>>),
     CheckStorage,
@@ -136,16 +137,22 @@ where
         }
     }
 
+    pub fn shutdown(&mut self) {
+        self.data.shutdown();
+    }
+
     fn transition(&mut self) -> Poll<ClientState, Error> {
         let next_state = match self.state {
             ClientState::FinishSend(None, None) => {
                 return Err("Bad state, should not have nothing to do".into())
             },
             ClientState::FinishSend(None, ref mut next_state) => {
+                debug!("State: FinishSend w/next_state");
                 try_ready!(self.data.ws.poll_complete());
                 *next_state.take().unwrap()
             }
             ClientState::FinishSend(ref mut msg, ref mut next_state) => {
+                debug!("State: FinishSend w/msg & next_state");
                 let item = msg.take().unwrap();
                 let ret = self.data.ws.start_send(item).chain_err(|| "unable to send")?;
                 match ret {
@@ -159,6 +166,7 @@ where
                 }
             },
             ClientState::SendMessages(ref mut more_messages) => {
+                debug!("State: SendMessages");
                 if more_messages.is_some() {
                     let mut messages = more_messages.take().unwrap();
                     let message = messages.pop().unwrap();
@@ -173,6 +181,7 @@ where
                 }
             },
             ClientState::CheckStorage => {
+                debug!("State: CheckStorage");
                 let webpush = self.data.webpush.as_ref().unwrap();
                 ClientState::WaitingForCheckStorage(self.data.srv.check_storage(
                     webpush.uaid.simple().to_string(),
@@ -181,14 +190,26 @@ where
                     webpush.unacked_stored_highest,
                 ))
             },
+            ClientState::IncrementStorage => {
+                debug!("State: IncrementStorage");
+                let webpush = self.data.webpush.as_ref().unwrap();
+                ClientState::WaitingForIncrementStorage(self.data.srv.increment_storage(
+                    webpush.uaid.simple().to_string(),
+                    webpush.message_month.clone(),
+                    webpush.unacked_stored_highest.unwrap(),
+                ))
+            },
             ClientState::WaitingForHello(ref mut timeout) => {
+                debug!("State: WaitingForHello");
                 let uaid = match try_ready!(self.data.input_with_timeout(timeout)) {
                     ClientMessage::Hello { uaid, use_webpush: Some(true), ..} => uaid,
                     _ => return Err("Invalid message, must be hello".into()),
                 };
-                ClientState::WaitingForProcessHello(self.data.srv.hello(&time::now(), uaid.as_ref()))
+                let ms_time = time::precise_time_ns() / 1000;
+                ClientState::WaitingForProcessHello(self.data.srv.hello(&ms_time, uaid.as_ref()))
             },
             ClientState::WaitingForProcessHello(ref mut response) => {
+                debug!("State: WaitingForProcessHello");
                 match try_ready!(response.poll()) {
                     call::HelloResponse { uaid: Some(uaid), message_month, reset_uaid, rotate_message_table }
                     => self.data.process_hello(uaid, message_month, reset_uaid, rotate_message_table),
@@ -196,10 +217,12 @@ where
                 }
             },
             ClientState::WaitingForCheckStorage(ref mut response) => {
+                debug!("State: WaitingForCheckStorage");
                 let (include_topic, mut messages, timestamp) = match try_ready!(response.poll()) {
                     call::CheckStorageResponse { include_topic, messages, timestamp }
                     => (include_topic, messages, timestamp),
                 };
+                debug!("Got checkstorage response");
                 let webpush = self.data.webpush.as_mut().unwrap();
                 webpush.flags.include_topic = include_topic;
                 webpush.unacked_stored_highest = timestamp;
@@ -219,7 +242,14 @@ where
                     ClientState::Await
                 }
             },
+            ClientState::WaitingForIncrementStorage(ref mut response) => {
+                debug!("State: WaitingForIncrementStorage");
+                try_ready!(response.poll());
+                self.data.webpush.as_mut().unwrap().flags.increment_storage = false;
+                ClientState::WaitingForAcks
+            }
             ClientState::WaitingForRegister(channel_id, ref mut response) => {
+                debug!("State: WaitingForRegister");
                 match try_ready!(response.poll()) {
                     call::RegisterResponse::Success { endpoint } => {
                         let msg = ServerMessage::Register {
@@ -241,7 +271,7 @@ where
                 }
             },
             ClientState::WaitingForUnRegister(channel_id, ref mut response) => {
-                debug!("Attempting to wait for unregister");
+                debug!("State: WaitingForUnRegister");
                 let msg = match try_ready!(response.poll()) {
                     call::UnRegisterResponse::Success{ success } => {
                         debug!("Got the unregister response");
@@ -263,6 +293,7 @@ where
                 ClientState::FinishSend(Some(msg), Some(Box::new(next_state)))
             },
             ClientState::WaitingForAcks => {
+                debug!("State: WaitingForAcks");
                 if let Some(next_state) = self.data.determine_acked_state() {
                     return Ok(next_state.into())
                 }
@@ -280,10 +311,12 @@ where
                 }
             },
             ClientState::WaitingForDelete(ref mut response) => {
+                debug!("State: WaitingForDelete");
                 try_ready!(response.poll());
                 ClientState::WaitingForAcks
             },
             ClientState::Await => {
+                debug!("State: Await");
                 if self.data.webpush.as_ref().unwrap().flags.check {
                     return Ok(ClientState::CheckStorage.into())
                 }
@@ -313,13 +346,11 @@ where
                 }
             },
             ClientState::ShutdownCleanup(ref mut err) => {
+                debug!("State: ShutdownCleanup");
                 if let Some(err_obj) = err.take() {
                     debug!("Error for shutdown: {}", err_obj);
                 };
-                // If we made it past hello, do more cleanup
-                if let Some(WebPushClient { uaid, .. }) = self.data.webpush {
-                    self.data.srv.disconnet_client(&uaid);
-                };
+                self.data.shutdown();
                 ClientState::Done
             },
             _ => return Err("Transition didn't work".into()),
@@ -480,6 +511,13 @@ where
 
     fn unacked_messages(&self) -> bool {
         self.webpush.as_ref().unwrap().unacked_messages()
+    }
+
+    pub fn shutdown(&mut self) {
+        // If we made it past hello, do more cleanup
+        if let Some(WebPushClient { uaid, .. }) = self.webpush {
+            self.srv.disconnet_client(&uaid);
+        };
     }
 }
 

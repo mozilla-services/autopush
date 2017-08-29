@@ -85,8 +85,11 @@ pub struct Notification {
     pub channel_id: Uuid,
     pub version: String,
     pub ttl: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub topic: Option<String>,
     pub timestamp: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
     data: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     headers: Option<HashMap<String, String>>
 }
