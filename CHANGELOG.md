@@ -1,3 +1,14 @@
+<a name="1.35.1"></a>
+## 1.35.1 (2017-08-29)
+
+
+#### Bug Fixes
+
+*   change "enable_simplepush" flag to "disable_simplepush" ([f2cdbf0e](https://github.com/mozilla-services/autopush/commit/f2cdbf0e1b9804339b163ac1f656d790da5b9b55), closes [#994](https://github.com/mozilla-services/autopush/issues/994))
+*   Add missing metric for notification encoding ([74fbf58d](https://github.com/mozilla-services/autopush/commit/74fbf58d72241a8d3b73aa785e2769791ea88fa5), closes [#992](https://github.com/mozilla-services/autopush/issues/992))
+
+
+
 <a name="1.35.0"></a>
 ## 1.35.0 (2017-08-10)
 
