@@ -98,6 +98,7 @@ pub enum ClientState {
     WaitingForCheckStorage(MyFuture<call::CheckStorageResponse>),
     WaitingForDelete(MyFuture<call::DeleteMessageResponse>),
     WaitingForIncrementStorage(MyFuture<call::IncStorageResponse>),
+    WaitingForDropUser(MyFuture<call::DropUserResponse>),
     FinishSend(Option<ServerMessage>, Option<Box<ClientState>>),
     SendMessages(Option<Vec<Notification>>),
     CheckStorage,
@@ -238,7 +239,6 @@ where
                     )
                 } else {
                     webpush.flags.check = false;
-                    // TODO:: Handle reset_uaid and migrate_monthly here
                     ClientState::Await
                 }
             },
@@ -250,25 +250,29 @@ where
             }
             ClientState::WaitingForRegister(channel_id, ref mut response) => {
                 debug!("State: WaitingForRegister");
-                match try_ready!(response.poll()) {
+                let msg = match try_ready!(response.poll()) {
                     call::RegisterResponse::Success { endpoint } => {
-                        let msg = ServerMessage::Register {
+                        ServerMessage::Register {
                             channel_id: channel_id,
                             status: 200,
                             push_endpoint: endpoint,
-                        };
-                        ClientState::FinishSend(Some(msg), Some(Box::new(ClientState::Await)))
+                        }
                     },
                     call::RegisterResponse::Error { error_msg, status, .. } => {
                         debug!("Got unregister fail, error: {}", error_msg);
-                        let msg = ServerMessage::Register {
+                        ServerMessage::Register {
                             channel_id: channel_id,
                             status: status,
                             push_endpoint: "".into(),
-                        };
-                        ClientState::FinishSend(Some(msg), Some(Box::new(ClientState::Await)))
+                        }
                     }
-                }
+                };
+                let next_state = if self.data.unacked_messages() {
+                    ClientState::WaitingForAcks
+                } else {
+                    ClientState::Await
+                };
+                ClientState::FinishSend(Some(msg), Some(Box::new(next_state)))
             },
             ClientState::WaitingForUnRegister(channel_id, ref mut response) => {
                 debug!("State: WaitingForUnRegister");
@@ -314,6 +318,11 @@ where
                 debug!("State: WaitingForDelete");
                 try_ready!(response.poll());
                 ClientState::WaitingForAcks
+            },
+            ClientState::WaitingForDropUser(ref mut response) => {
+                debug!("State: WaitingForDropUser");
+                try_ready!(response.poll());
+                ClientState::Done
             },
             ClientState::Await => {
                 debug!("State: Await");
@@ -502,6 +511,10 @@ where
             Some(ClientState::IncrementStorage)
         } else if all_acked && webpush.flags.check {
             Some(ClientState::CheckStorage)
+        } else if all_acked && webpush.flags.reset_uaid {
+            Some(ClientState::WaitingForDropUser(
+                self.srv.drop_user(webpush.uaid.simple().to_string())
+            ))
         } else if all_acked && webpush.flags.none() {
             Some(ClientState::Await)
         } else {

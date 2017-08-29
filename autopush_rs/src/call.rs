@@ -161,6 +161,10 @@ enum Call {
         uaid: String,
         message_month: String,
         timestamp: i64,
+    },
+
+    DropUser {
+        uaid: String,
     }
 }
 
@@ -221,6 +225,11 @@ pub struct DeleteMessageResponse {
 #[derive(Deserialize)]
 pub struct IncStorageResponse {
     pub success: bool,
+}
+
+#[derive(Deserialize)]
+pub struct DropUserResponse {
+    pub sucess: bool,
 }
 
 impl Server {
@@ -293,6 +302,14 @@ impl Server {
         let (call, fut) = PythonCall::new(&Call::DeleteMessage {
             message: notif,
             message_month: message_month,
+        });
+        self.send_to_python(call);
+        return fut
+    }
+
+    pub fn drop_user(&self, uaid: String) -> MyFuture<DropUserResponse> {
+        let (call, fut) = PythonCall::new(&Call::DropUser {
+            uaid,
         });
         self.send_to_python(call);
         return fut
