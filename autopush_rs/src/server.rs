@@ -23,7 +23,7 @@ use uuid::Uuid;
 
 use client::{Client, RegisteredClient};
 use errors::*;
-use protocol::{ClientMessage, ServerMessage, Notification};
+use protocol::{ClientMessage, ServerMessage, ServerNotification, Notification};
 use queue::{self, AutopushQueue};
 use rt::{self, AutopushError, UnwindGuard};
 use util::{self, RcObject, timeout};
@@ -344,7 +344,7 @@ impl Server {
         if let Some(client) = uaids.get_mut(&uaid) {
             debug!("Found a client to deliver a notification to");
             // TODO: Don't unwrap, handle error properly
-            (&client.tx).send(notif).unwrap();
+            (&client.tx).send(ServerNotification::Notification(notif)).unwrap();
             info!("Dropped notification in queue");
             return Ok(());
         }

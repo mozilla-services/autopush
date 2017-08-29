@@ -1,16 +1,14 @@
-//! Managment of connected clients to a WebPush server
+//! Management of connected clients to a WebPush server
 //!
 //! This module is a pretty heavy work in progress. The intention is that
 //! this'll house all the various state machine transitions and state management
 //! of connected clients. Note that it's expected there'll be a lot of connected
 //! clients, so this may appears relatively heavily optimized!
 
-use std::io;
-use std::marker;
 use std::rc::Rc;
 
 use futures::AsyncSink;
-use futures::future::{result, err, loop_fn, Loop, ok, Either};
+use futures::future::{Either};
 use futures::sync::mpsc;
 use futures::{Stream, Sink, Future, Poll, Async};
 use tokio_core::reactor::Timeout;
@@ -19,19 +17,22 @@ use uuid::Uuid;
 
 use call;
 use errors::*;
-use protocol::{ClientMessage, ServerMessage, Notification};
+use protocol::{ClientAck, ClientMessage, ServerMessage, ServerNotification, Notification};
 use server::Server;
-use util::timeout;
 
 pub struct RegisteredClient {
     pub uaid: Uuid,
-    pub tx: mpsc::UnboundedSender<Notification>,
+    pub tx: mpsc::UnboundedSender<ServerNotification>,
 }
 
 // Represents a websocket client connection that may or may not be authenticated
 pub struct Client<T> {
-    webpush: Option<WebPushClient>,
+    data: ClientData<T>,
     state: ClientState,
+}
+
+pub struct ClientData<T> {
+    webpush: Option<WebPushClient>,
     srv: Rc<Server>,
     ws: T,
 }
@@ -39,14 +40,20 @@ pub struct Client<T> {
 // Represent the state for a valid WebPush client that is authenticated
 pub struct WebPushClient {
     uaid: Uuid,
-    rx: mpsc::UnboundedReceiver<Notification>,
+    rx: mpsc::UnboundedReceiver<ServerNotification>,
     flags: ClientFlags,
     message_month: String,
     unacked_direct_notifs: Vec<Notification>,
-    unacked_stored_notifs: Vec<String>,
+    unacked_stored_notifs: Vec<Notification>,
     // Highest version from stored, retained for use with increment
     // when all the unacked storeds are ack'd
-    unacked_stored_highest: Option<String>,
+    unacked_stored_highest: Option<i32>,
+}
+
+impl WebPushClient {
+    fn unacked_messages(&self) -> bool {
+        self.unacked_stored_notifs.len() > 0 || self.unacked_direct_notifs.len() > 0
+    }
 }
 
 pub struct ClientFlags {
@@ -60,9 +67,9 @@ pub struct ClientFlags {
 impl ClientFlags {
     fn new() -> ClientFlags {
         ClientFlags {
-            include_topic: false,
+            include_topic: true,
             increment_storage: false,
-            check: false,
+            check: true,
             reset_uaid: false,
             rotate_message_table: false,
         }
@@ -88,7 +95,13 @@ pub enum ClientState {
     WaitingForProcessHello(MyFuture<call::HelloResponse>),
     WaitingForRegister(Uuid, MyFuture<call::RegisterResponse>),
     WaitingForUnRegister(Uuid, MyFuture<call::UnRegisterResponse>),
+    WaitingForCheckStorage(MyFuture<call::CheckStorageResponse>),
+    WaitingForDelete(MyFuture<call::DeleteMessageResponse>),
     FinishSend(Option<ServerMessage>, Option<Box<ClientState>>),
+    SendMessages(Option<Vec<Notification>>),
+    CheckStorage,
+    IncrementStorage,
+    WaitingForAcks,
     Await,
     Done,
     ShutdownCleanup(Option<Error>),
@@ -115,72 +128,26 @@ where
         let timeout = Timeout::new(srv.opts.open_handshake_timeout.unwrap(), &srv.handle).unwrap();
         Client {
             state: ClientState::WaitingForHello(timeout),
-            webpush: None,
-            srv: srv.clone(),
-            ws: ws,
+            data: ClientData {
+                webpush: None,
+                srv: srv.clone(),
+                ws: ws
+            }
         }
     }
 
     fn transition(&mut self) -> Poll<ClientState, Error> {
         let next_state = match self.state {
-            ClientState::WaitingForHello(ref mut timeout) => {
-                match try_ready!(Combinators::input_with_timeout(&mut self.ws, timeout)) {
-                    ClientMessage::Hello {
-                        uaid: uaid,
-                        use_webpush: Some(true),
-                        ..
-                    } => {
-                        ClientState::WaitingForProcessHello(
-                            self.srv.hello(&time::now(), uaid.as_ref()),
-                        )
-                    },
-                    _ => return Err("Invalid message, must be hello".into()),
-                }
-            },
-            ClientState::WaitingForProcessHello(ref mut response) => {
-                match try_ready!(response.poll()) {
-                    call::HelloResponse {
-                        uaid: Some(uaid),
-                        message_month: message_month,
-                        reset_uaid: reset_uaid,
-                        rotate_message_table: rotate_message_table,
-                    } => {
-                        let (tx, rx) = mpsc::unbounded();
-                        let mut flags = ClientFlags::new();
-                        flags.reset_uaid = reset_uaid;
-                        flags.rotate_message_table = rotate_message_table;
-                        self.webpush = Some(WebPushClient {
-                            uaid: uaid,
-                            flags: flags,
-                            rx: rx,
-                            message_month: message_month,
-                            unacked_direct_notifs: Vec::new(),
-                            unacked_stored_notifs: Vec::new(),
-                            unacked_stored_highest: None,
-                        });
-                        self.srv.connect_client(
-                            RegisteredClient { uaid: uaid, tx: tx },
-                        );
-                        let response = ServerMessage::Hello {
-                            uaid: uaid.hyphenated().to_string(),
-                            status: 200,
-                            use_webpush: Some(true),
-                        };
-                        ClientState::FinishSend(Some(response), Some(Box::new(ClientState::Await)))
-                    }
-                    _ => return Err("Already connected elsewhere".into()),
-                }
-            },
             ClientState::FinishSend(None, None) => {
                 return Err("Bad state, should not have nothing to do".into())
             },
             ClientState::FinishSend(None, ref mut next_state) => {
-                try_ready!(self.ws.poll_complete());
+                try_ready!(self.data.ws.poll_complete());
                 *next_state.take().unwrap()
             }
             ClientState::FinishSend(ref mut msg, ref mut next_state) => {
                 let item = msg.take().unwrap();
-                let ret = self.ws.start_send(item).chain_err(|| "unable to send")?;
+                let ret = self.data.ws.start_send(item).chain_err(|| "unable to send")?;
                 match ret {
                     AsyncSink::Ready => {
                         ClientState::FinishSend(None, Some(next_state.take().unwrap()))
@@ -191,78 +158,70 @@ where
                     }
                 }
             },
-            ClientState::Await => {
-                let webpush = self.webpush.as_mut().unwrap();
-                match try_ready!(Combinators::input_or_notif(&mut self.ws, &mut webpush.rx)) {
-                    Either::A(ClientMessage::Register {
-                                  channel_id: channel_id,
-                                  key: key,
-                              }) => {
-                        debug!("Got a register command!");
-                        let uaid = webpush.uaid.clone();
-                        let message_month = webpush.message_month.clone();
-                        let channel_id_str = channel_id.hyphenated().to_string();
-                        let fut = self.srv.register(
-                            uaid.simple().to_string(),
-                            message_month,
-                            channel_id_str,
-                            key,
-                        );
-                        ClientState::WaitingForRegister(channel_id, fut)
-                    },
-                    Either::A(ClientMessage::Unregister {
-                                  channel_id: channel_id,
-                                  code: code,
-                              }) => {
-                        debug!("Got a unregister command");
-                        let uaid = webpush.uaid.clone();
-                        let message_month = webpush.message_month.clone();
-                        let channel_id_str = channel_id.hyphenated().to_string();
-                        let fut = self.srv.unregister(
-                            uaid.simple().to_string(),
-                            message_month,
-                            channel_id_str,
-                            code.unwrap_or(200),
-                        );
-                        ClientState::WaitingForUnRegister(channel_id, fut)
-                    },
-                    Either::A(ClientMessage::Ack { updates: updates }) => {
-                        for notif in updates.iter() {
-                            if let Some(pos) = webpush.unacked_direct_notifs.iter().position(
-                                |v| {
-                                    v.channel_id == notif.channel_id && v.version == notif.version
-                                },
-                            )
-                            {
-                                webpush.unacked_direct_notifs.remove(pos);
-                                continue;
-                            };
-                            if let Some(pos) = webpush.unacked_stored_notifs.iter().position(
-                                |v| {
-                                    v == &notif.version
-                                },
-                            )
-                            {
-                                webpush.unacked_stored_notifs.remove(pos);
-                                continue;
-                            };
-                        }
-                        ClientState::Await
-                    },
-                    Either::B(notif) => {
-                        webpush.unacked_direct_notifs.push(notif.clone());
-                        debug!("Got a notification to send, sending!");
-                        ClientState::FinishSend(
-                            Some(ServerMessage::Notification(notif)),
-                            Some(Box::new(ClientState::Await)),
-                        )
-                    },
-                    Either::A(_) => return Err("Invalid message".into()),
+            ClientState::SendMessages(ref mut more_messages) => {
+                if more_messages.is_some() {
+                    let mut messages = more_messages.take().unwrap();
+                    let message = messages.pop().unwrap();
+                    ClientState::FinishSend(
+                        Some(ServerMessage::Notification(message)),
+                        Some(Box::new(ClientState::SendMessages(
+                            if messages.len() > 0 { Some(messages) } else { None }
+                        )))
+                    )
+                } else {
+                    ClientState::WaitingForAcks
+                }
+            },
+            ClientState::CheckStorage => {
+                let webpush = self.data.webpush.as_ref().unwrap();
+                ClientState::WaitingForCheckStorage(self.data.srv.check_storage(
+                    webpush.uaid.simple().to_string(),
+                    webpush.message_month.clone(),
+                    webpush.flags.include_topic,
+                    webpush.unacked_stored_highest,
+                ))
+            },
+            ClientState::WaitingForHello(ref mut timeout) => {
+                let uaid = match try_ready!(self.data.input_with_timeout(timeout)) {
+                    ClientMessage::Hello { uaid, use_webpush: Some(true), ..} => uaid,
+                    _ => return Err("Invalid message, must be hello".into()),
+                };
+                ClientState::WaitingForProcessHello(self.data.srv.hello(&time::now(), uaid.as_ref()))
+            },
+            ClientState::WaitingForProcessHello(ref mut response) => {
+                match try_ready!(response.poll()) {
+                    call::HelloResponse { uaid: Some(uaid), message_month, reset_uaid, rotate_message_table }
+                    => self.data.process_hello(uaid, message_month, reset_uaid, rotate_message_table),
+                    _ => return Err("Already connected elsewhere".into()),
+                }
+            },
+            ClientState::WaitingForCheckStorage(ref mut response) => {
+                let (include_topic, mut messages, timestamp) = match try_ready!(response.poll()) {
+                    call::CheckStorageResponse { include_topic, messages, timestamp }
+                    => (include_topic, messages, timestamp),
+                };
+                let webpush = self.data.webpush.as_mut().unwrap();
+                webpush.flags.include_topic = include_topic;
+                webpush.unacked_stored_highest = timestamp;
+                if messages.len() > 0 {
+                    webpush.flags.increment_storage = !include_topic;
+                    webpush.unacked_stored_notifs.extend(messages.iter().cloned());
+                    let message = ServerMessage::Notification(
+                        messages.pop().unwrap()
+                    );
+                    ClientState::FinishSend(
+                        Some(message),
+                        Some(Box::new(ClientState::SendMessages(Some(messages))))
+                    )
+                } else {
+                    webpush.flags.check = false;
+                    // TODO:: Handle reset_uaid and migrate_monthly here
+                    ClientState::Await
                 }
             },
             ClientState::WaitingForRegister(channel_id, ref mut response) => {
                 match try_ready!(response.poll()) {
-                    call::RegisterResponse::Success { endpoint: endpoint } => {
+                    call::RegisterResponse::Success { endpoint } => {
                         let msg = ServerMessage::Register {
                             channel_id: channel_id,
                             status: 200,
@@ -270,38 +229,87 @@ where
                         };
                         ClientState::FinishSend(Some(msg), Some(Box::new(ClientState::Await)))
                     },
-                    call::RegisterResponse::Error { error_msg: msg, status: status, .. } => {
-                        debug!("Got unregister fail, error: {}", msg);
+                    call::RegisterResponse::Error { error_msg, status, .. } => {
+                        debug!("Got unregister fail, error: {}", error_msg);
                         let msg = ServerMessage::Register {
                             channel_id: channel_id,
                             status: status,
                             push_endpoint: "".into(),
                         };
                         ClientState::FinishSend(Some(msg), Some(Box::new(ClientState::Await)))
-                    },
-                    _ => return Err("woopsies, malfunction".into()),
+                    }
                 }
             },
             ClientState::WaitingForUnRegister(channel_id, ref mut response) => {
                 debug!("Attempting to wait for unregister");
-                match try_ready!(response.poll()) {
-                    call::UnRegisterResponse::Success{ success: success } => {
+                let msg = match try_ready!(response.poll()) {
+                    call::UnRegisterResponse::Success{ success } => {
                         debug!("Got the unregister response");
-                        let msg = ServerMessage::Unregister {
+                        ServerMessage::Unregister {
                             channel_id: channel_id,
                             status: if success { 200 } else { 500 },
-                        };
-                        ClientState::FinishSend(Some(msg), Some(Box::new(ClientState::Await)))
+                        }
                     },
-                    call::UnRegisterResponse::Error { error_msg: msg, status: status, .. } => {
-                        debug!("Got unregister fail, error: {}", msg);
-                        let msg = ServerMessage::Unregister {
-                            channel_id: channel_id,
-                            status: status,
-                        };
-                        ClientState::FinishSend(Some(msg), Some(Box::new(ClientState::Await)))
+                    call::UnRegisterResponse::Error { error_msg, status, .. } => {
+                        debug!("Got unregister fail, error: {}", error_msg);
+                        ServerMessage::Unregister { channel_id, status }
+                    }
+                };
+                let next_state = if self.data.unacked_messages() {
+                    ClientState::WaitingForAcks
+                } else {
+                    ClientState::Await
+                };
+                ClientState::FinishSend(Some(msg), Some(Box::new(next_state)))
+            },
+            ClientState::WaitingForAcks => {
+                if let Some(next_state) = self.data.determine_acked_state() {
+                    return Ok(next_state.into())
+                }
+                match try_ready!(self.data.input()) {
+                    ClientMessage::Register { channel_id, key } => {
+                        self.data.process_register(channel_id, key)
                     },
-                    _ => return Err("woopsies, malfunction".into()),
+                    ClientMessage::Unregister { channel_id, code } => {
+                        self.data.process_unregister(channel_id, code)
+                    },
+                    ClientMessage::Ack { updates } => {
+                        self.data.process_acks(updates)
+                    }
+                    _ => return Err("Invalid state transition".into())
+                }
+            },
+            ClientState::WaitingForDelete(ref mut response) => {
+                try_ready!(response.poll());
+                ClientState::WaitingForAcks
+            },
+            ClientState::Await => {
+                if self.data.webpush.as_ref().unwrap().flags.check {
+                    return Ok(ClientState::CheckStorage.into())
+                }
+                match try_ready!(self.data.input_or_notif()) {
+                    Either::A(ClientMessage::Register { channel_id, key }) => {
+                        self.data.process_register(channel_id, key)
+                    },
+                    Either::A(ClientMessage::Unregister { channel_id, code }) => {
+                        self.data.process_unregister(channel_id, code)
+                    },
+                    Either::B(ServerNotification::Notification(notif)) => {
+                        let webpush = self.data.webpush.as_mut().unwrap();
+                        webpush.unacked_direct_notifs.push(notif.clone());
+                        debug!("Got a notification to send, sending!");
+                        ClientState::FinishSend(
+                            Some(ServerMessage::Notification(notif)),
+                            Some(Box::new(ClientState::WaitingForAcks)),
+                        )
+                    },
+                    Either::B(ServerNotification::CheckStorage) => {
+                        let webpush = self.data.webpush.as_mut().unwrap();
+                        webpush.flags.include_topic = true;
+                        webpush.flags.check = true;
+                        ClientState::Await
+                    },
+                    _ => return Err("Invalid message".into())
                 }
             },
             ClientState::ShutdownCleanup(ref mut err) => {
@@ -309,8 +317,8 @@ where
                     debug!("Error for shutdown: {}", err_obj);
                 };
                 // If we made it past hello, do more cleanup
-                if let Some(WebPushClient { uaid: uaid, .. }) = self.webpush {
-                    self.srv.disconnet_client(&uaid);
+                if let Some(WebPushClient { uaid, .. }) = self.data.webpush {
+                    self.data.srv.disconnet_client(&uaid);
                 };
                 ClientState::Done
             },
@@ -320,21 +328,26 @@ where
     }
 }
 
-pub struct Combinators<T> {
-    _marker: marker::PhantomData<T>,
-}
-
-impl<T> Combinators<T>
+impl<T> ClientData<T>
 where
     T: Stream<Item = ClientMessage, Error = Error>
         + Sink<SinkItem = ServerMessage, SinkError = Error>
         + 'static,
 {
-    fn input_with_timeout(ws: &mut T, timeout: &mut Timeout) -> Poll<ClientMessage, Error> {
+    fn input(&mut self) -> Poll<ClientMessage, Error> {
+        let item = match self.ws.poll()? {
+            Async::Ready(None) => return Err("Client dropped".into()),
+            Async::Ready(Some(msg)) => Async::Ready(msg),
+            Async::NotReady => Async::NotReady
+        };
+        Ok(item)
+    }
+
+    fn input_with_timeout(&mut self, timeout: &mut Timeout) -> Poll<ClientMessage, Error> {
         let item = match timeout.poll()? {
-            Async::Ready(t) => return Err("Client timed out".into()),
+            Async::Ready(_) => return Err("Client timed out".into()),
             Async::NotReady => {
-                match ws.poll()? {
+                match self.ws.poll()? {
                     Async::Ready(None) => return Err("Client dropped".into()),
                     Async::Ready(Some(msg)) => Async::Ready(msg),
                     Async::NotReady => Async::NotReady,
@@ -344,23 +357,129 @@ where
         Ok(item)
     }
 
-    fn input_or_notif(
-        ws: &mut T,
-        queue: &mut mpsc::UnboundedReceiver<Notification>,
-    ) -> Poll<Either<ClientMessage, Notification>, Error> {
-        let item = match queue.poll() {
+    fn input_or_notif(&mut self) -> Poll<Either<ClientMessage, ServerNotification>, Error> {
+        let webpush = self.webpush.as_mut().unwrap();
+        let item = match webpush.rx.poll() {
             Ok(Async::Ready(Some(notif))) => Either::B(notif),
             Ok(Async::Ready(None)) => return Err("Sending side went byebye".into()),
             Ok(Async::NotReady) => {
-                match ws.poll()? {
+                match self.ws.poll()? {
                     Async::Ready(None) => return Err("Client dropped".into()),
                     Async::Ready(Some(msg)) => Either::A(msg),
                     Async::NotReady => return Ok(Async::NotReady),
                 }
             },
-            _ => return Err("Woah".into()),
+            Err(_) => return Err("Unexpected error".into()),
         };
         Ok(Async::Ready(item))
+    }
+
+    fn process_hello(&mut self, uaid: Uuid, message_month: String, reset_uaid: bool, rotate_message_table: bool) -> ClientState {
+        let (tx, rx) = mpsc::unbounded();
+        let mut flags = ClientFlags::new();
+        flags.reset_uaid = reset_uaid;
+        flags.rotate_message_table = rotate_message_table;
+        self.webpush = Some(WebPushClient {
+            uaid: uaid,
+            flags: flags,
+            rx: rx,
+            message_month: message_month,
+            unacked_direct_notifs: Vec::new(),
+            unacked_stored_notifs: Vec::new(),
+            unacked_stored_highest: None,
+        });
+        self.srv.connect_client(RegisteredClient { uaid: uaid, tx: tx });
+        let response = ServerMessage::Hello {
+            uaid: uaid.hyphenated().to_string(),
+            status: 200,
+            use_webpush: Some(true),
+        };
+        ClientState::FinishSend(Some(response), Some(Box::new(ClientState::Await)))
+    }
+
+    fn process_register(&mut self, channel_id: Uuid, key: Option<String>) -> ClientState {
+        debug!("Got a register command");
+        let webpush = self.webpush.as_ref().unwrap();
+        let uaid = webpush.uaid.clone();
+        let message_month = webpush.message_month.clone();
+        let channel_id_str = channel_id.hyphenated().to_string();
+        let fut = self.srv.register(
+            uaid.simple().to_string(),
+            message_month,
+            channel_id_str,
+            key,
+        );
+        ClientState::WaitingForRegister(channel_id, fut)
+    }
+
+    fn process_unregister(&mut self, channel_id: Uuid, code: Option<i32>) -> ClientState {
+        debug!("Got a unregister command");
+        let webpush = self.webpush.as_ref().unwrap();
+        let uaid = webpush.uaid.clone();
+        let message_month = webpush.message_month.clone();
+        let channel_id_str = channel_id.hyphenated().to_string();
+        let fut = self.srv.unregister(
+            uaid.simple().to_string(),
+            message_month,
+            channel_id_str,
+            code.unwrap_or(200),
+        );
+        ClientState::WaitingForUnRegister(channel_id, fut)
+    }
+
+    fn process_acks(&mut self, updates: Vec<ClientAck>) -> ClientState {
+        let webpush = self.webpush.as_mut().unwrap();
+        let mut fut: Option<MyFuture<call::DeleteMessageResponse>> = None;
+        for notif in updates.iter() {
+            if let Some(pos) = webpush.unacked_direct_notifs.iter().position(|v| {
+                    v.channel_id == notif.channel_id && v.version == notif.version
+                }) {
+                webpush.unacked_direct_notifs.remove(pos);
+                continue;
+            };
+            if let Some(pos) = webpush.unacked_stored_notifs.iter().position(|v| {
+                    v.channel_id == notif.channel_id && v.version == notif.version
+            }) {
+                let message_month = webpush.message_month.clone();
+                let n = webpush.unacked_stored_notifs.remove(pos);
+                if n.topic.is_some() {
+                    if fut.is_none() {
+                        fut = Some(self.srv.delete_message(message_month, n))
+                    } else {
+                        let my_fut = self.srv.delete_message(message_month, n);
+                        fut = Some(Box::new(fut.take().unwrap().and_then(move |_| {
+                            my_fut
+                        })));
+                    }
+                }
+                continue;
+            };
+        }
+        if let Some(my_fut) = fut {
+            ClientState::WaitingForDelete(my_fut)
+        } else {
+            ClientState::WaitingForAcks
+        }
+    }
+
+    // Called from WaitingForAcks to determine if we're in fact done waiting for acks
+    // and to determine where we might go next
+    fn determine_acked_state(&mut self) -> Option<ClientState> {
+        let webpush = self.webpush.as_ref().unwrap();
+        let all_acked = !self.unacked_messages();
+        if all_acked && webpush.flags.check && webpush.flags.increment_storage {
+            Some(ClientState::IncrementStorage)
+        } else if all_acked && webpush.flags.check {
+            Some(ClientState::CheckStorage)
+        } else if all_acked && webpush.flags.none() {
+            Some(ClientState::Await)
+        } else {
+            None
+        }
+    }
+
+    fn unacked_messages(&self) -> bool {
+        self.webpush.as_ref().unwrap().unacked_messages()
     }
 }
 
@@ -384,57 +503,5 @@ where
                 Err(e) => self.state = ClientState::ShutdownCleanup(Some(e)),
             };
         }
-    }
-}
-
-/// Helper future to wait for the first item on one of two streams, returning
-/// the item and the two streams when done.
-struct StreamNext<S1, S2> {
-    left: Option<S1>,
-    right: Option<S2>,
-}
-
-impl<S1, S2> StreamNext<S1, S2>
-where
-    S1: Stream,
-    S2: Stream<Error = S1::Error>,
-{
-    fn new(s1: S1, s2: S2) -> StreamNext<S1, S2> {
-        StreamNext {
-            left: Some(s1),
-            right: Some(s2),
-        }
-    }
-}
-
-impl<S1, S2> Future for StreamNext<S1, S2>
-where
-    S1: Stream,
-    S2: Stream<Error = S1::Error>,
-{
-    type Item = Option<(Either<S1::Item, S2::Item>, S1, S2)>;
-    type Error = S1::Error;
-
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        let item = {
-            let left = self.left.as_mut().unwrap();
-            let right = self.right.as_mut().unwrap();
-            match left.poll()? {
-                Async::Ready(None) => return Ok(Async::Ready(None)),
-                Async::Ready(Some(item)) => Either::A(item),
-                Async::NotReady => {
-                    match right.poll()? {
-                        Async::Ready(None) => return Ok(Async::Ready(None)),
-                        Async::Ready(Some(item)) => Either::B(item),
-                        Async::NotReady => return Ok(Async::NotReady),
-                    }
-                }
-            }
-        };
-        Ok(Async::Ready(Some((
-            item,
-            self.left.take().unwrap(),
-            self.right.take().unwrap(),
-        ))))
     }
 }

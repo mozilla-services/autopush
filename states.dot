@@ -50,7 +50,6 @@ digraph g{
     WAIT_FOR_ACKS -> AWAIT_COMMAND [label="all acked \n Cond:NO_FLAGS"];
     WAIT_FOR_ACKS -> RUN_COMMAND [label="reg or unreg"];
     WAIT_FOR_ACKS -> DISCONNECT [label="connection drop"];
-    WAIT_FOR_ACKS -> WAIT_FOR_ACKS [label="Set:include_topic, Set:check_flag", fontcolor="darkgreen", color="green"];
     WAIT_FOR_ACKS -> STORE_DIRECT_MESSAGES [label="connection drop \n Cond:direct unacked messages"];
 
     INC_STORAGE_POSITION -> CHECK_STORAGE [label="UnSet:inc_storage_flag"];

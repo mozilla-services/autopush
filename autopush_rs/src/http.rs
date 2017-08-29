@@ -6,18 +6,15 @@
 use std::str;
 use std::rc::Rc;
 
-use errors::*;
 use futures::future::err;
 use futures::{Stream, Future};
 use hyper::Method;
 use hyper;
 use serde_json;
-use time;
 use tokio_service::Service;
 use uuid::Uuid;
 
 use server::Server;
-use protocol::Notification;
 
 pub struct Push(pub Rc<Server>);
 
@@ -28,8 +25,6 @@ impl Service for Push {
     type Future = Box<Future<Item = hyper::Response, Error = hyper::Error>>;
 
     fn call(&self, req: hyper::Request) -> Self::Future {
-        use hyper::header::ContentType;
-
         if *req.method() != Method::Put && *req.method() != Method::Post {
             println!("not a PUT: {}", req.method());
             return Box::new(err(hyper::Error::Method))
@@ -45,10 +40,6 @@ impl Service for Push {
                 println!("uri not uuid: {}", req_uaid);
                 return Box::new(err(hyper::Error::Status))
             }
-        };
-        let form_encoded = match req.headers().get::<ContentType>() {
-            Some(header) => **header == "application/x-www-form-urlencoded",
-            None => false,
         };
 
         debug!("Got a message, now to do something!");

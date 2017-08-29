@@ -10,6 +10,12 @@
 use std::collections::HashMap;
 use uuid::Uuid;
 
+// Used for the server to flag a webpush client to deliver a Notification or Check storage
+pub enum ServerNotification {
+    CheckStorage,
+    Notification(Notification),
+}
+
 #[derive(Deserialize)]
 #[serde(tag = "messageType", rename_all = "lowercase")]
 pub enum ClientMessage {
@@ -74,19 +80,13 @@ pub enum ServerMessage {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Notification {
+    pub uaid: Option<Uuid>,
     #[serde(rename = "channelID")]
     pub channel_id: Uuid,
     pub version: String,
-    ttl: u32,
-    topic: Option<String>,
-    timestamp: u64,
+    pub ttl: u32,
+    pub topic: Option<String>,
+    pub timestamp: u64,
     data: Option<String>,
     headers: Option<HashMap<String, String>>
-}
-
-#[derive(Serialize)]
-pub struct Update {
-    #[serde(rename = "channelID")]
-    pub channel_id: Uuid,
-    pub version: u64,
 }

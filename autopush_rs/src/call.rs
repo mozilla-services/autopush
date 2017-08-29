@@ -27,6 +27,7 @@ use uuid::Uuid;
 
 use errors::*;
 use rt::{self, UnwindGuard, AutopushError};
+use protocol;
 use server::Server;
 
 #[repr(C)]
@@ -142,6 +143,18 @@ enum Call<'a> {
         channel_id: String,
         message_month: String,
         code: i32,
+    },
+
+    CheckStorage {
+        uaid: String,
+        message_month: String,
+        include_topic: bool,
+        timestamp: Option<i32>,
+    },
+
+    DeleteMessage {
+        message: protocol::Notification,
+        message_month: String,
     }
 }
 
@@ -187,6 +200,18 @@ pub enum UnRegisterResponse {
     }
 }
 
+#[derive(Deserialize)]
+pub struct CheckStorageResponse {
+    pub include_topic: bool,
+    pub messages: Vec<protocol::Notification>,
+    pub timestamp: Option<i32>,
+}
+
+#[derive(Deserialize)]
+pub struct DeleteMessageResponse {
+    pub success: bool,
+}
+
 impl Server {
     pub fn hello(&self, connected_at: &Tm, uaid: Option<&Uuid>)
         -> MyFuture<HelloResponse>
@@ -222,6 +247,30 @@ impl Server {
             message_month: message_month,
             channel_id: channel_id,
             code: code,
+        });
+        self.send_to_python(call);
+        return fut
+    }
+
+    pub fn check_storage(&self, uaid: String, message_month: String, include_topic: bool, timestamp: Option<i32>)
+        -> MyFuture<CheckStorageResponse>
+    {
+        let (call, fut) = PythonCall::new(&Call::CheckStorage {
+            uaid: uaid,
+            message_month: message_month,
+            include_topic: include_topic,
+            timestamp: timestamp,
+        });
+        self.send_to_python(call);
+        return fut
+    }
+
+    pub fn delete_message(&self, message_month: String, notif: protocol::Notification)
+        -> MyFuture<DeleteMessageResponse>
+    {
+        let (call, fut) = PythonCall::new(&Call::DeleteMessage {
+            message: notif,
+            message_month: message_month,
         });
         self.send_to_python(call);
         return fut
