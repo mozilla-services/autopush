@@ -99,6 +99,7 @@ pub enum ClientState {
     WaitingForDelete(MyFuture<call::DeleteMessageResponse>),
     WaitingForIncrementStorage(MyFuture<call::IncStorageResponse>),
     WaitingForDropUser(MyFuture<call::DropUserResponse>),
+    WaitingForMigrateUser(MyFuture<call::MigrateUserResponse>),
     FinishSend(Option<ServerMessage>, Option<Box<ClientState>>),
     SendMessages(Option<Vec<Notification>>),
     CheckStorage,
@@ -247,7 +248,17 @@ where
                 try_ready!(response.poll());
                 self.data.webpush.as_mut().unwrap().flags.increment_storage = false;
                 ClientState::WaitingForAcks
-            }
+            },
+            ClientState::WaitingForMigrateUser(ref mut response) => {
+                debug!("State: WaitingForMigrateUser");
+                let message_month = match try_ready!(response.poll()) {
+                    call::MigrateUserResponse{ message_month} => message_month
+                };
+                let webpush = self.data.webpush.as_mut().unwrap();
+                webpush.message_month = message_month;
+                webpush.flags.rotate_message_table = false;
+                ClientState::Await
+            },
             ClientState::WaitingForRegister(channel_id, ref mut response) => {
                 debug!("State: WaitingForRegister");
                 let msg = match try_ready!(response.poll()) {
@@ -511,6 +522,13 @@ where
             Some(ClientState::IncrementStorage)
         } else if all_acked && webpush.flags.check {
             Some(ClientState::CheckStorage)
+        } else if all_acked && webpush.flags.rotate_message_table {
+            Some(ClientState::WaitingForMigrateUser(
+                self.srv.migrate_user(
+                    webpush.uaid.simple().to_string(),
+                    webpush.message_month.clone(),
+                )
+            ))
         } else if all_acked && webpush.flags.reset_uaid {
             Some(ClientState::WaitingForDropUser(
                 self.srv.drop_user(webpush.uaid.simple().to_string())

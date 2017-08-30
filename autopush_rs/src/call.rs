@@ -165,6 +165,11 @@ enum Call {
 
     DropUser {
         uaid: String,
+    },
+
+    MigrateUser {
+        uaid: String,
+        message_month: String,
     }
 }
 
@@ -229,7 +234,12 @@ pub struct IncStorageResponse {
 
 #[derive(Deserialize)]
 pub struct DropUserResponse {
-    pub sucess: bool,
+    pub success: bool,
+}
+
+#[derive(Deserialize)]
+pub struct MigrateUserResponse {
+    pub message_month: String,
 }
 
 impl Server {
@@ -310,6 +320,15 @@ impl Server {
     pub fn drop_user(&self, uaid: String) -> MyFuture<DropUserResponse> {
         let (call, fut) = PythonCall::new(&Call::DropUser {
             uaid,
+        });
+        self.send_to_python(call);
+        return fut
+    }
+
+    pub fn migrate_user(&self, uaid: String, message_month: String) -> MyFuture<MigrateUserResponse> {
+        let (call, fut) = PythonCall::new(&Call::MigrateUser {
+            uaid,
+            message_month,
         });
         self.send_to_python(call);
         return fut
