@@ -170,6 +170,11 @@ enum Call {
     MigrateUser {
         uaid: String,
         message_month: String,
+    },
+
+    StoreMessages {
+        message_month: String,
+        messages: Vec<protocol::Notification>,
     }
 }
 
@@ -241,6 +246,12 @@ pub struct DropUserResponse {
 pub struct MigrateUserResponse {
     pub message_month: String,
 }
+
+#[derive(Deserialize)]
+pub struct StoreMessagesResponse {
+    pub success: bool,
+}
+
 
 impl Server {
     pub fn hello(&self, connected_at: &u64, uaid: Option<&Uuid>)
@@ -329,6 +340,20 @@ impl Server {
         let (call, fut) = PythonCall::new(&Call::MigrateUser {
             uaid,
             message_month,
+        });
+        self.send_to_python(call);
+        return fut
+    }
+
+    pub fn store_messages(&self, uaid: String, message_month: String, mut messages: Vec<protocol::Notification>)
+        -> MyFuture<StoreMessagesResponse>
+    {
+        for message in messages.iter_mut() {
+            message.uaid = Some(uaid.clone());
+        }
+        let (call, fut) = PythonCall::new(&Call::StoreMessages {
+            message_month,
+            messages,
         });
         self.send_to_python(call);
         return fut

@@ -171,13 +171,18 @@ where
                 debug!("State: SendMessages");
                 if more_messages.is_some() {
                     let mut messages = more_messages.take().unwrap();
-                    let message = messages.pop().unwrap();
-                    ClientState::FinishSend(
-                        Some(ServerMessage::Notification(message)),
-                        Some(Box::new(ClientState::SendMessages(
+                    if let Some(message) = messages.pop() {
+                        ClientState::FinishSend(
+                            Some(ServerMessage::Notification(message)),
+                            Some(Box::new(ClientState::SendMessages(
+                                if messages.len() > 0 { Some(messages) } else { None }
+                            )))
+                        )
+                    } else {
+                        ClientState::SendMessages(
                             if messages.len() > 0 { Some(messages) } else { None }
-                        )))
-                    )
+                        )
+                    }
                 } else {
                     ClientState::WaitingForAcks
                 }
@@ -546,8 +551,21 @@ where
 
     pub fn shutdown(&mut self) {
         // If we made it past hello, do more cleanup
-        if let Some(WebPushClient { uaid, .. }) = self.webpush {
-            self.srv.disconnet_client(&uaid);
+        if self.webpush.is_some() {
+            let webpush = self.webpush.take().unwrap();
+            // If there's direct unack'd messages, they need to be saved out without blocking
+            // here
+            self.srv.disconnet_client(&webpush.uaid);
+            if webpush.unacked_direct_notifs.len() > 0 {
+                self.srv.handle.spawn(self.srv.store_messages(
+                    webpush.uaid.simple().to_string(),
+                    webpush.message_month,
+                    webpush.unacked_direct_notifs
+                ).then(|_| {
+                    debug!("Finished saving unacked direct notifications");
+                    Ok(())
+                }))
+            }
         };
     }
 }

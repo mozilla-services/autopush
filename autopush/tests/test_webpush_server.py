@@ -4,6 +4,7 @@ import unittest
 from threading import Event
 from uuid import uuid4, UUID
 
+import attr
 import factory
 from boto.dynamodb2.exceptions import ItemNotFound
 from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
@@ -133,7 +134,7 @@ class CheckStorageFactory(factory.Factory):
 
 
 def webpush_messages(obj):
-    return [WebPushMessageFactory(uaid=obj.uaid)
+    return [attr.asdict(WebPushMessageFactory(uaid=obj.uaid))
             for _ in range(obj.message_count)]
 
 

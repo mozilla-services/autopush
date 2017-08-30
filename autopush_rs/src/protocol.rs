@@ -80,7 +80,7 @@ pub enum ServerMessage {
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Notification {
-    pub uaid: Option<Uuid>,
+    pub uaid: Option<String>,
     #[serde(rename = "channelID")]
     pub channel_id: Uuid,
     pub version: String,

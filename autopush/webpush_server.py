@@ -85,6 +85,7 @@ class WebPushMessage(object):
             topic=self.topic,
             timestamp=self.timestamp,
             message_id=self.version,
+            update_id=self.version,
         )
 
 
@@ -501,7 +502,9 @@ class StoreMessagesUserCommand(ProcessorCommand):
         # type: (StoreMessages) -> StoreMessagesResponse
         message = self.db.message_tables[command.message_month]
         for m in command.messages:
-            notif = m.to_WebPushNotification()
+            if "topic" not in m:
+                m["topic"] = None
+            notif = WebPushMessage(**m).to_WebPushNotification()
             message.store_message(notif)
         return StoreMessagesResponse()
 
