@@ -20,7 +20,7 @@ from autopush.metrics import SinkMetrics
 from autopush.config import AutopushConfig
 from autopush.logging import begin_or_register
 from autopush.tests.support import TestingLogObserver
-from autopush.utils import WebPushNotification
+from autopush.utils import WebPushNotification, ns_time
 from autopush.websocket import USER_RECORD_VERSION
 from autopush.webpush_server import (
     CheckStorage,
@@ -31,7 +31,9 @@ from autopush.webpush_server import (
     IncStoragePosition,
     MigrateUser,
     Register,
-    Unregister
+    StoreMessages,
+    Unregister,
+    WebPushMessage,
 )
 
 
@@ -85,6 +87,35 @@ class WebPushNotificationFactory(factory.Factory):
     headers = factory.LazyFunction(generate_random_headers)
 
 
+def generate_version(obj):
+    if obj.topic:
+        msg_key = ":".join(["01", obj.uaid, obj.channelID.hex,
+                            obj.topic])
+    else:
+        sortkey_timestamp = ns_time()
+        msg_key = ":".join(["02", obj.uaid, obj.channelID.hex,
+                            str(sortkey_timestamp)])
+    # Technically this should be fernet encrypted, but this is fine for
+    # testing here
+    return msg_key
+
+
+class WebPushMessageFactory(factory.Factory):
+    class Meta:
+        model = WebPushMessage
+
+    uaid = factory.LazyFunction(lambda: str(uuid4()))
+    channelID = factory.LazyFunction(uuid4)
+    ttl = 86400
+    data = factory.LazyFunction(
+        lambda: random.randint(30, 4096) * "*"
+    )
+    topic = None
+    timestamp = factory.LazyFunction(lambda: int(time.time() * 1000))
+    headers = factory.LazyFunction(generate_random_headers)
+    version = factory.LazyAttribute(generate_version)
+
+
 class HelloFactory(factory.Factory):
     class Meta:
         model = Hello
@@ -99,6 +130,25 @@ class CheckStorageFactory(factory.Factory):
 
     uaid = factory.LazyFunction(lambda: uuid4().hex)
     include_topic = True
+
+
+def webpush_messages(obj):
+    return [WebPushMessageFactory(uaid=obj.uaid)
+            for _ in range(obj.message_count)]
+
+
+class StoreMessageFactory(factory.Factory):
+    class Meta:
+        model = StoreMessages
+
+    messages = factory.LazyAttribute(webpush_messages)
+    message_month = factory.LazyFunction(
+        lambda: make_rotating_tablename("message")
+    )
+
+    class Params:
+        message_count = 20
+        uaid = factory.LazyFunction(lambda: uuid4().hex)
 
 
 class BaseSetup(unittest.TestCase):
@@ -153,8 +203,6 @@ class TestWebPushServer(BaseSetup):
             eq_(len(ws.workers), 2)
         finally:
             ws.stop()
-        # XXX:
-        #eq_(len(ws.workers), 0)
 
     def test_hello_process(self):
         ws = self._makeFUT()
@@ -318,7 +366,6 @@ class TestDeleteMessageProcessor(BaseSetup):
         from autopush.webpush_server import CheckStorageCommand
         check_command = CheckStorageCommand(self.conf, self.db)
         check = CheckStorageFactory(message_month=self.db.current_msg_month)
-        uaid = check.uaid
         delete_command = self._makeFUT()
 
         # Store some topic messages
@@ -483,3 +530,15 @@ class TestUnregisterProcessor(BaseSetup):
         )
         ok_(result.error)
         ok_("Invalid UUID" in result.error_msg)
+
+
+class TestStoreMessagesProcessor(BaseSetup):
+    def _makeFUT(self):
+        from autopush.webpush_server import StoreMessagesUserCommand
+        return StoreMessagesUserCommand(self.conf, self.db)
+
+    def test_store_messages(self):
+        cmd = self._makeFUT()
+        store_message = StoreMessageFactory()
+        response = cmd.process(store_message)
+        eq_(response.success, True)

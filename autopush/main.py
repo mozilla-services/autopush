@@ -345,7 +345,8 @@ class RustConnectionApplication(AutopushMultiService):
                 cert=ns.router_ssl_cert,
                 dh_param=ns.ssl_dh_param
             ),
-            auto_ping_interval=ns.auto_ping_interval or 5,  # XXX: for autopush_rs
+            # XXX: default is for autopush_rs
+            auto_ping_interval=ns.auto_ping_interval or 300,
             auto_ping_timeout=ns.auto_ping_timeout,
             max_connections=ns.max_connections,
             close_handshake_timeout=ns.close_handshake_timeout,

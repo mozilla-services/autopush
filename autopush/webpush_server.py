@@ -1,7 +1,6 @@
 """WebPush Server
 
 """
-import atexit
 from threading import Thread
 from uuid import UUID, uuid4
 
@@ -135,6 +134,14 @@ class MigrateUser(InputCommand):
     message_month = attrib()  # type: str
 
 
+@attrs(slots=True)
+class StoreMessages(InputCommand):
+    message_month = attrib()  # type: str
+    messages = attrib(
+        default=attr.Factory(list)
+    )  # type: List[WebPushMessage]
+
+
 ###############################################################################
 # Output messages serialized to the outgoing queue
 ###############################################################################
@@ -171,13 +178,18 @@ class DeleteMessageResponse(OutputCommand):
 
 
 @attrs(slots=True)
-class DropUserResponse(InputCommand):
+class DropUserResponse(OutputCommand):
     success = attrib(default=True)  # type: bool
 
 
 @attrs(slots=True)
-class MigrateUserResponse(InputCommand):
+class MigrateUserResponse(OutputCommand):
     message_month = attrib()  # type: str
+
+
+@attrs(slots=True)
+class StoreMessagesResponse(OutputCommand):
+    success = attrib(default=True)  # type: bool
 
 
 ###############################################################################
@@ -259,6 +271,7 @@ class CommandProcessor(object):
         self.migrate_user_proocessor = MigrateUserCommand(conf, db)
         self.register_process = RegisterCommand(conf, db)
         self.unregister_process = UnregisterCommand(conf, db)
+        self.store_messages_process = StoreMessagesUserCommand(conf, db)
         self.deserialize = dict(
             hello=Hello,
             check_storage=CheckStorage,
@@ -268,6 +281,7 @@ class CommandProcessor(object):
             migrate_user=MigrateUser,
             register=Register,
             unregister=Unregister,
+            store_messages=StoreMessages,
         )
         self.command_dict = dict(
             hello=self.hello_processor,
@@ -278,6 +292,7 @@ class CommandProcessor(object):
             migrate_user=self.migrate_user_proocessor,
             register=self.register_process,
             unregister=self.unregister_process,
+            store_messages=self.store_messages_process,
         )  # type: Dict[str, ProcessorCommand]
 
     def process_message(self, input):
@@ -479,6 +494,16 @@ class MigrateUserCommand(ProcessorCommand):
         # Finally, update the route message month
         self.db.router.update_message_month(command.uaid.hex, cur_month)
         return MigrateUserResponse(message_month=cur_month)
+
+
+class StoreMessagesUserCommand(ProcessorCommand):
+    def process(self, command):
+        # type: (StoreMessages) -> StoreMessagesResponse
+        message = self.db.message_tables[command.message_month]
+        for m in command.messages:
+            notif = m.to_WebPushNotification()
+            message.store_message(notif)
+        return StoreMessagesResponse()
 
 
 def _validate_chid(chid):
