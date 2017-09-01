@@ -22,7 +22,11 @@ a message that has not yet been delivered to be deleted. See :ref:`cancel`.
 `/v1/.../.../registration/...`
 
 This is tied to the :ref:`reg_calls` Handlers. This endpoint is used by
-apps that wish to use :term:`bridging` protocols to register new channels.
+devices that wish to use :term:`bridging` protocols to register new channels.
+
+*NOTE*: This is not intended to be used by app developers. Please see the
+`Web Push API on MDN <https://developer.mozilla.org/en-US/docs/Web/API/Push_API>`_
+for how to use WebPush.
 See :ref:`bridge_api`.
 
 ---
@@ -312,9 +316,13 @@ Calls
 Registration
 ~~~~~~~~~~~~
 
-Request a new UAID registration, Channel ID, and optionally set a bridge
+Request a new UAID registration, Channel ID, and set a bridge
 type and 3rd party bridge instance ID token for this connection. (See
 :class:`~autopush.web.registration.NewRegistrationHandler`)
+
+*NOTE*: This call is designed for devices to register endpoints to be
+used by bridge protocols. Please see `Web Push API <https://developer.mozilla.org/en-US/docs/Web/API/Push_API>`_
+for how to use Web Push in your application.
 
 **Call:**
 

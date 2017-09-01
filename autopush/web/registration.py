@@ -174,9 +174,16 @@ class AuthorizationCheckSchema(Schema):
 
 
 def conditional_token_check(object_dict, parent_dict):
-    if parent_dict['path_kwargs']['type'] in ['gcm', 'fcm']:
+    ptype = parent_dict['path_kwargs']['type']
+    # Basic "bozo-filter" to prevent customer surprises later.
+    if ptype not in ['apns', 'fcm', 'gcm', 'webpush', 'simplepush', 'test']:
+        raise InvalidRequest("Unknown registration type",
+                             status_code=400,
+                             errno=108,
+                             )
+    if ptype in ['gcm', 'fcm']:
         return GCMTokenSchema()
-    if parent_dict['path_kwargs']['type'] == 'apns':
+    if ptype == 'apns':
         return APNSTokenSchema()
     return TokenSchema()
 
