@@ -194,7 +194,6 @@ class PushState(object):
     check_storage = attrib(default=False)  # type: bool
     use_webpush = attrib(default=False)  # type: bool
     router_type = attrib(default=None)  # type: Optional[str]
-    wake_data = attrib(default=None)  # type: Optional[JSONDict]
     connected_at = attrib(default=Factory(ms_time))  # type: float
     ping_time_out = attrib(default=False)  # type: bool
 
@@ -541,9 +540,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def timeoutConnection(self):
         """Idle timer fired."""
-        if self.ps.wake_data:
-            return self.sendClose(code=4774, reason="UDP Idle")
-
         self.sendClose()
 
     def onAutoPingTimeout(self):
@@ -748,19 +744,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         existing_user, uaid = validate_uaid(uaid)
         self.ps.uaid = uaid
         self.ps.stats.existing_uaid = existing_user
-        # Check for the special wakeup commands
-        if "wakeup_host" in data and "mobilenetwork" in data:
-            wakeup_host = data.get("wakeup_host")
-            if "ip" in wakeup_host and "port" in wakeup_host:
-                mobilenetwork = data.get("mobilenetwork")
-                # Normalize the wake info to a single object.
-                wake_data = dict(data=dict(ip=wakeup_host["ip"],
-                                 port=wakeup_host["port"],
-                                 mcc=mobilenetwork.get("mcc", ''),
-                                 mnc=mobilenetwork.get("mnc", ''),
-                                 netid=mobilenetwork.get("netid", '')))
-                self.ps.wake_data = wake_data
-
         self.transport.pauseProducing()
 
         d = self.deferToThread(self._register_user, existing_user)
@@ -796,10 +779,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             )
             if self.ps.use_webpush:
                 user_item["current_month"] = self.ps.message_month
-
-        # If this connection uses the wakeup mechanism, add it.
-        if self.ps.wake_data:
-            user_item["wake_data"] = self.ps.wake_data
 
         return self.db.router.register_user(user_item)
 
@@ -907,10 +886,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                 d.addErrback(self.log_failure,
                              extra="Failed to delete old node")
 
-        # UDP clients are done at this point and timed out to ensure they
-        # drop their connection
-        timeout = self.conf.wake_timeout if self.ps.wake_data else None
-        self.setTimeout(timeout)
         self.finish_hello(previous)
 
     def finish_hello(self, previous):

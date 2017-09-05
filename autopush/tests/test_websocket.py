@@ -888,56 +888,6 @@ class WebsocketTestCase(unittest.TestCase):
         ok_(time.time() - connected >= 3)
 
     @inlineCallbacks
-    def test_hello_timeout_with_wake_timeout(self):
-        self.proto.conf.hello_timeout = 3
-        self.proto.conf.wake_timeout = 3
-
-        self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[],
-                                wakeup_host={"ip": "127.0.0.1",
-                                             "port": 9999},
-                                mobilenetwork={"mcc": "hammer",
-                                               "mnc": "banana",
-                                               "netid": "gorp",
-                                               "ignored": "ok"}))
-        close_args = yield self._wait_for_close()
-        ok_(ms_time() - self.proto.ps.connected_at >= 3000)
-        _, kwargs = close_args
-        eq_(kwargs, {"code": 4774, "reason": "UDP Idle"})
-
-    @inlineCallbacks
-    def test_hello_udp(self):
-        self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[],
-                                wakeup_host={"ip": "127.0.0.1",
-                                             "port": 9999},
-                                mobilenetwork={"mcc": "hammer",
-                                               "mnc": "banana",
-                                               "netid": "gorp",
-                                               "ignored": "ok"}))
-        msg = yield self.get_response()
-        eq_(msg["status"], 200)
-        route_data = self.proto.db.router.get_uaid(
-            msg["uaid"]).get('wake_data')
-        eq_(route_data,
-            {'data': {"ip": "127.0.0.1", "port": 9999, "mcc": "hammer",
-                      "mnc": "banana", "netid": "gorp"}})
-
-    @inlineCallbacks
-    def test_bad_hello_udp(self):
-        self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[],
-                                wakeup_host={"port": 9999},
-                                mobilenetwork={"mcc": "hammer",
-                                               "mnc": "banana",
-                                               "netid": "gorp",
-                                               "ignored": "ok"}))
-        msg = yield self.get_response()
-        eq_(msg["status"], 200)
-        ok_("wake_data" not in
-            self.proto.db.router.get_uaid(msg["uaid"]).keys())
-
-    @inlineCallbacks
     def test_not_hello(self):
         self._connect()
         self._send_message(dict(messageType="wooooo"))

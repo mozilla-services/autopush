@@ -1120,26 +1120,6 @@ class SimplePushRouterTestCase(unittest.TestCase):
         d.addBoth(verify_deliver)
         return d
 
-    @patch("requests.post")
-    def test_route_udp(self, request_mock):
-        self.storage_mock.save_notification.return_value = True
-        udp_data = {'wakeup_host': {'ip': '127.0.0.1', 'port': 9999},
-                    'mobilenetwork': {'mcc': 'hammer'}}
-        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
-                           udp=udp_data)
-        self.router_mock.get_uaid.return_value = router_data
-        self.router.router_conf = {'server': 'http://example.com',
-                                   'idle': 1, 'cert': 'test.pem'}
-
-        d = self.router.route_notification(self.notif, router_data)
-
-        def check_deliver(result):
-            eq_(result.status_code, 202)
-
-        d.addBoth(check_deliver)
-        eq_(self.router.udp, udp_data)
-        return d
-
     def test_amend(self):
         resp = {"key": "value"}
         expected = resp.copy()

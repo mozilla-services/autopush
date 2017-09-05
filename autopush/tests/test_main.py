@@ -237,10 +237,6 @@ class EndpointMainTestCase(unittest.TestCase):
         router_read_throughput = 0
         router_write_throughput = 0
         resolve_hostname = False
-        # UDP
-        wake_pem = "test"
-        wake_timeout = 10
-        wake_server = "http://example.com"
         message_tablename = "None"
         message_read_throughput = 0
         message_write_throughput = 0
@@ -363,7 +359,6 @@ class EndpointMainTestCase(unittest.TestCase):
         eq_(app.routers["gcm"].router_conf['collapsekey'], "collapse")
         eq_(app.routers["apns"].router_conf['firefox']['cert'], "cert.file")
         eq_(app.routers["apns"].router_conf['firefox']['key'], "key.file")
-        eq_(conf.wake_timeout, 10)
 
     def test_bad_senders(self):
         old_list = self.TestArg.senderid_list
