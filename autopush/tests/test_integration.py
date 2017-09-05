@@ -1830,6 +1830,22 @@ class TestGCMBridgeIntegration(IntegrationBase):
         eq_(ca_data['body'], base64url_encode(data))
 
     @inlineCallbacks
+    def test_invalid_registration(self):
+        self._add_router()
+
+        url = "{}/v1/{}/{}/registration".format(
+            self.ep.conf.endpoint_url,
+            "invalid",
+            self.senderID,
+        )
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {"chid": str(uuid.uuid4()),
+             "token": uuid.uuid4().hex,
+             }
+        ))
+        eq_(response.code, 400)
+
+    @inlineCallbacks
     def test_registration_aes128gcm(self):
         self._add_router()
         # get the senderid
