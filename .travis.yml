@@ -1,5 +1,9 @@
 language: python
-cache: pip
+cache:
+  directories:
+    - $HOME/.cargo
+    - autopush_rs/target
+    - $HOME/.cache/pip
 sudo: required
 dist: trusty
 
@@ -22,6 +26,8 @@ before_install:
 install:
 - ${DDB:+make ddb}
 - pip install tox ${CODECOV:+codecov}
+- curl https://sh.rustup.rs | sh -s -- -y
+- export PATH=$PATH:$HOME/.cargo/bin
 script:
 - tox -- ${CODECOV:+--with-coverage --cover-xml --cover-package=autopush}
 after_success:

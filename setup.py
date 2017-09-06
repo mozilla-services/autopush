@@ -38,11 +38,17 @@ setup(name="AutoPush",
       [console_scripts]
       autopush = autopush.main:ConnectionApplication.main
       autoendpoint = autopush.main:EndpointApplication.main
+      autopush_rs = autopush.main:RustConnectionApplication.main
       autokey = autokey:main
       endpoint_diagnostic = autopush.diagnostic_cli:run_endpoint_diagnostic_cli
       drop_users = autopush.scripts.drop_user:drop_users
       [nose.plugins]
       object-tracker = autopush.noseplugin:ObjectTracker
       """,
+      setup_requires=['snaek'],
+      install_requires=['snaek'],
+      snaek_rust_modules=[
+          ('autopush_rs._native', 'autopush_rs/'),
+      ],
       **extra_options
       )

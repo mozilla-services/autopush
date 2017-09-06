@@ -3,4 +3,6 @@ omit =
     *noseplugin*
     autopush/tests/certs/makecerts.py
     autopush/gcdump.py
+    autopush/webpush_server.py
+    autopush/tests/test_webpush_server.py
 show_missing = true
