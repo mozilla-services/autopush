@@ -129,6 +129,11 @@ def _obsolete_args(parser):
     parser.add_argument('--apns_cert_file', help="OBSOLETE")
     parser.add_argument('--apns_key_file', help="OBSOLETE")
 
+    # UDP
+    parser.add_argument('--wake_timeout', help="OBSOLETE")
+    parser.add_argument('--wake_pem', help="OBSOLETE")
+    parser.add_argument('--wake_server', help="OBSOLETE")
+
 
 def _add_external_router_args(parser):
     """Parses out external router arguments"""
@@ -177,17 +182,6 @@ def _add_external_router_args(parser):
                                              "APNS settings",
                         type=str, default="",
                         env_var="APNS_CREDS")
-    # UDP
-    parser.add_argument('--wake_timeout',
-                        help="UDP: idle timeout before closing socket",
-                        type=int, default=0, env_var="WAKE_TIMEOUT")
-    parser.add_argument('--wake_pem',
-                        help="custom TLS PEM file for remote Wake server",
-                        type=str, env_var="WAKE_PEM")
-    parser.add_argument('--wake_server',
-                        help="remote endpoint for wake-up calls",
-                        type=str, default='http://example.com',
-                        env_var="WAKE_SERVER")
 
 
 def parse_connection(config_files, args):

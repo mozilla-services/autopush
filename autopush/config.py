@@ -161,7 +161,6 @@ class AutopushConfig(object):
 
     hello_timeout = attrib(default=0)  # type: int
     # Force timeout in idle seconds
-    wake_timeout = attrib(default=0)  # type: int
     msg_limit = attrib(default=100)  # type: int
     auto_ping_interval = attrib(default=None)  # type: Optional[int]
     auto_ping_timeout = attrib(default=None)  # type: Optional[int]
@@ -221,12 +220,6 @@ class AutopushConfig(object):
         router_conf = {}
         if ns.key_hash:
             db.key_hash = ns.key_hash
-        # Some routers require a websocket to timeout on idle
-        # (e.g. UDP)
-        if ns.wake_pem is not None and ns.wake_timeout != 0:
-            router_conf["simplepush"] = {"idle": ns.wake_timeout,
-                                         "server": ns.wake_server,
-                                         "cert": ns.wake_pem}
         if ns.apns_creds:
             # if you have the critical elements for each external
             # router, create it
@@ -307,7 +300,6 @@ class AutopushConfig(object):
             statsd_port=ns.statsd_port,
             router_conf=router_conf,
             resolve_hostname=ns.resolve_hostname,
-            wake_timeout=ns.wake_timeout,
             ami_id=ami_id,
             client_certs=client_certs,
             msg_limit=ns.msg_limit,

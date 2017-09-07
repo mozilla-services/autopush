@@ -6,12 +6,10 @@ table for retrieval by the client.
 
 """
 import json
-from urllib import urlencode
 import time
 from StringIO import StringIO
 from typing import Any  # noqa
 
-import requests
 from boto.dynamodb2.exceptions import ItemNotFound
 from boto.exception import JSONResponseError
 from twisted.internet.threads import deferToThread
@@ -51,7 +49,6 @@ class WebPushRouter(object):
         self.router_conf = router_conf
         self.db = db
         self.agent = agent
-        self.waker = None
 
     @property
     def metrics(self):
@@ -73,7 +70,6 @@ class WebPushRouter(object):
         # Determine if they're connected at the moment
         node_id = uaid_data.get("node_id")
         uaid = uaid_data["uaid"]
-        self.udp = uaid_data.get("udp")
         router = self.db.router
 
         # Node_id is present, attempt delivery.
@@ -153,19 +149,6 @@ class WebPushRouter(object):
             returnValue(self.delivered_response(notification))
         else:
             ret_val = self.stored_response(notification)
-            if self.udp is not None and "server" in self.router_conf:
-                # Attempt to send off the UDP wake request.
-                try:
-                    yield deferToThread(
-                        requests.post,
-                        self.router_conf["server"],
-                        data=urlencode(self.udp["data"]),
-                        cert=self.router_conf.get("cert"),
-                        timeout=self.router_conf.get("server_timeout", 3)
-                    )
-                except Exception as exc:
-                    self.log.debug("Could not send UDP wake request: {exc}",
-                                   exc=exc)
             returnValue(ret_val)
 
     def delivered_response(self, notification):
