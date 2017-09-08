@@ -43,7 +43,9 @@ struct AutopushServerInner {
 #[repr(C)]
 pub struct AutopushServerOptions {
     pub debug: i32,
+    pub router_ip: *const c_char,
     pub host_ip: *const c_char,
+    pub router_port: u16,
     pub port: u16,
     pub url: *const c_char,
     pub ssl_key: *const c_char,
@@ -68,6 +70,8 @@ pub struct Server {
 pub struct ServerOptions {
     pub debug: bool,
     pub host_ip: String,
+    pub router_ip: String,
+    pub router_port: u16,
     pub port: u16,
     pub url: String,
     pub ssl_key: Option<PathBuf>,
@@ -122,7 +126,9 @@ pub extern "C" fn autopush_server_new(opts: *const AutopushServerOptions,
         let opts = ServerOptions {
             debug: opts.debug != 0,
             host_ip: to_s(opts.host_ip).expect("hostname must be specified").to_string(),
+            router_ip: to_s(opts.router_ip).expect("router hostname must be specified").to_string(),
             port: opts.port,
+            router_port: opts.router_port,
             url: to_s(opts.url).expect("url must be specified").to_string(),
             ssl_key: to_s(opts.ssl_key).map(PathBuf::from),
             ssl_cert: to_s(opts.ssl_cert).map(PathBuf::from),
@@ -233,7 +239,7 @@ impl Server {
                 use hyper::server::Http;
 
                 let handle = core.handle();
-                let addr = "127.0.0.1:8081".parse().unwrap();
+                let addr = format!("{}:{}", srv.opts.router_ip, srv.opts.router_port).parse().unwrap();
                 let push_listener = TcpListener::bind(&addr, &handle).unwrap();
                 let proto = Http::new();
                 let push_srv = push_listener.incoming().for_each(move |(socket, addr)| {
