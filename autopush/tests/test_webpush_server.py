@@ -156,6 +156,7 @@ class BaseSetup(unittest.TestCase):
     def setUp(self):
         self.conf = AutopushConfig(
             hostname="localhost",
+            resolve_hostname=True,
             port=8080,
             statsd_host=None,
             env="test",

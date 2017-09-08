@@ -27,6 +27,9 @@ class AutopushServer(object):
         cfg.close_handshake_timeout = conf.close_handshake_timeout
         cfg.max_connections = conf.max_connections
         cfg.open_handshake_timeout = 5
+        if not conf._resolve_hostname:
+            raise Exception("Must set resolve_hostname to True")
+        cfg.host_ip = ffi_from_buffer(conf.hostname)
         cfg.port = conf.port
         cfg.ssl_cert = ffi_from_buffer(conf.ssl.cert)
         cfg.ssl_dh_param = ffi_from_buffer(conf.ssl.dh_param)
