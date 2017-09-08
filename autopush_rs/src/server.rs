@@ -43,6 +43,7 @@ struct AutopushServerInner {
 #[repr(C)]
 pub struct AutopushServerOptions {
     pub debug: i32,
+    pub host_ip: *const c_char,
     pub port: u16,
     pub url: *const c_char,
     pub ssl_key: *const c_char,
@@ -66,6 +67,7 @@ pub struct Server {
 
 pub struct ServerOptions {
     pub debug: bool,
+    pub host_ip: String,
     pub port: u16,
     pub url: String,
     pub ssl_key: Option<PathBuf>,
@@ -119,6 +121,7 @@ pub extern "C" fn autopush_server_new(opts: *const AutopushServerOptions,
 
         let opts = ServerOptions {
             debug: opts.debug != 0,
+            host_ip: to_s(opts.host_ip).expect("hostname must be specified").to_string(),
             port: opts.port,
             url: to_s(opts.url).expect("url must be specified").to_string(),
             ssl_key: to_s(opts.ssl_key).map(PathBuf::from),
@@ -265,7 +268,7 @@ impl Server {
             handle: core.handle(),
             tx: tx,
         });
-        let addr = format!("127.0.0.1:{}", srv.opts.port);
+        let addr = format!("{}:{}", srv.opts.host_ip, srv.opts.port);
         let ws_listener = TcpListener::bind(&addr.parse().unwrap(), &srv.handle)?;
 
         assert!(srv.opts.ssl_key.is_none(), "ssl not supported yet");
