@@ -27,15 +27,17 @@ use std::any::Any;
 use std::error;
 use std::io;
 
-use tungstenite;
-use serde_json;
 use futures::Future;
+use httparse;
+use serde_json;
+use tungstenite;
 
 error_chain! {
     foreign_links {
         Ws(tungstenite::Error);
         Io(io::Error);
         Json(serde_json::Error);
+        Httparse(httparse::Error);
     }
 
     errors {

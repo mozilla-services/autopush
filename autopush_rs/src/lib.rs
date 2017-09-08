@@ -60,9 +60,11 @@
 //!
 //! Otherwise be sure to check out each module for more documentation!
 
+extern crate bytes;
 extern crate env_logger;
 #[macro_use]
 extern crate futures;
+extern crate httparse;
 extern crate hyper;
 extern crate libc;
 #[macro_use]
@@ -70,9 +72,11 @@ extern crate log;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
 extern crate serde_json;
 extern crate time;
 extern crate tokio_core;
+extern crate tokio_io;
 extern crate tokio_service;
 extern crate tokio_tungstenite;
 extern crate tungstenite;

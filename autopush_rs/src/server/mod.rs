@@ -15,8 +15,10 @@ use futures::task::{self, Task};
 use futures::{Stream, Future, Sink, Async, Poll, AsyncSink, StartSend};
 use libc::c_char;
 use serde_json;
-use tokio_core::net::{TcpListener, TcpStream};
+use time;
+use tokio_core::net::TcpListener;
 use tokio_core::reactor::{Core, Timeout, Handle, Interval};
+use tokio_io;
 use tokio_tungstenite::{accept_async, WebSocketStream};
 use tungstenite::Message;
 use uuid::Uuid;
@@ -26,7 +28,12 @@ use errors::*;
 use protocol::{ClientMessage, ServerMessage, ServerNotification, Notification};
 use queue::{self, AutopushQueue};
 use rt::{self, AutopushError, UnwindGuard};
+use server::webpush_io::WebpushIo;
+use server::dispatch::{Dispatch, RequestType};
 use util::{self, RcObject, timeout};
+
+mod dispatch;
+mod webpush_io;
 
 #[repr(C)]
 pub struct AutopushServer {
@@ -299,19 +306,38 @@ impl Server {
 
                 // TODO: TCP socket options here?
 
-                // Perform the websocket handshake on each connection, but don't let
-                // it take too long.
-                let ws = accept_async(socket, None).chain_err(|| "failed to accept client");
-                let ws = timeout(ws, srv.opts.open_handshake_timeout, &handle);
-
-                // Once the handshake is done we'll start the main communication
-                // with the client, managing pings here and deferring to
-                // `Client` to start driving the internal state machine.
+                // Figure out if this is a websocket or a `/status` request,
+                // without letting it take too long.
+                let request = Dispatch::new(socket);
+                let request = timeout(request,
+                                      srv.opts.open_handshake_timeout,
+                                      &handle);
                 let srv2 = srv.clone();
-                let client = ws.and_then(move |ws| {
-                    PingManager::new(&srv2, ws)
-                        .chain_err(|| "failed to make ping handler")
-                }).flatten();
+                let handle2 = handle.clone();
+                let client = request.and_then(move |(socket, request)| -> MyFuture<_> {
+                    match request {
+                        RequestType::Status => write_status(socket),
+                        RequestType::Websocket => {
+                            // Perform the websocket handshake on each
+                            // connection, but don't let it take too long.
+                            let ws = accept_async(socket, None).chain_err(|| {
+                                "failed to accept client"
+                            });
+                            let ws = timeout(ws,
+                                             srv2.opts.open_handshake_timeout,
+                                             &handle2);
+
+                            // Once the handshake is done we'll start the main
+                            // communication with the client, managing pings
+                            // here and deferring to `Client` to start driving
+                            // the internal state machine.
+                            Box::new(ws.and_then(move |ws| {
+                                PingManager::new(&srv2, ws)
+                                    .chain_err(|| "failed to make ping handler")
+                            }).flatten())
+                        }
+                    }
+                });
 
                 let srv = srv.clone();
                 handle.spawn(client.then(move |res| {
@@ -376,11 +402,11 @@ impl Drop for Server {
 }
 
 struct PingManager {
-    socket: RcObject<WebpushSocket<WebSocketStream<TcpStream>>>,
+    socket: RcObject<WebpushSocket<WebSocketStream<WebpushIo>>>,
     ping_interval: Interval,
     timeout: TimeoutState,
     srv: Rc<Server>,
-    client: CloseState<Client<RcObject<WebpushSocket<WebSocketStream<TcpStream>>>>>,
+    client: CloseState<Client<RcObject<WebpushSocket<WebSocketStream<WebpushIo>>>>>,
 }
 
 enum TimeoutState {
@@ -395,7 +421,7 @@ enum CloseState<T> {
 }
 
 impl PingManager {
-    fn new(srv: &Rc<Server>, socket: WebSocketStream<TcpStream>)
+    fn new(srv: &Rc<Server>, socket: WebSocketStream<WebpushIo>)
         -> io::Result<PingManager>
     {
         // The `socket` is itself a sink and a stream, and we've also got a sink
@@ -605,4 +631,26 @@ impl<T> Sink for WebpushSocket<T>
         try_ready!(self.poll_complete());
         Ok(self.inner.close()?)
     }
+}
+
+fn write_status(socket: WebpushIo) -> MyFuture<()> {
+    let data = json!({
+        "status": "OK",
+        "version": env!("CARGO_PKG_VERSION"),
+    }).to_string();
+    let data = format!("\
+        HTTP/1.1 200 Ok\r\n\
+        Server: webpush\r\n\
+        Date: {date}\r\n\
+        Content-Length: {len}\r\n\
+        \r\n\
+        {data}\
+    ",
+        date = time::at(time::get_time()).rfc822(),
+        len = data.len(),
+        data = data,
+    );
+    Box::new(tokio_io::io::write_all(socket, data.into_bytes())
+        .map(|_| ())
+        .chain_err(|| "failed to write status response"))
 }

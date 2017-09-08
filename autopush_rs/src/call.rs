@@ -22,7 +22,6 @@ use libc::c_char;
 use serde::de;
 use serde::ser;
 use serde_json;
-use time::Tm;
 use uuid::Uuid;
 
 use errors::*;
