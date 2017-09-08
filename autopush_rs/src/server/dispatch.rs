@@ -71,11 +71,14 @@ impl Future for Dispatch {
 
                 if req.headers.iter().any(|h| h.name == "Upgrade") {
                     RequestType::Websocket
-                } else if req.path == Some("/status") {
-                    RequestType::Status
                 } else {
-                    debug!("unknown http request {:?}", req);
-                    return Err("unknown http request".into())
+                    match req.path {
+                        Some(ref path) if path.starts_with("/status") => RequestType::Status,
+                        _ => {
+                            debug!("unknown http request {:?}", req);
+                            return Err("unknown http request".into())
+                        }
+                    }
                 }
             };
 
