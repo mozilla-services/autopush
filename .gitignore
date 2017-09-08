@@ -25,3 +25,5 @@ pypy/
 src/
 .tox/
 .eggs/
+autopush_rs/target
+autopush_rs/_native*
