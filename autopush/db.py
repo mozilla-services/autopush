@@ -163,10 +163,8 @@ def get_rotating_message_table(prefix="message", delta=0, date=None,
                                message_write_throughput=5):
     # type: (str, int, Optional[datetime.date], int, int) -> Table
     """Gets the message table for the current month."""
-    db = DynamoDBConnection()
-    dblist = db.list_tables()["TableNames"]
     tablename = make_rotating_tablename(prefix, delta, date)
-    if tablename not in dblist:
+    if not table_exists(DynamoDBConnection(), tablename):
         return create_rotating_message_table(
             prefix=prefix, delta=delta, date=date,
             read_throughput=message_read_throughput,
@@ -220,9 +218,7 @@ def create_storage_table(tablename="storage", read_throughput=5,
 def _make_table(table_func, tablename, read_throughput, write_throughput):
     # type: (Callable[[str, int, int], Table], str, int, int) -> Table
     """Private common function to make a table with a table func"""
-    db = DynamoDBConnection()
-    dblist = db.list_tables()["TableNames"]
-    if tablename not in dblist:
+    if not table_exists(DynamoDBConnection(), tablename):
         return table_func(tablename, read_throughput, write_throughput)
     else:
         return Table(tablename)
@@ -354,6 +350,23 @@ def generate_last_connect_values(date):
             val = "".join([year, month, str(hour).zfill(2),
                            str(rand_int).zfill(4)])
             yield int(val)
+
+
+def list_tables(conn):
+    """Return a list of the names of all DynamoDB tables."""
+    start_table = None
+    while True:
+        result = conn.list_tables(exclusive_start_table_name=start_table)
+        for table in result.get('TableNames', []):
+            yield table
+        start_table = result.get('LastEvaluatedTableName', None)
+        if not start_table:
+            break
+
+
+def table_exists(conn, tablename):
+    """Determine if the specified Table exists"""
+    return any(tablename == name for name in list_tables(conn))
 
 
 class Storage(object):

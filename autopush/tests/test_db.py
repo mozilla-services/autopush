@@ -21,6 +21,7 @@ from autopush.db import (
     create_router_table,
     create_storage_table,
     preflight_check,
+    table_exists,
     Storage,
     Message,
     Router,
@@ -136,12 +137,9 @@ class StorageTestCase(unittest.TestCase):
     def test_custom_tablename(self):
         db = DynamoDBConnection()
         db_name = "storage_%s" % uuid.uuid4()
-        dblist = db.list_tables()["TableNames"]
-        ok_(db_name not in dblist)
-
+        ok_(not table_exists(db, db_name))
         create_storage_table(db_name)
-        dblist = db.list_tables()["TableNames"]
-        ok_(db_name in dblist)
+        ok_(table_exists(db, db_name))
 
     def test_provisioning(self):
         db_name = "storage_%s" % uuid.uuid4()
@@ -390,12 +388,9 @@ class RouterTestCase(unittest.TestCase):
     def test_custom_tablename(self):
         db = DynamoDBConnection()
         db_name = "router_%s" % uuid.uuid4()
-        dblist = db.list_tables()["TableNames"]
-        ok_(db_name not in dblist)
-
+        ok_(not table_exists(db, db_name))
         create_router_table(db_name)
-        dblist = db.list_tables()["TableNames"]
-        ok_(db_name in dblist)
+        ok_(table_exists(db, db_name))
 
     def test_provisioning(self):
         db_name = "router_%s" % uuid.uuid4()
