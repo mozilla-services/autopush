@@ -158,6 +158,7 @@ class BaseSetup(unittest.TestCase):
             hostname="localhost",
             resolve_hostname=True,
             port=8080,
+            router_port=8081,
             statsd_host=None,
             env="test",
             auto_ping_interval=float(300),

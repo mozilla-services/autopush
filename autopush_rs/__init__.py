@@ -30,6 +30,8 @@ class AutopushServer(object):
         if not conf._resolve_hostname:
             raise Exception("Must set resolve_hostname to True")
         cfg.host_ip = ffi_from_buffer(conf.hostname)
+        cfg.router_ip = ffi_from_buffer(conf.router_hostname)
+        cfg.router_port = conf.router_port
         cfg.port = conf.port
         cfg.ssl_cert = ffi_from_buffer(conf.ssl.cert)
         cfg.ssl_dh_param = ffi_from_buffer(conf.ssl.dh_param)
