@@ -6,6 +6,7 @@ from twisted.internet.defer import DeferredList
 from twisted.internet.threads import deferToThread
 
 from autopush import __version__
+from autopush.db import table_exists
 from autopush.exceptions import MissingTableException
 from autopush.web.base import BaseWebHandler
 
@@ -39,14 +40,15 @@ class HealthHandler(BaseWebHandler):
 
     def _check_table(self, table):
         """Checks the tables known about in DynamoDB"""
-        d = deferToThread(table.connection.list_tables)
-        d.addCallback(self._check_success, table.table_name)
-        d.addErrback(self._check_error, table.table_name)
+        name = table.table_name
+        d = deferToThread(table_exists, table.connection, name)
+        d.addCallback(self._check_success, name)
+        d.addErrback(self._check_error, name)
         return d
 
-    def _check_success(self, result, name):
-        """Verifies a name is in the list of tables"""
-        if name not in result.get("TableNames", {}):
+    def _check_success(self, exists, name):
+        """Verifies a Table exists"""
+        if not exists:
             raise MissingTableException("Nonexistent table")
         self._health_checks[name] = {"status": "OK"}
 
