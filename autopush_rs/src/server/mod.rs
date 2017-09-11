@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::ffi::CStr;
 use std::io;
 use std::mem;
+use std::net::{IpAddr, ToSocketAddrs};
 use std::panic;
 use std::path::PathBuf;
 use std::rc::Rc;
@@ -89,6 +90,10 @@ pub struct ServerOptions {
     pub auto_ping_timeout: Duration,
     pub max_connections: Option<u32>,
     pub close_handshake_timeout: Option<Duration>,
+}
+
+fn resolve(host: &str) -> IpAddr {
+    (host, 0).to_socket_addrs().unwrap().next().unwrap().ip()
 }
 
 #[no_mangle]
@@ -246,7 +251,8 @@ impl Server {
                 use hyper::server::Http;
 
                 let handle = core.handle();
-                let addr = format!("{}:{}", srv.opts.router_ip, srv.opts.router_port).parse().unwrap();
+                let router_ip = resolve(&srv.opts.router_ip);
+                let addr = format!("{}:{}", router_ip, srv.opts.router_port).parse().unwrap();
                 let push_listener = TcpListener::bind(&addr, &handle).unwrap();
                 let proto = Http::new();
                 let push_srv = push_listener.incoming().for_each(move |(socket, addr)| {
@@ -281,7 +287,8 @@ impl Server {
             handle: core.handle(),
             tx: tx,
         });
-        let addr = format!("{}:{}", srv.opts.host_ip, srv.opts.port);
+        let host_ip = resolve(&srv.opts.host_ip);
+        let addr = format!("{}:{}", host_ip, srv.opts.port);
         let ws_listener = TcpListener::bind(&addr.parse().unwrap(), &srv.handle)?;
 
         assert!(srv.opts.ssl_key.is_none(), "ssl not supported yet");
@@ -497,6 +504,9 @@ impl Future for PingManager {
             }
         }
 
+        // Ensure the scheduled ping is actually flushed out
+        self.socket.borrow_mut().poll_complete()?;
+
         // At this point looks our state of ping management A-OK, so try to
         // make progress on our client, and when done with that execute the
         // closing handshake.
@@ -590,7 +600,6 @@ impl<T> Stream for WebpushSocket<T>
                         Pong::None => {}
                         Pong::Received => {}
                         Pong::Waiting(task) => {
-                            self.pong = Pong::None;
                             task.notify();
                         }
                     }
