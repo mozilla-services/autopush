@@ -22,8 +22,8 @@ time = "0.1"
 tokio-core = "0.1"
 tokio-io = "0.1"
 tokio-service = "0.1"
-tokio-tungstenite = "0.3"
-tungstenite = "0.4"
+tokio-tungstenite = { version = "0.3", default-features = false }
+tungstenite = { version = "0.4", default-features = false }
 uuid = { version = "0.5", features = ["serde", "v4"] }
 
 [profile.release]
