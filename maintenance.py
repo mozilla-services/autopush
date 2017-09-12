@@ -50,6 +50,7 @@ REGION = "us-east-1"
 
 dynamodb = boto3.resource('dynamodb', region_name=REGION)
 client = boto3.client('dynamodb', region_name=REGION)
+paginator = client.get_paginator('list_tables')
 
 
 def get_month(delta=0):
@@ -76,6 +77,12 @@ def make_rotating_tablename(prefix, delta=0):
     return "{}_{:04d}_{:02d}".format(prefix, date.year, date.month)
 
 
+def table_exists(tablename):
+    """Determine if the specified Table exists"""
+    query = "contains(TableNames, {!r})".format(tablename)
+    return any(paginator.paginate().search(query))
+
+
 def table_maintenance(event, context):
     """AWS Lambda function for ensuring the appropriate message table is
     available for the next month
@@ -95,8 +102,7 @@ def table_maintenance(event, context):
 
     # Determine if we are making the table or just verifying limits
     nxt_mth_tblname = make_rotating_tablename(MESSAGE_TABLE_PREFIX, delta=1)
-    existing_tables = client.list_tables()["TableNames"]
-    if nxt_mth_tblname in existing_tables:
+    if table_exists(nxt_mth_tblname):
         # Verify table units
         nxt_mth_tbl = dynamodb.Table(nxt_mth_tblname)
         nxt_limits = nxt_mth_tbl.provisioned_throughput
