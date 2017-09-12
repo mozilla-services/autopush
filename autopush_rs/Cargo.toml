@@ -25,6 +25,3 @@ tokio-service = "0.1"
 tokio-tungstenite = "0.3"
 tungstenite = "0.4"
 uuid = { version = "0.5", features = ["serde", "v4"] }
-
-[profile.release]
-debug-assertions = true
