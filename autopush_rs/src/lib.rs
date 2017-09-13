@@ -69,6 +69,7 @@ extern crate hyper;
 extern crate libc;
 #[macro_use]
 extern crate log;
+extern crate openssl;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
@@ -77,6 +78,7 @@ extern crate serde_json;
 extern crate time;
 extern crate tokio_core;
 extern crate tokio_io;
+extern crate tokio_openssl;
 extern crate tokio_service;
 extern crate tokio_tungstenite;
 extern crate tungstenite;

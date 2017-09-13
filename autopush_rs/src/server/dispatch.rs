@@ -29,9 +29,10 @@ use tokio_io::AsyncRead;
 
 use errors::*;
 use server::webpush_io::WebpushIo;
+use server::tls::MaybeTlsStream;
 
 pub struct Dispatch {
-    socket: Option<TcpStream>,
+    socket: Option<MaybeTlsStream<TcpStream>>,
     data: BytesMut,
 }
 
@@ -41,7 +42,7 @@ pub enum RequestType {
 }
 
 impl Dispatch {
-    pub fn new(socket: TcpStream) -> Dispatch {
+    pub fn new(socket: MaybeTlsStream<TcpStream>) -> Dispatch {
         Dispatch {
             socket: Some(socket),
             data: BytesMut::new(),

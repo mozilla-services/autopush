@@ -14,6 +14,7 @@ use futures::sync::oneshot;
 use futures::task;
 use futures::{Stream, Future, Sink, Async, Poll, AsyncSink, StartSend};
 use libc::c_char;
+use openssl::ssl::SslAcceptor;
 use serde_json;
 use time;
 use tokio_core::net::TcpListener;
@@ -28,11 +29,12 @@ use errors::*;
 use protocol::{ClientMessage, ServerMessage, ServerNotification, Notification};
 use queue::{self, AutopushQueue};
 use rt::{self, AutopushError, UnwindGuard};
-use server::webpush_io::WebpushIo;
 use server::dispatch::{Dispatch, RequestType};
+use server::webpush_io::WebpushIo;
 use util::{self, RcObject, timeout};
 
 mod dispatch;
+mod tls;
 mod webpush_io;
 
 #[repr(C)]
@@ -69,6 +71,7 @@ pub struct AutopushServerOptions {
 pub struct Server {
     uaids: RefCell<HashMap<Uuid, RegisteredClient>>,
     open_connections: Cell<u32>,
+    tls_acceptor: Option<SslAcceptor>,
     pub tx: queue::Sender,
     pub opts: Arc<ServerOptions>,
     pub handle: Handle,
@@ -234,10 +237,6 @@ impl Server {
         let (inittx, initrx) = oneshot::channel();
 
         let opts = opts.clone();
-        assert!(opts.ssl_key.is_none(), "ssl not supported");
-        assert!(opts.ssl_cert.is_none(), "ssl not supported");
-        assert!(opts.ssl_dh_param.is_none(), "ssl not supported");
-
         let thread = thread::spawn(move || {
             let (srv, mut core) = match Server::new(&opts, tx) {
                 Ok(core) => {
@@ -287,14 +286,11 @@ impl Server {
             open_connections: Cell::new(0),
             handle: core.handle(),
             tx: tx,
+            tls_acceptor: tls::configure(opts),
         });
         let host_ip = resolve(&srv.opts.host_ip);
         let addr = format!("{}:{}", host_ip, srv.opts.port);
         let ws_listener = TcpListener::bind(&addr.parse().unwrap(), &srv.handle)?;
-
-        assert!(srv.opts.ssl_key.is_none(), "ssl not supported yet");
-        assert!(srv.opts.ssl_cert.is_none(), "ssl not supported yet");
-        assert!(srv.opts.ssl_dh_param.is_none(), "ssl not supported yet");
 
         let handle = core.handle();
         let srv2 = srv.clone();
@@ -317,9 +313,14 @@ impl Server {
 
                 // TODO: TCP socket options here?
 
+                // Process TLS (if configured)
+                let socket = tls::accept(&srv, socket);
+
                 // Figure out if this is a websocket or a `/status` request,
-                // without letting it take too long.
-                let request = Dispatch::new(socket);
+                let request = socket.and_then(Dispatch::new);
+
+                // Time out both the TLS accept (if any) along with the dispatch
+                // to figure out where we're going.
                 let request = timeout(request, srv.opts.open_handshake_timeout, &handle);
                 let srv2 = srv.clone();
                 let handle2 = handle.clone();

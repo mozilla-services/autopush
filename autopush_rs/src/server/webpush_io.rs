@@ -13,13 +13,15 @@ use futures::Poll;
 use tokio_core::net::TcpStream;
 use tokio_io::{AsyncRead, AsyncWrite};
 
+use server::tls::MaybeTlsStream;
+
 pub struct WebpushIo {
-    tcp: TcpStream,
+    tcp: MaybeTlsStream<TcpStream>,
     header_to_read: Option<BytesMut>,
 }
 
 impl WebpushIo {
-    pub fn new(tcp: TcpStream, header: BytesMut) -> WebpushIo {
+    pub fn new(tcp: MaybeTlsStream<TcpStream>, header: BytesMut) -> WebpushIo {
         WebpushIo {
             tcp: tcp,
             header_to_read: Some(header),
