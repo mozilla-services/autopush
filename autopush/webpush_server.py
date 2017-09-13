@@ -157,6 +157,7 @@ class OutputCommand(object):
 class HelloResponse(OutputCommand):
     uaid = attrib()  # type: Optional[str]
     message_month = attrib()  # type: str
+    check_storage = attrib()  # type: bool
     reset_uaid = attrib()  # type: bool
     rotate_message_table = attrib(default=False)  # type: bool
 
@@ -337,6 +338,7 @@ class HelloCommand(ProcessorCommand):
         # type: (Hello) -> HelloResponse
         user_item = None
         flags = dict(
+            check_storage=False,
             message_month=self.db.current_msg_month,
             reset_uaid=False
         )
@@ -359,8 +361,9 @@ class HelloCommand(ProcessorCommand):
         # type: (Hello) -> (Optional[JSONDict], JSONDict)
         flags = dict(
             message_month=None,
-            rotate_message_table=False,
+            check_storage=False,
             reset_uaid=False,
+            rotate_message_table=False,
         )
         uaid = hello.uaid.hex
         try:
@@ -379,6 +382,9 @@ class HelloCommand(ProcessorCommand):
                 not in self.db.message_tables:
             self.db.router.drop_user(uaid)
             return None, flags
+
+        # If we got here, its a valid user that needs storage checked
+        flags["check_storage"] = True
 
         # Determine if message table rotation is needed
         flags["message_month"] = record["current_month"]

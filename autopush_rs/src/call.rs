@@ -187,6 +187,7 @@ struct PythonError {
 pub struct HelloResponse {
     pub uaid: Option<Uuid>,
     pub message_month: String,
+    pub check_storage: bool,
     pub reset_uaid: bool,
     pub rotate_message_table: bool,
 }
