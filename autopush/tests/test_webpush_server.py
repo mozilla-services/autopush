@@ -234,6 +234,7 @@ class TestHelloProcessor(BaseSetup):
         result = p.process(hello)  # type: HelloResponse
         ok_(isinstance(result, HelloResponse))
         ok_(hello.uaid != result.uaid)
+        eq_(result.check_storage, False)
 
     def test_existing_uaid(self):
         p = self._makeFUT()
@@ -244,6 +245,7 @@ class TestHelloProcessor(BaseSetup):
         result = p.process(hello)  # type: HelloResponse
         ok_(isinstance(result, HelloResponse))
         eq_(hello.uaid.hex, result.uaid)
+        eq_(result.check_storage, True)
 
     def test_existing_newer_uaid(self):
         p = self._makeFUT()
