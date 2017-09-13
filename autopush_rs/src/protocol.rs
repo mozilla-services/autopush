@@ -39,9 +39,7 @@ pub enum ClientMessage {
         code: Option<i32>,
     },
 
-    Ack {
-        updates: Vec<ClientAck>,
-    },
+    Ack { updates: Vec<ClientAck> },
 }
 
 #[derive(Deserialize)]
@@ -91,5 +89,5 @@ pub struct Notification {
     #[serde(skip_serializing_if = "Option::is_none")]
     data: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    headers: Option<HashMap<String, String>>
+    headers: Option<HashMap<String, String>>,
 }

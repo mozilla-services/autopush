@@ -45,35 +45,27 @@ pub struct PythonCall {
 }
 
 #[no_mangle]
-pub extern "C" fn autopush_python_call_input_ptr(call: *mut AutopushPythonCall,
-                                                 err: &mut AutopushError)
-    -> *const u8
-{
-    unsafe {
-        (*call).inner.catch(err, |call| {
-            call.input.as_ptr()
-        })
-    }
+pub extern "C" fn autopush_python_call_input_ptr(
+    call: *mut AutopushPythonCall,
+    err: &mut AutopushError,
+) -> *const u8 {
+    unsafe { (*call).inner.catch(err, |call| call.input.as_ptr()) }
 }
 
 #[no_mangle]
-pub extern "C" fn autopush_python_call_input_len(call: *mut AutopushPythonCall,
-                                                 err: &mut AutopushError)
-    -> usize
-{
-    unsafe {
-        (*call).inner.catch(err, |call| {
-            call.input.len()
-        })
-    }
+pub extern "C" fn autopush_python_call_input_len(
+    call: *mut AutopushPythonCall,
+    err: &mut AutopushError,
+) -> usize {
+    unsafe { (*call).inner.catch(err, |call| call.input.len()) }
 }
 
 #[no_mangle]
-pub extern "C" fn autopush_python_call_complete(call: *mut AutopushPythonCall,
-                                                input: *const c_char,
-                                                err: &mut AutopushError)
-    -> i32
-{
+pub extern "C" fn autopush_python_call_complete(
+    call: *mut AutopushPythonCall,
+    input: *const c_char,
+    err: &mut AutopushError,
+) -> i32 {
     unsafe {
         (*call).inner.catch(err, |call| {
             let input = CStr::from_ptr(input).to_str().unwrap();
@@ -100,7 +92,8 @@ impl AutopushPythonCall {
     }
 
     fn _new<F>(input: String, f: F) -> AutopushPythonCall
-        where F: FnOnce(&str) + Send + 'static,
+    where
+        F: FnOnce(&str) + Send + 'static,
     {
         AutopushPythonCall {
             inner: UnwindGuard::new(Inner {
@@ -162,19 +155,14 @@ enum Call {
         timestamp: i64,
     },
 
-    DropUser {
-        uaid: String,
-    },
+    DropUser { uaid: String },
 
-    MigrateUser {
-        uaid: String,
-        message_month: String,
-    },
+    MigrateUser { uaid: String, message_month: String },
 
     StoreMessages {
         message_month: String,
         messages: Vec<protocol::Notification>,
-    }
+    },
 }
 
 #[derive(Deserialize)]
@@ -195,29 +183,25 @@ pub struct HelloResponse {
 #[derive(Deserialize)]
 #[serde(untagged)]
 pub enum RegisterResponse {
-    Success {
-        endpoint: String,
-    },
+    Success { endpoint: String },
 
     Error {
         error_msg: String,
         error: bool,
         status: u32,
-    }
+    },
 }
 
 #[derive(Deserialize)]
 #[serde(untagged)]
 pub enum UnRegisterResponse {
-    Success {
-        success: bool,
-    },
+    Success { success: bool },
 
     Error {
         error_msg: String,
         error: bool,
         status: u32,
-    }
+    },
 }
 
 #[derive(Deserialize)]
@@ -254,21 +238,27 @@ pub struct StoreMessagesResponse {
 
 
 impl Server {
-    pub fn hello(&self, connected_at: &u64, uaid: Option<&Uuid>)
-        -> MyFuture<HelloResponse>
-    {
+    pub fn hello(&self, connected_at: &u64, uaid: Option<&Uuid>) -> MyFuture<HelloResponse> {
         let ms = *connected_at as i64;
         let (call, fut) = PythonCall::new(&Call::Hello {
             connected_at: ms,
-            uaid: if let Some(uuid) = uaid { Some(uuid.simple().to_string()) } else { None },
+            uaid: if let Some(uuid) = uaid {
+                Some(uuid.simple().to_string())
+            } else {
+                None
+            },
         });
         self.send_to_python(call);
-        return fut
+        return fut;
     }
 
-    pub fn register(&self, uaid: String, message_month: String, channel_id: String, key: Option<String>)
-        -> MyFuture<RegisterResponse>
-    {
+    pub fn register(
+        &self,
+        uaid: String,
+        message_month: String,
+        channel_id: String,
+        key: Option<String>,
+    ) -> MyFuture<RegisterResponse> {
         let (call, fut) = PythonCall::new(&Call::Register {
             uaid: uaid,
             message_month: message_month,
@@ -276,12 +266,16 @@ impl Server {
             key: key,
         });
         self.send_to_python(call);
-        return fut
+        return fut;
     }
 
-    pub fn unregister(&self, uaid: String, message_month: String, channel_id: String, code: i32)
-        -> MyFuture<UnRegisterResponse>
-    {
+    pub fn unregister(
+        &self,
+        uaid: String,
+        message_month: String,
+        channel_id: String,
+        code: i32,
+    ) -> MyFuture<UnRegisterResponse> {
         let (call, fut) = PythonCall::new(&Call::Unregister {
             uaid: uaid,
             message_month: message_month,
@@ -289,12 +283,16 @@ impl Server {
             code: code,
         });
         self.send_to_python(call);
-        return fut
+        return fut;
     }
 
-    pub fn check_storage(&self, uaid: String, message_month: String, include_topic: bool, timestamp: Option<i64>)
-        -> MyFuture<CheckStorageResponse>
-    {
+    pub fn check_storage(
+        &self,
+        uaid: String,
+        message_month: String,
+        include_topic: bool,
+        timestamp: Option<i64>,
+    ) -> MyFuture<CheckStorageResponse> {
         let (call, fut) = PythonCall::new(&Call::CheckStorage {
             uaid: uaid,
             message_month: message_month,
@@ -302,52 +300,62 @@ impl Server {
             timestamp: timestamp,
         });
         self.send_to_python(call);
-        return fut
+        return fut;
     }
 
-    pub fn increment_storage(&self, uaid: String, message_month: String, timestamp: i64)
-        -> MyFuture<IncStorageResponse>
-    {
+    pub fn increment_storage(
+        &self,
+        uaid: String,
+        message_month: String,
+        timestamp: i64,
+    ) -> MyFuture<IncStorageResponse> {
         let (call, fut) = PythonCall::new(&Call::IncStoragePosition {
             uaid: uaid,
             message_month: message_month,
             timestamp: timestamp,
         });
         self.send_to_python(call);
-        return fut
+        return fut;
     }
 
-    pub fn delete_message(&self, message_month: String, notif: protocol::Notification)
-        -> MyFuture<DeleteMessageResponse>
-    {
+    pub fn delete_message(
+        &self,
+        message_month: String,
+        notif: protocol::Notification,
+    ) -> MyFuture<DeleteMessageResponse> {
         let (call, fut) = PythonCall::new(&Call::DeleteMessage {
             message: notif,
             message_month: message_month,
         });
         self.send_to_python(call);
-        return fut
+        return fut;
     }
 
     pub fn drop_user(&self, uaid: String) -> MyFuture<DropUserResponse> {
-        let (call, fut) = PythonCall::new(&Call::DropUser {
-            uaid,
-        });
+        let (call, fut) = PythonCall::new(&Call::DropUser { uaid });
         self.send_to_python(call);
-        return fut
+        return fut;
     }
 
-    pub fn migrate_user(&self, uaid: String, message_month: String) -> MyFuture<MigrateUserResponse> {
+    pub fn migrate_user(
+        &self,
+        uaid: String,
+        message_month: String,
+    ) -> MyFuture<MigrateUserResponse> {
         let (call, fut) = PythonCall::new(&Call::MigrateUser {
             uaid,
             message_month,
         });
         self.send_to_python(call);
-        return fut
+        return fut;
     }
 
-    pub fn store_messages(&self, uaid: String, message_month: String, mut messages: Vec<protocol::Notification>)
-        -> MyFuture<StoreMessagesResponse>
-    {
+    pub fn store_messages(
+        &self,
+        uaid: String,
+        message_month: String,
+        mut messages: Vec<protocol::Notification>,
+    ) -> MyFuture<StoreMessagesResponse> {
         for message in messages.iter_mut() {
             message.uaid = Some(uaid.clone());
         }
@@ -356,7 +364,7 @@ impl Server {
             messages,
         });
         self.send_to_python(call);
-        return fut
+        return fut;
     }
 
     fn send_to_python(&self, call: PythonCall) {
@@ -366,22 +374,19 @@ impl Server {
 
 impl PythonCall {
     fn new<T, U>(input: &T) -> (PythonCall, MyFuture<U>)
-        where T: ser::Serialize,
-              U: for<'de> de::Deserialize<'de> + 'static,
+    where
+        T: ser::Serialize,
+        U: for<'de> de::Deserialize<'de> + 'static,
     {
         let (tx, rx) = oneshot::channel();
         let call = PythonCall {
             input: serde_json::to_string(input).unwrap(),
-            output: Box::new(|json: &str| {
-                drop(tx.send(json_or_error(json)));
-            }),
+            output: Box::new(|json: &str| { drop(tx.send(json_or_error(json))); }),
         };
-        let rx = Box::new(rx.then(|res| {
-            match res {
-                Ok(Ok(s)) => Ok(serde_json::from_str(&s)?),
-                Ok(Err(e)) => Err(e),
-                Err(_) => Err("call canceled from python".into()),
-            }
+        let rx = Box::new(rx.then(|res| match res {
+            Ok(Ok(s)) => Ok(serde_json::from_str(&s)?),
+            Ok(Err(e)) => Err(e),
+            Err(_) => Err("call canceled from python".into()),
         }));
         (call, rx)
     }
@@ -390,7 +395,7 @@ impl PythonCall {
 fn json_or_error(json: &str) -> Result<String> {
     if let Ok(err) = serde_json::from_str::<PythonError>(json) {
         if err.error {
-            return Err(format!("python exception: {}", err.error_msg).into())
+            return Err(format!("python exception: {}", err.error_msg).into());
         }
     }
     Ok(json.to_string())

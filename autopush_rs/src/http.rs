@@ -27,18 +27,18 @@ impl Service for Push {
     fn call(&self, req: hyper::Request) -> Self::Future {
         if *req.method() != Method::Put && *req.method() != Method::Post {
             println!("not a PUT: {}", req.method());
-            return Box::new(err(hyper::Error::Method))
+            return Box::new(err(hyper::Error::Method));
         }
         if req.uri().path().len() == 0 {
             println!("empty uri path");
-            return Box::new(err(hyper::Error::Incomplete))
+            return Box::new(err(hyper::Error::Incomplete));
         }
         let req_uaid = req.uri().path()[6..].to_string();
         let uaid = match Uuid::parse_str(&req_uaid) {
             Ok(id) => id,
             Err(_) => {
                 println!("uri not uuid: {}", req_uaid);
-                return Box::new(err(hyper::Error::Status))
+                return Box::new(err(hyper::Error::Status));
             }
         };
 
@@ -50,18 +50,19 @@ impl Service for Push {
             let s = String::from_utf8(body.to_vec()).unwrap();
             if let Ok(msg) = serde_json::from_str(&s) {
                 match srv.notify_client(uaid, msg) {
-                    Ok(_) => return Ok(hyper::Response::new()
-                        .with_status(hyper::StatusCode::Ok)
-                    ),
-                    _ => return Ok(hyper::Response::new()
-                        .with_status(hyper::StatusCode::BadRequest)
-                        .with_body("Unable to decode body payload")
-                    )
+                    Ok(_) => return Ok(hyper::Response::new().with_status(hyper::StatusCode::Ok)),
+                    _ => {
+                        return Ok(
+                            hyper::Response::new()
+                                .with_status(hyper::StatusCode::BadRequest)
+                                .with_body("Unable to decode body payload"),
+                        )
+                    }
                 }
             }
-            Ok(hyper::Response::new()
-                .with_status(hyper::StatusCode::NotFound)
-            )
+            Ok(hyper::Response::new().with_status(
+                hyper::StatusCode::NotFound,
+            ))
         }))
     }
 }

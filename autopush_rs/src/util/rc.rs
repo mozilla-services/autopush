@@ -33,9 +33,7 @@ impl<T: Sink> Sink for RcObject<T> {
     type SinkItem = T::SinkItem;
     type SinkError = T::SinkError;
 
-    fn start_send(&mut self, msg: T::SinkItem)
-        -> StartSend<T::SinkItem, T::SinkError>
-    {
+    fn start_send(&mut self, msg: T::SinkItem) -> StartSend<T::SinkItem, T::SinkError> {
         self.0.borrow_mut().start_send(msg)
     }
 

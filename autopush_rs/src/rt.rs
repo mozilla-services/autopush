@@ -55,16 +55,14 @@ impl AutopushError {
     fn string(&self) -> Option<&str> {
         assert!(self.p1 != 0);
         assert!(self.p2 != 0);
-        let any: &Any = unsafe {
-            mem::transmute((self.p1, self.p2))
-        };
+        let any: &Any = unsafe { mem::transmute((self.p1, self.p2)) };
         // Similar to what libstd does, only check for `&'static str` and
         // `String`.
-        any.downcast_ref::<&'static str>()
-            .map(|s| &s[..])
-            .or_else(|| {
+        any.downcast_ref::<&'static str>().map(|s| &s[..]).or_else(
+            || {
                 any.downcast_ref::<String>().map(|s| &s[..])
-            })
+            },
+        )
     }
 
     fn assert_empty(&self) {
@@ -83,7 +81,7 @@ impl AutopushError {
 
     /// Deallocates the internal `Box<Any>`, freeing the resources behind it.
     unsafe fn cleanup(&mut self) {
-        mem::transmute::<_, Box<Any+Send>>((self.p1, self.p2));
+        mem::transmute::<_, Box<Any + Send>>((self.p1, self.p2));
         self.p1 = 0;
         self.p2 = 0;
     }
@@ -93,9 +91,7 @@ impl AutopushError {
 /// there is no error message.
 #[no_mangle]
 pub extern "C" fn autopush_error_msg_len(err: *const AutopushError) -> usize {
-    abort_on_panic(|| unsafe {
-        (*err).string().map(|s| s.len()).unwrap_or(0)
-    })
+    abort_on_panic(|| unsafe { (*err).string().map(|s| s.len()).unwrap_or(0) })
 }
 
 /// Returns the data pointer of the error message, if any. If not present
@@ -112,9 +108,7 @@ pub extern "C" fn autopush_error_msg_ptr(err: *const AutopushError) -> *const u8
 /// The error itself can continue to be reused for future function calls.
 #[no_mangle]
 pub unsafe extern "C" fn autopush_error_cleanup(err: *mut AutopushError) {
-    abort_on_panic(|| {
-        (&mut *err).cleanup();
-    });
+    abort_on_panic(|| { (&mut *err).cleanup(); });
 }
 
 /// Helper structure to provide "unwind safety" to ensure we don't reuse values
@@ -147,28 +141,32 @@ impl<T> UnwindGuard<T> {
     /// closure `f` will not be executed. This function will immediately return
     /// with the "null" return value to propagate the panic again.
     pub fn catch<F, R>(&self, err: &mut AutopushError, f: F) -> R::AbiRet
-        where F: FnOnce(&T) -> R,
-              R: AbiInto,
+    where
+        F: FnOnce(&T) -> R,
+        R: AbiInto,
     {
         err.assert_empty();
         if self.poisoned.get() {
             err.fill(Box::new(String::from("accessing poisoned object")));
-            return R::null()
+            return R::null();
         }
 
         // The usage of `AssertUnwindSafe` should be ok here because as
         // soon as we see this closure panic we'll disallow all further
         // access to the internals of `self`.
         let mut panicked = true;
-        let ret = catch(err, panic::AssertUnwindSafe(|| {
-            let ret = f(&self.inner);
-            panicked = false;
-            return ret
-        }));
+        let ret = catch(
+            err,
+            panic::AssertUnwindSafe(|| {
+                let ret = f(&self.inner);
+                panicked = false;
+                return ret;
+            }),
+        );
         if panicked {
             self.poisoned.set(true);
         }
-        return ret
+        return ret;
     }
 }
 
@@ -177,8 +175,9 @@ impl<T> UnwindGuard<T> {
 /// This is typically only used for constructors where there's no state
 /// persisted across calls.
 pub fn catch<T, F>(err: &mut AutopushError, f: F) -> T::AbiRet
-    where F: panic::UnwindSafe + FnOnce() -> T,
-          T: AbiInto,
+where
+    F: panic::UnwindSafe + FnOnce() -> T,
+    T: AbiInto,
 {
     err.assert_empty();
 
@@ -189,7 +188,7 @@ pub fn catch<T, F>(err: &mut AutopushError, f: F) -> T::AbiRet
             err.p1 = ptrs.0;
             err.p2 = ptrs.1;
             T::null()
-        }
+        },
     }
 }
 
@@ -199,7 +198,8 @@ pub fn catch<T, F>(err: &mut AutopushError, f: F) -> T::AbiRet
 /// This should be rarely used but is used when executing destructors in Rust,
 /// which should be infallible (and this is just a double-check that they are).
 pub fn abort_on_panic<F, R>(f: F) -> R
-    where F: FnOnce() -> R,
+where
+    F: FnOnce() -> R,
 {
     struct Bomb {
         active: bool,
@@ -216,7 +216,7 @@ pub fn abort_on_panic<F, R>(f: F) -> R
     let mut bomb = Bomb { active: true };
     let r = f();
     bomb.active = false;
-    return r
+    return r;
 }
 
 pub trait AbiInto {

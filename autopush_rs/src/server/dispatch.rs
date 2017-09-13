@@ -59,7 +59,7 @@ impl Future for Dispatch {
                 self.data.reserve(16); // get some extra space
             }
             if try_ready!(self.socket.as_mut().unwrap().read_buf(&mut self.data)) == 0 {
-                return Err("early eof".into())
+                return Err("early eof".into());
             }
             let ty = {
                 let mut headers = [httparse::EMPTY_HEADER; 16];
@@ -76,14 +76,14 @@ impl Future for Dispatch {
                         Some(ref path) if path.starts_with("/status") => RequestType::Status,
                         _ => {
                             debug!("unknown http request {:?}", req);
-                            return Err("unknown http request".into())
+                            return Err("unknown http request".into());
                         }
                     }
                 }
             };
 
             let tcp = self.socket.take().unwrap();
-            return Ok((WebpushIo::new(tcp, self.data.take()), ty).into())
+            return Ok((WebpushIo::new(tcp, self.data.take()), ty).into());
         }
     }
 }
