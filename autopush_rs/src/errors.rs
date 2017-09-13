@@ -51,17 +51,20 @@ pub type MyFuture<T> = Box<Future<Item = T, Error = Error>>;
 
 pub trait FutureChainErr<T> {
     fn chain_err<F, E>(self, callback: F) -> MyFuture<T>
-        where F: FnOnce() -> E + 'static,
-              E: Into<ErrorKind>;
+    where
+        F: FnOnce() -> E + 'static,
+        E: Into<ErrorKind>;
 }
 
 impl<F> FutureChainErr<F::Item> for F
-    where F: Future + 'static,
-          F::Error: error::Error + Send + 'static,
+where
+    F: Future + 'static,
+    F::Error: error::Error + Send + 'static,
 {
     fn chain_err<C, E>(self, callback: C) -> MyFuture<F::Item>
-        where C: FnOnce() -> E + 'static,
-              E: Into<ErrorKind>,
+    where
+        C: FnOnce() -> E + 'static,
+        E: Into<ErrorKind>,
     {
         Box::new(self.then(|r| r.chain_err(callback)))
     }

@@ -96,20 +96,16 @@ fn resolve(host: &str) -> IpAddr {
 }
 
 #[no_mangle]
-pub extern "C" fn autopush_server_new(opts: *const AutopushServerOptions,
-                                      err: &mut AutopushError)
-    -> *mut AutopushServer
-{
+pub extern "C" fn autopush_server_new(
+    opts: *const AutopushServerOptions,
+    err: &mut AutopushError,
+) -> *mut AutopushServer {
     unsafe fn to_s<'a>(ptr: *const c_char) -> Option<&'a str> {
         if ptr.is_null() {
-            return None
+            return None;
         }
         let s = CStr::from_ptr(ptr).to_str().expect("invalid utf-8");
-        if s.is_empty() {
-            None
-        } else {
-            Some(s)
-        }
+        if s.is_empty() { None } else { Some(s) }
     }
 
     unsafe fn ito_dur(seconds: u32) -> Option<Duration> {
@@ -124,8 +120,10 @@ pub extern "C" fn autopush_server_new(opts: *const AutopushServerOptions,
         if seconds == 0.0 {
             None
         } else {
-            Some(Duration::new(seconds as u64,
-                               (seconds.fract() * 1_000_000_000.0) as u32))
+            Some(Duration::new(
+                seconds as u64,
+                (seconds.fract() * 1_000_000_000.0) as u32,
+            ))
         }
     }
 
@@ -136,18 +134,22 @@ pub extern "C" fn autopush_server_new(opts: *const AutopushServerOptions,
 
         let opts = ServerOptions {
             debug: opts.debug != 0,
-            host_ip: to_s(opts.host_ip).expect("hostname must be specified").to_string(),
-            router_ip: to_s(opts.router_ip).expect("router hostname must be specified").to_string(),
+            host_ip: to_s(opts.host_ip)
+                .expect("hostname must be specified")
+                .to_string(),
+            router_ip: to_s(opts.router_ip)
+                .expect("router hostname must be specified")
+                .to_string(),
             port: opts.port,
             router_port: opts.router_port,
             url: to_s(opts.url).expect("url must be specified").to_string(),
             ssl_key: to_s(opts.ssl_key).map(PathBuf::from),
             ssl_cert: to_s(opts.ssl_cert).map(PathBuf::from),
             ssl_dh_param: to_s(opts.ssl_dh_param).map(PathBuf::from),
-            auto_ping_interval: fto_dur(opts.auto_ping_interval)
-                .expect("ping interval cannot be 0"),
-            auto_ping_timeout: fto_dur(opts.auto_ping_timeout)
-                .expect("ping timeout cannot be 0"),
+            auto_ping_interval: fto_dur(opts.auto_ping_interval).expect(
+                "ping interval cannot be 0",
+            ),
+            auto_ping_timeout: fto_dur(opts.auto_ping_timeout).expect("ping timeout cannot be 0"),
             close_handshake_timeout: ito_dur(opts.close_handshake_timeout),
             max_connections: if opts.max_connections == 0 {
                 None
@@ -168,14 +170,15 @@ pub extern "C" fn autopush_server_new(opts: *const AutopushServerOptions,
 }
 
 #[no_mangle]
-pub extern "C" fn autopush_server_start(srv: *mut AutopushServer,
-                                        queue: *mut AutopushQueue,
-                                        err: &mut AutopushError) -> i32 {
+pub extern "C" fn autopush_server_start(
+    srv: *mut AutopushServer,
+    queue: *mut AutopushQueue,
+    err: &mut AutopushError,
+) -> i32 {
     unsafe {
         (*srv).inner.catch(err, |srv| {
             let tx = (*queue).tx();
-            let (tx, thread) = Server::start(&srv.opts, tx)
-                .expect("failed to start server");
+            let (tx, thread) = Server::start(&srv.opts, tx).expect("failed to start server");
             srv.tx.set(Some(tx));
             srv.thread.set(Some(thread));
         })
@@ -183,8 +186,7 @@ pub extern "C" fn autopush_server_start(srv: *mut AutopushServer,
 }
 
 #[no_mangle]
-pub extern "C" fn autopush_server_stop(srv: *mut AutopushServer,
-                                       err: &mut AutopushError) -> i32 {
+pub extern "C" fn autopush_server_stop(srv: *mut AutopushServer, err: &mut AutopushError) -> i32 {
     unsafe {
         (*srv).inner.catch(err, |srv| {
             srv.stop().expect("tokio thread panicked");
@@ -224,9 +226,10 @@ impl Server {
     /// separate thread for the tokio reactor. The returned
     /// `AutopushServerInner` is a handle to the spawned thread and can be used
     /// to interact with it (e.g. shut it down).
-    fn start(opts: &Arc<ServerOptions>, tx: queue::Sender)
-        -> io::Result<(oneshot::Sender<()>, thread::JoinHandle<()>)>
-    {
+    fn start(
+        opts: &Arc<ServerOptions>,
+        tx: queue::Sender,
+    ) -> io::Result<(oneshot::Sender<()>, thread::JoinHandle<()>)> {
         let (donetx, donerx) = oneshot::channel();
         let (inittx, initrx) = oneshot::channel();
 
@@ -251,12 +254,13 @@ impl Server {
 
                 let handle = core.handle();
                 let router_ip = resolve(&srv.opts.router_ip);
-                let addr = format!("{}:{}", router_ip, srv.opts.router_port).parse().unwrap();
+                let addr = format!("{}:{}", router_ip, srv.opts.router_port)
+                    .parse()
+                    .unwrap();
                 let push_listener = TcpListener::bind(&addr, &handle).unwrap();
                 let proto = Http::new();
                 let push_srv = push_listener.incoming().for_each(move |(socket, addr)| {
-                    proto.bind_connection(&handle, socket, addr,
-                                          ::http::Push(srv.clone()));
+                    proto.bind_connection(&handle, socket, addr, ::http::Push(srv.clone()));
                     Ok(())
                 });
                 core.handle().spawn(push_srv.then(|res| {
@@ -275,9 +279,7 @@ impl Server {
         }
     }
 
-    fn new(opts: &Arc<ServerOptions>, tx: queue::Sender)
-        -> io::Result<(Rc<Server>, Core)>
-    {
+    fn new(opts: &Arc<ServerOptions>, tx: queue::Sender) -> io::Result<(Rc<Server>, Core)> {
         let core = Core::new()?;
         let srv = Rc::new(Server {
             opts: opts.clone(),
@@ -296,17 +298,20 @@ impl Server {
 
         let handle = core.handle();
         let srv2 = srv.clone();
-        let ws_srv = ws_listener.incoming()
+        let ws_srv = ws_listener
+            .incoming()
             .map_err(|e| Error::from(e))
-
             .for_each(move |(socket, addr)| {
                 // Make sure we're not handling too many clients before we start the
                 // websocket handshake.
                 let max = srv.opts.max_connections.unwrap_or(u32::max_value());
                 if srv.open_connections.get() >= max {
-                    info!("dropping {} as we already have too many open \
-                           connections", addr);
-                    return Ok(())
+                    info!(
+                        "dropping {} as we already have too many open \
+                           connections",
+                        addr
+                    );
+                    return Ok(());
                 }
                 srv.open_connections.set(srv.open_connections.get() + 1);
 
@@ -315,9 +320,7 @@ impl Server {
                 // Figure out if this is a websocket or a `/status` request,
                 // without letting it take too long.
                 let request = Dispatch::new(socket);
-                let request = timeout(request,
-                                      srv.opts.open_handshake_timeout,
-                                      &handle);
+                let request = timeout(request, srv.opts.open_handshake_timeout, &handle);
                 let srv2 = srv.clone();
                 let handle2 = handle.clone();
                 let client = request.and_then(move |(socket, request)| -> MyFuture<_> {
@@ -326,21 +329,21 @@ impl Server {
                         RequestType::Websocket => {
                             // Perform the websocket handshake on each
                             // connection, but don't let it take too long.
-                            let ws = accept_async(socket, None).chain_err(|| {
-                                "failed to accept client"
-                            });
-                            let ws = timeout(ws,
-                                             srv2.opts.open_handshake_timeout,
-                                             &handle2);
+                            let ws =
+                                accept_async(socket, None).chain_err(|| "failed to accept client");
+                            let ws = timeout(ws, srv2.opts.open_handshake_timeout, &handle2);
 
                             // Once the handshake is done we'll start the main
                             // communication with the client, managing pings
                             // here and deferring to `Client` to start driving
                             // the internal state machine.
-                            Box::new(ws.and_then(move |ws| {
-                                PingManager::new(&srv2, ws)
-                                    .chain_err(|| "failed to make ping handler")
-                            }).flatten())
+                            Box::new(
+                                ws.and_then(move |ws| {
+                                    PingManager::new(&srv2, ws).chain_err(
+                                        || "failed to make ping handler",
+                                    )
+                                }).flatten(),
+                            )
                         }
                     }
                 });
@@ -376,7 +379,12 @@ impl Server {
     /// namely its channel to send notifications back.
     pub fn connect_client(&self, client: RegisteredClient) {
         debug!("Connecting a client!");
-        assert!(self.uaids.borrow_mut().insert(client.uaid, client).is_none());
+        assert!(
+            self.uaids
+                .borrow_mut()
+                .insert(client.uaid, client)
+                .is_none()
+        );
     }
 
     /// A notification has come for the uaid
@@ -385,7 +393,10 @@ impl Server {
         if let Some(client) = uaids.get_mut(&uaid) {
             debug!("Found a client to deliver a notification to");
             // TODO: Don't unwrap, handle error properly
-            client.tx.unbounded_send(ServerNotification::Notification(notif)).unwrap();
+            client
+                .tx
+                .unbounded_send(ServerNotification::Notification(notif))
+                .unwrap();
             info!("Dropped notification in queue");
             return Ok(());
         }
@@ -427,9 +438,7 @@ enum CloseState<T> {
 }
 
 impl PingManager {
-    fn new(srv: &Rc<Server>, socket: WebSocketStream<WebpushIo>)
-        -> io::Result<PingManager>
-    {
+    fn new(srv: &Rc<Server>, socket: WebSocketStream<WebpushIo>) -> io::Result<PingManager> {
         // The `socket` is itself a sink and a stream, and we've also got a sink
         // (`tx`) and a stream (`rx`) to send messages. Half of our job will be
         // doing all this proxying: reading messages from `socket` and sending
@@ -468,7 +477,7 @@ impl Future for PingManager {
                     self.timeout.reset(at);
                     self.waiting = WaitingFor::Pong;
                 } else {
-                    break
+                    break;
                 }
             }
             assert!(!socket.ping);
@@ -499,7 +508,7 @@ impl Future for PingManager {
                         // then no need to keep checking the timer and we can
                         // keep going
                         debug!("waiting for socket to see pong timed out");
-                        break
+                        break;
                     } else if self.timeout.poll()?.is_ready() {
                         // We may not actually be reading messages from the
                         // websocket right now, could have been waiting on
@@ -510,7 +519,7 @@ impl Future for PingManager {
                         debug!("waited too long for a pong");
                         socket.pong_timeout = true;
                     } else {
-                        break
+                        break;
                     }
                 }
                 WaitingFor::Close => {
@@ -519,16 +528,16 @@ impl Future for PingManager {
                         if let CloseState::Exchange(ref mut client) = self.client {
                             client.shutdown();
                         }
-                        return Err("close handshake took too long".into())
+                        return Err("close handshake took too long".into());
                     }
                 }
             }
         }
 
         // Be sure to always flush out any buffered messages/pings
-        socket.poll_complete().chain_err(|| {
-            "failed routine `poll_complete` call"
-        })?;
+        socket.poll_complete().chain_err(
+            || "failed routine `poll_complete` call",
+        )?;
         drop(socket);
 
         // At this point looks our state of ping management A-OK, so try to
@@ -570,7 +579,9 @@ impl<T> WebpushSocket<T> {
     }
 
     fn send_ping(&mut self) -> Poll<(), Error>
-        where T: Sink<SinkItem = Message>, Error: From<T::SinkError>
+    where
+        T: Sink<SinkItem = Message>,
+        Error: From<T::SinkError>,
     {
         if self.ping {
             debug!("sending a ping");
@@ -581,7 +592,7 @@ impl<T> WebpushSocket<T> {
                 }
                 AsyncSink::NotReady(_) => {
                     debug!("ping not ready to be sent");
-                    return Ok(Async::NotReady)
+                    return Ok(Async::NotReady);
                 }
             }
         }
@@ -590,8 +601,9 @@ impl<T> WebpushSocket<T> {
 }
 
 impl<T> Stream for WebpushSocket<T>
-    where T: Stream<Item = Message>,
-          Error: From<T::Error>,
+where
+    T: Stream<Item = Message>,
+    Error: From<T::Error>,
 {
     type Item = ClientMessage;
     type Error = Error;
@@ -606,21 +618,19 @@ impl<T> Stream for WebpushSocket<T>
                     // elapsed (set above) then this is where we start
                     // triggering errors.
                     if self.pong_timeout {
-                        return Err("failed to receive a pong in time".into())
+                        return Err("failed to receive a pong in time".into());
                     }
-                    return Ok(Async::NotReady)
+                    return Ok(Async::NotReady);
                 }
             };
             match msg {
                 Message::Text(ref s) => {
                     trace!("text message {}", s);
                     let msg = serde_json::from_str(s).chain_err(|| "invalid json text")?;
-                    return Ok(Some(msg).into())
+                    return Ok(Some(msg).into());
                 }
 
-                Message::Binary(_) => {
-                    return Err("binary messages not accepted".into())
-                }
+                Message::Binary(_) => return Err("binary messages not accepted".into()),
 
                 // sending a pong is already managed by lower layers, just go to
                 // the next message
@@ -639,19 +649,20 @@ impl<T> Stream for WebpushSocket<T>
 }
 
 impl<T> Sink for WebpushSocket<T>
-    where T: Sink<SinkItem = Message>,
-          Error: From<T::SinkError>,
+where
+    T: Sink<SinkItem = Message>,
+    Error: From<T::SinkError>,
 {
     type SinkItem = ServerMessage;
     type SinkError = Error;
 
-    fn start_send(&mut self, msg: ServerMessage)
-        -> StartSend<ServerMessage, Error>
-    {
+    fn start_send(&mut self, msg: ServerMessage) -> StartSend<ServerMessage, Error> {
         if self.send_ping()?.is_not_ready() {
-            return Ok(AsyncSink::NotReady(msg))
+            return Ok(AsyncSink::NotReady(msg));
         }
-        let s = serde_json::to_string(&msg).chain_err(|| "failed to serialize")?;
+        let s = serde_json::to_string(&msg).chain_err(
+            || "failed to serialize",
+        )?;
         match self.inner.start_send(Message::Text(s))? {
             AsyncSink::Ready => Ok(AsyncSink::Ready),
             AsyncSink::NotReady(_) => Ok(AsyncSink::NotReady(msg)),
@@ -686,7 +697,9 @@ fn write_status(socket: WebpushIo) -> MyFuture<()> {
         len = data.len(),
         data = data,
     );
-    Box::new(tokio_io::io::write_all(socket, data.into_bytes())
-        .map(|_| ())
-        .chain_err(|| "failed to write status response"))
+    Box::new(
+        tokio_io::io::write_all(socket, data.into_bytes())
+            .map(|_| ())
+            .chain_err(|| "failed to write status response"),
+    )
 }

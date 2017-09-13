@@ -25,9 +25,7 @@ fn _assert_kinds() {
 }
 
 #[no_mangle]
-pub extern "C" fn autopush_queue_new(err: &mut AutopushError)
-    -> *mut AutopushQueue
-{
+pub extern "C" fn autopush_queue_new(err: &mut AutopushError) -> *mut AutopushQueue {
     rt::catch(err, || {
         let (tx, rx) = mpsc::channel();
 
@@ -39,10 +37,10 @@ pub extern "C" fn autopush_queue_new(err: &mut AutopushError)
 }
 
 #[no_mangle]
-pub extern "C" fn autopush_queue_recv(queue: *mut AutopushQueue,
-                                      err: &mut AutopushError)
-    -> *mut AutopushPythonCall
-{
+pub extern "C" fn autopush_queue_recv(
+    queue: *mut AutopushQueue,
+    err: &mut AutopushError,
+) -> *mut AutopushPythonCall {
     rt::catch(err, || unsafe {
         let mut rx = (*queue).rx.lock().unwrap();
         let msg = match *rx {

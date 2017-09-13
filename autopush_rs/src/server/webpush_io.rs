@@ -35,7 +35,7 @@ impl Read for WebpushIo {
             let n = (&header[..]).read(buf)?;
             header.split_to(n);
             if buf.len() == 0 || n > 0 {
-                return Ok(n)
+                return Ok(n);
             }
         }
         self.header_to_read = None;
@@ -55,8 +55,7 @@ impl Write for WebpushIo {
     }
 }
 
-impl AsyncRead for WebpushIo {
-}
+impl AsyncRead for WebpushIo {}
 
 impl AsyncWrite for WebpushIo {
     fn shutdown(&mut self) -> Poll<(), io::Error> {

@@ -10,9 +10,10 @@ pub struct MySendAll<T: Stream, U> {
 }
 
 impl<T, U> MySendAll<T, U>
-    where U: Sink<SinkItem=T::Item>,
-          T: Stream,
-          T::Error: From<U::SinkError>,
+where
+    U: Sink<SinkItem = T::Item>,
+    T: Stream,
+    T::Error: From<U::SinkError>,
 {
     #[allow(unused)]
     pub fn new(t: T, u: U) -> MySendAll<T, U> {
@@ -24,20 +25,24 @@ impl<T, U> MySendAll<T, U>
     }
 
     fn sink_mut(&mut self) -> &mut U {
-        self.sink.as_mut().take()
-            .expect("Attempted to poll MySendAll after completion")
+        self.sink.as_mut().take().expect(
+            "Attempted to poll MySendAll after completion",
+        )
     }
 
     fn stream_mut(&mut self) -> &mut Fuse<T> {
-        self.stream.as_mut().take()
-            .expect("Attempted to poll MySendAll after completion")
+        self.stream.as_mut().take().expect(
+            "Attempted to poll MySendAll after completion",
+        )
     }
 
     fn take_result(&mut self) -> (T, U) {
-        let sink = self.sink.take()
-            .expect("Attempted to poll MySendAll after completion");
-        let fuse = self.stream.take()
-            .expect("Attempted to poll MySendAll after completion");
+        let sink = self.sink.take().expect(
+            "Attempted to poll MySendAll after completion",
+        );
+        let fuse = self.stream.take().expect(
+            "Attempted to poll MySendAll after completion",
+        );
         (fuse.into_inner(), sink)
     }
 
@@ -45,16 +50,17 @@ impl<T, U> MySendAll<T, U>
         debug_assert!(self.buffered.is_none());
         if let AsyncSink::NotReady(item) = try!(self.sink_mut().start_send(item)) {
             self.buffered = Some(item);
-            return Ok(Async::NotReady)
+            return Ok(Async::NotReady);
         }
         Ok(Async::Ready(()))
     }
 }
 
 impl<T, U> Future for MySendAll<T, U>
-    where U: Sink<SinkItem=T::Item>,
-          T: Stream,
-          T::Error: From<U::SinkError>,
+where
+    U: Sink<SinkItem = T::Item>,
+    T: Stream,
+    T::Error: From<U::SinkError>,
 {
     type Item = (T, U);
     type Error = T::Error;
@@ -71,11 +77,11 @@ impl<T, U> Future for MySendAll<T, U>
                 Async::Ready(Some(item)) => try_ready!(self.try_start_send(item)),
                 Async::Ready(None) => {
                     try_ready!(self.sink_mut().poll_complete());
-                    return Ok(Async::Ready(self.take_result()))
+                    return Ok(Async::Ready(self.take_result()));
                 }
                 Async::NotReady => {
                     try_ready!(self.sink_mut().poll_complete());
-                    return Ok(Async::NotReady)
+                    return Ok(Async::NotReady);
                 }
             }
         }

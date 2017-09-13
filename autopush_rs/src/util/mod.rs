@@ -24,21 +24,20 @@ pub use self::rc::RcObject;
 /// timeout) and otherwise the returned future will cancel `f` and resolve to an
 /// error if the `dur` timeout elapses before `f` resolves.
 pub fn timeout<F>(f: F, dur: Option<Duration>, handle: &Handle) -> MyFuture<F::Item>
-    where F: Future + 'static,
-          F::Error: Into<Error>,
+where
+    F: Future + 'static,
+    F::Error: Into<Error>,
 {
     let dur = match dur {
         Some(dur) => dur,
         None => return Box::new(f.map_err(|e| e.into())),
     };
     let timeout = Timeout::new(dur, handle).into_future().flatten();
-    Box::new(f.select2(timeout).then(|res| {
-        match res {
-            Ok(Either::A((item, _timeout))) => Ok(item),
-            Err(Either::A((e, _timeout))) => Err(e.into()),
-            Ok(Either::B(((), _item))) => Err("timed out".into()),
-            Err(Either::B((e, _item))) => Err(e.into()),
-        }
+    Box::new(f.select2(timeout).then(|res| match res {
+        Ok(Either::A((item, _timeout))) => Ok(item),
+        Err(Either::A((e, _timeout))) => Err(e.into()),
+        Ok(Either::B(((), _item))) => Err("timed out".into()),
+        Err(Either::B((e, _item))) => Err(e.into()),
     }))
 }
 
@@ -50,11 +49,12 @@ pub fn init_logging(json: bool) {
     let mut builder = env_logger::LogBuilder::new();
 
     if env::var("RUST_LOG").is_ok() {
-       builder.parse(&env::var("RUST_LOG").unwrap());
+        builder.parse(&env::var("RUST_LOG").unwrap());
     }
 
-    builder.target(env_logger::LogTarget::Stdout)
-        .format(maybe_json_record);
+    builder.target(env_logger::LogTarget::Stdout).format(
+        maybe_json_record,
+    );
 
     if builder.init().is_ok() {
         LOG_JSON.store(json, Ordering::SeqCst);
@@ -82,9 +82,11 @@ fn maybe_json_record(record: &LogRecord) -> String {
             line: record.location().line(),
         }).unwrap()
     } else {
-        format!("{}:{}: {}",
-                record.level(),
-                record.location().module_path(),
-                record.args())
+        format!(
+            "{}:{}: {}",
+            record.level(),
+            record.location().module_path(),
+            record.args()
+        )
     }
 }
