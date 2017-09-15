@@ -1,3 +1,36 @@
+<a name="1.36.0"></a>
+## 1.36.0 (2017-09-15)
+
+
+#### Refactor
+
+*   Reorganize the Rust ping manager ([2a1ab5dd](https://github.com/mozilla-services/autopush/commit/2a1ab5dda62b28a5d6a50ba70ec102c9df1c1a79))
+*   Remove unneeded features from Rust deps ([b2d43dd0](https://github.com/mozilla-services/autopush/commit/b2d43dd0978e63e3d620c140c4242d0f8c0b45b5))
+
+#### Features
+
+*   SSL support to the Rust server ([59d1c897](https://github.com/mozilla-services/autopush/commit/59d1c897d61716cf5fa336896fe92709525d80f9))
+*   update cargo deps, and rustfmt all the rust ([ead3dd05](https://github.com/mozilla-services/autopush/commit/ead3dd05fd6be3a17d6470d20547c1fd4f571409), closes [#1006](https://github.com/mozilla-services/autopush/issues/1006))
+*   Add a `/status` handler on the ws port ([2430d35e](https://github.com/mozilla-services/autopush/commit/2430d35ecdfb204f0536def455402e41189702c1))
+*   use config hostname for Rust websocket binding ([2ef718fe](https://github.com/mozilla-services/autopush/commit/2ef718fe314ff550937721457fdde61385409935), closes [#1004](https://github.com/mozilla-services/autopush/issues/1004))
+*   remove unused udp wake capability ([efc0d256](https://github.com/mozilla-services/autopush/commit/efc0d256a49ea67c63371f245639be34b5010f64), closes [#886](https://github.com/mozilla-services/autopush/issues/886))
+*   initial Rust proof of concept implementation ([5bf2de64](https://github.com/mozilla-services/autopush/commit/5bf2de6403e3f7a5ff8b4910b86d06c99b023cf7), closes [#978](https://github.com/mozilla-services/autopush/issues/978))
+
+#### Bug Fixes
+
+*   don't check storage for new uaid's ([922e3425](https://github.com/mozilla-services/autopush/commit/922e342591068c265ae44d0c4857479f17be9d8a), closes [#1017](https://github.com/mozilla-services/autopush/issues/1017))
+*   remove debug assertions ([063eb532](https://github.com/mozilla-services/autopush/commit/063eb532ae42eebca9291eca120c3f1921c952a1))
+*   Correctly schedule pong timeouts ([3b5075ac](https://github.com/mozilla-services/autopush/commit/3b5075acda57d5471ea9d18a7e2c11380a19935e))
+*   Start ping timeouts once pints are sent ([11a30a98](https://github.com/mozilla-services/autopush/commit/11a30a98b5423c65082252f9d77e70efce0bbbb6))
+*   ensure lambda script paginates through all table names ([d692c7f3](https://github.com/mozilla-services/autopush/commit/d692c7f332bb81af5d819b52d5dbb1bd68b38d77), closes [#1000](https://github.com/mozilla-services/autopush/issues/1000))
+*   resolve hostnames and send pings out ([e57932cf](https://github.com/mozilla-services/autopush/commit/e57932cf99550d531686cb21fa8b662a838d9322), closes [#1011](https://github.com/mozilla-services/autopush/issues/1011))
+*   ensure we paginate through all table names ([f9f0d0bf](https://github.com/mozilla-services/autopush/commit/f9f0d0bfb84c10c8611bbec6f99ab0e9355bc89c), closes [#1000](https://github.com/mozilla-services/autopush/issues/1000))
+*   more lenient /status matching ([7506f74a](https://github.com/mozilla-services/autopush/commit/7506f74af6af91b039bdaeb518c4b9cf6a357501))
+*   use router ip/port for proper binding in Rust PoC ([56facd8e](https://github.com/mozilla-services/autopush/commit/56facd8eb7ed1909afb4da0cce001746683b4d64))
+*   allow only known protocols for /register calls ([f9b19d3c](https://github.com/mozilla-services/autopush/commit/f9b19d3c9e512f0201ef4f4b112eb5ed6f8f73b3), closes [#997](https://github.com/mozilla-services/autopush/issues/997))
+
+
+
 <a name="1.35.1"></a>
 ## 1.35.1 (2017-08-29)
 
