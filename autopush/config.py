@@ -129,10 +129,6 @@ class AutopushConfig(object):
         DDBTableConfig,
         default=dict(tablename="router")
     )  # type: DDBTableConfig
-    storage_table = _nested(
-        DDBTableConfig,
-        default=dict(tablename="storage")
-    )  # type: DDBTableConfig
     message_table = _nested(
         DDBTableConfig,
         default=dict(tablename="message")
@@ -173,8 +169,6 @@ class AutopushConfig(object):
 
     # Use the cryptography library
     use_cryptography = attrib(default=False)  # type: bool
-    # Allow Simplepush Protocol (deprecated)
-    disable_simplepush = attrib(default=False)  # type: bool
 
     def __attrs_post_init__(self):
         """Initialize the Settings object"""
@@ -306,16 +300,10 @@ class AutopushConfig(object):
             connect_timeout=ns.connection_timeout,
             memusage_port=ns.memusage_port,
             use_cryptography=ns.use_cryptography,
-            disable_simplepush=ns.disable_simplepush,
             router_table=dict(
                 tablename=ns.router_tablename,
                 read_throughput=ns.router_read_throughput,
                 write_throughput=ns.router_write_throughput
-            ),
-            storage_table=dict(
-                tablename=ns.storage_tablename,
-                read_throughput=ns.storage_read_throughput,
-                write_throughput=ns.storage_write_throughput
             ),
             message_table=dict(
                 tablename=ns.message_tablename,
@@ -329,13 +317,6 @@ class AutopushConfig(object):
             ),
             **kwargs
         )
-
-    def make_simplepush_endpoint(self, uaid, chid):
-        """Create a simplepush endpoint"""
-        root = self.endpoint_url + "/spush/"
-        base = (uaid.replace('-', '').decode("hex") +
-                chid.replace('-', '').decode("hex"))
-        return root + 'v1/' + self.fernet.encrypt(base).strip('=')
 
     def make_endpoint(self, uaid, chid, key=None):
         """Create an v1 or v2 WebPush endpoint from the identifiers.

@@ -34,16 +34,15 @@ class HealthHandler(BaseWebHandler):
 
         dl = DeferredList([
             self._check_table(self.db.router.table),
-            self._check_table(self.db.storage.table)
+            self._check_table(self.db.message.table, "storage")
         ])
         dl.addBoth(self._finish_response)
 
-    def _check_table(self, table):
+    def _check_table(self, table, name_over=None):
         """Checks the tables known about in DynamoDB"""
-        name = table.table_name
-        d = deferToThread(table_exists, table.connection, name)
-        d.addCallback(self._check_success, name)
-        d.addErrback(self._check_error, name)
+        d = deferToThread(table_exists, table.connection, table.table_name)
+        d.addCallback(self._check_success, name_over or table.table_name)
+        d.addErrback(self._check_error, name_over or table.table_name)
         return d
 
     def _check_success(self, exists, name):

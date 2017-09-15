@@ -10,7 +10,6 @@ from autobahn.twisted.util import sleep
 from autobahn.websocket.protocol import ConnectionRequest
 from boto.dynamodb2.exceptions import (
     ProvisionedThroughputExceededException,
-    ItemNotFound
 )
 from boto.exception import JSONResponseError
 from mock import Mock, patch
@@ -358,6 +357,22 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(name, "cancel")
 
     @inlineCallbacks
+    def test_close_with_cleanup_no_node(self):
+        self._connect()
+        self.proto.ps.uaid = dummy_uaid_str
+        self.factory.clients[dummy_uaid_str] = self.proto
+
+        # Stick a mock on
+        notif_mock = Mock()
+        notif_mock.ttl = 0
+        self.proto.ps.direct_updates = dict(foo=[notif_mock])
+        self.proto.db.router.get_uaid = mock_get = Mock()
+        mock_get.return_value = dict(foo="bar")
+        self.proto.onClose(True, None, None)
+        yield sleep(.25)
+        eq_(len(self.factory.clients), 0)
+
+    @inlineCallbacks
     def test_close_with_delivery_cleanup(self):
         self._connect()
         self.proto.ps.uaid = dummy_uaid_str
@@ -365,10 +380,11 @@ class WebsocketTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
 
         # Stick an un-acked direct notification in
-        self.proto.ps.direct_updates[chid] = 12
+        notif = make_webpush_notification(self.proto.ps.uaid, chid)
+        self.proto.ps.direct_updates[chid] = [notif]
 
         # Apply some mocks
-        self.proto.db.storage.save_notification = Mock()
+        self.proto.db.message.store_message = Mock()
         self.proto.db.router.get_uaid = mock_get = Mock()
         mock_get.return_value = dict(node_id="localhost:2000")
 
@@ -382,7 +398,6 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         self.proto.ps.uaid = dummy_uaid.hex
         self.factory.clients[dummy_uaid.hex] = self.proto
-        self.proto.ps.use_webpush = True
 
         # Stick an un-acked direct notification in
         self.proto.ps.direct_updates[dummy_chid_str] = [dummy_notif()]
@@ -405,10 +420,11 @@ class WebsocketTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
 
         # Stick an un-acked direct notification in
-        self.proto.ps.direct_updates[chid] = 12
+        notif = make_webpush_notification(self.proto.ps.uaid, chid)
+        self.proto.ps.direct_updates[chid] = [notif]
 
         # Apply some mocks
-        self.proto.db.storage.save_notification = Mock()
+        self.proto.db.message.store_message = Mock()
         self.proto.db.router.get_uaid = mock_get = Mock()
         mock_get.return_value = False
         self.metrics.reset_mock()
@@ -419,52 +435,6 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(self.metrics.timing.call_args[0][0], 'ua.connection.lifespan')
         # Wait for final cleanup (no error or metric produced)
         yield sleep(.25)
-
-    @inlineCallbacks
-    def test_close_with_delivery_cleanup_and_get_uaid_error(self):
-        self._connect()
-        self.proto.ps.uaid = uuid.uuid4().hex
-        self.factory.clients["asdf"] = self.proto
-        chid = str(uuid.uuid4())
-
-        # Stick an un-acked direct notification in
-        self.proto.ps.direct_updates[chid] = 12
-
-        # Apply some mocks
-        self.proto.db.storage.save_notification = Mock()
-        self.proto.db.router.get_uaid = mock_get = Mock()
-        self.metrics.reset_mock()
-
-        def raise_item(*args, **kwargs):
-            raise ItemNotFound()
-
-        mock_get.side_effect = raise_item
-
-        # Close the connection
-        self.proto.onClose(True, None, None)
-        yield self._wait_for(lambda: self.proto.log.info.called)
-        # Wait for final cleanup (no error or metric produced)
-        yield sleep(.25)
-
-    @inlineCallbacks
-    def test_close_with_delivery_cleanup_and_no_node_id(self):
-        self._connect()
-        self.proto.ps.uaid = uuid.uuid4().hex
-        self.factory.clients["asdf"] = self.proto
-        chid = str(uuid.uuid4())
-
-        # Stick an un-acked direct notification in
-        self.proto.ps.direct_updates[chid] = 12
-
-        # Apply some mocks
-        self.proto.db.storage.save_notification = Mock()
-        self.proto.db.router.get_uaid = mock_get = Mock()
-        mock_get.return_value = mock_node_get = Mock()
-        mock_node_get.get.return_value = None
-
-        # Close the connection
-        self.proto.onClose(True, None, None)
-        yield self._wait_for(lambda: mock_node_get.mock_calls)
 
     @inlineCallbacks
     def test_hello_old(self):
@@ -535,7 +505,7 @@ class WebsocketTestCase(unittest.TestCase):
             uaid=orig_uaid,
             connected_at=ms_time(),
             current_month="message_2016_3",
-            router_type="simplepush",
+            router_type="webpush",
         ))
 
         # router.register_user returns (registered, previous
@@ -594,7 +564,7 @@ class WebsocketTestCase(unittest.TestCase):
             uaid=orig_uaid,
             connected_at=ms_time(),
             current_month="message_2016_3",
-            router_type="simplepush",
+            router_type="webpush",
         ))
 
         # router.register_user returns (registered, previous
@@ -663,14 +633,6 @@ class WebsocketTestCase(unittest.TestCase):
             patch_range.stop()
 
     @inlineCallbacks
-    def test_hello(self):
-        self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
-
-        msg = yield self.get_response()
-        eq_(msg["status"], 200)
-
-    @inlineCallbacks
     def test_hello_webpush_uses_one_db_call(self):
         db.TRACK_DB_CALLS = True
         db.DB_CALLS = []
@@ -696,22 +658,6 @@ class WebsocketTestCase(unittest.TestCase):
         ok_("use_webpush" in msg)
 
     @inlineCallbacks
-    def test_hello_with_missing_router_type(self):
-        self._connect()
-        uaid = uuid.uuid4().hex
-        router = self.proto.db.router
-        router.table.put_item(data=dict(
-            uaid=uaid,
-            connected_at=ms_time()-1000,
-        ))
-
-        self._send_message(dict(messageType="hello", channelIDs=[],
-                                uaid=uaid))
-        msg = yield self.get_response()
-        eq_(msg["status"], 200)
-        ok_(msg["uaid"] != uaid)
-
-    @inlineCallbacks
     def test_hello_with_missing_current_month(self):
         self._connect()
         uaid = uuid.uuid4().hex
@@ -728,44 +674,11 @@ class WebsocketTestCase(unittest.TestCase):
         ok_(msg["uaid"] != uaid)
 
     @inlineCallbacks
-    def test_hello_with_uaid(self):
-        self._connect()
-        uaid = uuid.uuid4().hex
-        router = self.proto.db.router
-        router.register_user(dict(
-            uaid=uaid,
-            connected_at=ms_time(),
-            router_type="simplepush",
-        ))
-        self._send_message(dict(messageType="hello", channelIDs=[],
-                                uaid=uaid))
-        msg = yield self.get_response()
-        eq_(msg["status"], 200)
-        eq_(msg["uaid"], uaid)
-
-    @inlineCallbacks
-    def test_hello_resets_record(self):
-        self._connect()
-        uaid = uuid.uuid4().hex
-        router = self.proto.db.router
-        router.register_user(dict(
-            uaid=uaid,
-            connected_at=ms_time(),
-            router_type="simplepush",
-        ))
-        self._send_message(dict(messageType="hello", channelIDs=[],
-                                uaid=uaid))
-        msg = yield self.get_response()
-        eq_(msg["status"], 200)
-        eq_(msg["uaid"], uaid)
-        eq_(self.proto.ps.reset_uaid, True)
-
-    @inlineCallbacks
     def test_hello_with_bad_uaid(self):
         self._connect()
         uaid = "ajsidlfjlsdjflasjjailsdf"
         self._send_message(dict(messageType="hello", channelIDs=[],
-                                uaid=uaid))
+                                use_webpush=True, uaid=uaid))
         msg = yield self.get_response()
         eq_(msg["status"], 200)
         ok_(msg["uaid"] != uaid)
@@ -775,7 +688,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         uaid = str(uuid.uuid4())
         self._send_message(dict(messageType="hello", channelIDs=[],
-                                uaid=uaid))
+                                use_webpush=True, uaid=uaid))
         msg = yield self.get_response()
         eq_(msg["status"], 200)
         ok_(msg["uaid"] != uaid)
@@ -785,7 +698,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         uaid = uuid.uuid4().hex.upper()
         self._send_message(dict(messageType="hello", channelIDs=[],
-                                uaid=uaid))
+                                use_webpush=True, uaid=uaid))
         msg = yield self.get_response()
         eq_(msg["status"], 200)
         ok_(msg["uaid"] != uaid)
@@ -797,7 +710,8 @@ class WebsocketTestCase(unittest.TestCase):
         router = self.proto.db.router
         router.table.connection.update_item = Mock(side_effect=KeyError)
 
-        self._send_message(dict(messageType="hello", channelIDs=[], stop=1))
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                use_webpush=True, stop=1))
         msg = yield self.get_response()
         eq_(msg["status"], 503)
         eq_(msg["reason"], "error")
@@ -815,7 +729,8 @@ class WebsocketTestCase(unittest.TestCase):
         router = self.proto.db.router
         router.table.connection.update_item = Mock(side_effect=throw_error)
 
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
         msg = yield self.get_response()
         eq_(msg["status"], 503)
         eq_(msg["reason"], "error - overloaded")
@@ -834,7 +749,8 @@ class WebsocketTestCase(unittest.TestCase):
         router = self.proto.db.router
         router.table.connection.update_item = Mock(side_effect=throw_error)
 
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
         msg = yield self.get_response()
         eq_(msg["status"], 503)
         eq_(msg["reason"], "error - overloaded")
@@ -848,7 +764,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.db.router.register_user = \
             Mock(return_value=(False, {}))
 
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
         msg = yield self.get_response()
         calls = self.proto.db.router.register_user.mock_calls
         eq_(len(calls), 1)
@@ -856,24 +773,16 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(msg["reason"], "already_connected")
 
     @inlineCallbacks
-    def test_hello_no_simplepush(self):
-        state = self.conf.disable_simplepush
-        self.conf.disable_simplepush = True
-        self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
-        msg = yield self.get_response()
-        eq_(msg["status"], 401)
-        self.conf.disable_simplepush = state
-
-    @inlineCallbacks
     def test_hello_dupe(self):
         self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
         msg = yield self.get_response()
         eq_(msg["status"], 200)
 
         # Send another hello
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
         msg = yield self.get_response()
         eq_(msg["status"], 401)
 
@@ -898,14 +807,16 @@ class WebsocketTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_hello_env(self):
         self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
         msg = yield self.get_response()
         eq_(msg["env"], "test")
 
     @inlineCallbacks
     def test_ping(self):
         self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
         msg = yield self.get_response()
         eq_(msg["status"], 200)
         self._send_message({})
@@ -915,7 +826,8 @@ class WebsocketTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_ping_too_much(self):
         self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
         msg = yield self.get_response()
         eq_(msg["status"], 200)
         self.proto.ps.last_ping = time.time() - 30
@@ -994,7 +906,8 @@ class WebsocketTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_register(self):
         self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[], stop=1))
+        self._send_message(dict(messageType="hello", channelIDs=[],
+                                use_webpush=True, stop=1))
         msg = yield self.get_response()
         ok_("messageType" in msg)
 
@@ -1009,7 +922,6 @@ class WebsocketTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_register_webpush(self):
         self._connect()
-        self.proto.ps.use_webpush = True
         chid = str(uuid.uuid4())
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.db.message.register_channel = Mock()
@@ -1021,7 +933,6 @@ class WebsocketTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_register_webpush_with_key(self):
         self._connect()
-        self.proto.ps.use_webpush = True
         chid = str(uuid.uuid4())
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.db.message.register_channel = Mock()
@@ -1050,7 +961,8 @@ class WebsocketTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_register_no_chid(self):
         self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
         msg = yield self.get_response()
         ok_("messageType" in msg)
 
@@ -1062,7 +974,8 @@ class WebsocketTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_register_bad_chid(self):
         self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
         msg = yield self.get_response()
         ok_("messageType" in msg)
 
@@ -1074,7 +987,8 @@ class WebsocketTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_register_bad_chid_upper(self):
         self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
         msg = yield self.get_response()
         ok_("messageType" in msg)
 
@@ -1087,7 +1001,8 @@ class WebsocketTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_register_bad_chid_nodash(self):
         self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
         msg = yield self.get_response()
         ok_("messageType" in msg)
 
@@ -1142,7 +1057,6 @@ class WebsocketTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_register_over_provisioning(self):
         self._connect()
-        self.proto.ps.use_webpush = True
         chid = str(uuid.uuid4())
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.db.message.register_channel = register = Mock()
@@ -1200,7 +1114,6 @@ class WebsocketTestCase(unittest.TestCase):
     def test_unregister_with_webpush(self):
         chid = str(uuid.uuid4())
         self._connect()
-        self.proto.ps.use_webpush = True
         self.proto.force_retry = Mock()
         self.proto.process_unregister(dict(channelID=chid))
         ok_(self.proto.force_retry.called)
@@ -1209,7 +1122,8 @@ class WebsocketTestCase(unittest.TestCase):
     def test_ws_unregister(self):
         chid = str(uuid.uuid4())
         self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
         msg = yield self.get_response()
         eq_(msg["messageType"], "hello")
         eq_(msg["status"], 200)
@@ -1242,56 +1156,8 @@ class WebsocketTestCase(unittest.TestCase):
         eq_(msg["status"], 401)
         eq_(msg["messageType"], "unregister")
 
-    @inlineCallbacks
-    def test_ws_unregister_fail(self):
-        self._connect()
-        self.proto.ps.uaid = uuid.uuid4().hex
-        chid = str(uuid.uuid4())
-
-        # Replace storage delete with call to fail
-        table = self.proto.db.storage.table
-        delete = table.delete_item
-
-        def raise_exception(*args, **kwargs):
-            # Stick the original back
-            table.delete_item = delete
-            raise Exception("Connection problem?")
-
-        table.delete_item = MockAssist([raise_exception, True])
-        self._send_message(dict(messageType="unregister",
-                                channelID=chid))
-        yield self._wait_for(lambda: self.proto.log.failure.called)
-        self.proto.log.failure.assert_called_once()
-        assert_called_included(self.proto.log.info, format="Unregister")
-
-    def test_notification(self):
-        self._connect()
-        self.proto.ps.uaid = uuid.uuid4().hex
-        chid = str(uuid.uuid4())
-
-        # Send ourself a notification
-        payload = {"channelID": chid, "version": 10}
-        self.proto.send_notification(payload)
-
-        # Check the call result
-        args = self.send_mock.call_args
-        ok_(args is not None)
-        self.send_mock.reset_mock()
-
-        msg = json.loads(args[0][0])
-        eq_(msg["messageType"], "notification")
-        ok_("updates" in msg)
-        eq_(len(msg["updates"]), 1)
-        update = msg["updates"][0]
-        eq_(update["channelID"], chid)
-        eq_(update["version"], 10)
-
-        # Verify outgoing queue in sent directly
-        eq_(len(self.proto.ps.direct_updates), 1)
-
     def test_notification_with_webpush(self):
         self._connect()
-        self.proto.ps.use_webpush = True
         self.proto.ps.uaid = uuid.uuid4().hex
 
         chid = str(uuid.uuid4())
@@ -1318,78 +1184,50 @@ class WebsocketTestCase(unittest.TestCase):
                    "version": "10",
                    "headers": fixed_headers})
 
-    def test_notification_avoid_newer_delivery(self):
+    @inlineCallbacks
+    def test_hello_not_webpush(self):
         self._connect()
-        self.proto.ps.uaid = uuid.uuid4().hex
-
-        chid = str(uuid.uuid4())
-        self.proto.ps.updates_sent[chid] = 14
-
-        # Send ourself a notification
-        payload = {"channelID": chid, "version": 10}
-        self.proto.send_notification(payload)
-
-        # Check the call result
-        args = self.send_mock.call_args
-        eq_(args, None)
+        self._send_message(dict(messageType="hello",
+                                channelIDs=[]))
+        msg = yield self.get_response()
+        eq_(msg['status'], 401)
+        ok_('Simplepush not supported' in msg['reason'])
 
     @inlineCallbacks
     def test_ack(self):
         chid = str(uuid.uuid4())
         self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[]))
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
 
         # stick a notification to ack in
-        self.proto.ps.direct_updates[chid] = 12
-
+        notif = make_webpush_notification(self.proto.ps.uaid, chid)
+        self.proto.ps.direct_updates[chid] = [notif]
         msg = yield self.get_response()
         eq_(msg["status"], 200)
 
         # Send our ack
         self._send_message(dict(messageType="ack",
                                 updates=[{"channelID": chid,
-                                          "version": 12}]))
+                                          "version": notif.version}]))
 
         # Verify it was cleared out
-        eq_(len(self.proto.ps.direct_updates), 0)
+        eq_(len(self.proto.ps.direct_updates.get(str(notif.channel_id))), 0)
         eq_(len(self.proto.log.debug.mock_calls), 2)
         assert_called_included(self.proto.log.debug,
                                format="Ack",
-                               router_key="simplepush",
+                               router_key="webpush",
                                message_source="direct",
-                               message_id=str(12))
+                               message_id=notif.version)
 
     def test_ack_with_bad_input(self):
         self._connect()
         eq_(self.proto.ack_update(None), None)
 
-    def test_ack_with_webpush_direct(self):
-        self._connect()
-        self.proto.ps.uaid = uuid.uuid4().hex
-        chid = str(uuid.uuid4())
-
-        notif = make_webpush_notification(self.proto.ps.uaid, chid)
-        notif.message_id = dummy_version
-        self.proto.ps.use_webpush = True
-        self.proto.ps.direct_updates[chid] = [notif]
-
-        self.proto.ack_update(dict(
-            channelID=chid,
-            version=dummy_version
-        ))
-        eq_(self.proto.ps.direct_updates[chid], [])
-        eq_(len(self.proto.log.debug.mock_calls), 1)
-        assert_called_included(self.proto.log.debug,
-                               format="Ack",
-                               router_key="webpush",
-                               message_source="direct",
-                               message_id=dummy_version)
-
     def test_ack_with_webpush_from_storage(self):
         self._connect()
         chid = str(uuid.uuid4())
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.ps.use_webpush = True
         self.proto.ps.direct_updates[chid] = []
         notif = make_webpush_notification(self.proto.ps.uaid, chid)
         notif.message_id = dummy_version
@@ -1448,41 +1286,6 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.updates_sent[dummy_chid_str] = []
         self.proto._handle_webpush_update_remove(None, dummy_chid_str, notif)
 
-    @inlineCallbacks
-    def test_ack_fails_first_time(self):
-        self._connect()
-        self.proto.ps.uaid = uuid.uuid4().hex
-
-        class FailFirst(object):
-            def __init__(self):
-                self.tries = 0
-
-            def __call__(self, *args, **kwargs):
-                return self.tries != 0
-
-        self.proto.db.storage = Mock(
-            **{"delete_notification.side_effect": FailFirst()})
-
-        chid = str(uuid.uuid4())
-
-        # stick a notification to ack in
-        self.proto.ps.updates_sent[chid] = 12
-
-        # Send our ack
-        self._send_message(dict(messageType="ack",
-                                updates=[{"channelID": chid,
-                                          "version": 12}]))
-
-        # Ask for a notification check again
-        self.proto.process_notifications = Mock()
-        self.proto.ps._check_notifications = True
-
-        yield sleep(0.1)
-        yield self._wait_for(lambda: len(self.transport_mock.mock_calls) > 1)
-        eq_(self.proto.ps.updates_sent, {})
-        process_calls = self.proto.process_notifications.mock_calls
-        eq_(len(process_calls), 1)
-
     def test_ack_missing_updates(self):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
@@ -1503,25 +1306,14 @@ class WebsocketTestCase(unittest.TestCase):
         calls = self.send_mock.call_args_list
         eq_(len(calls), 0)
 
-    def test_ack_untracked(self):
-        self._connect()
-        self.proto.ps.uaid = uuid.uuid4().hex
-
-        self._send_message(dict(messageType="ack",
-                                updates=[{"channelID": str(uuid.uuid4()),
-                                          "version": 10}]))
-
-        calls = self.send_mock.call_args_list
-        eq_(len(calls), 0)
-
     def test_process_notifications(self):
         twisted.internet.base.DelayedCall.debug = True
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
 
         # Swap out fetch_notifications
-        self.proto.db.storage.fetch_notifications = Mock(
-            return_value=[]
+        self.proto.db.message.fetch_messages = Mock(
+            return_value=(None, [])
         )
 
         self.proto.process_notifications()
@@ -1545,61 +1337,79 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps._notification_fetch.addErrback(lambda x: d.errback(x))
         return d
 
-    @inlineCallbacks
-    def test_process_notifications_overload(self):
+    def test_process_notifications_err(self):
+
+        def throw(*args, **kwargs):
+            raise Exception("Krikey")
+
         twisted.internet.base.DelayedCall.debug = True
         self._connect()
+        self.proto.db.message.fetch_messages = Mock(
+            return_value=(None, [])
+        )
+        self.proto.db.message.fetch_messages = Mock(
+            side_effect=throw)
+        self.proto.db.message.fetch_timestamp_messages = Mock(
+            side_effect=throw)
         self.proto.ps.uaid = uuid.uuid4().hex
 
-        def throw_error(*args):
-            raise ProvisionedThroughputExceededException(None, None)
-
-        # Swap out fetch_notifications
-        self.proto.db.storage.fetch_notifications = MockAssist([
-            throw_error,
-            [],
-        ])
-
-        # Start the randrange patch
-        patch_randrange = patch("autopush.websocket.randrange")
-        mock_randrange = patch_randrange.start()
-        mock_randrange.return_value = 0.1
-
-        # No-op the deferToLater
-        self.proto.deferToLater = Mock()
-
         self.proto.process_notifications()
-        yield self.proto.ps._notification_fetch
-        ok_(self.proto.deferToLater.called)
-        ok_(mock_randrange.called)
-        patch_randrange.stop()
-
-    def test_process_notification_error(self):
-        self._connect()
-        self.proto.ps.uaid = uuid.uuid4().hex
-
-        def throw_error(*args, **kwargs):
-            raise Exception("An error happened!")
-
-        self.proto.db.storage = Mock(
-            **{"fetch_notifications.side_effect": throw_error})
-        self.proto.ps._check_notifications = True
-        self.proto.process_notifications()
-
+        notif_d = self.proto.ps._notification_fetch
+        # Tag on our own to follow up
         d = Deferred()
 
-        def check_error(result):
-            eq_(self.proto.ps._check_notifications, False)
-            ok_(self.proto.log.failure.called)
+        # Ensure we catch error outs from either call
+        notif_d.addErrback(lambda x: d.errback(x))
+
+        def wait(result):
+            fail = self.proto.log.failure
+            ok_(fail.called)
+            eq_(fail.call_args[1].get('failure').value[0], 'Krikey')
             d.callback(True)
 
-        self.proto.ps._notification_fetch.addBoth(check_error)
+        self.proto.ps._notification_fetch.addCallback(wait)
+        self.proto.ps._notification_fetch.addErrback(lambda x: d.errback(x))
+        return d
+
+    def test_process_notifications_provision_err(self):
+        from boto.dynamodb2.exceptions import (
+            ProvisionedThroughputExceededException
+        )
+
+        def throw(*args, **kwargs):
+            raise ProvisionedThroughputExceededException(500, "whoops")
+
+        twisted.internet.base.DelayedCall.debug = True
+        self._connect()
+        self.proto.db.message.fetch_messages = Mock(
+            return_value=(None, [])
+        )
+        self.proto.db.message.fetch_messages = Mock(
+            side_effect=throw)
+        self.proto.db.message.fetch_timestamp_messages = Mock(
+            side_effect=throw)
+        self.proto.deferToLater = Mock()
+        self.proto.ps.uaid = uuid.uuid4().hex
+
+        self.proto.process_notifications()
+        notif_d = self.proto.ps._notification_fetch
+        # Tag on our own to follow up
+        d = Deferred()
+
+        # Ensure we catch error outs from either call
+        notif_d.addErrback(lambda x: d.errback(x))
+
+        def wait(result):
+            ok_(self.proto.deferToLater.called)
+            d.callback(True)
+
+        self.proto.ps._notification_fetch.addCallback(wait)
+        self.proto.ps._notification_fetch.addErrback(lambda x: d.errback(x))
         return d
 
     def test_process_notif_doesnt_run_with_webpush_outstanding(self):
         self._connect()
         self.proto.ps.uaid = dummy_uaid.hex
-        self.proto.ps.use_webpush = True
         self.proto.ps.updates_sent[dummy_chid_str] = [dummy_notif()]
         self.proto.deferToLater = Mock()
         self.proto.process_notifications()
@@ -1639,7 +1449,6 @@ class WebsocketTestCase(unittest.TestCase):
     def test_notif_finished_with_webpush(self):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.ps.use_webpush = True
         self.proto.deferToLater = Mock()
         self.proto.ps._check_notifications = True
         self.proto.ps.scan_timestamps = True
@@ -1649,7 +1458,6 @@ class WebsocketTestCase(unittest.TestCase):
     def test_notif_finished_with_webpush_with_notifications(self):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.ps.use_webpush = True
         self.proto.ps._check_notifications = True
         self.proto.process_notifications = Mock()
 
@@ -1665,7 +1473,6 @@ class WebsocketTestCase(unittest.TestCase):
     def test_notif_finished_with_webpush_with_old_notifications(self):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.ps.use_webpush = True
         self.proto.ps._check_notifications = True
         self.proto.process_notifications = Mock()
         notif = make_webpush_notification(
@@ -1685,7 +1492,6 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         self.conf.msg_limit = 2
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.ps.use_webpush = True
         self.proto.ps._check_notifications = True
         self.proto.db.router.drop_user = Mock()
         self.proto.ps.message.fetch_messages = Mock()
@@ -1713,148 +1519,6 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.process_notifications()
         self.proto.ps._notification_fetch.addBoth(check)
         return d
-
-    @inlineCallbacks
-    def test_notification_results(self):
-        # Populate the database for ourself
-        uaid = uuid.uuid4().hex
-        chid = str(uuid.uuid4())
-        chid2 = str(uuid.uuid4())
-        chid3 = str(uuid.uuid4())
-
-        # Create a router record
-        router = self.proto.db.router
-        router.register_user(dict(
-            uaid=uaid,
-            connected_at=ms_time(),
-            router_type="simplepush",
-        ))
-
-        storage = self.proto.db.storage
-        storage.save_notification(uaid, chid, 12)
-        storage.save_notification(uaid, chid2, 8)
-        storage.save_notification(uaid, chid3, 9)
-
-        self._connect()
-        # Indicate we saw a newer direct version of chid2, and an older direct
-        # version of chid3
-        self.proto.ps.direct_updates[chid2] = 9
-        self.proto.ps.direct_updates[chid3] = 8
-
-        self._send_message(dict(messageType="hello", channelIDs=[],
-                                uaid=uaid))
-        msg = yield self.get_response()
-        eq_(msg["status"], 200)
-        eq_(msg["messageType"], "hello")
-
-        # Now wait for the notification results
-        msg = yield self.get_response()
-        eq_(msg["messageType"], "notification")
-        eq_(len(msg["updates"]), 2)
-        for update in msg["updates"]:
-            uchid = update["channelID"]
-            ver = update["version"]
-            if uchid == chid:
-                eq_(ver, 12)
-            elif uchid == chid3:
-                eq_(ver, 9)
-            ok_(uchid in [chid, chid3])
-
-    @inlineCallbacks
-    def test_notification_dont_deliver_after_ack(self):
-        self._connect()
-
-        uaid = uuid.uuid4().hex
-        chid = str(uuid.uuid4())
-
-        # Create a dummy router record
-        router = self.proto.db.router
-        router.register_user(dict(
-            uaid=uaid,
-            connected_at=ms_time(),
-            router_type="simplepush",
-        ))
-
-        storage = self.proto.db.storage
-        storage.save_notification(uaid, chid, 10)
-
-        # Verify the message is stored
-        results = storage.fetch_notifications(uaid)
-        eq_(len(results), 1)
-
-        self._send_message(dict(messageType="hello", channelIDs=[], uaid=uaid))
-        msg = yield self.get_response()
-        eq_(msg["status"], 200)
-
-        # Now wait for the notification
-        msg = yield self.get_response()
-        eq_(msg["messageType"], "notification")
-        updates = msg["updates"]
-        eq_(len(updates), 1)
-        eq_(updates[0]["channelID"], chid)
-        eq_(updates[0]["version"], 10)
-
-        # Send our ack
-        self._send_message(dict(messageType="ack",
-                                updates=[{"channelID": chid,
-                                          "version": 10}]))
-        # Wait for updates to be cleared and notifications accepted again
-        yield sleep(0.1)
-        yield self._wait_for(lambda: not self.proto.ps.updates_sent)
-        # Accepting again
-        eq_(self.proto.ps.updates_sent, {})
-
-        # Check that storage is clear
-        notifs = storage.fetch_notifications(uaid)
-        eq_(len(notifs), 0)
-
-    @inlineCallbacks
-    def test_notification_dont_deliver(self):
-        # Populate the database for ourself
-        uaid = uuid.uuid4().hex
-        chid = str(uuid.uuid4())
-
-        # Create a dummy router record
-        router = self.proto.db.router
-        router.register_user(dict(
-            uaid=uaid,
-            connected_at=ms_time(),
-            router_type="simplepush",
-        ))
-
-        storage = self.proto.db.storage
-        storage.save_notification(uaid, chid, 12)
-
-        # Verify the message is stored
-        results = storage.fetch_notifications(uaid)
-        eq_(len(results), 1)
-
-        self._connect()
-        self._send_message(dict(messageType="hello", channelIDs=[],
-                                uaid=uaid))
-        yield self.proto.ps._register
-        # Setup updates_sent to avoid a notification send
-        self.proto.ps.updates_sent[chid] = 14
-
-        # Notification check has started, indicate to check
-        # notifications again
-        self.proto.ps._check_notifications = True
-
-        # Now replace process_notifications so it won't be
-        # run again
-        self.proto.process_notifications = Mock()
-
-        # Chain our check for the call
-        yield self.proto.ps._notification_fetch
-        send_calls = self.send_mock.mock_calls
-        # There should be one, for the hello response No notifications
-        # should've been delivered after this notifiation check
-        eq_(len(send_calls), 1)
-
-        # Now we wait for the mock call to run
-        calls = self.proto.process_notifications.mock_calls
-        yield self._wait_for(lambda: len(calls))
-        eq_(len(calls), 1)
 
     def test_incomplete_uaid(self):
         mm = self.proto.db.router = Mock()

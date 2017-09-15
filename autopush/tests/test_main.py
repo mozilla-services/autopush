@@ -231,9 +231,6 @@ class EndpointMainTestCase(unittest.TestCase):
         statsd_host = "statsd_host"
         statsd_port = "statsd_port"
         router_tablename = "none"
-        storage_tablename = "None"
-        storage_read_throughput = 0
-        storage_write_throughput = 0
         router_read_throughput = 0
         router_write_throughput = 0
         resolve_hostname = False

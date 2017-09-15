@@ -10,19 +10,15 @@ from boto.dynamodb2.exceptions import (
 )
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.items import Item
-from boto.exception import BotoServerError
 from mock import Mock
 from nose.tools import eq_, assert_raises, ok_
 
 from autopush.db import (
     get_rotating_message_table,
     get_router_table,
-    get_storage_table,
     create_router_table,
-    create_storage_table,
     preflight_check,
     table_exists,
-    Storage,
     Message,
     Router,
     generate_last_connect,
@@ -50,7 +46,7 @@ def make_webpush_notification(uaid, chid, ttl=100):
 class DbCheckTestCase(unittest.TestCase):
     def test_preflight_check_fail(self):
         router = Router(get_router_table(), SinkMetrics())
-        storage = Storage(get_storage_table(), SinkMetrics())
+        message = Message(get_rotating_message_table(), SinkMetrics())
 
         def raise_exc(*args, **kwargs):  # pragma: no cover
             raise Exception("Oops")
@@ -59,24 +55,24 @@ class DbCheckTestCase(unittest.TestCase):
         router.clear_node.side_effect = raise_exc
 
         with assert_raises(Exception):
-            preflight_check(storage, router)
+            preflight_check(message, router)
 
     def test_preflight_check(self):
         router = Router(get_router_table(), SinkMetrics())
-        storage = Storage(get_storage_table(), SinkMetrics())
+        message = Message(get_rotating_message_table(), SinkMetrics())
 
         pf_uaid = "deadbeef00000000deadbeef01010101"
-        preflight_check(storage, router, pf_uaid)
+        preflight_check(message, router, pf_uaid)
         # now check that the database reports no entries.
-        notifs = storage.fetch_notifications(pf_uaid)
+        _, notifs = message.fetch_messages(uuid.UUID(pf_uaid))
         eq_(len(notifs), 0)
         assert_raises(ItemNotFound, router.get_uaid, pf_uaid)
 
     def test_preflight_check_wait(self):
         router = Router(get_router_table(), SinkMetrics())
-        storage = Storage(get_storage_table(), SinkMetrics())
+        message = Message(get_rotating_message_table(), SinkMetrics())
 
-        storage.table.describe = mock_describe = Mock()
+        message.table.describe = mock_describe = Mock()
 
         values = [
             dict(Table=dict(TableStatus="PENDING")),
@@ -88,9 +84,9 @@ class DbCheckTestCase(unittest.TestCase):
 
         mock_describe.side_effect = return_vals
         pf_uaid = "deadbeef00000000deadbeef01010101"
-        preflight_check(storage, router, pf_uaid)
+        preflight_check(message, router, pf_uaid)
         # now check that the database reports no entries.
-        notifs = storage.fetch_notifications(pf_uaid)
+        _, notifs = message.fetch_messages(uuid.UUID(pf_uaid))
         eq_(len(notifs), 0)
         assert_raises(ItemNotFound, router.get_uaid, pf_uaid)
 
@@ -123,92 +119,6 @@ class DbCheckTestCase(unittest.TestCase):
         eq_(db.normalize_id(abnormal), normal)
         assert_raises(ValueError, db.normalize_id, "invalid")
         eq_(db.normalize_id(abnormal.upper()), normal)
-
-
-class StorageTestCase(unittest.TestCase):
-    def setUp(self):
-        table = get_storage_table()
-        self.real_table = table
-        self.real_connection = table.connection
-
-    def tearDown(self):
-        self.real_table.connection = self.real_connection
-
-    def test_custom_tablename(self):
-        db = DynamoDBConnection()
-        db_name = "storage_%s" % uuid.uuid4()
-        ok_(not table_exists(db, db_name))
-        create_storage_table(db_name)
-        ok_(table_exists(db, db_name))
-
-    def test_provisioning(self):
-        db_name = "storage_%s" % uuid.uuid4()
-
-        s = create_storage_table(db_name, 8, 11)
-        eq_(s.throughput["read"], 8)
-        eq_(s.throughput["write"], 11)
-
-    def test_dont_save_older(self):
-        s = get_storage_table()
-        storage = Storage(s, SinkMetrics())
-        # Unfortunately moto can't run condition expressions, so
-        # we gotta fake it
-        storage.table.connection = Mock()
-
-        def raise_error(*args, **kwargs):
-            raise ConditionalCheckFailedException(None, None)
-
-        storage.table.connection.put_item.side_effect = raise_error
-        result = storage.save_notification(dummy_uaid, dummy_chid, 8)
-        eq_(result, False)
-
-    def test_fetch_boto_err(self):
-        s = get_storage_table()
-        storage = Storage(s, SinkMetrics())
-        storage.table.connection = Mock()
-
-        def raise_error(*args, **kwargs):
-            raise BotoServerError(None, None)
-
-        storage.table.connection.put_item.side_effect = raise_error
-        with assert_raises(BotoServerError):
-            storage.save_notification(dummy_uaid, dummy_chid, 12)
-
-    def test_fetch_over_provisioned(self):
-        s = get_storage_table()
-        storage = Storage(s, SinkMetrics())
-        storage.table.connection = Mock()
-
-        def raise_error(*args, **kwargs):
-            raise ProvisionedThroughputExceededException(None, None)
-
-        storage.table.connection.put_item.side_effect = raise_error
-        with assert_raises(ProvisionedThroughputExceededException):
-            storage.save_notification(dummy_uaid, dummy_chid, 12)
-
-    def test_save_over_provisioned(self):
-        s = get_storage_table()
-        storage = Storage(s, SinkMetrics())
-        storage.table = Mock()
-
-        def raise_error(*args, **kwargs):
-            raise ProvisionedThroughputExceededException(None, None)
-
-        storage.table.query_2.side_effect = raise_error
-        with assert_raises(ProvisionedThroughputExceededException):
-            storage.fetch_notifications(dummy_uaid)
-
-    def test_delete_over_provisioned(self):
-        s = get_storage_table()
-        storage = Storage(s, SinkMetrics())
-        storage.table.connection = Mock()
-
-        def raise_error(*args, **kwargs):
-            raise ProvisionedThroughputExceededException(None, None)
-
-        storage.table.connection.delete_item.side_effect = raise_error
-        results = storage.delete_notification(dummy_uaid, dummy_chid)
-        eq_(results, False)
 
 
 class MessageTestCase(unittest.TestCase):
@@ -429,7 +339,7 @@ class RouterTestCase(unittest.TestCase):
         with assert_raises(ProvisionedThroughputExceededException):
             router.register_user(dict(uaid=dummy_uaid, node_id="me",
                                       connected_at=1234,
-                                      router_type="simplepush"))
+                                      router_type="webpush"))
 
     def test_clear_node_provision_failed(self):
         r = get_router_table()
@@ -444,7 +354,7 @@ class RouterTestCase(unittest.TestCase):
             router.clear_node(Item(r, dict(uaid=dummy_uaid,
                                            connected_at="1234",
                                            node_id="asdf",
-                                           router_type="simplepush")))
+                                           router_type="webpush")))
 
     def test_incomplete_uaid(self):
         # Older records may be incomplete. We can't inject them using normal
@@ -470,7 +380,7 @@ class RouterTestCase(unittest.TestCase):
         router.table.connection = Mock()
         router.table.connection.update_item.return_value = {}
         result = router.register_user(dict(uaid="", node_id="me",
-                                           router_type="simplepush",
+                                           router_type="webpush",
                                            connected_at=1234))
         eq_(result[0], True)
 
@@ -484,7 +394,7 @@ class RouterTestCase(unittest.TestCase):
         router.table.connection = Mock()
         router.table.connection.update_item.side_effect = raise_condition
         router_data = dict(uaid=dummy_uaid, node_id="asdf", connected_at=1234,
-                           router_type="simplepush")
+                           router_type="webpush")
         result = router.register_user(router_data)
         eq_(result, (False, {}))
 
@@ -530,7 +440,7 @@ class RouterTestCase(unittest.TestCase):
         router = Router(r, SinkMetrics())
         # Register a node user
         router.register_user(dict(uaid=uaid, node_id="asdf",
-                                  router_type="simplepush",
+                                  router_type="webpush",
                                   connected_at=1234))
         result = router.drop_user(uaid)
         eq_(result, True)

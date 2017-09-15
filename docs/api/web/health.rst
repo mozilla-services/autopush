@@ -11,6 +11,8 @@
     :member-order: bysource
 
 :mod:`autopush.web.statushandler`
+---------------------------------
+
 .. autoclass:: StatusHandler
     :members:
     :private-members:

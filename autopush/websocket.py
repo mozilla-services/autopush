@@ -192,7 +192,6 @@ class PushState(object):
 
     last_ping = attrib(default=0.0)  # type: float
     check_storage = attrib(default=False)  # type: bool
-    use_webpush = attrib(default=False)  # type: bool
     router_type = attrib(default=None)  # type: Optional[str]
     connected_at = attrib(default=Factory(ms_time))  # type: float
     ping_time_out = attrib(default=False)  # type: bool
@@ -293,17 +292,14 @@ class PushState(object):
         self._uaid_hash = hasher(value) if value else ""
         self.stats.uaid_hash = self._uaid_hash
 
-    def set_connection_type(self, conn_type):
+    def init_connection(self):
         """Set the connection type for the client"""
-        self.use_webpush = conn_type == "webpush"
-        self._base_tags.append("use_webpush:{}".format(self.use_webpush))
-        self.router_type = conn_type
-        self.stats.connection_type = conn_type
+        self._base_tags.append("use_webpush:True")
+        self.router_type = self.stats.connection_type = "webpush"
 
-        if conn_type == "webpush":
-            # Update our message tracking for webpush
-            self.updates_sent = defaultdict(lambda: [])
-            self.direct_updates = defaultdict(lambda: [])
+        # Update our message tracking for webpush
+        self.updates_sent = defaultdict(lambda: [])
+        self.direct_updates = defaultdict(lambda: [])
 
     def pauseProducing(self):
         """IProducer implementation tracking if we should pause output"""
@@ -417,8 +413,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def log_failure(self, failure, **kwargs):
         """Log a twisted failure out through twisted's log.failure"""
-        self.log.failure(format="Unexpected error", failure=failure,
-                         **kwargs)
+        self.log.failure(format="Unexpected error", failure=failure, **kwargs)
 
     @property
     def paused(self):
@@ -585,16 +580,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # Attempt to deliver any notifications not originating from storage
         if self.ps.direct_updates:
             defers = []
-            if self.ps.use_webpush:
-                for notifs in self.ps.direct_updates.values():
-                    notifs = filter(lambda x: x.ttl != 0, notifs)
-                    self.ps.stats.direct_storage += len(notifs)
-                    defers.extend(map(self._save_webpush_notif, notifs))
-            else:
-                items = self.ps.direct_updates.items()
-                self.ps.stats.direct_storage += len(items)
-                for chid, version in items:
-                    defers.append(self._save_simple_notif(chid, version))
+            for notifs in self.ps.direct_updates.values():
+                notifs = filter(lambda x: x.ttl != 0, notifs)
+                self.ps.stats.direct_storage += len(notifs)
+                defers.extend(map(self._save_webpush_notif, notifs))
 
             # Tag on the notifier once everything has been stored
             dl = DeferredList(defers)
@@ -609,28 +598,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def _save_webpush_notif(self, notif):
         """Save a direct_update webpush style notification"""
-        return deferToThread(
-            self.ps.message.store_message,
-            notif
-        ).addErrback(self.log_failure)
-
-    def _save_simple_notif(self, channel_id, version):
-        """Save a simplepush notification"""
-        return deferToThread(
-            self.db.storage.save_notification,
-            uaid=self.ps.uaid,
-            chid=channel_id,
-            version=version,
-        ).addErrback(self.log_failure)
+        return deferToThread(self.ps.message.store_message,
+                             notif).addErrback(self.log_failure)
 
     def _lookup_node(self, results):
         """Looks up the node to send a notify for it to check storage if
         connected"""
         # Locate the node that has this client connected
-        d = deferToThread(
-            self.db.router.get_uaid,
-            self.ps.uaid
-        )
+        d = deferToThread(self.db.router.get_uaid, self.ps.uaid)
         d.addCallback(self._notify_node)
         d.addErrback(self._trap_uaid_not_found)
         d.addErrback(self.log_failure,
@@ -646,7 +621,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         connected elsewhere now"""
         if not result:
             return
-
         node_id = result.get("node_id")
         if not node_id:
             return
@@ -665,11 +639,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         d.addErrback(self.log_failure, extra="Failed to notify node")
 
     def returnError(self, messageType, reason, statusCode, close=True,
-                    message="", url=DEFAULT_WS_ERR):
+                    url=DEFAULT_WS_ERR):
         """Return an error to a client, and optionally shut down the connection
         safely"""
-        send = {"messageType": messageType,
-                "reason": reason,
+        send = {"messageType": messageType, "reason": reason,
                 "status": statusCode}
         if url:
             send["more_info"] = url
@@ -700,10 +673,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                                   self.err_finish_overload, message_type)
             d.addErrback(self.trap_cancel)
         else:
-            send = {"messageType": "error",
-                    "reason": "overloaded",
-                    "status": 503
-                    }
+            send = {"messageType": "error", "reason": "overloaded",
+                    "status": 503}
             self.sendJSON(send)
 
     def err_finish_overload(self, message_type):
@@ -731,14 +702,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if self.ps.uaid:
             return self.returnError("hello", "duplicate hello", 401)
 
-        if data.get("use_webpush", False):
-            conn_type = "webpush"
-        else:
-            if self.conf.disable_simplepush:
-                return self.returnError("hello", "Simplepush not supported",
-                                        401)
-            conn_type = "simplepush"
-        self.ps.set_connection_type(conn_type)
+        if not data.get("use_webpush", False):
+            return self.returnError("hello", "Simplepush not supported", 401)
+        self.ps.init_connection()
 
         uaid = data.get("uaid")
         existing_user, uaid = validate_uaid(uaid)
@@ -770,15 +736,13 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.uaid = uuid.uuid4().hex
             self.ps.stats.uaid_reset = True
             user_item = dict(
-                uaid=self.ps.uaid,
-                node_id=self.conf.router_url,
+                uaid=self.ps.uaid, node_id=self.conf.router_url,
                 connected_at=self.ps.connected_at,
                 router_type=self.ps.router_type,
                 last_connect=generate_last_connect(),
                 record_version=USER_RECORD_VERSION,
             )
-            if self.ps.use_webpush:
-                user_item["current_month"] = self.ps.message_month
+            user_item["current_month"] = self.ps.message_month
 
         return self.db.router.register_user(user_item)
 
@@ -808,23 +772,22 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             return None
 
         # Validate webpush records
-        if self.ps.use_webpush:
-            # Current month must exist and be a valid prior month
-            if ("current_month" not in record) or record["current_month"] \
-                    not in self.db.message_tables:
-                self.log.debug(format="Dropping User", code=105,
-                               uaid_hash=self.ps.uaid_hash,
-                               uaid_record=dump_uaid(record))
-                self.force_retry(self.db.router.drop_user,
-                                 self.ps.uaid)
-                tags = ['code:105']
-                self.metrics.increment("ua.expiration", tags=tags)
-                return None
+        # Current month must exist and be a valid prior month
+        if ("current_month" not in record) or record["current_month"] \
+                not in self.db.message_tables:
+            self.log.debug(format="Dropping User", code=105,
+                           uaid_hash=self.ps.uaid_hash,
+                           uaid_record=dump_uaid(record))
+            self.force_retry(self.db.router.drop_user,
+                             self.ps.uaid)
+            tags = ['code:105']
+            self.metrics.increment("ua.expiration", tags=tags)
+            return None
 
-            # Determine if message table rotation is needed
-            if record["current_month"] != self.ps.message_month:
-                self.ps.message_month = record["current_month"]
-                self.ps.rotate_message_table = True
+        # Determine if message table rotation is needed
+        if record["current_month"] != self.ps.message_month:
+            self.ps.message_month = record["current_month"]
+            self.ps.rotate_message_table = True
 
         # Include and update last_connect if needed, otherwise exclude
         if has_connected_this_month(record):
@@ -857,8 +820,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if not registered:
             # Registration failed
             msg = {"messageType": "hello", "reason": "already_connected",
-                   "status": 500,
-                   "more_info": url}
+                   "status": 500, "more_info": url}
             self.sendJSON(msg)
             return
 
@@ -878,10 +840,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             last_connect = previous.get("connected_at")
             if last_connect and node_id != self.conf.router_url:
                 url = "%s/notif/%s/%s" % (node_id, self.ps.uaid, last_connect)
-                d = self.factory.agent.request(
-                    "DELETE",
-                    url.encode("utf8"),
-                )
+                d = self.factory.agent.request("DELETE", url.encode("utf8"))
                 d.addErrback(self.trap_connection_err)
                 d.addErrback(self.log_failure,
                              extra="Failed to delete old node")
@@ -891,9 +850,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def finish_hello(self, previous):
         """callback for successful hello message, that sends hello reply"""
         self.ps._register = None
-        msg = {"messageType": "hello", "uaid": self.ps.uaid, "status": 200}
-        if self.ps.use_webpush:
-            msg["use_webpush"] = True
+        msg = {"messageType": "hello", "uaid": self.ps.uaid, "status": 200,
+               "use_webpush": True}
 
         if self.autoPingInterval:
             msg["ping"] = self.autoPingInterval
@@ -919,7 +877,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             return
 
         # Webpush with any outstanding storage-based must all be cleared
-        if self.ps.use_webpush and any(self.ps.updates_sent.values()):
+        if any(self.ps.updates_sent.values()):
             d = self.deferToLater(1, self.process_notifications)
             d.addErrback(self.trap_cancel)
             return
@@ -932,11 +890,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.ps._check_notifications = False
         self.ps._more_notifications = True
 
-        if self.ps.use_webpush:
-            d = self.deferToThread(self.webpush_fetch())
-        else:
-            d = self.deferToThread(
-                self.db.storage.fetch_notifications, self.ps.uaid)
+        d = self.deferToThread(self.webpush_fetch())
         d.addCallback(self.finish_notifications)
         d.addErrback(self.error_notification_overload)
         d.addErrback(self.trap_cancel)
@@ -985,38 +939,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             return
 
         # Process notifications differently based on webpush style or not
-        if self.ps.use_webpush:
-            return self.finish_webpush_notifications(notifs)
-
-        updates = []
-        notifs = notifs or []
-        # Track outgoing, screen out things we've seen that weren't
-        # ack'd yet
-        for s in notifs:
-            chid = s['chid']
-            version = int(s['version'])
-            self.ps.stats.stored_retrieved += 1
-            if self._newer_notification_sent(chid, version):
-                continue
-            if chid in self.ps.direct_updates:
-                # We're going to send a newer one, ignore the direct older
-                # one for acks
-                del self.ps.direct_updates[chid]
-            self.ps.updates_sent[chid] = version
-            updates.append({"channelID": chid, "version": version})
-        if updates:
-            msg = {"messageType": "notification", "updates": updates}
-            self.sendJSON(msg)
-
-        # Were we told to check notifications again?
-        if self.ps._check_notifications:
-            self.ps._check_notifications = False
-            d = self.deferToLater(1, self.process_notifications)
-            d.addErrback(self.trap_cancel)
-        elif self.ps.reset_uaid:
-            # Told to reset the user?
-            self.force_retry(self.db.router.drop_user, self.ps.uaid)
-            self.sendClose()
+        return self.finish_webpush_notifications(notifs)
 
     def finish_webpush_notifications(self, result):
         # type: (Tuple[str, List[WebPushNotification]]) -> None
@@ -1049,8 +972,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
             # Told to reset the user?
             if self.ps.reset_uaid:
-                self.force_retry(
-                    self.db.router.drop_user, self.ps.uaid)
+                self.force_retry(self.db.router.drop_user, self.ps.uaid)
                 self.sendClose()
 
             # Not told to check for notifications, do we need to now rotate
@@ -1094,9 +1016,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if self.ps.current_timestamp:
             self.force_retry(
                 self.ps.message.update_last_message_read,
-                self.ps.uaid_obj,
-                self.ps.current_timestamp
-            )
+                self.ps.uaid_obj, self.ps.current_timestamp)
 
         # Schedule a new process check
         self.check_missed_notifications(None)
@@ -1191,12 +1111,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             return self.bad_message("register", "Invalid UUID specified")
         self.transport.pauseProducing()
 
-        if self.ps.use_webpush:
-            d = self.deferToThread(self.conf.make_endpoint,
-                                   self.ps.uaid, chid, data.get("key"))
-        else:
-            d = self.deferToThread(self.conf.make_simplepush_endpoint,
-                                   self.ps.uaid, chid)
+        d = self.deferToThread(self.conf.make_endpoint, self.ps.uaid, chid,
+                               data.get("key"))
         d.addCallback(self.finish_register, chid)
         d.addErrback(self.trap_cancel)
         d.addErrback(self.error_register)
@@ -1212,32 +1128,24 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def finish_register(self, endpoint, chid):
         """callback for successful endpoint creation, sends register reply"""
-        if self.ps.use_webpush:
-            d = self.deferToThread(self.ps.message.register_channel,
-                                   self.ps.uaid, chid)
-            d.addCallback(self.send_register_finish, endpoint, chid)
-            # Note: No trap_cancel needed here since the deferred here is
-            # returned to process_register which will trap it
-            d.addErrback(self.err_overload, "register", disconnect=False)
-            return d
-        else:
-            self.send_register_finish(None, endpoint, chid)
+        d = self.deferToThread(self.ps.message.register_channel, self.ps.uaid,
+                               chid)
+        d.addCallback(self.send_register_finish, endpoint, chid)
+        # Note: No trap_cancel needed here since the deferred here is
+        # returned to process_register which will trap it
+        d.addErrback(self.err_overload, "register", disconnect=False)
+        return d
 
     def send_register_finish(self, result, endpoint, chid):
         self.transport.resumeProducing()
-        msg = {"messageType": "register",
-               "channelID": chid,
-               "pushEndpoint": endpoint,
-               "status": 200
-               }
+        msg = {"messageType": "register", "channelID": chid,
+               "pushEndpoint": endpoint, "status": 200}
         self.sendJSON(msg)
         self.metrics.increment("ua.command.register")
         self.ps.stats.registers += 1
-        self.log.info(format="Register", channel_id=chid,
-                      endpoint=endpoint,
+        self.log.info(format="Register", channel_id=chid, endpoint=endpoint,
                       uaid_hash=self.ps.uaid_hash,
-                      user_agent=self.ps.user_agent,
-                      **self.ps.raw_agent)
+                      user_agent=self.ps.user_agent, **self.ps.raw_agent)
 
     def process_unregister(self, data):
         """Process an unregister message"""
@@ -1253,28 +1161,18 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.ps.stats.unregisters += 1
         event = dict(format="Unregister", channel_id=chid,
                      uaid_hash=self.ps.uaid_hash,
-                     user_agent=self.ps.user_agent,
-                     **self.ps.raw_agent)
+                     user_agent=self.ps.user_agent, **self.ps.raw_agent)
         if "code" in data:
             event["code"] = extract_code(data)
         self.log.info(**event)
 
         # Clear out any existing tracked messages for this channel
-        if self.ps.use_webpush:
-            self.ps.direct_updates[chid] = []
-            self.ps.updates_sent[chid] = []
-        else:
-            self.ps.direct_updates.pop(chid, None)
-            self.ps.updates_sent.pop(chid, None)
+        self.ps.direct_updates[chid] = []
+        self.ps.updates_sent[chid] = []
 
-        if self.ps.use_webpush:
-            # Unregister the channel
-            self.force_retry(self.ps.message.unregister_channel,
-                             self.ps.uaid, chid)
-        else:
-            # Delete any record from storage, we don't wait for this
-            self.force_retry(self.db.storage.delete_notification,
-                             self.ps.uaid, chid)
+        # Unregister the channel
+        self.force_retry(self.ps.message.unregister_channel, self.ps.uaid,
+                         chid)
 
         data["status"] = 200
         self.sendJSON(data)
@@ -1296,10 +1194,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         code = extract_code(update)
 
-        if self.ps.use_webpush:
-            return self._handle_webpush_ack(chid, version, code)
-        else:
-            return self._handle_simple_ack(chid, version, code)
+        return self._handle_webpush_ack(chid, version, code)
 
     def _handle_webpush_ack(self, chid, version, code):
         """Handle clearing out a webpush ack"""
@@ -1346,8 +1241,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                     # message
                     d = self.force_retry(
                         self.ps.message.update_last_message_read,
-                        self.ps.uaid_obj,
-                        self.ps.current_timestamp,
+                        self.ps.uaid_obj, self.ps.current_timestamp,
                     )
                     d.addBoth(self._handle_webpush_update_remove, chid, msg)
                 else:
@@ -1376,33 +1270,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.ps.updates_sent[chid].remove(notif)
         except (AttributeError, ValueError):
             pass
-
-    def _handle_simple_ack(self, chid, version, code):
-        """Handle clearing out a simple ack"""
-        if chid in self.ps.direct_updates and \
-           self.ps.direct_updates[chid] <= version:
-            del self.ps.direct_updates[chid]
-            self.log.debug(format="Ack", router_key="simplepush",
-                           channel_id=chid, message_id=str(version),
-                           message_source="direct",
-                           uaid_hash=self.ps.uaid_hash,
-                           user_agent=self.ps.user_agent, code=code,
-                           **self.ps.raw_agent)
-            self.ps.stats.direct_acked += 1
-            return
-        self.log.debug(format="Ack", router_key="simplepush", channel_id=chid,
-                       message_id=str(version), message_source="stored",
-                       uaid_hash=self.ps.uaid_hash,
-                       user_agent=self.ps.user_agent, code=code,
-                       **self.ps.raw_agent)
-        self.ps.stats.stored_acked += 1
-        if chid in self.ps.updates_sent and \
-           self.ps.updates_sent[chid] <= version:
-            del self.ps.updates_sent[chid]
-        else:
-            return
-        return self.force_retry(self.db.storage.delete_notification,
-                                self.ps.uaid, chid, version)
 
     def process_ack(self, data):
         """Process an ack message, delete notifications from storage if
@@ -1447,7 +1314,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         # When using webpush, we don't check again if we have outstanding
         # notifications
-        if self.ps.use_webpush and any(self.ps.updates_sent.values()):
+        if any(self.ps.updates_sent.values()):
             return
 
         # Should we check again?
@@ -1466,11 +1333,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             msg["reason"] = message
         self.sendJSON(msg)
 
-    def _newer_notification_sent(self, channel_id, version):
-        """Returns whether a newer channel_id/version has already been sent"""
-        return self.ps.updates_sent.get(channel_id, 0) > version or \
-            self.ps.direct_updates.get(channel_id, 0) > version
-
     ####################################
     # Utility function for external use
     def send_notification(self, update):
@@ -1480,23 +1342,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         update notification from an endpoint.
 
         """
-        chid, version = (update["channelID"], update["version"])
-        if not self.ps.use_webpush and \
-           self._newer_notification_sent(chid, version):
-            return
+        chid = update["channelID"]
 
-        if self.ps.use_webpush:
-            # Create the notification
-            notif = WebPushNotification.from_serialized(self.ps.uaid_obj,
-                                                        update)
-            self.ps.direct_updates[chid].append(notif)
-            if notif.topic:
-                self.metrics.increment("ua.notification.topic")
-            self.sendJSON(notif.websocket_format())
-        else:
-            self.ps.direct_updates[chid] = version
-            msg = {"messageType": "notification", "updates": [update]}
-            self.sendJSON(msg)
+        # Create the notification
+        notif = WebPushNotification.from_serialized(self.ps.uaid_obj, update)
+        self.ps.direct_updates[chid].append(notif)
+        if notif.topic:
+            self.metrics.increment("ua.notification.topic")
+        self.sendJSON(notif.websocket_format())
 
 
 class PushServerFactory(WebSocketServerFactory):
@@ -1632,7 +1485,4 @@ class StatusResource(Resource):
     def render(self, request):
         request.setResponseCode(200)
         request.setHeader("content-type", "application/json")
-        return json.dumps({
-            "status": "OK",
-            "version": __version__,
-        })
+        return json.dumps({"status": "OK", "version": __version__})

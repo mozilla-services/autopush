@@ -37,11 +37,9 @@ from autopush.web.registration import (
     SubRegistrationHandler,
     UaidRegistrationHandler,
 )
-from autopush.web.simplepush import SimplePushHandler
 from autopush.web.webpush import WebPushHandler
 from autopush.websocket import (
     NotificationHandler,
-    PushServerProtocol,
     RouterHandler,
 )
 from autopush.websocket import PushServerProtocol  # noqa
@@ -158,11 +156,6 @@ class EndpointHTTPFactory(BaseHTTPFactory):
                  routers,      # type: Dict[str, IRouter]
                  **kwargs):
         # type: (...) -> None
-        if not conf.disable_simplepush:
-            self.ap_handlers += (
-                (r"/spush/(?:(?P<api_ver>v\d+)\/)?(?P<token>[^\/]+)",
-                 SimplePushHandler),
-            )
         self.ap_handlers = tuple(self.ap_handlers)
         BaseHTTPFactory.__init__(self, conf, db=db, **kwargs)
         self.routers = routers

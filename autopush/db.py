@@ -204,17 +204,6 @@ def create_router_table(tablename="router", read_throughput=5,
                         )
 
 
-def create_storage_table(tablename="storage", read_throughput=5,
-                         write_throughput=5):
-    # type: (str, int, int) -> Table
-    """Create a new storage table for simplepush style notification storage"""
-    return Table.create(tablename,
-                        schema=[HashKey("uaid"), RangeKey("chid")],
-                        throughput=dict(read=read_throughput,
-                                        write=write_throughput),
-                        )
-
-
 def _make_table(table_func, tablename, read_throughput, write_throughput):
     # type: (Callable[[str, int, int], Table], str, int, int) -> Table
     """Private common function to make a table with a table func"""
@@ -237,22 +226,9 @@ def get_router_table(tablename="router", read_throughput=5,
                        write_throughput)
 
 
-def get_storage_table(tablename="storage", read_throughput=5,
-                      write_throughput=5):
-    # type: (str, int, int) -> Table
-    """Get the main storage table object
-
-    Creates the table if it doesn't already exist, otherwise returns the
-    existing table.
-
-    """
-    return _make_table(create_storage_table, tablename, read_throughput,
-                       write_throughput)
-
-
-def preflight_check(storage, router, uaid="deadbeef00000000deadbeef00000000"):
-    # type: (Storage, Router, str) -> None
-    """Performs a pre-flight check of the storage/router/message to ensure
+def preflight_check(message, router, uaid="deadbeef00000000deadbeef00000000"):
+    # type: (Message, Router, str) -> None
+    """Performs a pre-flight check of the router/message to ensure
     appropriate permissions for operation.
 
     Failure to run correctly will raise an exception.
@@ -262,34 +238,38 @@ def preflight_check(storage, router, uaid="deadbeef00000000deadbeef00000000"):
     ready = False
     while not ready:
         tbl_status = [x.describe()["Table"]["TableStatus"]
-                      for x in [storage.table, router.table]]
+                      for x in [message.table, router.table]]
         ready = all([status == "ACTIVE" for status in tbl_status])
         if not ready:
             time.sleep(1)
 
     # Use a distinct UAID so it doesn't interfere with metrics
-    chid = uuid.uuid4().hex
+    uaid = uuid.UUID(uaid)
+    chid = uuid.uuid4()
+    message_id = str(uuid.uuid4())
     node_id = "mynode:2020"
     connected_at = 0
-    version = 12
+    notif = WebPushNotification(
+        uaid=uaid,
+        channel_id=chid,
+        update_id=message_id,
+        message_id=message_id,
+        ttl=60,
+    )
 
     # Store a notification, fetch it, delete it
-    storage.save_notification(uaid, chid, version)
-    notifs = storage.fetch_notifications(uaid)
-    assert len(notifs) > 0
-    storage.delete_notification(uaid, chid, version)
+    message.store_message(notif)
+    assert message.delete_message(notif)
 
     # Store a router entry, fetch it, delete it
-    router.register_user(dict(uaid=uaid, node_id=node_id,
+    router.register_user(dict(uaid=uaid.hex, node_id=node_id,
                               connected_at=connected_at,
-                              router_type="simplepush"))
-    item = router.get_uaid(uaid)
+                              router_type="webpush"))
+    item = router.get_uaid(uaid.hex)
     assert item.get("node_id") == node_id
     # Clean up the preflight data.
     router.clear_node(item)
-    router.drop_user(uaid)
-    storage.table.delete_item(uaid=uaid, chid=chid)
-    storage.table.delete_item(uaid=uaid, chid=" ")
+    router.drop_user(uaid.hex)
 
 
 def track_provisioned(func):
@@ -367,82 +347,6 @@ def list_tables(conn):
 def table_exists(conn, tablename):
     """Determine if the specified Table exists"""
     return any(tablename == name for name in list_tables(conn))
-
-
-class Storage(object):
-    """Create a Storage table abstraction on top of a DynamoDB Table object"""
-    def __init__(self, table, metrics):
-        # type: (Table, IMetrics) -> None
-        """Create a new Storage object
-
-        :param table: :class:`Table` object.
-        :param metrics: Metrics object that implements the
-                        :class:`autopush.metrics.IMetrics` interface.
-
-        """
-        self.table = table
-        self.metrics = metrics
-        self.encode = table._encode_keys
-
-    @track_provisioned
-    def fetch_notifications(self, uaid):
-        # type: (str) -> List[Dict[str, Any]]
-        """Fetch all notifications for a UAID
-
-        :raises:
-            :exc:`ProvisionedThroughputExceededException` if dynamodb table
-            exceeds throughput.
-
-        """
-        notifs = self.table.query_2(consistent=True, uaid__eq=hasher(uaid),
-                                    chid__gt=" ")
-        return list(notifs)
-
-    @track_provisioned
-    def save_notification(self, uaid, chid, version):
-        # type: (str, str, Optional[int]) -> bool
-        """Save a notification for the UAID
-
-        :raises:
-            :exc:`ProvisionedThroughputExceededException` if dynamodb table
-            exceeds throughput.
-
-        """
-        conn = self.table.connection
-        try:
-            cond = "attribute_not_exists(version) or version < :ver"
-            conn.put_item(
-                self.table.table_name,
-                item=self.encode(dict(uaid=hasher(uaid),
-                                      chid=normalize_id(chid),
-                                      version=version)),
-                condition_expression=cond,
-                expression_attribute_values={
-                    ":ver": {'N': str(version)}
-                }
-            )
-            return True
-        except ConditionalCheckFailedException:
-            return False
-
-    def delete_notification(self, uaid, chid, version=None):
-        # type: (str, str, Optional[int]) -> bool
-        """Delete a notification for a UAID
-
-        :returns: Whether or not the notification was able to be deleted.
-
-        """
-        try:
-            if version:
-                self.table.delete_item(uaid=hasher(uaid),
-                                       chid=normalize_id(chid),
-                                       expected={"version__eq": version})
-            else:
-                self.table.delete_item(uaid=hasher(uaid),
-                                       chid=normalize_id(chid))
-            return True
-        except ProvisionedThroughputExceededException:
-            return False
 
 
 class Message(object):
@@ -876,13 +780,11 @@ class Router(object):
 class DatabaseManager(object):
     """Provides database access"""
 
-    _storage_conf = attrib()  # type: DDBTableConfig
     _router_conf = attrib()   # type: DDBTableConfig
     _message_conf = attrib()  # type: DDBTableConfig
 
     metrics = attrib()  # type: IMetrics
 
-    storage = attrib(default=None)                  # type: Optional[Storage]
     router = attrib(default=None)                   # type: Optional[Router]
     message_tables = attrib(default=Factory(dict))  # type: Dict[str, Message]
     current_msg_month = attrib(init=False)          # type: Optional[str]
@@ -903,7 +805,6 @@ class DatabaseManager(object):
         """Create a DatabaseManager from the given config"""
         metrics = autopush.metrics.from_config(conf)
         return cls(
-            storage_conf=conf.storage_table,
             router_conf=conf.router_table,
             message_conf=conf.message_table,
             metrics=metrics,
@@ -915,14 +816,10 @@ class DatabaseManager(object):
         """Setup metrics, message tables and perform preflight_check"""
         self.metrics.start()
         self.setup_tables()
-        preflight_check(self.storage, self.router, preflight_uaid)
+        preflight_check(self.message, self.router, preflight_uaid)
 
     def setup_tables(self):
         """Lookup or create the database tables"""
-        self.storage = Storage(
-            get_storage_table(**asdict(self._storage_conf)),
-            self.metrics
-        )
         self.router = Router(
             get_router_table(**asdict(self._router_conf)),
             self.metrics

@@ -5,12 +5,10 @@ HTTP Endpoints for Notifications
 
 Autopush exposes three HTTP endpoints:
 
-`/[sw]push/...`
+`/wpush/...`
 
-This is tied to one of the Endpoint Handlers, either `/wpush/...` for
-:class:`~autopush.web.webpush.WebPushHandler`, or `/spush/...` for :class:`~autopush.web.simplepush.SimplePushHandler`.
-(Note, `SimplePushHandler` is obsolete and will be removed without
-notification in a future update.) This endpoint is returned by the Push
+This is tied to the Endpoint Handler :class:`~autopush.web.webpush.WebPushHandler`
+This endpoint is returned by the Push
 registration process and is used by the :term:`AppServer` to send Push
 alerts to the Application. See :ref:`send`.
 
