@@ -47,16 +47,6 @@ def add_shared_args(parser):
                         type=str, default=None, env_var="SSL_DH_PARAM")
     parser.add_argument('--router_tablename', help="DynamoDB Router Tablename",
                         type=str, default="router", env_var="ROUTER_TABLENAME")
-    parser.add_argument('--storage_tablename',
-                        help="DynamoDB Storage Tablename", type=str,
-                        default="storage", env_var="STORAGE_TABLENAME")
-    parser.add_argument('--storage_read_throughput',
-                        help="DynamoDB storage read throughput",
-                        type=int, default=5, env_var="STORAGE_READ_THROUGHPUT")
-    parser.add_argument('--storage_write_throughput',
-                        help="DynamoDB storage write throughput",
-                        type=int, default=5,
-                        env_var="STORAGE_WRITE_THROUGHPUT")
     parser.add_argument('--message_tablename',
                         help="DynamoDB Message Tablename", type=str,
                         default="message", env_var="MESSAGE_TABLENAME")
@@ -103,10 +93,6 @@ def add_shared_args(parser):
                         help="Use the cryptography library vs. JOSE",
                         action="store_true",
                         default=False, env_var="USE_CRYPTOGRAPHY")
-    parser.add_argument('--disable_simplepush',
-                        help="Disable the deprecated Simplepush protocol",
-                        action="store_true", default=False,
-                        env_var="DISABLE_SIMPLEPUSH")
     # No ENV because this is for humans
     _add_external_router_args(parser)
     _obsolete_args(parser)
@@ -133,6 +119,11 @@ def _obsolete_args(parser):
     parser.add_argument('--wake_timeout', help="OBSOLETE")
     parser.add_argument('--wake_pem', help="OBSOLETE")
     parser.add_argument('--wake_server', help="OBSOLETE")
+
+    parser.add_argument('--disable_simplepush', help="OBSOLETE")
+    parser.add_argument('--storage_tablename', help="OBSOLETE")
+    parser.add_argument('--storage_read_throughput', help="OBSOLETE")
+    parser.add_argument('--storage_write_throughput', help="OBSOLETE")
 
 
 def _add_external_router_args(parser):

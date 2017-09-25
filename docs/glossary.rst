@@ -35,9 +35,8 @@ Glossary
     Router Type
        Every :term:`UAID` that connects has a router type. This indicates the
        type of routing to use when dispatching notifications. For most clients, this
-       value will be ``webpush``. Older Firefox OS clients use ``simplepush``
-       and clients using :term:`Bridging` it will be one of ``gcm``, ``fcm``,
-       or ``apns``.
+       value will be ``webpush``. Clients using :term:`Bridging` it will use either
+       ``gcm``, ``fcm``, or ``apns``.
 
     Subscription
        A unique route between an :term:`AppServer` and the Application. May

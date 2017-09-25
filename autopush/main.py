@@ -116,7 +116,7 @@ class AutopushMultiService(MultiService):
         conf = AutopushConfig.from_argparse(
             ns,
             debug=ns.debug,
-            preflight_uaid="deadbeef000000000deadbeef" + postfix,
+            preflight_uaid="deadbeef00000000deadbeef" + postfix,
             **kwargs
         )
         return cls(conf)

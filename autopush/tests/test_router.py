@@ -9,7 +9,7 @@ from autopush.utils import WebPushNotification
 from mock import Mock, PropertyMock, patch
 from nose.tools import eq_, ok_, assert_raises
 from twisted.trial import unittest
-from twisted.internet.error import ConnectError, ConnectionRefusedError
+from twisted.internet.error import ConnectionRefusedError
 from twisted.internet.defer import inlineCallbacks
 from twisted.web.client import Agent
 
@@ -21,23 +21,19 @@ from hyper.http20.exceptions import HTTP20Error
 
 from autopush.config import AutopushConfig
 from autopush.db import (
-    Message,
-    ProvisionedThroughputExceededException,
-    ItemNotFound,
+    Message
 )
 from autopush.exceptions import RouterException
 from autopush.metrics import SinkMetrics
 from autopush.router import (
     APNSRouter,
     GCMRouter,
-    SimpleRouter,
     WebPushRouter,
     FCMRouter,
 )
 from autopush.router.interface import RouterResponse, IRouter
 from autopush.tests import MockAssist
 from autopush.tests.support import test_db
-from autopush.web.base import Notification
 
 
 class RouterInterfaceTestCase(TestCase):
@@ -908,225 +904,6 @@ class FCMRouterTestCase(unittest.TestCase):
                 app_id="invalid")
 
 
-class SimplePushRouterTestCase(unittest.TestCase):
-    def setUp(self):
-        from twisted.logger import Logger
-        conf = AutopushConfig(
-            hostname="localhost",
-            statsd_host=None,
-        )
-        self.metrics = metrics = Mock(spec=SinkMetrics)
-        db = test_db(metrics=metrics)
-
-        self.agent_mock = agent = Mock(spec=Agent)
-        self.router = SimpleRouter(conf, {}, db, agent)
-        self.router.log = Mock(spec=Logger)
-        self.notif = Notification(10, "data", dummy_chid)
-        mock_result = Mock(spec=gcmclient.gcm.Result)
-        mock_result.canonical = dict()
-        mock_result.failed = dict()
-        mock_result.not_registered = dict()
-        mock_result.needs_retry.return_value = False
-        self.router_mock = db.router
-        self.storage_mock = db.storage
-
-    def _raise_connect_error(self):
-        raise ConnectError()
-
-    def _raise_connection_refused_error(self):
-        raise ConnectionRefusedError()
-
-    def _raise_db_error(self):
-        raise ProvisionedThroughputExceededException(None, None)
-
-    def _raise_item_error(self):
-        raise ItemNotFound()
-
-    def test_register(self):
-        router_data = {}
-        self.router.register("uaid", router_data=router_data, app_id="test123")
-        eq_(router_data, {})
-
-    def test_route_to_connected(self):
-        self.agent_mock.request.return_value = response_mock = Mock()
-        response_mock.code = 200
-        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
-        d = self.router.route_notification(self.notif, router_data)
-
-        def verify_deliver(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 200)
-        d.addBoth(verify_deliver)
-        return d
-
-    def test_route_connection_fail_saved(self):
-        self.agent_mock.request.side_effect = MockAssist(
-            [self._raise_connection_refused_error])
-        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
-        self.router_mock.clear_node.return_value = None
-        self.router_mock.get_uaid.return_value = {}
-        self.storage_mock.save_notification.return_value = True
-        d = self.router.route_notification(self.notif, router_data)
-
-        def verify_deliver(reply):
-            eq_(len(self.router.log.debug.mock_calls), 1)
-            ok_(reply.status_code, 202)
-            eq_(len(self.router_mock.clear_node.mock_calls), 1)
-
-        d.addBoth(verify_deliver)
-        return d
-
-    def test_route_to_busy_node_save_old_version(self):
-        self.agent_mock.request.return_value = response_mock = Mock()
-        response_mock.code = 202
-        self.storage_mock.save_notification.return_value = False
-        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
-        d = self.router.route_notification(self.notif, router_data)
-
-        def verify_deliver(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 202)
-        d.addBoth(verify_deliver)
-        return d
-
-    def test_route_to_busy_node_save_throws_db_error(self):
-        self.agent_mock.request.return_value = response_mock = Mock()
-        response_mock.code = 202
-        self.storage_mock.save_notification.side_effect = MockAssist(
-            [self._raise_db_error]
-        )
-        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
-        d = self.router.route_notification(self.notif, router_data)
-
-        def verify_deliver(fail):
-            exc = fail.value
-            ok_(exc, RouterException)
-            eq_(exc.status_code, 503)
-        d.addBoth(verify_deliver)
-        return d
-
-    def test_route_with_no_node_saves_and_lookup_fails(self):
-        self.storage_mock.save_notification.return_value = True
-        self.router_mock.get_uaid.side_effect = MockAssist(
-            [self._raise_db_error]
-        )
-        router_data = dict(uaid=dummy_uaid)
-        d = self.router.route_notification(self.notif, router_data)
-
-        def verify_deliver(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 202)
-        d.addBoth(verify_deliver)
-        return d
-
-    def test_route_with_no_node_saves_and_lookup_fails_with_item_error(self):
-        self.storage_mock.save_notification.return_value = True
-        self.router_mock.get_uaid.side_effect = MockAssist(
-            [self._raise_item_error]
-        )
-        router_data = dict(uaid=dummy_uaid)
-        d = self.router.route_notification(self.notif, router_data)
-
-        def verify_deliver(fail):
-            exc = fail.value
-            ok_(exc, RouterException)
-            eq_(exc.status_code, 410)
-        d.addBoth(verify_deliver)
-        return d
-
-    def test_route_to_busy_node_saves_looks_up_and_no_node(self):
-        self.agent_mock.request.return_value = response_mock = Mock()
-        response_mock.code = 202
-        self.storage_mock.save_notification.return_value = True
-        self.router_mock.get_uaid.return_value = dict()
-        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
-        d = self.router.route_notification(self.notif, router_data)
-
-        def verify_deliver(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 202)
-        d.addBoth(verify_deliver)
-        return d
-
-    def test_route_to_busy_node_saves_looks_up_and_sends_check_202(self):
-        self.agent_mock.request.return_value = response_mock = Mock()
-        response_mock.code = 202
-        self.storage_mock.save_notification.return_value = True
-        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
-        self.router_mock.get_uaid.return_value = router_data
-
-        d = self.router.route_notification(self.notif, router_data)
-
-        def verify_deliver(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 202)
-            ok_(self.router_mock.get_uaid.called)
-        d.addBoth(verify_deliver)
-        return d
-
-    def test_route_to_busy_node_saves_looks_up_and_send_check_fails(self):
-        response_mock = Mock()
-        self.agent_mock.request.side_effect = MockAssist(
-            [response_mock, self._raise_connection_refused_error])
-        response_mock.code = 202
-        self.storage_mock.save_notification.return_value = True
-        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
-        self.router_mock.get_uaid.return_value = router_data
-
-        d = self.router.route_notification(self.notif, router_data)
-
-        def verify_deliver(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 202)
-            ok_(self.router_mock.clear_node.called)
-        d.addBoth(verify_deliver)
-        return d
-
-    def test_route_busy_node_saves_looks_up_and_send_check_fails_and_db(self):
-        response_mock = Mock()
-        self.agent_mock.request.side_effect = MockAssist(
-            [response_mock, self._raise_connect_error])
-        response_mock.code = 202
-        self.storage_mock.save_notification.return_value = True
-        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
-        self.router_mock.get_uaid.return_value = router_data
-        self.router_mock.clear_node.side_effect = MockAssist(
-            [self._raise_db_error]
-        )
-
-        d = self.router.route_notification(self.notif, router_data)
-
-        def verify_deliver(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 202)
-            ok_(self.router_mock.clear_node.called)
-        d.addBoth(verify_deliver)
-        return d
-
-    def test_route_to_busy_node_saves_looks_up_and_sends_check_200(self):
-        self.agent_mock.request.return_value = response_mock = Mock()
-        response_mock.addCallback.return_value = response_mock
-        type(response_mock).code = PropertyMock(
-            side_effect=MockAssist([202, 200]))
-        self.storage_mock.save_notification.return_value = True
-        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid)
-        self.router_mock.get_uaid.return_value = router_data
-
-        d = self.router.route_notification(self.notif, router_data)
-
-        def verify_deliver(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 200)
-        d.addBoth(verify_deliver)
-        return d
-
-    def test_amend(self):
-        resp = {"key": "value"}
-        expected = resp.copy()
-        self.router.amend_endpoint_response(resp, {})
-        eq_(resp, expected)
-
-
 class WebPushRouterTestCase(unittest.TestCase):
     def setUp(self):
         conf = AutopushConfig(
@@ -1188,6 +965,31 @@ class WebPushRouterTestCase(unittest.TestCase):
         d.addCallback(verify_deliver)
         return d
 
+    def test_route_failure(self):
+        self.agent_mock.request = Mock(side_effect=ConnectionRefusedError)
+        self.message_mock.store_message.return_value = True
+        self.message_mock.all_channels.return_value = (True, [dummy_chid])
+        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
+                           current_month=self.db.current_msg_month)
+        self.router_mock.get_uaid.return_value = router_data
+        self.router.message_id = uuid.uuid4().hex
+
+        d = self.router.route_notification(self.notif, router_data)
+
+        def verify_deliver(result):
+            ok_(isinstance(result, RouterResponse))
+            eq_(result.status_code, 201)
+            kwargs = self.message_mock.store_message.call_args[1]
+            eq_(len(self.metrics.increment.mock_calls), 3)
+            t_h = kwargs["notification"].headers
+            eq_(t_h.get('encryption'), self.headers.get('encryption'))
+            eq_(t_h.get('crypto_key'), self.headers.get('crypto-key'))
+            eq_(t_h.get('encoding'), self.headers.get('content-encoding'))
+            ok_("Location" in result.headers)
+
+        d.addCallback(verify_deliver)
+        return d
+
     def test_route_to_busy_node_with_ttl_zero(self):
         notif = WebPushNotification(
             uaid=uuid.UUID(dummy_uaid),
@@ -1225,3 +1027,116 @@ class WebPushRouterTestCase(unittest.TestCase):
         expected = resp.copy()
         self.router.amend_endpoint_response(resp, {})
         eq_(resp, expected)
+
+    def test_route_to_busy_node_save_throws_db_error(self):
+        from boto.dynamodb2.exceptions import JSONResponseError
+
+        def throw():
+            raise JSONResponseError(500, "Whoops")
+
+        self.agent_mock.request.return_value = response_mock = Mock()
+        response_mock.code = 202
+        self.message_mock.store_message.side_effect = MockAssist(
+            [throw]
+        )
+        router_data = dict(node_id="http://somewhere",
+                           uaid=dummy_uaid,
+                           current_month=self.db.current_msg_month)
+        d = self.router.route_notification(self.notif, router_data)
+
+        def verify_deliver(fail):
+            exc = fail.value
+            ok_(exc, RouterException)
+            eq_(exc.status_code, 503)
+        d.addBoth(verify_deliver)
+
+        return d
+
+    def test_route_lookup_uaid_fails(self):
+        from boto.dynamodb2.exceptions import JSONResponseError
+
+        def throw():
+            raise JSONResponseError(500, "Whoops")
+
+        self.message_mock.store_message.return_value = True
+        self.router_mock.get_uaid.side_effect = MockAssist(
+            [throw]
+        )
+        router_data = dict(node_id="http://somewhere",
+                           uaid=dummy_uaid,
+                           current_month=self.db.current_msg_month)
+        d = self.router.route_notification(self.notif, router_data)
+
+        def verify_deliver(status):
+            ok_(status.status_code, 201)
+        d.addBoth(verify_deliver)
+
+        return d
+
+    def test_route_lookup_uaid_not_found(self):
+        from boto.dynamodb2.exceptions import ItemNotFound
+
+        def throw():
+            raise ItemNotFound()
+
+        self.message_mock.store_message.return_value = True
+        self.router_mock.get_uaid.side_effect = MockAssist(
+            [throw]
+        )
+        router_data = dict(node_id="http://somewhere",
+                           uaid=dummy_uaid,
+                           current_month=self.db.current_msg_month)
+        d = self.router.route_notification(self.notif, router_data)
+
+        def verify_deliver(status):
+            ok_(status.value.status_code, 410)
+        d.addBoth(verify_deliver)
+
+        return d
+
+    def test_route_lookup_uaid_no_nodeid(self):
+        self.message_mock.store_message.return_value = True
+        self.router_mock.get_uaid.return_value = dict(
+
+        )
+        router_data = dict(node_id="http://somewhere",
+                           uaid=dummy_uaid,
+                           current_month=self.db.current_msg_month)
+        d = self.router.route_notification(self.notif, router_data)
+
+        def verify_deliver(status):
+            ok_(status.status_code, 201)
+        d.addBoth(verify_deliver)
+
+        return d
+
+    def test_route_and_clear_failure(self):
+        from boto.dynamodb2.exceptions import JSONResponseError
+        self.agent_mock.request = Mock(side_effect=ConnectionRefusedError)
+        self.message_mock.store_message.return_value = True
+        self.message_mock.all_channels.return_value = (True, [dummy_chid])
+        router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
+                           current_month=self.db.current_msg_month)
+        self.router_mock.get_uaid.return_value = router_data
+
+        def throw():
+            raise JSONResponseError(500, "Whoops")
+
+        self.router_mock.clear_node.side_effect = MockAssist([throw])
+        self.router.message_id = uuid.uuid4().hex
+
+        d = self.router.route_notification(self.notif, router_data)
+
+        def verify_deliver(result):
+            ok_(isinstance(result, RouterResponse))
+            eq_(result.status_code, 201)
+            kwargs = self.message_mock.store_message.call_args[1]
+            eq_(len(self.metrics.increment.mock_calls), 3)
+            t_h = kwargs["notification"].headers
+            eq_(t_h.get('encryption'), self.headers.get('encryption'))
+            eq_(t_h.get('crypto_key'), self.headers.get('crypto-key'))
+            eq_(t_h.get('encoding'), self.headers.get('content-encoding'))
+            ok_("Location" in result.headers)
+
+        d.addCallback(verify_deliver)
+        return d

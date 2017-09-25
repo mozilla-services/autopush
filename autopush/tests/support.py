@@ -6,7 +6,6 @@ from autopush.config import DDBTableConfig
 from autopush.db import (
     DatabaseManager,
     Router,
-    Storage
 )
 from autopush.metrics import SinkMetrics
 
@@ -42,8 +41,6 @@ class TestingLogObserver(object):
 def test_db(metrics=None):
     """Return a test DatabaseManager: its Storage/Router are mocked"""
     return DatabaseManager(
-        storage_conf=DDBTableConfig(tablename='storage'),
-        storage=Mock(spec=Storage),
         router_conf=DDBTableConfig(tablename='router'),
         router=Mock(spec=Router),
         message_conf=DDBTableConfig(tablename='message'),

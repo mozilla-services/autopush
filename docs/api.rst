@@ -9,6 +9,7 @@ documentation is organized alphabetically by module name.
 .. toctree::
    :maxdepth: 1
 
+   api/config
    api/db
    api/exceptions
    api/logging
@@ -19,15 +20,12 @@ documentation is organized alphabetically by module name.
    api/router/gcm
    api/router/fcm
    api/router/interface
-   api/router/simple
    api/web/base
    api/web/webpush
-   api/web/simplepush
    api/web/logging
    api/web/message
    api/web/registration
    api/web/health
-   api/settings
    api/ssl
    api/utils
    api/websocket

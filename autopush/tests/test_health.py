@@ -38,7 +38,7 @@ class HealthTestCase(unittest.TestCase):
 
         app = EndpointHTTPFactory.for_handler(HealthHandler, conf, db=db)
         self.router_table = app.db.router.table
-        self.storage_table = app.db.storage.table
+        self.message = app.db.message
         self.client = Client(app)
 
     @inlineCallbacks
@@ -53,12 +53,15 @@ class HealthTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_aws_error(self):
+        from autopush.db import make_rotating_tablename
+
         def raise_error(*args, **kwargs):
             raise InternalServerError(None, None)
         self.router_table.connection.list_tables = Mock(
             side_effect=raise_error)
-        self.storage_table.connection.list_tables = Mock(
-            return_value={"TableNames": ["storage"]})
+        table_name = make_rotating_tablename("message")
+        self.message.table.connection.list_tables = Mock(
+            return_value={"TableNames": [table_name]})
 
         yield self._assert_reply({
             "status": "NOT OK",
@@ -74,7 +77,7 @@ class HealthTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_nonexistent_table(self):
         no_tables = Mock(return_value={"TableNames": []})
-        self.storage_table.connection.list_tables = no_tables
+        self.message.table.connection.list_tables = no_tables
         self.router_table.connection.list_tables = no_tables
 
         yield self._assert_reply({
@@ -97,7 +100,7 @@ class HealthTestCase(unittest.TestCase):
             raise Exception("synergies not aligned")
         self.router_table.connection.list_tables = Mock(
             return_value={"TableNames": ["router"]})
-        self.storage_table.connection.list_tables = Mock(
+        self.message.table.connection.list_tables = Mock(
             side_effect=raise_error)
 
         yield self._assert_reply({

@@ -13,12 +13,10 @@ from autopush.db import DatabaseManager  # noqa
 from autopush.router.apnsrouter import APNSRouter
 from autopush.router.gcm import GCMRouter
 from autopush.router.interface import IRouter  # noqa
-from autopush.router.simple import SimpleRouter
 from autopush.router.webpush import WebPushRouter
 from autopush.router.fcm import FCMRouter
 
-__all__ = ["APNSRouter", "FCMRouter", "GCMRouter", "WebPushRouter",
-           "SimpleRouter"]
+__all__ = ["APNSRouter", "FCMRouter", "GCMRouter", "WebPushRouter"]
 
 
 def routers_from_config(conf, db, agent):
@@ -28,9 +26,6 @@ def routers_from_config(conf, db, agent):
     routers = dict(
         webpush=WebPushRouter(conf, None, db, agent)
     )
-    if not conf.disable_simplepush:
-        routers['simplepush'] = SimpleRouter(
-            conf, router_conf.get("simplepush"), db, agent)
     if 'apns' in router_conf:
         routers["apns"] = APNSRouter(conf, router_conf["apns"], db.metrics)
     if 'gcm' in router_conf:

@@ -84,6 +84,8 @@ class VerifyJWT(object):
         NOT do validation.
 
         :param token: Partial or full VAPID auth token
+        :type token: str
+
         :return dict of the VAPID claims
 
         """

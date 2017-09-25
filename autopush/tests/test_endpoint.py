@@ -51,7 +51,6 @@ class MessageTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
             crypto_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
-            disable_simplepush=False,
         )
         db = test_db()
         self.message_mock = db.message = Mock(spec=Message)
@@ -139,7 +138,6 @@ class RegistrationTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
             bear_hash_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB=',
-            disable_simplepush=False,
         )
         self.fernet_mock = conf.fernet = Mock(spec=Fernet)
 
@@ -187,11 +185,6 @@ class RegistrationTestCase(unittest.TestCase):
         # previously failed
         tags = self.reg.base_tags()
         eq_(tags, ['user_agent:test', 'host:example.com:8080'])
-
-    def test_disable_simplepush(self):
-        self.conf.disable_simplepush = True
-        routers = routers_from_config(self.conf, self.db, Mock())
-        ok_("simplepush" not in routers)
 
     def _check_error(self, resp, code, errno, error, message=None):
         d = json.loads(resp.content)
@@ -268,10 +261,10 @@ class RegistrationTestCase(unittest.TestCase):
         })
 
         resp = yield self.client.post(
-            self.url(router_type='simplepush', router_token='yyy'),
+            self.url(router_type='webpush', router_token='yyy'),
             headers={"Authorization": self.auth},
             body=json.dumps(dict(
-                type="simplepush",
+                type="webpush",
                 channelID=str(dummy_chid),
                 data={},
             ))
@@ -349,15 +342,15 @@ class RegistrationTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_post_bad_router_register(self, *args):
-        router = self.routers["simplepush"]
+        router = self.routers["webpush"]
         rexc = RouterException("invalid", status_code=402, errno=107)
         router.register = Mock(side_effect=rexc)
 
         resp = yield self.client.post(
-            self.url(router_type="simplepush"),
+            self.url(router_type="webpush"),
             headers={"Authorization": self.auth},
             body=json.dumps(dict(
-                type="simplepush",
+                type="webpush",
                 channelID=str(dummy_chid),
                 data={},
             ))
@@ -414,7 +407,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.patch('uuid.uuid4', return_value=dummy_uaid)
 
         resp = yield self.client.delete(
-            self.url(router_type="simplepush",
+            self.url(router_type="webpush",
                      uaid=dummy_uaid.hex,
                      chid=str(dummy_chid)),
             headers={"Authorization": "WebPush Invalid"},
@@ -432,11 +425,11 @@ class RegistrationTestCase(unittest.TestCase):
             'encrypt.return_value': 'abcd123',
         })
         resp = yield self.client.post(
-            self.url(router_type="simplepush", uaid=dummy_uaid.hex) +
+            self.url(router_type="webpush", uaid=dummy_uaid.hex) +
             "/subscription",
             headers={"Authorization": self.auth},
             body=json.dumps(dict(
-                type="simplepush",
+                type="webpush",
                 data={},
             ))
         )
@@ -468,11 +461,11 @@ class RegistrationTestCase(unittest.TestCase):
         })
 
         resp = yield self.client.post(
-            self.url(router_type="simplepush", uaid=dummy_uaid.hex) +
+            self.url(router_type="webpush", uaid=dummy_uaid.hex) +
             "/subscription",
             headers={"Authorization": self.auth},
             body=json.dumps(dict(
-                type="simplepush",
+                type="webpush",
                 key=utils.base64url_encode(dummy_key),
                 data={},
             ))
@@ -546,8 +539,8 @@ class RegistrationTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_put_bad_router_register(self):
-        frouter = self.routers["simplepush"]
-        rexc = RouterException("invalid", status_code=402, errno=107)
+        frouter = self.routers["webpush"]
+        rexc = RouterException("invalid", status_code=400, errno=108)
         frouter.register = Mock(side_effect=rexc)
 
         resp = yield self.client.put(
@@ -555,7 +548,7 @@ class RegistrationTestCase(unittest.TestCase):
             headers={"Authorization": self.auth},
             body=json.dumps(dict(token="blah"))
         )
-        self._check_error(resp, rexc.status_code, rexc.errno, "")
+        self._check_error(resp, rexc.status_code, rexc.errno, "Bad Request")
 
     @inlineCallbacks
     def test_delete_success(self):
@@ -619,7 +612,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.db.router.drop_user.return_value = True
 
         yield self.client.delete(
-            self.url(router_type="simplepush",
+            self.url(router_type="webpush",
                      router_token="test",
                      uaid=dummy_uaid.hex),
             headers={"Authorization": self.auth},

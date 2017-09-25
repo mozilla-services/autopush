@@ -10,11 +10,7 @@ DynamoDB Table Functions
 
 .. autofunction:: create_router_table
 
-.. autofunction:: create_storage_table
-
 .. autofunction:: get_router_table
-
-.. autofunction:: get_storage_table
 
 Utility Functions
 +++++++++++++++++
@@ -23,11 +19,6 @@ Utility Functions
 
 DynamoDB Table Class Abstractions
 +++++++++++++++++++++++++++++++++
-
-.. autoclass:: Storage
-    :members:
-    :special-members: __init__
-    :member-order: bysource
 
 .. autoclass:: Router
     :members:

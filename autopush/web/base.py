@@ -2,7 +2,6 @@ import json
 import time
 from functools import wraps
 
-from attr import attrs, attrib
 from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from boto.exception import BotoServerError
 from marshmallow.schema import UnmarshalResult  # noqa
@@ -110,7 +109,7 @@ class ThreadedValidate(object):
         will attach equivilant functionality to the method handler. Calling
         `self.finish()` is needed on decorated handlers.
 
-        Validated requests are deserialized into the **kwargs of the wrapped
+        Validated requests are deserialized into the `**kwargs` of the wrapped
         request handler method.
 
         .. code-block:: python
@@ -129,18 +128,6 @@ class ThreadedValidate(object):
 
 # Alias to the validation classmethod decorator
 threaded_validate = ThreadedValidate.validate
-
-
-@attrs
-class Notification(object):
-    """Parsed notification from the request"""
-    version = attrib()
-    data = attrib()
-    channel_id = attrib()
-
-    @property
-    def data_length(self):
-        return len(self.data or "")
 
 
 class BaseWebHandler(BaseHandler):

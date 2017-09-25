@@ -31,6 +31,4 @@ Utility Functions
 
 .. autofunction:: ms_time
 
-.. autofunction:: periodic_reporter
-
 .. autofunction:: log_exception

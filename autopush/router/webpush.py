@@ -119,6 +119,7 @@ class WebPushRouter(object):
         #   - Error (db error): Done, return 202
         #   - Error (no client) : Done, return 404
         try:
+            # is this call redundant? We already get uaid_data passed in
             uaid_data = yield deferToThread(router.get_uaid, uaid)
         except JSONResponseError:
             returnValue(self.stored_response(notification))
