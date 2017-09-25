@@ -1052,48 +1052,6 @@ class WebPushRouterTestCase(unittest.TestCase):
 
         return d
 
-    def test_route_lookup_uaid_fails(self):
-        from boto.dynamodb2.exceptions import JSONResponseError
-
-        def throw():
-            raise JSONResponseError(500, "Whoops")
-
-        self.message_mock.store_message.return_value = True
-        self.router_mock.get_uaid.side_effect = MockAssist(
-            [throw]
-        )
-        router_data = dict(node_id="http://somewhere",
-                           uaid=dummy_uaid,
-                           current_month=self.db.current_msg_month)
-        d = self.router.route_notification(self.notif, router_data)
-
-        def verify_deliver(status):
-            ok_(status.status_code, 201)
-        d.addBoth(verify_deliver)
-
-        return d
-
-    def test_route_lookup_uaid_not_found(self):
-        from boto.dynamodb2.exceptions import ItemNotFound
-
-        def throw():
-            raise ItemNotFound()
-
-        self.message_mock.store_message.return_value = True
-        self.router_mock.get_uaid.side_effect = MockAssist(
-            [throw]
-        )
-        router_data = dict(node_id="http://somewhere",
-                           uaid=dummy_uaid,
-                           current_month=self.db.current_msg_month)
-        d = self.router.route_notification(self.notif, router_data)
-
-        def verify_deliver(status):
-            ok_(status.value.status_code, 410)
-        d.addBoth(verify_deliver)
-
-        return d
-
     def test_route_lookup_uaid_no_nodeid(self):
         self.message_mock.store_message.return_value = True
         self.router_mock.get_uaid.return_value = dict(

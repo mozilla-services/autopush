@@ -10,7 +10,6 @@ import time
 from StringIO import StringIO
 from typing import Any  # noqa
 
-from boto.dynamodb2.exceptions import ItemNotFound
 from boto.exception import JSONResponseError
 from twisted.internet.threads import deferToThread
 from twisted.web.client import FileBodyProducer
@@ -109,32 +108,6 @@ class WebPushRouter(object):
                                   response_body="Retry Request",
                                   errno=201)
 
-        # - Lookup client
-        #   - Success (node found): Notify node of new notification
-        #     - Success: Done, return 200
-        #     - Error (no client): Done, return 202
-        #     - Error (no node): Clear node entry
-        #       - Both: Done, return 202
-        #   - Success (no node): Done, return 202
-        #   - Error (db error): Done, return 202
-        #   - Error (no client) : Done, return 404
-        try:
-            # is this call redundant? We already get uaid_data passed in
-            uaid_data = yield deferToThread(router.get_uaid, uaid)
-        except JSONResponseError:
-            returnValue(self.stored_response(notification))
-        except ItemNotFound:
-            self.metrics.increment("updates.client.deleted")
-            raise RouterException("User was deleted",
-                                  status_code=410,
-                                  response_body="Invalid UAID",
-                                  log_exception=False,
-                                  errno=105)
-
-        # Verify there's a node_id in here, if not we're done
-        node_id = uaid_data.get("node_id")
-        if not node_id:
-            returnValue(self.stored_response(notification))
         try:
             result = yield self._send_notification_check(uaid, node_id)
         except (ConnectError, ConnectionClosed, ResponseFailed) as exc:
