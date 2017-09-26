@@ -436,7 +436,7 @@ class Message(object):
 
     @track_provisioned
     def store_message(self, notification):
-        # type: (WebPushNotification) -> bool
+        # type: (WebPushNotification) -> None
         """Stores a WebPushNotification in the message table"""
         item = dict(
             uaid=hasher(notification.uaid.hex),
@@ -448,7 +448,6 @@ class Message(object):
             updateid=notification.update_id
         )
         self.table.put_item(data=item, overwrite=True)
-        return True
 
     @track_provisioned
     def delete_message(self, notification):

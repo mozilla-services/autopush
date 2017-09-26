@@ -100,16 +100,14 @@ class WebPushRouter(object):
         #   - Success (older version): Done, return 202
         #   - Error (db error): Done, return 503
         try:
-            result = yield self._save_notification(uaid_data, notification)
-            if result is False:
-                returnValue(self.stored_response(notification))
+            yield self._save_notification(uaid_data, notification)
         except JSONResponseError:
             raise RouterException("Error saving to database",
                                   status_code=503,
                                   response_body="Retry Request",
                                   errno=201)
 
-        # - Lookup client
+        # - Lookup client again to get latest node state after save.
         #   - Success (node found): Notify node of new notification
         #     - Success: Done, return 200
         #     - Error (no client): Done, return 202
@@ -119,7 +117,6 @@ class WebPushRouter(object):
         #   - Error (db error): Done, return 202
         #   - Error (no client) : Done, return 404
         try:
-            # is this call redundant? We already get uaid_data passed in
             uaid_data = yield deferToThread(router.get_uaid, uaid)
         except JSONResponseError:
             returnValue(self.stored_response(notification))
