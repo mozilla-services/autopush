@@ -24,11 +24,13 @@ def memusage():
     buf = StringIO()
     rusage = trap_err(resource.getrusage, resource.RUSAGE_SELF)
     buf.writelines([repr(rusage), '\n\n'])
-    trap_err(objgraph.show_most_common_types, limit=0, file=buf)
-    buf.write('\n\n')
     trap_err(pmap_extended, buf)
+    # dump rpython's heap before objgraph potentially pollutes the
+    # heap with its heavy workload
     trap_err(dump_rpy_heap, buf)
     trap_err(get_stats_asmmemmgr, buf)
+    buf.write('\n\n')
+    trap_err(objgraph.show_most_common_types, limit=0, file=buf)
     return buf.getvalue()
 
 
