@@ -1,3 +1,18 @@
+<a name="1.37.0"></a>
+## 1.37.0 (2017-10-02)
+
+
+#### Features
+
+*   remove Simplepush from codebase ([61b57524](https://github.com/mozilla-services/autopush/commit/61b57524e6c1343e0ab72ca6cec0ec06144c9e9d), closes [#799](https://github.com/mozilla-services/autopush/issues/799))
+
+#### Bug Fixes
+
+*   dump_rpy_heap before calling objgraph ([ece7db1a](https://github.com/mozilla-services/autopush/commit/ece7db1aeb25fdf364d1b0e566a2dfebd025d760), closes [#1028](https://github.com/mozilla-services/autopush/issues/1028))
+*   Remove discussion comment and useless bool return ([243b7d31](https://github.com/mozilla-services/autopush/commit/243b7d31e17e6e0bb40ff16953047e29046020ec), closes [#1026](https://github.com/mozilla-services/autopush/issues/1026))
+
+
+
 <a name="1.36.0"></a>
 ## 1.36.0 (2017-09-15)
 
