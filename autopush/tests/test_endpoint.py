@@ -330,7 +330,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.patch('uuid.uuid4', return_value=dummy_uaid)
 
         resp = yield self.client.post(
-            self.url(router_type="foo"),
+            self.url(router_type="simplepush"),
             headers={"Authorization": self.auth},
             body=json.dumps(dict(
                 type="invalid",

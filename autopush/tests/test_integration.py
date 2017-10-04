@@ -462,6 +462,21 @@ class Test_Data(IntegrationBase):
         ))
         yield self.shut_down(client)
 
+    @inlineCallbacks
+    def test_legacy_simplepush_record(self):
+        """convert to webpush record and see if it works"""
+        client = yield self.quick_register()
+        uaid = "deadbeef00000000deadbeef00000001"
+        self.ep.db.router.get_uaid = Mock(
+            return_value={'router_type': 'simplepush',
+                          'uaid': uaid,
+                          'current_month': self.ep.db.current_msg_month})
+        self.ep.db.message_tables[
+            self.ep.db.current_msg_month].all_channels = Mock(
+            return_value=(True, client.channels))
+        yield client.send_notification()
+        yield self.shut_down(client)
+
     @patch("autopush.metrics.datadog")
     @inlineCallbacks
     def test_webpush_data_delivery_to_disconnected_client(self, m_ddog):

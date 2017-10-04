@@ -99,6 +99,11 @@ class WebPushSubscriptionSchema(Schema):
                                  result.get("critical_failure"),
                                  status_code=410,
                                  errno=105)
+        # Some stored user records are marked as "simplepush".
+        # If you encounter one, may need to tweak it a bit to get it as
+        # a valid WebPush record.
+        if result["router_type"] == "simplepush":
+            result["router_type"] = "webpush"
 
         if result["router_type"] == "webpush":
             self._validate_webpush(d, result)
