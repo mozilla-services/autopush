@@ -116,6 +116,16 @@ class TestBase(unittest.TestCase):
         eq_(base._headers[ch3], self.CORS_HEADERS)
         eq_(base._headers[ch4], self.CORS_RESPONSE_HEADERS)
 
+    def test_sts_max_age_header(self):
+        args = {"api_ver": "v1", "token": "test"}
+        base = self.base
+        base.conf.sts_max_age = 86400
+        base.prepare()
+        base.options(args)
+        sts_header = base._headers.get("Strict-Transport-Security")
+        ok_("max-age=86400" in sts_header)
+        ok_("includeSubDomains" in sts_header)
+
     def test_write_error(self):
         """ Write error is triggered by sending the app a request
         with an invalid method (e.g. "put" instead of "PUT").

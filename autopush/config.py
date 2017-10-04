@@ -170,6 +170,9 @@ class AutopushConfig(object):
     # Use the cryptography library
     use_cryptography = attrib(default=False)  # type: bool
 
+    # Strict-Transport-Security max age (Default 1 year in secs)
+    sts_max_age = attrib(default=31536000)  # type: int
+
     def __attrs_post_init__(self):
         """Initialize the Settings object"""
         # Setup hosts/ports/urls
@@ -315,6 +318,7 @@ class AutopushConfig(object):
                 cert=ns.ssl_cert,
                 dh_param=ns.ssl_dh_param
             ),
+            sts_max_age=ns.sts_max_age,
             **kwargs
         )
 

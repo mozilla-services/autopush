@@ -163,6 +163,12 @@ class BaseWebHandler(BaseHandler):
                             ",".join(self.cors_request_headers))
             self.set_header("Access-Control-Expose-Headers",
                             ",".join(self.cors_response_headers))
+        if self.conf.sts_max_age:
+            self.set_header("Strict-Transport-Security",
+                            ";".join([
+                                "max-age={}".format(self.conf.sts_max_age),
+                                "includeSubDomains"
+                                ]))
 
     #############################################################
     #                    Cyclone HTTP Methods
