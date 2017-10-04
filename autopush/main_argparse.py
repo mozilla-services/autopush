@@ -93,6 +93,10 @@ def add_shared_args(parser):
                         help="Use the cryptography library vs. JOSE",
                         action="store_true",
                         default=False, env_var="USE_CRYPTOGRAPHY")
+    parser.add_argument('--sts_max_age',
+                        help="Max Strict Transport Age in seconds",
+                        type=int, default=31536000,
+                        env_var="STS_MAX_AGE")
     # No ENV because this is for humans
     _add_external_router_args(parser)
     _obsolete_args(parser)

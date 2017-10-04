@@ -260,6 +260,7 @@ class EndpointMainTestCase(unittest.TestCase):
         memusage_port = None
         disable_simplepush = True
         use_cryptography = False
+        sts_max_age = 1234
 
     def setUp(self):
         patchers = [
