@@ -1807,7 +1807,7 @@ class TestFCMBridgeIntegration(IntegrationBase):
         )
         self._mock_send = Mock()
         fcm.fcm.send_request = self._mock_send
-        fcm.fcm.parse_responses = Mock(return_value=[reply])
+        fcm.fcm.parse_responses = Mock(return_value=reply)
 
     @inlineCallbacks
     def test_registration(self):
