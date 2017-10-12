@@ -3,7 +3,6 @@ import uuid
 
 from cryptography.fernet import Fernet
 from mock import Mock
-from nose.tools import eq_, ok_
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial import unittest
 
@@ -63,10 +62,10 @@ class TestWebpushHandler(unittest.TestCase):
         resp = yield self.client.post(
             self.url(api_ver="v1", token=dummy_token),
         )
-        eq_(resp.get_status(), 503)
+        assert resp.get_status() == 503
         ru = self.db.router.register_user
-        ok_(ru.called)
-        eq_('webpush', ru.call_args[0][0].get('router_type'))
+        assert ru.called
+        assert 'webpush' == ru.call_args[0][0].get('router_type')
 
     @inlineCallbacks
     def test_router_returns_data_without_detail(self):
@@ -90,8 +89,8 @@ class TestWebpushHandler(unittest.TestCase):
         resp = yield self.client.post(
             self.url(api_ver="v1", token=dummy_token),
         )
-        eq_(resp.get_status(), 503)
-        ok_(self.db.router.drop_user.called)
+        assert resp.get_status() == 503
+        assert self.db.router.drop_user.called
 
     @inlineCallbacks
     def test_request_bad_ckey(self):
@@ -100,7 +99,7 @@ class TestWebpushHandler(unittest.TestCase):
             self.url(api_ver="v1", token='ignored'),
             headers={'crypto-key': 'dummy_key'}
         )
-        eq_(resp.get_status(), 404)
+        assert resp.get_status() == 404
 
     @inlineCallbacks
     def test_request_bad_v1_id(self):
@@ -108,7 +107,7 @@ class TestWebpushHandler(unittest.TestCase):
         resp = yield self.client.post(
             self.url(api_ver="v1", token='ignored'),
         )
-        eq_(resp.get_status(), 404)
+        assert resp.get_status() == 404
 
     @inlineCallbacks
     def test_request_bad_v2_id_short(self):
@@ -117,7 +116,7 @@ class TestWebpushHandler(unittest.TestCase):
             self.url(api_ver='v2', token='ignored'),
             headers={'authorization': 'vapid t=dummy_key,k=aaa'}
         )
-        eq_(resp.get_status(), 404)
+        assert resp.get_status() == 404
 
     @inlineCallbacks
     def test_request_bad_draft02_auth(self):
@@ -125,7 +124,7 @@ class TestWebpushHandler(unittest.TestCase):
             self.url(api_ver='v2', token='ignored'),
             headers={'authorization': 'vapid foo'}
         )
-        eq_(resp.get_status(), 401)
+        assert resp.get_status() == 401
 
     @inlineCallbacks
     def test_request_bad_draft02_missing_key(self):
@@ -134,7 +133,7 @@ class TestWebpushHandler(unittest.TestCase):
             self.url(api_ver='v2', token='ignored'),
             headers={'authorization': 'vapid t=dummy.key.value,k='}
         )
-        eq_(resp.get_status(), 401)
+        assert resp.get_status() == 401
 
     @inlineCallbacks
     def test_request_bad_draft02_bad_pubkey(self):
@@ -143,7 +142,7 @@ class TestWebpushHandler(unittest.TestCase):
             self.url(api_ver='v2', token='ignored'),
             headers={'authorization': 'vapid t=dummy.key.value,k=!aaa'}
         )
-        eq_(resp.get_status(), 401)
+        assert resp.get_status() == 401
 
     @inlineCallbacks
     def test_request_bad_v2_id_missing_pubkey(self):
@@ -153,7 +152,7 @@ class TestWebpushHandler(unittest.TestCase):
             headers={'crypto-key': 'key_id=dummy_key',
                      'authorization': 'dummy_key'}
         )
-        eq_(resp.get_status(), 401)
+        assert resp.get_status() == 401
 
     @inlineCallbacks
     def test_request_v2_id_variant_pubkey(self):
@@ -170,7 +169,7 @@ class TestWebpushHandler(unittest.TestCase):
             headers={'crypto-key': 'p256ecdsa=' + variant_key,
                      'authorization': 'webpush dummy.key'}
         )
-        eq_(resp.get_status(), 401)
+        assert resp.get_status() == 401
 
     @inlineCallbacks
     def test_request_v2_id_no_crypt_auth(self):
@@ -185,7 +184,7 @@ class TestWebpushHandler(unittest.TestCase):
             self.url(api_ver='v1', token='ignored'),
             headers={'authorization': 'webpush dummy.key'}
         )
-        eq_(resp.get_status(), 401)
+        assert resp.get_status() == 401
 
     @inlineCallbacks
     def test_request_bad_v2_id_bad_pubkey(self):
@@ -195,4 +194,4 @@ class TestWebpushHandler(unittest.TestCase):
             headers={'crypto-key': 'p256ecdsa=Invalid!',
                      'authorization': 'dummy_key'}
         )
-        eq_(resp.get_status(), 401)
+        assert resp.get_status() == 401

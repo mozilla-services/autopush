@@ -5,4 +5,5 @@ omit =
     autopush/gcdump.py
     autopush/webpush_server.py
     autopush/tests/test_webpush_server.py
+    autopush/tests/conftest.py
 show_missing = true

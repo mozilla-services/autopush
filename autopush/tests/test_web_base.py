@@ -3,7 +3,6 @@ import uuid
 
 from boto.exception import BotoServerError
 from mock import Mock, patch
-from nose.tools import eq_, ok_
 from twisted.internet.defer import Deferred
 from twisted.logger import Logger
 from twisted.python.failure import Failure
@@ -70,19 +69,19 @@ class TestBase(unittest.TestCase):
         ch4 = "Access-Control-Expose-Headers"
         base = self.base
         base.conf.cors = False
-        ok_(base._headers.get(ch1) != "*")
-        ok_(base._headers.get(ch2) != self.CORS_METHODS)
-        ok_(base._headers.get(ch3) != self.CORS_HEADERS)
-        ok_(base._headers.get(ch4) != self.CORS_RESPONSE_HEADERS)
+        assert base._headers.get(ch1) != "*"
+        assert base._headers.get(ch2) != self.CORS_METHODS
+        assert base._headers.get(ch3) != self.CORS_HEADERS
+        assert base._headers.get(ch4) != self.CORS_RESPONSE_HEADERS
 
         base.clear_header(ch1)
         base.clear_header(ch2)
         base.conf.cors = True
         self.base.prepare()
-        eq_(base._headers[ch1], "*")
-        eq_(base._headers[ch2], self.CORS_METHODS)
-        eq_(base._headers[ch3], self.CORS_HEADERS)
-        eq_(base._headers[ch4], self.CORS_RESPONSE_HEADERS)
+        assert base._headers[ch1] == "*"
+        assert base._headers[ch2] == self.CORS_METHODS
+        assert base._headers[ch3] == self.CORS_HEADERS
+        assert base._headers[ch4] == self.CORS_RESPONSE_HEADERS
 
     def test_cors_head(self):
         ch1 = "Access-Control-Allow-Origin"
@@ -94,10 +93,10 @@ class TestBase(unittest.TestCase):
         base.prepare()
         args = {"api_ver": "v1", "token": "test"}
         base.head(args)
-        eq_(base._headers[ch1], "*")
-        eq_(base._headers[ch2], self.CORS_METHODS)
-        eq_(base._headers[ch3], self.CORS_HEADERS)
-        eq_(base._headers[ch4], self.CORS_RESPONSE_HEADERS)
+        assert base._headers[ch1] == "*"
+        assert base._headers[ch2] == self.CORS_METHODS
+        assert base._headers[ch3] == self.CORS_HEADERS
+        assert base._headers[ch4] == self.CORS_RESPONSE_HEADERS
 
     def test_cors_options(self):
         ch1 = "Access-Control-Allow-Origin"
@@ -111,10 +110,10 @@ class TestBase(unittest.TestCase):
         base.conf.cors = True
         base.prepare()
         base.options(args)
-        eq_(base._headers[ch1], "*")
-        eq_(base._headers[ch2], self.CORS_METHODS)
-        eq_(base._headers[ch3], self.CORS_HEADERS)
-        eq_(base._headers[ch4], self.CORS_RESPONSE_HEADERS)
+        assert base._headers[ch1] == "*"
+        assert base._headers[ch2] == self.CORS_METHODS
+        assert base._headers[ch3] == self.CORS_HEADERS
+        assert base._headers[ch4] == self.CORS_RESPONSE_HEADERS
 
     def test_sts_max_age_header(self):
         args = {"api_ver": "v1", "token": "test"}
@@ -123,8 +122,8 @@ class TestBase(unittest.TestCase):
         base.prepare()
         base.options(args)
         sts_header = base._headers.get("Strict-Transport-Security")
-        ok_("max-age=86400" in sts_header)
-        ok_("includeSubDomains" in sts_header)
+        assert "max-age=86400" in sts_header
+        assert "includeSubDomains" in sts_header
 
     def test_write_error(self):
         """ Write error is triggered by sending the app a request
@@ -142,7 +141,7 @@ class TestBase(unittest.TestCase):
 
         self.base.write_error(999, exc_info=exc_info)
         self.status_mock.assert_called_with(999)
-        eq_(self.base.log.failure.called, True)
+        assert self.base.log.failure.called is True
 
     def test_write_error_no_exc(self):
         """ Write error is triggered by sending the app a request
@@ -152,7 +151,7 @@ class TestBase(unittest.TestCase):
         """
         self.base.write_error(999)
         self.status_mock.assert_called_with(999)
-        eq_(self.base.log.failure.called, True)
+        assert self.base.log.failure.called is True
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
     def test_init_info(self, t):
@@ -162,16 +161,16 @@ class TestBase(unittest.TestCase):
         self.request_mock.headers["ttl"] = "0"
         self.request_mock.headers["authorization"] = "bearer token fred"
         d = self.base._init_info()
-        eq_(d["request_id"], dummy_request_id)
-        eq_(d["user_agent"], "myself")
-        eq_(d["remote_ip"], "local1")
-        eq_(d["message_ttl"], "0")
-        eq_(d["authorization"], "bearer token fred")
+        assert d["request_id"] == dummy_request_id
+        assert d["user_agent"] == "myself"
+        assert d["remote_ip"] == "local1"
+        assert d["message_ttl"] == "0"
+        assert d["authorization"] == "bearer token fred"
         self.request_mock.headers["x-forwarded-for"] = "local2"
         self.request_mock.headers["authorization"] = "webpush token barney"
         d = self.base._init_info()
-        eq_(d["remote_ip"], "local2")
-        eq_(d["authorization"], "webpush token barney")
+        assert d["remote_ip"] == "local2"
+        assert d["authorization"] == "webpush token barney"
 
     def test_write_response(self):
         self.base._write_response(400, 103, message="Fail",

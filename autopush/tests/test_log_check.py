@@ -1,7 +1,6 @@
 import json
 
 import twisted
-from nose.tools import eq_, ok_
 from twisted.internet.defer import inlineCallbacks
 from twisted.logger import globalLogPublisher
 from twisted.trial import unittest
@@ -34,28 +33,28 @@ class LogCheckTestCase(unittest.TestCase):
     @inlineCallbacks
     def test_get_err(self):
         resp = yield self.client.get('/v1/err')
-        eq_(len(self.logs), 2)
-        ok_(self.logs.logged(
+        assert len(self.logs) == 2
+        assert self.logs.logged(
             lambda e: (e['log_level'].name == 'error' and
                        e['log_format'] == 'Test Error Message' and
                        e['status_code'] == 418)
-        ))
+        )
         payload = json.loads(resp.content)
-        eq_(payload.get('code'), 418)
-        eq_(payload.get('message'), "ERROR:Success")
+        assert payload.get('code') == 418
+        assert payload.get('message') == "ERROR:Success"
 
     @inlineCallbacks
     def test_get_crit(self):
         resp = yield self.client.get('/v1/err/crit')
-        eq_(len(self.logs), 2)
-        ok_(self.logs.logged(
+        assert len(self.logs) == 2
+        assert self.logs.logged(
             lambda e: (e['log_level'].name == 'critical' and
                        e['log_failure'] and
                        e['log_format'] == 'Test Critical Message' and
                        e['status_code'] == 418)
-        ))
+        )
         payload = json.loads(resp.content)
-        eq_(payload.get('code'), 418)
-        eq_(payload.get('error'), "Test Failure")
+        assert payload.get('code') == 418
+        assert payload.get('error') == "Test Failure"
 
         self.flushLoggedErrors()

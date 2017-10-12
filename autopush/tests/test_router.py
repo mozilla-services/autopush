@@ -7,7 +7,7 @@ import decimal
 
 from autopush.utils import WebPushNotification
 from mock import Mock, PropertyMock, patch
-from nose.tools import eq_, ok_, assert_raises
+import pytest
 from twisted.trial import unittest
 from twisted.internet.error import ConnectionRefusedError
 from twisted.internet.defer import inlineCallbacks
@@ -38,15 +38,19 @@ from autopush.tests.support import test_db
 
 class RouterInterfaceTestCase(TestCase):
     def test_not_implemented(self):
-        assert_raises(NotImplementedError, IRouter, None, None)
+        with pytest.raises(NotImplementedError):
+            IRouter(None, None)
 
         def init(self, conf, router_conf):
             pass
         IRouter.__init__ = init
         ir = IRouter(None, None)
-        assert_raises(NotImplementedError, ir.register, "uaid", {}, "")
-        assert_raises(NotImplementedError, ir.route_notification, "uaid", {})
-        assert_raises(NotImplementedError, ir.amend_endpoint_response, {}, {})
+        with pytest.raises(NotImplementedError):
+            ir.register("uaid", {}, "")
+        with pytest.raises(NotImplementedError):
+            ir.route_notification("uaid", {})
+        with pytest.raises(NotImplementedError):
+            ir.amend_endpoint_response({}, {})
 
 
 # FOR LEGACY REASONS, CHANNELID MUST BE IN HEX FORMAT FOR BRIDGE PUBLICATION
@@ -114,23 +118,27 @@ class APNSRouterTestCase(unittest.TestCase):
 
     def test_register(self):
         router_data = {"token": "connect_data"}
-        self.router.register("uaid", router_data=router_data, app_id="firefox")
-        eq_(router_data, {"rel_channel": "firefox", "token": "connect_data"})
+        self.router.register("uaid", router_data=router_data,
+                             app_id="firefox")
+        assert router_data == {"rel_channel": "firefox",
+                               "token": "connect_data"}
 
     def test_extended_register(self):
         router_data = {"token": "connect_data",
                        "aps": {"foo": "bar",
                                "gorp": "baz"}}
-        self.router.register("uaid", router_data=router_data, app_id="firefox")
-        eq_(router_data, {"rel_channel": "firefox", "token": "connect_data",
-                          "aps": {"foo": "bar", "gorp": "baz"}})
+        self.router.register("uaid", router_data=router_data,
+                             app_id="firefox")
+        assert router_data == {
+            "rel_channel": "firefox", "token": "connect_data",
+            "aps": {"foo": "bar", "gorp": "baz"}}
 
     def test_register_bad(self):
-        with assert_raises(RouterException):
+        with pytest.raises(RouterException):
             self.router.register("uaid", router_data={}, app_id="firefox")
 
     def test_register_bad_channel(self):
-        with assert_raises(RouterException):
+        with pytest.raises(RouterException):
             self.router.register(
                 "uaid",
                 router_data={"token": "connect_data"},
@@ -146,12 +154,12 @@ class APNSRouterTestCase(unittest.TestCase):
         self.router.apns['firefox'].connections[1].request = Mock(
             side_effect=raiser)
 
-        with assert_raises(RouterException) as e:
+        with pytest.raises(RouterException) as ex:
             yield self.router.route_notification(self.notif, self.router_data)
 
-        eq_(e.exception.response_body, 'APNS returned an error '
-                                       'processing request')
-        eq_(e.exception.status_code, 502)
+        assert ex.value.response_body == ('APNS returned an error '
+                                          'processing request')
+        assert ex.value.status_code == 502
         self.flushLoggedErrors()
 
     @inlineCallbacks
@@ -161,14 +169,14 @@ class APNSRouterTestCase(unittest.TestCase):
         yield self._waitfor(lambda:
                             self.mock_connection.request.called is True)
 
-        ok_(isinstance(result, RouterResponse))
-        ok_(self.mock_connection.request.called)
+        assert isinstance(result, RouterResponse)
+        assert self.mock_connection.request.called
         body = self.mock_connection.request.call_args[1]
         body_json = json.loads(body['body'])
-        ok_('chid' in body_json)
+        assert 'chid' in body_json
         # The ChannelID is a UUID4, and unpredictable.
         del(body_json['chid'])
-        eq_(body_json, {
+        assert body_json == {
             "body": "q60d6g",
             "enc": "test",
             "ver": 10,
@@ -178,7 +186,7 @@ class APNSRouterTestCase(unittest.TestCase):
             },
             "enckey": "test",
             "con": "aesgcm",
-        })
+        }
 
     @inlineCallbacks
     def test_route_notification_complex(self):
@@ -192,12 +200,12 @@ class APNSRouterTestCase(unittest.TestCase):
                                                       router_data)
         yield self._waitfor(lambda:
                             self.mock_connection.request.called is True)
-        ok_(isinstance(result, RouterResponse))
-        ok_(self.mock_connection.request.called)
+        assert isinstance(result, RouterResponse)
+        assert self.mock_connection.request.called
         body = self.mock_connection.request.call_args[1]
         body_json = json.loads(body['body'])
-        eq_(body_json['aps']['number'], 4)
-        eq_(body_json['aps']['string'], 'String')
+        assert body_json['aps']['number'] == 4
+        assert body_json['aps']['string'] == 'String'
 
     @inlineCallbacks
     def test_route_low_priority_notification(self):
@@ -208,25 +216,26 @@ class APNSRouterTestCase(unittest.TestCase):
         yield apns2.send("abcd0123", {}, 'apnsid', priority=False, exp=exp)
         yield self._waitfor(lambda:
                             self.mock_connection.request.called is True)
-        ok_(self.mock_connection.request.called)
+        assert self.mock_connection.request.called
         body = self.mock_connection.request.call_args[1]
         headers = body['headers']
-        eq_(headers, {'apns-expiration': str(exp),
-                      'apns-topic': 'com.example.SomeApp',
-                      'apns-priority': '5',
-                      'apns-id': 'apnsid'})
+        assert headers == {
+            'apns-expiration': str(exp),
+            'apns-topic': 'com.example.SomeApp',
+            'apns-priority': '5',
+            'apns-id': 'apnsid'}
 
     @inlineCallbacks
     def test_bad_send(self):
         self.mock_response.status = 400
         self.mock_response.read.return_value = json.dumps({'reason': 'boo'})
-        with assert_raises(RouterException) as ex:
+        with pytest.raises(RouterException) as ex:
             yield self.router.route_notification(self.notif, self.router_data)
-        ok_(isinstance(ex.exception, RouterException))
-        eq_(ex.exception.status_code, 502)
-        eq_(ex.exception.message, 'APNS Transmit Error 400:boo')
-        eq_(ex.exception.response_body, 'APNS could not process your '
-                                        'message boo')
+        assert isinstance(ex.value, RouterException)
+        assert ex.value.status_code == 502
+        assert ex.value.message == 'APNS Transmit Error 400:boo'
+        assert ex.value.response_body == (
+            'APNS could not process your message boo')
 
     @inlineCallbacks
     def test_fail_send(self):
@@ -234,32 +243,32 @@ class APNSRouterTestCase(unittest.TestCase):
             raise HTTP20Error("oops")
 
         self.router.apns['firefox'].connections[0].request.side_effect = throw
-        with assert_raises(RouterException) as ex:
+        with pytest.raises(RouterException) as ex:
             yield self.router.route_notification(self.notif, self.router_data)
-        ok_(isinstance(ex.exception, RouterException))
-        eq_(ex.exception.status_code, 502)
-        eq_(ex.exception.message, "Server error")
-        eq_(ex.exception.response_body, 'APNS returned an error processing '
-                                        'request')
+        assert isinstance(ex.value, RouterException)
+        assert ex.value.status_code == 502
+        assert ex.value.message == "Server error"
+        assert ex.value.response_body == 'APNS returned an error ' \
+                                         'processing request'
         self.flushLoggedErrors()
 
     def test_too_many_connections(self):
         rr = self.router.apns['firefox']
-        with assert_raises(RouterException) as ex:
+        with pytest.raises(RouterException) as ex:
             while True:
                 rr._get_connection()
 
-        ok_(isinstance(ex.exception, RouterException))
-        eq_(ex.exception.status_code, 503)
-        eq_(ex.exception.message, "Too many APNS requests, "
-                                  "increase pool from 2")
-        eq_(ex.exception.response_body, "APNS busy, please retry")
+        assert isinstance(ex.value, RouterException)
+        assert ex.value.status_code == 503
+        assert ex.value.message == "Too many APNS requests, " \
+                                   "increase pool from 2"
+        assert ex.value.response_body == "APNS busy, please retry"
 
     def test_amend(self):
         resp = {"key": "value"}
         expected = resp.copy()
         self.router.amend_endpoint_response(resp, {})
-        eq_(resp, expected)
+        assert resp == expected
 
     def test_route_crypto_key(self):
         headers = {"content-encoding": "aesgcm",
@@ -277,11 +286,11 @@ class APNSRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 201)
-            eq_(result.logged_status, 200)
-            ok_("TTL" in result.headers)
-            ok_(self.mock_connection.called)
+            assert isinstance(result, RouterResponse)
+            assert result.status_code == 201
+            assert result.logged_status == 200
+            assert "TTL" in result.headers
+            assert self.mock_connection.called
 
         d.addCallback(check_results)
         return d
@@ -327,11 +336,11 @@ class GCMRouterTestCase(unittest.TestCase):
         fgcm.send.return_value = mock_result
 
     def _check_error_call(self, exc, code, response=None):
-        ok_(isinstance(exc, RouterException))
-        eq_(exc.status_code, code)
-        ok_(self.router.gcm['test123'].send.called)
+        assert isinstance(exc, RouterException)
+        assert exc.status_code == code
+        assert self.router.gcm['test123'].send.called
         if response:
-            eq_(exc.response_body, response)
+            assert exc.response_body == response
         self.flushLoggedErrors()
 
     def test_init(self):
@@ -339,23 +348,24 @@ class GCMRouterTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
-        with assert_raises(IOError):
+        with pytest.raises(IOError):
             GCMRouter(conf, {"senderIDs": {}}, SinkMetrics())
 
     def test_register(self):
         router_data = {"token": "test123"}
         self.router.register("uaid", router_data=router_data, app_id="test123")
         # Check the information that will be recorded for this user
-        eq_(router_data, {"token": "test123",
-                          "creds": {"senderID": "test123",
-                                    "auth": "12345678abcdefg"}})
+        assert router_data == {
+            "token": "test123",
+            "creds": {"senderID": "test123",
+                      "auth": "12345678abcdefg"}}
 
     def test_register_bad(self):
-        with assert_raises(RouterException):
+        with pytest.raises(RouterException):
             self.router.register("uaid", router_data={}, app_id="")
-        with assert_raises(RouterException):
+        with pytest.raises(RouterException):
             self.router.register("uaid", router_data={}, app_id='')
-        with assert_raises(RouterException):
+        with pytest.raises(RouterException):
             self.router.register(
                 "uaid",
                 router_data={"token": "abcd1234"},
@@ -368,7 +378,7 @@ class GCMRouterTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
-        with assert_raises(IOError):
+        with pytest.raises(IOError):
             GCMRouter(
                 conf,
                 {"senderIDs": {"test123": {"auth": "abcd"}}},
@@ -380,15 +390,15 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            ok_(self.router.gcm['test123'].send.called)
+            assert isinstance(result, RouterResponse)
+            assert self.router.gcm['test123'].send.called
             # Make sure the data was encoded as base64
             data = self.router.gcm['test123'].send.call_args[0][0].data
-            eq_(data['body'], 'q60d6g')
-            eq_(data['enc'], 'test')
-            eq_(data['chid'], dummy_chid)
-            eq_(data['enckey'], 'test')
-            eq_(data['con'], 'aesgcm')
+            assert data['body'] == 'q60d6g'
+            assert data['enc'] == 'test'
+            assert data['chid'] == dummy_chid
+            assert data['enckey'] == 'test'
+            assert data['con'] == 'aesgcm'
         d.addCallback(check_results)
         return d
 
@@ -405,21 +415,21 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 201)
-            eq_(result.logged_status, 200)
-            ok_("TTL" in result.headers)
-            ok_(self.router.gcm['test123'].send.called)
+            assert isinstance(result, RouterResponse)
+            assert result.status_code == 201
+            assert result.logged_status == 200
+            assert "TTL" in result.headers
+            assert self.router.gcm['test123'].send.called
             # Make sure the data was encoded as base64
             data = self.router.gcm['test123'].send.call_args[0][0].data
             options = self.router.gcm['test123'].send.call_args[0][0].options
-            eq_(data['body'], 'q60d6g')
-            eq_(data['enc'], 'test')
-            eq_(data['chid'], dummy_chid)
-            eq_(data['enckey'], 'test')
-            eq_(data['con'], 'aesgcm')
+            assert data['body'] == 'q60d6g'
+            assert data['enc'] == 'test'
+            assert data['chid'] == dummy_chid
+            assert data['enckey'] == 'test'
+            assert data['con'] == 'aesgcm'
             # use the defined min TTL
-            eq_(options['time_to_live'], 60)
+            assert options['time_to_live'] == 60
         d.addCallback(check_results)
         return d
 
@@ -436,18 +446,18 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            ok_(self.router.gcm['test123'].send.called)
+            assert isinstance(result, RouterResponse)
+            assert self.router.gcm['test123'].send.called
             # Make sure the data was encoded as base64
             data = self.router.gcm['test123'].send.call_args[0][0].data
             options = self.router.gcm['test123'].send.call_args[0][0].options
-            eq_(data['body'], 'q60d6g')
-            eq_(data['enc'], 'test')
-            eq_(data['chid'], dummy_chid)
-            eq_(data['enckey'], 'test')
-            eq_(data['con'], 'aesgcm')
+            assert data['body'] == 'q60d6g'
+            assert data['enc'] == 'test'
+            assert data['chid'] == dummy_chid
+            assert data['enckey'] == 'test'
+            assert data['con'] == 'aesgcm'
             # use the defined min TTL
-            eq_(options['time_to_live'], 2419200)
+            assert options['time_to_live'] == 2419200
         d.addCallback(check_results)
         return d
 
@@ -464,9 +474,9 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(bad_notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result.value, RouterException))
-            eq_(result.value.status_code, 413)
-            eq_(result.value.errno, 104)
+            assert isinstance(result.value, RouterException)
+            assert result.value.status_code == 413
+            assert result.value.errno == 104
 
         d.addBoth(check_results)
         return d
@@ -478,8 +488,8 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            ok_(self.router.gcm['test123'].send.called)
+            assert isinstance(result, RouterResponse)
+            assert self.router.gcm['test123'].send.called
         d.addCallback(check_results)
         return d
 
@@ -529,14 +539,14 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.router_data, dict(token="new"))
-            eq_(self.router.metrics.increment.call_args[0][0],
+            assert isinstance(result, RouterResponse)
+            assert result.router_data == dict(token="new")
+            assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
             self.router.metrics.increment.call_args[1]['tags'].sort()
-            eq_(self.router.metrics.increment.call_args[1]['tags'],
-                ['platform:gcm', 'reason:reregister'])
-            ok_(self.router.gcm['test123'].send.called)
+            assert self.router.metrics.increment.call_args[1]['tags'] == [
+                'platform:gcm', 'reason:reregister']
+            assert self.router.gcm['test123'].send.called
         d.addCallback(check_results)
         return d
 
@@ -547,14 +557,14 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.router_data, dict())
-            eq_(self.router.metrics.increment.call_args[0][0],
+            assert isinstance(result, RouterResponse)
+            assert result.router_data == dict()
+            assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
             self.router.metrics.increment.call_args[1]['tags'].sort()
-            eq_(self.router.metrics.increment.call_args[1]['tags'],
-                ['platform:gcm', 'reason:unregistered'])
-            ok_(self.router.gcm['test123'].send.called)
+            assert self.router.metrics.increment.call_args[1]['tags'] == [
+                'platform:gcm', 'reason:unregistered']
+            assert self.router.gcm['test123'].send.called
         d.addCallback(check_results)
         return d
 
@@ -565,13 +575,13 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
-            ok_(self.router.metrics.increment.called)
-            eq_(self.router.metrics.increment.call_args[0][0],
+            assert self.router.metrics.increment.called
+            assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
             self.router.metrics.increment.call_args[1]['tags'].sort()
-            eq_(self.router.metrics.increment.call_args[1]['tags'],
-                ['platform:gcm', 'reason:failure'])
-            eq_(fail.value.message, 'GCM unable to deliver')
+            assert self.router.metrics.increment.call_args[1]['tags'] == [
+                'platform:gcm', 'reason:failure']
+            assert fail.value.message == 'GCM unable to deliver'
             self._check_error_call(fail.value, 410)
         d.addBoth(check_results)
         return d
@@ -583,13 +593,13 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
-            ok_(self.router.metrics.increment.called)
-            eq_(self.router.metrics.increment.call_args[0][0],
+            assert self.router.metrics.increment.called
+            assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
             self.router.metrics.increment.call_args[1]['tags'].sort()
-            eq_(self.router.metrics.increment.call_args[1]['tags'],
-                ['platform:gcm', 'reason:retry'])
-            eq_(fail.value.message, 'GCM failure to deliver, retry')
+            assert self.router.metrics.increment.call_args[1]['tags'] == [
+                'platform:gcm', 'reason:retry']
+            assert fail.value.message == 'GCM failure to deliver, retry'
             self._check_error_call(fail.value, 503)
         d.addBoth(check_results)
         return d
@@ -599,20 +609,21 @@ class GCMRouterTestCase(unittest.TestCase):
                                            {"router_data": {"token": "abc"}})
 
         def check_results(fail):
-            eq_(fail.value.status_code, 500, "Server error")
+            assert fail.value.status_code == 500, "Server error"
         d.addBoth(check_results)
         return d
 
     def test_amend(self):
         router_data = {"token": "test123"}
-        self.router.register("uaid", router_data=router_data, app_id="test123")
+        self.router.register("uaid", router_data=router_data,
+                             app_id="test123")
         resp = {"key": "value"}
         self.router.amend_endpoint_response(
             resp, self.router_data.get('router_data'))
-        eq_({"key": "value", "senderid": "test123"}, resp)
+        assert {"key": "value", "senderid": "test123"} == resp
 
     def test_register_invalid_token(self):
-        with assert_raises(RouterException):
+        with pytest.raises(RouterException):
             self.router.register(
                 uaid="uaid",
                 router_data={"token": "invalid"},
@@ -660,9 +671,9 @@ class FCMRouterTestCase(unittest.TestCase):
         ffcm.notify_single_device.return_value = mock_result
 
     def _check_error_call(self, exc, code):
-        ok_(isinstance(exc, RouterException))
-        eq_(exc.status_code, code)
-        ok_(self.router.fcm.notify_single_device.called)
+        assert isinstance(exc, RouterException)
+        assert exc.status_code == code
+        assert self.router.fcm.notify_single_device.called
         self.flushLoggedErrors()
 
     @patch("pyfcm.FCMNotification", spec=pyfcm.FCMNotification)
@@ -676,19 +687,21 @@ class FCMRouterTestCase(unittest.TestCase):
             raise Exception("oopsy")
 
         ffcm.side_effect = throw_auth
-        with assert_raises(IOError):
+        with pytest.raises(IOError):
             FCMRouter(conf, {}, SinkMetrics())
 
     def test_register(self):
         router_data = {"token": "test123"}
-        self.router.register("uaid", router_data=router_data, app_id="test123")
+        self.router.register("uaid", router_data=router_data,
+                             app_id="test123")
         # Check the information that will be recorded for this user
-        eq_(router_data, {"token": "test123",
-                          "creds": {"senderID": "test123",
-                                    "auth": "12345678abcdefg"}})
+        assert router_data == {
+            "token": "test123",
+            "creds": {"senderID": "test123",
+                      "auth": "12345678abcdefg"}}
 
     def test_register_bad(self):
-        with assert_raises(RouterException):
+        with pytest.raises(RouterException):
             self.router.register("uaid", router_data={}, app_id="invalid123")
 
     def test_route_notification(self):
@@ -696,19 +709,19 @@ class FCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 201)
-            eq_(result.logged_status, 200)
-            ok_("TTL" in result.headers)
-            ok_(self.router.fcm.notify_single_device.called)
+            assert isinstance(result, RouterResponse)
+            assert result.status_code == 201
+            assert result.logged_status == 200
+            assert "TTL" in result.headers
+            assert self.router.fcm.notify_single_device.called
             # Make sure the data was encoded as base64
             args = self.router.fcm.notify_single_device.call_args[1]
             data = args['data_message']
-            eq_(data['body'], 'q60d6g')
-            eq_(data['chid'], dummy_chid)
-            eq_(data['enc'], 'test')
-            eq_(data['enckey'], 'test')
-            eq_(data['con'], 'aesgcm')
+            assert data['body'] == 'q60d6g'
+            assert data['chid'] == dummy_chid
+            assert data['enc'] == 'test'
+            assert data['enckey'] == 'test'
+            assert data['con'] == 'aesgcm'
         d.addCallback(check_results)
         return d
 
@@ -725,18 +738,18 @@ class FCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            ok_(self.router.fcm.notify_single_device.called)
+            assert isinstance(result, RouterResponse)
+            assert self.router.fcm.notify_single_device.called
             # Make sure the data was encoded as base64
             args = self.router.fcm.notify_single_device.call_args[1]
             data = args['data_message']
-            eq_(data['body'], 'q60d6g')
-            eq_(data['chid'], dummy_chid)
-            eq_(data['enc'], 'test')
-            eq_(data['enckey'], 'test')
-            eq_(data['con'], 'aesgcm')
+            assert data['body'] == 'q60d6g'
+            assert data['chid'] == dummy_chid
+            assert data['enc'] == 'test'
+            assert data['enckey'] == 'test'
+            assert data['con'] == 'aesgcm'
             # use the defined min TTL
-            eq_(args['time_to_live'], 60)
+            assert args['time_to_live'] == 60
         d.addCallback(check_results)
         return d
 
@@ -753,18 +766,18 @@ class FCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            ok_(self.router.fcm.notify_single_device.called)
+            assert isinstance(result, RouterResponse)
+            assert self.router.fcm.notify_single_device.called
             # Make sure the data was encoded as base64
             args = self.router.fcm.notify_single_device.call_args[1]
             data = args['data_message']
-            eq_(data['body'], 'q60d6g')
-            eq_(data['chid'], dummy_chid)
-            eq_(data['enc'], 'test')
-            eq_(data['enckey'], 'test')
-            eq_(data['con'], 'aesgcm')
+            assert data['body'] == 'q60d6g'
+            assert data['chid'] == dummy_chid
+            assert data['enc'] == 'test'
+            assert data['enckey'] == 'test'
+            assert data['con'] == 'aesgcm'
             # use the defined min TTL
-            eq_(args['time_to_live'], 2419200)
+            assert args['time_to_live'] == 2419200
         d.addCallback(check_results)
         return d
 
@@ -782,9 +795,9 @@ class FCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(bad_notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result.value, RouterException))
-            eq_(result.value.status_code, 413)
-            eq_(result.value.errno, 104)
+            assert isinstance(result.value, RouterException)
+            assert result.value.status_code == 413
+            assert result.value.errno == 104
 
         d.addBoth(check_results)
         return d
@@ -796,8 +809,8 @@ class FCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            ok_(self.router.fcm.notify_single_device.called)
+            assert isinstance(result, RouterResponse)
+            assert self.router.fcm.notify_single_device.called
         d.addCallback(check_results)
         return d
 
@@ -847,9 +860,9 @@ class FCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.router_data, dict(token="new"))
-            ok_(self.router.fcm.notify_single_device.called)
+            assert isinstance(result, RouterResponse)
+            assert result.router_data == dict(token="new")
+            assert self.router.fcm.notify_single_device.called
         d.addCallback(check_results)
         return d
 
@@ -860,9 +873,9 @@ class FCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.router_data, dict())
-            ok_(self.router.fcm.notify_single_device.called)
+            assert isinstance(result, RouterResponse)
+            assert result.router_data == dict()
+            assert self.router.fcm.notify_single_device.called
         d.addCallback(check_results)
         return d
 
@@ -883,7 +896,7 @@ class FCMRouterTestCase(unittest.TestCase):
                                            {"router_data": {"token": ""}})
 
         def check_results(fail):
-            eq_(fail.value.status_code, 410)
+            assert fail.value.status_code == 410
         d.addBoth(check_results)
         return d
 
@@ -894,10 +907,10 @@ class FCMRouterTestCase(unittest.TestCase):
         resp = {"key": "value"}
         self.router.amend_endpoint_response(
             resp, self.router_data.get('router_data'))
-        eq_({"key": "value", "senderid": "test123"}, resp)
+        assert {"key": "value", "senderid": "test123"} == resp
 
     def test_register_invalid_token(self):
-        with assert_raises(RouterException):
+        with pytest.raises(RouterException):
             self.router.register(
                 uaid="uaid",
                 router_data={"token": "invalid"},
@@ -953,14 +966,14 @@ class WebPushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 201)
+            assert isinstance(result, RouterResponse)
+            assert result.status_code == 201
             kwargs = self.message_mock.store_message.call_args[1]
             t_h = kwargs["notification"].headers
-            eq_(t_h.get('encryption'), self.headers.get('encryption'))
-            eq_(t_h.get('crypto_key'), self.headers.get('crypto-key'))
-            eq_(t_h.get('encoding'), self.headers.get('content-encoding'))
-            ok_("Location" in result.headers)
+            assert t_h.get('encryption') == self.headers.get('encryption')
+            assert t_h.get('crypto_key') == self.headers.get('crypto-key')
+            assert t_h.get('encoding') == self.headers.get('content-encoding')
+            assert "Location" in result.headers
 
         d.addCallback(verify_deliver)
         return d
@@ -977,15 +990,15 @@ class WebPushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 201)
+            assert isinstance(result, RouterResponse)
+            assert result.status_code == 201
             kwargs = self.message_mock.store_message.call_args[1]
-            eq_(len(self.metrics.increment.mock_calls), 3)
+            assert len(self.metrics.increment.mock_calls) == 3
             t_h = kwargs["notification"].headers
-            eq_(t_h.get('encryption'), self.headers.get('encryption'))
-            eq_(t_h.get('crypto_key'), self.headers.get('crypto-key'))
-            eq_(t_h.get('encoding'), self.headers.get('content-encoding'))
-            ok_("Location" in result.headers)
+            assert t_h.get('encryption') == self.headers.get('encryption')
+            assert t_h.get('crypto_key') == self.headers.get('crypto-key')
+            assert t_h.get('encoding') == self.headers.get('content-encoding')
+            assert "Location" in result.headers
 
         d.addCallback(verify_deliver)
         return d
@@ -1015,10 +1028,10 @@ class WebPushRouterTestCase(unittest.TestCase):
 
         def verify_deliver(fail):
             exc = fail.value
-            ok_(exc, RouterResponse)
-            eq_(exc.status_code, 201)
-            eq_(len(self.metrics.increment.mock_calls), 0)
-            ok_("Location" in exc.headers)
+            assert isinstance(exc, RouterException)
+            assert exc.status_code == 201
+            assert len(self.metrics.increment.mock_calls) == 0
+            assert "Location" in exc.headers
         d.addBoth(verify_deliver)
         return d
 
@@ -1026,7 +1039,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         resp = {"key": "value"}
         expected = resp.copy()
         self.router.amend_endpoint_response(resp, {})
-        eq_(resp, expected)
+        assert resp == expected
 
     def test_route_to_busy_node_save_throws_db_error(self):
         from boto.dynamodb2.exceptions import JSONResponseError
@@ -1046,8 +1059,8 @@ class WebPushRouterTestCase(unittest.TestCase):
 
         def verify_deliver(fail):
             exc = fail.value
-            ok_(exc, RouterException)
-            eq_(exc.status_code, 503)
+            assert isinstance(exc, RouterException)
+            assert exc.status_code == 503
         d.addBoth(verify_deliver)
 
         return d
@@ -1068,7 +1081,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(status):
-            ok_(status.status_code, 201)
+            assert status.status_code == 201
         d.addBoth(verify_deliver)
 
         return d
@@ -1089,7 +1102,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(status):
-            ok_(status.value.status_code, 410)
+            assert status.value.status_code == 410
         d.addBoth(verify_deliver)
 
         return d
@@ -1105,7 +1118,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(status):
-            ok_(status.status_code, 201)
+            assert status.status_code == 201
         d.addBoth(verify_deliver)
 
         return d
@@ -1128,15 +1141,15 @@ class WebPushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(result):
-            ok_(isinstance(result, RouterResponse))
-            eq_(result.status_code, 201)
+            assert isinstance(result, RouterResponse)
+            assert result.status_code == 201
             kwargs = self.message_mock.store_message.call_args[1]
-            eq_(len(self.metrics.increment.mock_calls), 3)
+            assert len(self.metrics.increment.mock_calls) == 3
             t_h = kwargs["notification"].headers
-            eq_(t_h.get('encryption'), self.headers.get('encryption'))
-            eq_(t_h.get('crypto_key'), self.headers.get('crypto-key'))
-            eq_(t_h.get('encoding'), self.headers.get('content-encoding'))
-            ok_("Location" in result.headers)
+            assert t_h.get('encryption') == self.headers.get('encryption')
+            assert t_h.get('crypto_key') == self.headers.get('crypto-key')
+            assert t_h.get('encoding') == self.headers.get('content-encoding')
+            assert "Location" in result.headers
 
         d.addCallback(verify_deliver)
         return d

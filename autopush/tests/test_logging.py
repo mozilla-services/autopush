@@ -9,7 +9,6 @@ import twisted.internet
 import twisted.trial.unittest
 
 from mock import Mock, patch
-from nose.tools import eq_, ok_
 from twisted.internet import reactor
 from twisted.internet.defer import Deferred
 from twisted.logger import Logger
@@ -65,18 +64,18 @@ class SentryLogTestCase(twisted.trial.unittest.TestCase):
             if not logged:   # pragma: nocover
                 reactor.callLater(0, check)
                 return
-            eq_(len(logged), 1)
+            assert len(logged) == 1
             # Check that the sentry data has the client info as a sub dict
             # Note: these are double quoted, single quote strings.
-            eq_(logged[0].get('extra').get('client_info'),
-                {u"'key'": u"'value'"})
+            assert logged[0].get('extra').get('client_info') == {
+                u"'key'": u"'value'"}
             # Check that the json written actually contains the client info
             # collapsed up into 'Fields'.
             out.seek(0)
             payload = json.loads(out.readline())
-            eq_(payload['Fields']['key'], 'value')
-            eq_(payload['Fields']['key2'], 'value')
-            eq_(payload['Fields']['key3'], True)
+            assert payload['Fields']['key'] == 'value'
+            assert payload['Fields']['key2'] == 'value'
+            assert payload['Fields']['key3'] is True
             self._port.stopListening()
             pl.stop()
             d.callback(True)
@@ -99,12 +98,12 @@ class SentryLogTestCase(twisted.trial.unittest.TestCase):
                 reactor.callLater(0, check)
                 return
 
-            eq_(len(logged), 1)
+            assert len(logged) == 1
             # Ensure a top level stacktrace was included
             stacktrace = logged[0]['stacktrace']
-            ok_(any(
+            assert any(
                 filename == f['abs_path'] and testname == f['function']
-                for f in stacktrace['frames']))
+                for f in stacktrace['frames'])
 
             self._port.stopListening()
             pl.stop()
@@ -118,19 +117,19 @@ class PushLoggerTestCase(twisted.trial.unittest.TestCase):
         obj = PushLogger.setup_logging("Autopush")
         obj._output = mock_stdout = Mock()
         log.info("omg!", Type=7)
-        eq_(len(mock_stdout.mock_calls), 2)
+        assert len(mock_stdout.mock_calls) == 2
         kwargs = mock_stdout.mock_calls[0][1][0]
-        ok_("Type" in kwargs)
+        assert "Type" in kwargs
         obj.stop()
 
     def test_human_logs(self):
         obj = PushLogger.setup_logging("Autopush", log_format="text")
         obj._output = mock_stdout = Mock()
         log.info("omg!", Type=7)
-        eq_(len(mock_stdout.mock_calls), 2)
+        assert len(mock_stdout.mock_calls) == 2
         mock_stdout.reset_mock()
         log.error("wtf!", Type=7)
-        eq_(len(mock_stdout.mock_calls), 2)
+        assert len(mock_stdout.mock_calls) == 2
         obj.stop()
 
     def test_start_stop(self):
@@ -149,7 +148,7 @@ class PushLoggerTestCase(twisted.trial.unittest.TestCase):
         obj.stop()
         with open("testfile.txt") as f:
             lines = f.readlines()
-        eq_(len(lines), 1)
+        assert len(lines) == 1
 
     @patch("autopush.logging.boto3")
     def test_firehose_only_output(self, mock_boto3):
@@ -159,8 +158,8 @@ class PushLoggerTestCase(twisted.trial.unittest.TestCase):
         obj.start()
         log.info("wow")
         obj.stop()
-        eq_(len(obj.firehose.mock_calls), 3)
-        eq_(len(obj.firehose.process.mock_calls), 1)
+        assert len(obj.firehose.mock_calls) == 3
+        assert len(obj.firehose.process.mock_calls) == 1
 
 
 class FirehoseProcessorTestCase(twisted.trial.unittest.TestCase):
@@ -175,10 +174,10 @@ class FirehoseProcessorTestCase(twisted.trial.unittest.TestCase):
     def test_full_queue(self):
         proc = FirehoseProcessor("test", 1)
         proc.process("test")
-        eq_(proc._records.full(), True)
+        assert proc._records.full() is True
         proc.process("another")
-        eq_(proc._records.qsize(), 1)
-        eq_(proc._records.get(), "test")
+        assert proc._records.qsize() == 1
+        assert proc._records.get() == "test"
 
     def test_message_max_size(self):
         proc = FirehoseProcessor("test")
@@ -191,8 +190,8 @@ class FirehoseProcessorTestCase(twisted.trial.unittest.TestCase):
         proc.start()
         proc.process("a decently larger message")
         proc.stop()
-        eq_(len(self.mock_boto.mock_calls), 2)
-        eq_(len(proc._client.put_record_batch.mock_calls), 1)
+        assert len(self.mock_boto.mock_calls) == 2
+        assert len(proc._client.put_record_batch.mock_calls) == 1
 
     def test_message_max_batch(self):
         proc = FirehoseProcessor("test")
@@ -205,8 +204,8 @@ class FirehoseProcessorTestCase(twisted.trial.unittest.TestCase):
         proc.start()
         proc.process("a decently larger message")
         proc.stop()
-        eq_(len(self.mock_boto.mock_calls), 2)
-        eq_(len(proc._client.put_record_batch.mock_calls), 1)
+        assert len(self.mock_boto.mock_calls) == 2
+        assert len(proc._client.put_record_batch.mock_calls) == 1
 
     def test_queue_timeout(self):
         proc = FirehoseProcessor("test")
@@ -230,5 +229,5 @@ class FirehoseProcessorTestCase(twisted.trial.unittest.TestCase):
         proc.start()
         proc.process("a decently larger message")
         proc.stop()
-        eq_(len(self.mock_boto.mock_calls), 4)
-        eq_(len(proc._client.put_record_batch.mock_calls), 3)
+        assert len(self.mock_boto.mock_calls) == 4
+        assert len(proc._client.put_record_batch.mock_calls) == 3

@@ -1,7 +1,6 @@
 import unittest
 
 from mock import Mock, patch
-from nose.tools import eq_, ok_
 
 
 class FakeDict(dict):
@@ -18,7 +17,7 @@ class DiagnosticCLITestCase(unittest.TestCase):
             "--router_tablename=fred",
             "http://someendpoint",
         ])
-        eq_(cli.db.router.table.table_name, "fred")
+        assert cli.db.router.table.table_name == "fred"
 
     def test_bad_endpoint(self):
         cli = self._makeFUT([
@@ -26,7 +25,7 @@ class DiagnosticCLITestCase(unittest.TestCase):
             "http://someendpoint",
         ])
         returncode = cli.run()
-        ok_(returncode not in (None, 0))
+        assert returncode not in (None, 0)
 
     @patch("autopush.diagnostic_cli.AutopushConfig")
     @patch("autopush.diagnostic_cli.DatabaseManager.from_config")

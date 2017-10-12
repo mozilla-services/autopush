@@ -10,4 +10,6 @@ nose
 pbr==1.10.0
 psutil
 pympler==0.5
+pytest
+pytest-cov
 websocket-client

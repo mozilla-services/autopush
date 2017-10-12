@@ -12,7 +12,7 @@ from cryptography.exceptions import InvalidSignature
 from jose import jws
 from marshmallow import Schema, fields
 from mock import Mock, patch
-from nose.tools import eq_, ok_, assert_raises
+import pytest
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial import unittest
 
@@ -81,14 +81,14 @@ class TestThreadedValidate(unittest.TestCase):
     def test_validate_load(self):
         tv, rh = self._make_full()
         d, errors = tv._validate_request(rh)
-        eq_(errors, {})
-        eq_(d, {})
+        assert errors == {}
+        assert d == {}
 
     def test_validate_invalid_schema(self):
         tv, rh = self._make_full(schema=InvalidSchema)
         d, errors = tv._validate_request(rh)
-        ok_("afield" in errors)
-        eq_(d, {})
+        assert "afield" in errors
+        assert d == {}
 
     def test_call_func_no_error(self):
         mock_func = Mock()
@@ -103,7 +103,7 @@ class TestThreadedValidate(unittest.TestCase):
         result = tv._validate_request(rh)
         tv._call_func(result, mock_func, rh)
         self._mock_errors.assert_called()
-        eq_(len(mock_func.mock_calls), 0)
+        assert len(mock_func.mock_calls) == 0
 
     @inlineCallbacks
     def test_decorator(self):
@@ -129,7 +129,7 @@ class TestThreadedValidate(unittest.TestCase):
         )
         client = Client(app)
         resp = yield client.get('/test')
-        eq_(resp.content, "done")
+        assert resp.content == "done"
 
 
 class TestWebPushRequestSchema(unittest.TestCase):
@@ -167,9 +167,9 @@ class TestWebPushRequestSchema(unittest.TestCase):
             router_data=dict(creds=dict(senderID="bogus")),
         )
         result, errors = schema.load(self._make_test_data())
-        eq_(errors, {})
-        ok_("notification" in result)
-        eq_(str(result["subscription"]["uaid"]), dummy_uaid)
+        assert errors == {}
+        assert "notification" in result
+        assert str(result["subscription"]["uaid"]) == dummy_uaid
 
     def test_no_headers(self):
         schema = self._make_fut()
@@ -184,12 +184,12 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         data = self._make_test_data(body="asdfasdf")
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(data)
 
-        eq_(cm.exception.status_code, 400)
-        eq_(cm.exception.errno, 110)
-        eq_(cm.exception.message, "Unknown Content-Encoding")
+        assert cm.value.status_code == 400
+        assert cm.value.errno == 110
+        assert cm.value.message == "Unknown Content-Encoding"
 
     def test_invalid_token(self):
         schema = self._make_fut()
@@ -199,10 +199,10 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         schema.context["conf"].parse_endpoint.side_effect = throw_item
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(self._make_test_data())
 
-        eq_(cm.exception.errno, 102)
+        assert cm.value.errno == 102
 
     def test_invalid_fernet_token(self):
         schema = self._make_fut()
@@ -212,10 +212,10 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         schema.context["conf"].parse_endpoint.side_effect = throw_item
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(self._make_test_data())
 
-        eq_(cm.exception.errno, 102)
+        assert cm.value.errno == 102
 
     def test_invalid_uaid_not_found(self):
         schema = self._make_fut()
@@ -230,10 +230,10 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         schema.context["db"].router.get_uaid.side_effect = throw_item
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(self._make_test_data())
 
-        eq_(cm.exception.errno, 103)
+        assert cm.value.errno == 103
 
     def test_critical_failure(self):
         schema = self._make_fut()
@@ -247,10 +247,10 @@ class TestWebPushRequestSchema(unittest.TestCase):
             critical_failure="Bad SenderID",
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(self._make_test_data())
 
-        eq_(cm.exception.errno, 105)
+        assert cm.value.errno == 105
 
     def test_invalid_header_combo(self):
         schema = self._make_fut()
@@ -271,10 +271,10 @@ class TestWebPushRequestSchema(unittest.TestCase):
             },
             body="asdfasdf",
         )
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.errno, 110)
+        assert cm.value.errno == 110
 
     def test_invalid_header_combo_04(self):
         schema = self._make_fut()
@@ -296,12 +296,13 @@ class TestWebPushRequestSchema(unittest.TestCase):
             },
             body="asdfasdf",
         )
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.message, "Encryption-Key header not valid for 02 "
-                                  "or later webpush-encryption")
-        eq_(cm.exception.errno, 110)
+        assert cm.value.message == (
+            "Encryption-Key header not valid for 02 "
+            "or later webpush-encryption")
+        assert cm.value.errno == 110
 
     def test_missing_encryption_salt(self):
         schema = self._make_fut()
@@ -322,11 +323,11 @@ class TestWebPushRequestSchema(unittest.TestCase):
             },
             body="asdfasdf",
         )
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 400)
-        eq_(cm.exception.errno, 110)
+        assert cm.value.status_code == 400
+        assert cm.value.errno == 110
 
     def test_missing_encryption_salt_04(self):
         schema = self._make_fut()
@@ -347,11 +348,11 @@ class TestWebPushRequestSchema(unittest.TestCase):
             },
             body="asdfasdf",
         )
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 400)
-        eq_(cm.exception.errno, 110)
+        assert cm.value.status_code == 400
+        assert cm.value.errno == 110
 
     def test_missing_encryption_key_dh(self):
         schema = self._make_fut()
@@ -372,11 +373,11 @@ class TestWebPushRequestSchema(unittest.TestCase):
             },
             body="asdfasdf",
         )
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 400)
-        eq_(cm.exception.errno, 110)
+        assert cm.value.status_code == 400
+        assert cm.value.errno == 110
 
     def test_missing_crypto_key_dh(self):
         schema = self._make_fut()
@@ -398,11 +399,11 @@ class TestWebPushRequestSchema(unittest.TestCase):
             },
             body="asdfasdf",
         )
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 400)
-        eq_(cm.exception.errno, 110)
+        assert cm.value.status_code == 400
+        assert cm.value.errno == 110
 
     def test_invalid_data_size(self):
         schema = self._make_fut()
@@ -418,7 +419,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
         schema.context["conf"].max_data = 1
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(self._make_test_data(
                 headers={
                     "content-encoding": "aesgcm",
@@ -426,7 +427,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
                 },
                 body="asdfasdfasdfasdfasd"))
 
-        eq_(cm.exception.errno, 104)
+        assert cm.value.errno == 104
 
     def test_invalid_data_must_have_crypto_headers(self):
         schema = self._make_fut()
@@ -440,10 +441,10 @@ class TestWebPushRequestSchema(unittest.TestCase):
             router_data=dict(creds=dict(senderID="bogus")),
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(self._make_test_data(body="asdfasdfasdfasdfasd"))
 
-        eq_(cm.exception.errno, 110)
+        assert cm.value.errno == 110
 
     def test_valid_data_crypto_padding_stripped(self):
         schema = self._make_fut()
@@ -469,8 +470,8 @@ class TestWebPushRequestSchema(unittest.TestCase):
         )
 
         result, errors = schema.load(info)
-        eq_(errors, {})
-        eq_(result["headers"]["encryption"], "salt=asdfjiasljdf")
+        assert errors == {}
+        assert result["headers"]["encryption"] == "salt=asdfjiasljdf"
 
     def test_invalid_dh_value_for_01_crypto(self):
         schema = self._make_fut()
@@ -496,11 +497,12 @@ class TestWebPushRequestSchema(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 400)
-        eq_(cm.exception.message, "dh value in Crypto-Key header not valid "
+        assert cm.value.status_code == 400
+        assert cm.value.message == (
+            "dh value in Crypto-Key header not valid "
             "for 01 or earlier webpush-encryption")
 
     def test_invalid_vapid_crypto_header(self):
@@ -526,10 +528,10 @@ class TestWebPushRequestSchema(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 401)
+        assert cm.value.status_code == 401
 
     def test_invalid_topic(self):
         schema = self._make_fut()
@@ -550,13 +552,13 @@ class TestWebPushRequestSchema(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 400)
-        eq_(cm.exception.errno, 113)
-        eq_(cm.exception.message,
-            "Topic must be no greater than 32 characters")
+        assert cm.value.status_code == 400
+        assert cm.value.errno == 113
+        assert cm.value.message == "Topic must be no greater than " \
+                                   "32 characters"
 
         info = self._make_test_data(
             headers={
@@ -564,13 +566,13 @@ class TestWebPushRequestSchema(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 400)
-        eq_(cm.exception.errno, 113)
-        eq_(cm.exception.message,
-            "Topic must be URL and Filename safe Base64 alphabet")
+        assert cm.value.status_code == 400
+        assert cm.value.errno == 113
+        assert cm.value.message == ("Topic must be URL and Filename "
+                                    "safe Base64 alphabet")
 
     def test_no_current_month(self):
         schema = self._make_fut()
@@ -586,12 +588,12 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         info = self._make_test_data()
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 410)
-        eq_(cm.exception.errno, 106)
-        eq_(cm.exception.message, "No such subscription")
+        assert cm.value.status_code == 410
+        assert cm.value.errno == 106
+        assert cm.value.message == "No such subscription"
 
     def test_old_current_month(self):
         schema = self._make_fut()
@@ -609,12 +611,12 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         info = self._make_test_data()
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 410)
-        eq_(cm.exception.errno, 106)
-        eq_(cm.exception.message, "No such subscription")
+        assert cm.value.status_code == 410
+        assert cm.value.errno == 106
+        assert cm.value.message == "No such subscription"
 
 
 class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
@@ -687,8 +689,8 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         )
 
         result, errors = schema.load(info)
-        eq_(errors, {})
-        ok_("jwt" in result)
+        assert errors == {}
+        assert "jwt" in result
 
     def test_valid_vapid_crypto_header_webpush(self, use_crypto=False):
         schema = self._make_fut()
@@ -719,8 +721,8 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         )
 
         result, errors = schema.load(info)
-        eq_(errors, {})
-        ok_("jwt" in result)
+        assert errors == {}
+        assert "jwt" in result
 
     def test_valid_vapid_crypto_header_webpush_crypto(self):
         self.test_valid_vapid_crypto_header_webpush(use_crypto=True)
@@ -752,9 +754,9 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         )
 
         result, errors = schema.load(info)
-        eq_(errors, {})
-        ok_("jwt" in result)
-        eq_(payload, result['jwt']['jwt_data'])
+        assert errors == {}
+        assert "jwt" in result
+        assert payload == result['jwt']['jwt_data']
 
     def test_valid_vapid_02_crypto_header_webpush_alt(self):
         schema = self._make_fut()
@@ -785,9 +787,9 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         )
 
         result, errors = schema.load(info)
-        eq_(errors, {})
-        ok_("jwt" in result)
-        eq_(payload, result['jwt']['jwt_data'])
+        assert errors == {}
+        assert "jwt" in result
+        assert payload == result['jwt']['jwt_data']
 
     def test_bad_vapid_02_crypto_header(self):
         schema = self._make_fut()
@@ -816,10 +818,10 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
-        eq_(cm.exception.status_code, 401)
-        eq_(cm.exception.errno, 109)
+        assert cm.value.status_code == 401
+        assert cm.value.errno == 109
 
     def test_invalid_vapid_draft2_crypto_header(self):
         schema = self._make_fut()
@@ -849,11 +851,11 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 401)
-        eq_(cm.exception.errno, 109)
+        assert cm.value.status_code == 401
+        assert cm.value.errno == 109
 
     @patch("autopush.web.webpush.extract_jwt")
     def test_invalid_vapid_crypto_header(self, mock_jwt):
@@ -887,11 +889,11 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 401)
-        eq_(cm.exception.errno, 109)
+        assert cm.value.status_code == 401
+        assert cm.value.errno == 109
 
     def test_invalid_too_far_exp_vapid_crypto_header(self):
         schema = self._make_fut()
@@ -919,11 +921,11 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 401)
-        eq_(cm.exception.errno, 109)
+        assert cm.value.status_code == 401
+        assert cm.value.errno == 109
 
     def test_invalid_bad_exp_vapid_crypto_header(self):
         schema = self._make_fut()
@@ -951,11 +953,11 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 401)
-        eq_(cm.exception.errno, 109)
+        assert cm.value.status_code == 401
+        assert cm.value.errno == 109
 
     @patch("autopush.web.webpush.extract_jwt")
     def test_invalid_encryption_header(self, mock_jwt):
@@ -987,11 +989,11 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 401)
-        eq_(cm.exception.errno, 109)
+        assert cm.value.status_code == 401
+        assert cm.value.errno == 109
 
     @patch("autopush.web.webpush.extract_jwt")
     def test_invalid_encryption_jwt(self, mock_jwt):
@@ -1024,11 +1026,11 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 401)
-        eq_(cm.exception.errno, 109)
+        assert cm.value.status_code == 401
+        assert cm.value.errno == 109
 
     @patch("autopush.web.webpush.extract_jwt")
     def test_invalid_crypto_key_header_content(self, mock_jwt):
@@ -1060,11 +1062,11 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 400)
-        eq_(cm.exception.errno, 110)
+        assert cm.value.status_code == 400
+        assert cm.value.errno == 110
 
     def test_expired_vapid_header(self):
         schema = self._make_fut()
@@ -1094,11 +1096,11 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 401)
-        eq_(cm.exception.errno, 109)
+        assert cm.value.status_code == 401
+        assert cm.value.errno == 109
 
     def test_missing_vapid_header(self):
         schema = self._make_fut()
@@ -1127,11 +1129,11 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 401)
-        eq_(cm.exception.errno, 109)
+        assert cm.value.status_code == 401
+        assert cm.value.errno == 109
 
     def test_bogus_vapid_header(self):
         schema = self._make_fut()
@@ -1162,8 +1164,8 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
             }
         )
 
-        with assert_raises(InvalidRequest) as cm:
+        with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        eq_(cm.exception.status_code, 401)
-        eq_(cm.exception.errno, 109)
+        assert cm.value.status_code == 401
+        assert cm.value.errno == 109

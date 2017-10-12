@@ -4,7 +4,6 @@ import uuid
 import twisted.internet.base
 from cryptography.fernet import Fernet, InvalidToken
 from mock import Mock, patch
-from nose.tools import eq_, ok_
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial import unittest
 
@@ -67,27 +66,27 @@ class MessageTestCase(unittest.TestCase):
         self.fernet_mock.configure_mock(**{
             "decrypt.side_effect": InvalidToken})
         resp = yield self.client.delete(self.url(message_id='%20'))
-        eq_(resp.get_status(), 400)
+        assert resp.get_status() == 400
 
     @inlineCallbacks
     def test_delete_token_wrong_components(self):
         self.fernet_mock.decrypt.return_value = "123:456"
         resp = yield self.client.delete(self.url(message_id="ignored"))
-        eq_(resp.get_status(), 400)
+        assert resp.get_status() == 400
 
     @inlineCallbacks
     def test_delete_token_wrong_kind(self):
         tok = ":".join(["r", dummy_uaid.hex, str(dummy_chid)])
         self.fernet_mock.decrypt.return_value = tok
         resp = yield self.client.delete(self.url(message_id='ignored'))
-        eq_(resp.get_status(), 400)
+        assert resp.get_status() == 400
 
     @inlineCallbacks
     def test_delete_invalid_timestamp_token(self):
         tok = ":".join(["02", str(dummy_chid)])
         self.fernet_mock.decrypt.return_value = tok
         resp = yield self.client.delete(self.url(message_id='ignored'))
-        eq_(resp.get_status(), 400)
+        assert resp.get_status() == 400
 
     @inlineCallbacks
     def test_delete_success(self):
@@ -97,7 +96,7 @@ class MessageTestCase(unittest.TestCase):
             "delete_message.return_value": True})
         resp = yield self.client.delete(self.url(message_id="123-456"))
         self.message_mock.delete_message.assert_called()
-        eq_(resp.get_status(), 204)
+        assert resp.get_status() == 204
 
     @inlineCallbacks
     def test_delete_topic_success(self):
@@ -107,7 +106,7 @@ class MessageTestCase(unittest.TestCase):
             "delete_message.return_value": True})
         resp = yield self.client.delete(self.url(message_id="123-456"))
         self.message_mock.delete_message.assert_called()
-        eq_(resp.get_status(), 204)
+        assert resp.get_status() == 204
 
     @inlineCallbacks
     def test_delete_topic_error_parts(self):
@@ -116,7 +115,7 @@ class MessageTestCase(unittest.TestCase):
         self.message_mock.configure_mock(**{
             "delete_message.return_value": True})
         resp = yield self.client.delete(self.url(message_id="123-456"))
-        eq_(resp.get_status(), 400)
+        assert resp.get_status() == 400
 
     @inlineCallbacks
     def test_delete_db_error(self):
@@ -126,7 +125,7 @@ class MessageTestCase(unittest.TestCase):
             "delete_message.side_effect":
             ProvisionedThroughputExceededException(None, None)})
         resp = yield self.client.delete(self.url(message_id="ignored"))
-        eq_(resp.get_status(), 503)
+        assert resp.get_status() == 503
 
 
 class RegistrationTestCase(unittest.TestCase):
@@ -181,40 +180,40 @@ class RegistrationTestCase(unittest.TestCase):
         self.reg.request = Mock(headers={'user-agent': 'test'},
                                 host='example.com:8080')
         tags = self.reg.base_tags()
-        eq_(tags, ['user_agent:test', 'host:example.com:8080'])
+        assert tags == ['user_agent:test', 'host:example.com:8080']
         # previously failed
         tags = self.reg.base_tags()
-        eq_(tags, ['user_agent:test', 'host:example.com:8080'])
+        assert tags == ['user_agent:test', 'host:example.com:8080']
 
     def _check_error(self, resp, code, errno, error, message=None):
         d = json.loads(resp.content)
-        eq_(d.get("code"), code)
-        eq_(d.get("errno"), errno)
-        eq_(d.get("error"), error)
+        assert d.get("code") == code
+        assert d.get("errno") == errno
+        assert d.get("error") == error
 
     def test_init_info(self):
         h = self.request_mock.headers
         h["user-agent"] = "myself"
         d = self.reg._init_info()
-        eq_(d["user_agent"], "myself")
+        assert d["user_agent"] == "myself"
         self.request_mock.remote_ip = "local1"
         d = self.reg._init_info()
-        eq_(d["remote_ip"], "local1")
+        assert d["remote_ip"] == "local1"
         self.request_mock.headers["x-forwarded-for"] = "local2"
         d = self.reg._init_info()
-        eq_(d["remote_ip"], "local2")
+        assert d["remote_ip"] == "local2"
 
     def test_conf_crypto_key(self):
         fake = 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
         conf = AutopushConfig(crypto_key=fake)
-        eq_(conf.fernet._fernets[0]._encryption_key,
+        assert conf.fernet._fernets[0]._encryption_key == (
             '\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
 
         fake2 = 'BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB='
         conf = AutopushConfig(crypto_key=[fake, fake2])
-        eq_(conf.fernet._fernets[0]._encryption_key,
+        assert conf.fernet._fernets[0]._encryption_key == (
             '\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00')
-        eq_(conf.fernet._fernets[1]._encryption_key,
+        assert conf.fernet._fernets[1]._encryption_key == (
             '\x10A\x04\x10A\x04\x10A\x04\x10A\x04\x10A\x04\x10')
 
     def test_cors(self):
@@ -222,15 +221,15 @@ class RegistrationTestCase(unittest.TestCase):
         ch2 = "Access-Control-Allow-Methods"
         reg = self.reg
         reg.conf.cors = False
-        ok_(reg._headers.get(ch1) != "*")
-        ok_(reg._headers.get(ch2) != self.CORS_HEAD)
+        assert reg._headers.get(ch1) != "*"
+        assert reg._headers.get(ch2) != self.CORS_HEAD
 
         reg.clear_header(ch1)
         reg.clear_header(ch2)
         reg.conf.cors = True
         reg.prepare()
-        eq_(reg._headers[ch1], "*")
-        eq_(reg._headers[ch2], self.CORS_HEAD)
+        assert reg._headers[ch1] == "*"
+        assert reg._headers[ch2] == self.CORS_HEAD
 
     def test_cors_head(self):
         ch1 = "Access-Control-Allow-Origin"
@@ -239,8 +238,8 @@ class RegistrationTestCase(unittest.TestCase):
         reg.conf.cors = True
         reg.prepare()
         reg.head(None)
-        eq_(reg._headers[ch1], "*")
-        eq_(reg._headers[ch2], self.CORS_HEAD)
+        assert reg._headers[ch1] == "*"
+        assert reg._headers[ch2] == self.CORS_HEAD
 
     def test_cors_options(self):
         ch1 = "Access-Control-Allow-Origin"
@@ -249,8 +248,8 @@ class RegistrationTestCase(unittest.TestCase):
         reg.conf.cors = True
         reg.prepare()
         reg.options(None)
-        eq_(reg._headers[ch1], "*")
-        eq_(reg._headers[ch2], self.CORS_HEAD)
+        assert reg._headers[ch1] == "*"
+        assert reg._headers[ch2] == self.CORS_HEAD
 
     @inlineCallbacks
     def test_post(self):
@@ -269,13 +268,13 @@ class RegistrationTestCase(unittest.TestCase):
                 data={},
             ))
         )
-        eq_(resp.get_status(), 200)
+        assert resp.get_status() == 200
 
         payload = json.loads(resp.content)
-        eq_(payload["uaid"], dummy_uaid.hex)
-        eq_(payload["channelID"], dummy_chid.hex)
-        eq_(payload["endpoint"], "http://localhost/wpush/v1/abcd123")
-        ok_("secret" in payload)
+        assert payload["uaid"] == dummy_uaid.hex
+        assert payload["channelID"] == dummy_chid.hex
+        assert payload["endpoint"] == "http://localhost/wpush/v1/abcd123"
+        assert "secret" in payload
 
     @inlineCallbacks
     def test_post_gcm(self):
@@ -302,16 +301,16 @@ class RegistrationTestCase(unittest.TestCase):
                 token="182931248179192",
             ))
         )
-        eq_(resp.get_status(), 200)
+        assert resp.get_status() == 200
 
         payload = json.loads(resp.content)
-        eq_(payload["uaid"], dummy_uaid.hex)
-        eq_(payload["channelID"], dummy_chid.hex)
-        eq_(payload["endpoint"], "http://localhost/wpush/v1/abcd123")
+        assert payload["uaid"] == dummy_uaid.hex
+        assert payload["channelID"] == dummy_chid.hex
+        assert payload["endpoint"] == "http://localhost/wpush/v1/abcd123"
         calls = self.db.router.register_user.call_args
         call_args = calls[0][0]
-        eq_(True, has_connected_this_month(call_args))
-        ok_("secret" in payload)
+        assert has_connected_this_month(call_args) is True
+        assert "secret" in payload
 
     @inlineCallbacks
     def test_post_invalid_args(self, *args):
@@ -374,8 +373,8 @@ class RegistrationTestCase(unittest.TestCase):
             ))
         )
         payload = json.loads(resp.content)
-        eq_(payload["channelID"], dummy_chid.hex)
-        eq_(payload["endpoint"], "http://localhost/wpush/v1/abcd123")
+        assert payload["channelID"] == dummy_chid.hex
+        assert payload["endpoint"] == "http://localhost/wpush/v1/abcd123"
 
     @inlineCallbacks
     def test_no_uaid(self):
@@ -434,8 +433,8 @@ class RegistrationTestCase(unittest.TestCase):
             ))
         )
         payload = json.loads(resp.content)
-        eq_(payload["channelID"], dummy_chid.hex)
-        eq_(payload["endpoint"], "http://localhost/wpush/v1/abcd123")
+        assert payload["channelID"] == dummy_chid.hex
+        assert payload["endpoint"] == "http://localhost/wpush/v1/abcd123"
 
     @inlineCallbacks
     def test_post_with_app_server_key(self, *args):
@@ -444,17 +443,17 @@ class RegistrationTestCase(unittest.TestCase):
         dummy_key = "RandomKeyString"
 
         def mock_encrypt(cleartext):
-            eq_(len(cleartext), 64)
+            assert len(cleartext) == 64
             # dummy_uaid
-            eq_(cleartext[0:16],
+            assert cleartext[0:16] == (
                 'abad1dea00000000aabbccdd00000000'.decode('hex'))
             # dummy_chid
-            eq_(cleartext[16:32],
+            assert cleartext[16:32] == (
                 'deadbeef00000000decafbad00000000'.decode('hex'))
             # sha256(dummy_key).digest()
-            eq_(cleartext[32:],
-                ('47aedd050b9e19171f0fa7b8b65ca670'
-                 '28f0bc92cd3f2cd3682b1200ec759007').decode('hex'))
+            assert cleartext[32:] == (
+                '47aedd050b9e19171f0fa7b8b65ca670'
+                '28f0bc92cd3f2cd3682b1200ec759007').decode('hex')
             return 'abcd123'
         self.fernet_mock.configure_mock(**{
             'encrypt.side_effect': mock_encrypt,
@@ -471,8 +470,8 @@ class RegistrationTestCase(unittest.TestCase):
             ))
         )
         payload = json.loads(resp.content)
-        eq_(payload["channelID"], dummy_chid.hex)
-        eq_(payload["endpoint"], "http://localhost/wpush/v2/abcd123")
+        assert payload["channelID"] == dummy_chid.hex
+        assert payload["endpoint"] == "http://localhost/wpush/v2/abcd123"
 
     @inlineCallbacks
     def test_put(self, *args):
@@ -490,16 +489,16 @@ class RegistrationTestCase(unittest.TestCase):
             body=json.dumps(data),
         )
         payload = json.loads(resp.content)
-        eq_(payload, {})
+        assert payload == {}
         frouter.register.assert_called_with(
             uaid="",
             router_data=data,
             app_id='test',
         )
         user_data = self.db.router.register_user.call_args[0][0]
-        eq_(user_data['uaid'], dummy_uaid.hex)
-        eq_(user_data['router_type'], 'test')
-        eq_(user_data['router_data']['token'], 'some_token')
+        assert user_data['uaid'] == dummy_uaid.hex
+        assert user_data['router_type'] == 'test'
+        assert user_data['router_data']['token'] == 'some_token'
 
     @inlineCallbacks
     def test_put_bad_auth(self, *args):
@@ -521,7 +520,7 @@ class RegistrationTestCase(unittest.TestCase):
             headers={"Authorization": "Fred Smith"},
             body=json.dumps(dict(token="blah"))
         )
-        eq_(resp.get_status(), 404)
+        assert resp.get_status() == 404
 
     @inlineCallbacks
     def test_put_bad_arguments(self, *args):
@@ -619,8 +618,9 @@ class RegistrationTestCase(unittest.TestCase):
         )
         # Note: Router is mocked, so the UAID is never actually
         # dropped.
-        ok_(self.db.router.drop_user.called)
-        eq_(self.db.router.drop_user.call_args_list[0][0], (dummy_uaid.hex,))
+        assert self.db.router.drop_user.called
+        assert self.db.router.drop_user.call_args_list[0][0] == (
+            dummy_uaid.hex,)
 
     @inlineCallbacks
     def test_delete_bad_uaid(self):
@@ -630,7 +630,7 @@ class RegistrationTestCase(unittest.TestCase):
                      uaid=uuid.uuid4().hex),
             headers={"Authorization": self.auth},
         )
-        eq_(resp.get_status(), 401)
+        assert resp.get_status() == 401
 
     @inlineCallbacks
     def test_delete_orphans(self):
@@ -641,7 +641,7 @@ class RegistrationTestCase(unittest.TestCase):
                      uaid=dummy_uaid.hex),
             headers={"Authorization": self.auth},
         )
-        eq_(resp.get_status(), 410)
+        assert resp.get_status() == 410
 
     @inlineCallbacks
     def test_delete_bad_auth(self, *args):
@@ -651,7 +651,7 @@ class RegistrationTestCase(unittest.TestCase):
                      uaid=dummy_uaid.hex),
             headers={"Authorization": "Invalid"},
         )
-        eq_(resp.get_status(), 401)
+        assert resp.get_status() == 401
 
     @inlineCallbacks
     def test_delete_bad_router(self):
@@ -661,7 +661,7 @@ class RegistrationTestCase(unittest.TestCase):
                      uaid=dummy_uaid.hex),
             headers={"Authorization": self.auth},
         )
-        eq_(resp.get_status(), 400)
+        assert resp.get_status() == 400
 
     @inlineCallbacks
     def test_get(self):
@@ -677,5 +677,5 @@ class RegistrationTestCase(unittest.TestCase):
         )
         self.db.message.all_channels.assert_called_with(str(dummy_uaid))
         payload = json.loads(resp.content)
-        eq_(chids, payload['channelIDs'])
-        eq_(dummy_uaid.hex, payload['uaid'])
+        assert chids == payload['channelIDs']
+        assert dummy_uaid.hex == payload['uaid']

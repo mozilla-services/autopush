@@ -504,7 +504,7 @@ class Message(object):
     def fetch_timestamp_messages(
             self,
             uaid,  # type: uuid.UUID
-            timestamp=None,  # type: Optional[int]
+            timestamp=None,  # type: Optional[int or str]
             limit=10,  # type: int
             ):
         # type: (...) -> Tuple[Optional[int], List[WebPushNotification]]

@@ -21,7 +21,6 @@ import twisted.internet.base
 import websocket
 from cryptography.fernet import Fernet
 from jose import jws
-from nose.tools import eq_, ok_
 from typing import Optional  # noqa
 from twisted.internet import reactor
 from twisted.internet.defer import inlineCallbacks, returnValue, Deferred
@@ -51,7 +50,7 @@ log = logging.getLogger(__name__)
 twisted.internet.base.DelayedCall.debug = True
 
 
-def setUp():
+def setup_module():
     logging.getLogger('boto').setLevel(logging.CRITICAL)
     if "SKIP_INTEGRATION" in os.environ:  # pragma: nocover
         raise SkipTest("Skipping integration tests")
@@ -116,7 +115,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         self.ws.send(msg)
         result = json.loads(self.ws.recv())
         log.debug("Recv: %s", result)
-        eq_(result["status"], 200)
+        assert result["status"] == 200
         if self.uaid and self.uaid != result["uaid"]:  # pragma: nocover
             log.debug("Mismatch on re-using uaid. Old: %s, New: %s",
                       self.uaid, result["uaid"])
@@ -133,8 +132,8 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         self.ws.send(msg)
         result = json.loads(self.ws.recv())
         log.debug("Recv: %s", result)
-        eq_(result["status"], 200)
-        eq_(result["channelID"], chid)
+        assert result["status"] == 200
+        assert result["channelID"] == chid
         self.channels[chid] = result["pushEndpoint"]
         return result
 
@@ -162,7 +161,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         http.request("DELETE", url.path)
         resp = http.getresponse()
         http.close()
-        eq_(resp.status, status)
+        assert resp.status == status
 
     def send_notification(self, channel=None, version=None, data=None,
                           use_header=True, status=None, ttl=200,
@@ -208,17 +207,17 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         resp = http.getresponse()
         log.debug("%s Response (%s): %s", method, resp.status, resp.read())
         http.close()
-        eq_(resp.status, status)
+        assert resp.status == status
         self.notif_response = resp
         location = resp.getheader("Location", None)
         log.debug("Response Headers: %s", resp.getheaders())
         if status >= 200 and status < 300:
-            ok_(location is not None)
+            assert location is not None
         if status == 201 and ttl is not None:
             ttl_header = resp.getheader("TTL")
-            eq_(ttl_header, str(ttl))
+            assert ttl_header == str(ttl)
         if ttl != 0 and status == 201:
-            ok_(location is not None)
+            assert location is not None
             if channel in self.messages:
                 self.messages[channel].append(location)
             else:
@@ -245,7 +244,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         self.ws.send("{}")
         result = self.ws.recv()
         log.debug("Recv: %s", result)
-        eq_(result, "{}")
+        assert result == "{}"
         return result
 
     def ack(self, channel, version):
@@ -421,22 +420,21 @@ class Test_Data(IntegrationBase):
     @inlineCallbacks
     def test_webpush_data_delivery_to_connected_client(self):
         client = yield self.quick_register()
-        ok_(client.channels)
+        assert client.channels
         chan = client.channels.keys()[0]
 
         # Invalid UTF-8 byte sequence.
         data = b"\xc3\x28\xa0\xa1\xe2\x28\xa1"
 
         result = yield client.send_notification(data=data)
-        ok_(result is not None)
-        eq_(result["messageType"], "notification")
-        eq_(result["channelID"], chan)
-        eq_(result["data"], "wyigoeIooQ")
-        ok_(self.logs.logged_ci(lambda ci: 'message_size' in ci),
-            "message_size not logged")
-        ok_(self.logs.logged_ci(
+        assert result is not None
+        assert result["messageType"] == "notification"
+        assert result["channelID"] == chan
+        assert result["data"] == "wyigoeIooQ"
+        assert self.logs.logged_ci(lambda ci: 'message_size' in ci)
+        assert self.logs.logged_ci(
             lambda ci: ci['encoding'] == "aesgcm"
-        ))
+        )
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -444,22 +442,21 @@ class Test_Data(IntegrationBase):
         from boto.dynamodb2.exceptions import ItemNotFound
         client = yield self.quick_register()
         self.conn.db.router.get_uaid = Mock(side_effect=ItemNotFound)
-        ok_(client.channels)
+        assert client.channels
         chan = client.channels.keys()[0]
 
         # Invalid UTF-8 byte sequence.
         data = b"\xc3\x28\xa0\xa1\xe2\x28\xa1"
 
         result = yield client.send_notification(data=data)
-        ok_(result is not None)
-        eq_(result["messageType"], "notification")
-        eq_(result["channelID"], chan)
-        eq_(result["data"], "wyigoeIooQ")
-        ok_(self.logs.logged_ci(lambda ci: 'message_size' in ci),
-            "message_size not logged")
-        ok_(self.logs.logged_ci(
+        assert result is not None
+        assert result["messageType"] == "notification"
+        assert result["channelID"] == chan
+        assert result["data"] == "wyigoeIooQ"
+        assert self.logs.logged_ci(lambda ci: 'message_size' in ci)
+        assert self.logs.logged_ci(
             lambda ci: ci['encoding'] == "aesgcm"
-        ))
+        )
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -512,20 +509,19 @@ class Test_Data(IntegrationBase):
 
         for chan in tests:
             result = yield client.get_notification()
-            ok_(result is not None)
+            assert result is not None
             chan = result["channelID"]
             test = tests[chan]
-            eq_(result["data"], test["result"])
+            assert result["data"] == test["result"]
             headers = result["headers"]
-            ok_("crypto_key" in headers)
-            ok_("encryption" in headers)
-            ok_("encoding" in headers)
+            assert "crypto_key" in headers
+            assert "encryption" in headers
+            assert "encoding" in headers
             yield client.ack(chan, result["version"])
 
-        ok_(self.logs.logged_ci(lambda ci: 'message_size' in ci),
-            "message_size not logged")
+        assert self.logs.logged_ci(lambda ci: 'message_size' in ci)
         inc_call = self.conn.db.metrics._client.increment.call_args_list[5]
-        eq_(inc_call[1]['tags'], ['source:Stored'])
+        assert inc_call[1]['tags'] == ['source:Stored']
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -551,7 +547,7 @@ class TestLoop(IntegrationBase):
     def test_basic_deliver(self):
         client = yield self.quick_register()
         result = yield client.send_notification()
-        ok_(result != {})
+        assert result != {}
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -568,8 +564,8 @@ class TestLoop(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result = yield client.send_notification()
-        ok_(result != {})
-        eq_(result["channelID"], chan)
+        assert result != {}
+        assert result["channelID"] == chan
         yield self.shut_down(client)
 
 
@@ -585,11 +581,11 @@ class TestWebPush(IntegrationBase):
         client = Client(self._ws_url)
         yield client.connect()
         result = yield client.hello()
-        ok_(result != {})
-        eq_(result["use_webpush"], True)
+        assert result != {}
+        assert result["use_webpush"] is True
         yield client.wait_for(lambda: len(db.DB_CALLS) == 3)
-        eq_(db.DB_CALLS, ['register_user', 'fetch_messages',
-                          'fetch_timestamp_messages'])
+        assert db.DB_CALLS == ['register_user', 'fetch_messages',
+                               'fetch_timestamp_messages']
         db.DB_CALLS = []
         db.TRACK_DB_CALLS = False
 
@@ -600,8 +596,8 @@ class TestWebPush(IntegrationBase):
         client = Client(self._ws_url)
         yield client.connect()
         result = yield client.hello()
-        ok_(result != {})
-        eq_(result["use_webpush"], True)
+        assert result != {}
+        assert result["use_webpush"] is True
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -610,9 +606,9 @@ class TestWebPush(IntegrationBase):
         client = Client(self._ws_url)
         yield client.connect()
         result = yield client.hello(uaid=non_uaid)
-        ok_(result != {})
-        ok_(result["uaid"] != non_uaid)
-        eq_(result["use_webpush"], True)
+        assert result != {}
+        assert result["uaid"] != non_uaid
+        assert result["use_webpush"] is True
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -620,22 +616,22 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
         result = yield client.send_notification(data=data)
-        eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], base64url_encode(data))
-        eq_(result["messageType"], "notification")
+        assert result["headers"]["encryption"] == client._crypto_key
+        assert result["data"] == base64url_encode(data)
+        assert result["messageType"] == "notification"
         yield self.shut_down(client)
         log_event = self.logs.logged_session()
-        eq_(log_event["connection_type"], "webpush")
-        eq_(log_event["direct_storage"], 1)
+        assert log_event["connection_type"] == "webpush"
+        assert log_event["direct_storage"] == 1
 
     @inlineCallbacks
     def test_topic_basic_delivery(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
         result = yield client.send_notification(data=data, topic="Inbox")
-        eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], base64url_encode(data))
-        eq_(result["messageType"], "notification")
+        assert result["headers"]["encryption"] == client._crypto_key
+        assert result["data"] == base64url_encode(data)
+        assert result["messageType"] == "notification"
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -649,11 +645,11 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], base64url_encode(data2))
-        eq_(result["messageType"], "notification")
+        assert result["headers"]["encryption"] == client._crypto_key
+        assert result["data"] == base64url_encode(data2)
+        assert result["messageType"] == "notification"
         result = yield client.get_notification()
-        eq_(result, None)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -665,15 +661,15 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification(timeout=10)
-        eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], base64url_encode(data))
-        eq_(result["messageType"], "notification")
+        assert result["headers"]["encryption"] == client._crypto_key
+        assert result["data"] == base64url_encode(data)
+        assert result["messageType"] == "notification"
         yield client.ack(result["channelID"], result["version"])
         yield client.disconnect()
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        eq_(result, None)
+        assert result is None
         yield client.disconnect()
         yield client.connect()
         yield client.hello()
@@ -685,11 +681,10 @@ class TestWebPush(IntegrationBase):
         client = yield self.quick_register()
         vapid_info = _get_vapid()
         result = yield client.send_notification(data=data, vapid=vapid_info)
-        eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], base64url_encode(data))
-        eq_(result["messageType"], "notification")
-        ok_(self.logs.logged_ci(lambda ci: 'router_key' in ci),
-            "router_key not logged")
+        assert result["headers"]["encryption"] == client._crypto_key
+        assert result["data"] == base64url_encode(data)
+        assert result["messageType"] == "notification"
+        assert self.logs.logged_ci(lambda ci: 'router_key' in ci)
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -762,20 +757,20 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
         yield client.disconnect()
-        ok_(client.channels)
+        assert client.channels
         yield client.send_notification(data=data)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        ok_(result != {})
-        eq_(result["data"], base64url_encode(data))
+        assert result != {}
+        assert result["data"] == base64url_encode(data)
 
         yield client.disconnect()
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        ok_(result != {})
-        eq_(result["data"], base64url_encode(data))
+        assert result != {}
+        assert result["data"] == base64url_encode(data)
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -784,27 +779,27 @@ class TestWebPush(IntegrationBase):
         data2 = str(uuid.uuid4())
         client = yield self.quick_register()
         yield client.disconnect()
-        ok_(client.channels)
+        assert client.channels
         yield client.send_notification(data=data)
         yield client.send_notification(data=data2)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        ok_(result != {})
-        ok_(result["data"] in map(base64url_encode, [data, data2]))
+        assert result != {}
+        assert result["data"] in map(base64url_encode, [data, data2])
         result = yield client.get_notification()
-        ok_(result != {})
-        ok_(result["data"] in map(base64url_encode, [data, data2]))
+        assert result != {}
+        assert result["data"] in map(base64url_encode, [data, data2])
 
         yield client.disconnect()
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        ok_(result != {})
-        ok_(result["data"] in map(base64url_encode, [data, data2]))
+        assert result != {}
+        assert result["data"] in map(base64url_encode, [data, data2])
         result = yield client.get_notification()
-        ok_(result != {})
-        ok_(result["data"] in map(base64url_encode, [data, data2]))
+        assert result != {}
+        assert result["data"] in map(base64url_encode, [data, data2])
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -813,29 +808,29 @@ class TestWebPush(IntegrationBase):
         data2 = str(uuid.uuid4())
         client = yield self.quick_register()
         yield client.disconnect()
-        ok_(client.channels)
+        assert client.channels
         with self.legacy_endpoint():
             yield client.send_notification(data=data)
             yield client.send_notification(data=data2)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification(timeout=5)
-        ok_(result != {})
-        ok_(result["data"] in map(base64url_encode, [data, data2]))
+        assert result != {}
+        assert result["data"] in map(base64url_encode, [data, data2])
         result = yield client.get_notification()
-        ok_(result != {})
-        ok_(result["data"] in map(base64url_encode, [data, data2]))
+        assert result != {}
+        assert result["data"] in map(base64url_encode, [data, data2])
         yield client.ack(result["channelID"], result["version"])
 
         yield client.disconnect()
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        ok_(result != {})
-        ok_(result["data"] in map(base64url_encode, [data, data2]))
-        ok_(result["messageType"], "notification")
+        assert result != {}
+        assert result["data"] in map(base64url_encode, [data, data2])
+        assert result["messageType"] == "notification"
         result = yield client.get_notification()
-        eq_(result, None)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -844,29 +839,29 @@ class TestWebPush(IntegrationBase):
         data2 = str(uuid.uuid4())
         client = yield self.quick_register()
         yield client.disconnect()
-        ok_(client.channels)
+        assert client.channels
         yield client.send_notification(data=data)
         yield client.send_notification(data=data2)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        ok_(result != {})
-        eq_(result["data"], base64url_encode(data))
+        assert result != {}
+        assert result["data"] == base64url_encode(data)
         result2 = yield client.get_notification()
-        ok_(result2 != {})
-        eq_(result2["data"], base64url_encode(data2))
+        assert result2 != {}
+        assert result2["data"] == base64url_encode(data2)
         yield client.ack(result["channelID"], result["version"])
 
         yield client.disconnect()
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        ok_(result != {})
-        eq_(result["data"], base64url_encode(data))
-        ok_(result["messageType"], "notification")
+        assert result != {}
+        assert result["data"] == base64url_encode(data)
+        assert result["messageType"] == "notification"
         result2 = yield client.get_notification()
-        ok_(result2 != {})
-        eq_(result2["data"], base64url_encode(data2))
+        assert result2 != {}
+        assert result2["data"] == base64url_encode(data2)
         yield client.ack(result2["channelID"], result2["version"])
 
         # Verify no messages are delivered
@@ -874,7 +869,7 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        ok_(result is None)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -883,17 +878,17 @@ class TestWebPush(IntegrationBase):
         data2 = str(uuid.uuid4())
         client = yield self.quick_register()
         yield client.disconnect()
-        ok_(client.channels)
+        assert client.channels
         yield client.send_notification(data=data)
         yield client.send_notification(data=data2)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        ok_(result != {})
-        ok_(result["data"] in map(base64url_encode, [data, data2]))
+        assert result != {}
+        assert result["data"] in map(base64url_encode, [data, data2])
         result2 = yield client.get_notification()
-        ok_(result2 != {})
-        ok_(result2["data"] in map(base64url_encode, [data, data2]))
+        assert result2 != {}
+        assert result2["data"] in map(base64url_encode, [data, data2])
         yield client.ack(result2["channelID"], result2["version"])
         yield client.ack(result["channelID"], result["version"])
 
@@ -901,28 +896,29 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        eq_(result, None)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
     def test_no_delivery_to_unregistered(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register()  # type: Client
-        ok_(client.channels)
+        assert client.channels
         chan = client.channels.keys()[0]
 
         result = yield client.send_notification(data=data)
-        eq_(result["channelID"], chan)
-        eq_(result["data"], base64url_encode(data))
+        assert result["channelID"] == chan
+        assert result["data"] == base64url_encode(data)
         yield client.ack(result["channelID"], result["version"])
 
         yield client.unregister(chan)
         result = yield client.send_notification(data=data, status=410)
 
         # Verify cache-control
-        eq_(client.notif_response.getheader("Cache-Control"), "max-age=86400")
+        assert client.notif_response.getheader("Cache-Control") == \
+            "max-age=86400"
 
-        eq_(result, None)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -935,7 +931,7 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        eq_(result, None)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -943,10 +939,10 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
         result = yield client.send_notification(data=data, ttl=None)
-        ok_(result is not None)
-        eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], base64url_encode(data))
-        eq_(result["messageType"], "notification")
+        assert result is not None
+        assert result["headers"]["encryption"] == client._crypto_key
+        assert result["data"] == base64url_encode(data)
+        assert result["messageType"] == "notification"
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -954,15 +950,15 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
         result = yield client.send_notification(data=data, ttl=None)
-        ok_(result is not None)
-        eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], base64url_encode(data))
-        eq_(result["messageType"], "notification")
+        assert result is not None
+        assert result["headers"]["encryption"] == client._crypto_key
+        assert result["data"] == base64url_encode(data)
+        assert result["messageType"] == "notification"
         yield client.disconnect()
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        eq_(result, None)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -970,10 +966,10 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
         result = yield client.send_notification(data=data, ttl=0)
-        ok_(result is not None)
-        eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], base64url_encode(data))
-        eq_(result["messageType"], "notification")
+        assert result is not None
+        assert result["headers"]["encryption"] == client._crypto_key
+        assert result["data"] == base64url_encode(data)
+        assert result["messageType"] == "notification"
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -985,7 +981,7 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        eq_(result, None)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -998,7 +994,7 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        eq_(result, None)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -1015,12 +1011,12 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification(timeout=4)
-        ok_(result is not None)
-        eq_(result["headers"]["encryption"], client._crypto_key)
-        eq_(result["data"], base64url_encode(data2))
-        eq_(result["messageType"], "notification")
+        assert result is not None
+        assert result["headers"]["encryption"] == client._crypto_key
+        assert result["data"] == base64url_encode(data2)
+        assert result["messageType"] == "notification"
         result = yield client.get_notification()
-        eq_(result, None)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -1044,19 +1040,19 @@ class TestWebPush(IntegrationBase):
         # Pull out and ack the first
         for x in range(0, 6):
             result = yield client.get_notification(timeout=4)
-            ok_(result is not None)
-            eq_(result["data"], base64url_encode(data))
+            assert result is not None
+            assert result["data"] == base64url_encode(data)
             yield client.ack(result["channelID"], result["version"])
 
         # Should have one more that is data2, this will only arrive if the
         # other six were acked as that hits the batch size
         result = yield client.get_notification(timeout=4)
-        ok_(result is not None)
-        eq_(result["data"], base64url_encode(data2))
+        assert result is not None
+        assert result["data"] == base64url_encode(data2)
 
         # No more
         result = yield client.get_notification()
-        eq_(result, None)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -1065,7 +1061,7 @@ class TestWebPush(IntegrationBase):
         client = yield self.quick_register()
         result = yield client.send_notification(data=data, use_header=False,
                                                 status=400)
-        eq_(result, None)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -1085,10 +1081,10 @@ class TestWebPush(IntegrationBase):
     def test_empty_message_without_crypto_headers(self):
         client = yield self.quick_register()
         result = yield client.send_notification(use_header=False)
-        ok_(result is not None)
-        eq_(result["messageType"], "notification")
-        ok_("headers" not in result)
-        ok_("data" not in result)
+        assert result is not None
+        assert result["messageType"] == "notification"
+        assert "headers" not in result
+        assert "data" not in result
         yield client.ack(result["channelID"], result["version"])
 
         yield client.disconnect()
@@ -1096,9 +1092,9 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        ok_(result is not None)
-        ok_("headers" not in result)
-        ok_("data" not in result)
+        assert result is not None
+        assert "headers" not in result
+        assert "data" not in result
         yield client.ack(result["channelID"], result["version"])
 
         yield self.shut_down(client)
@@ -1107,17 +1103,17 @@ class TestWebPush(IntegrationBase):
     def test_empty_message_with_crypto_headers(self):
         client = yield self.quick_register()
         result = yield client.send_notification()
-        ok_(result is not None)
-        eq_(result["messageType"], "notification")
-        ok_("headers" not in result)
-        ok_("data" not in result)
+        assert result is not None
+        assert result["messageType"] == "notification"
+        assert "headers" not in result
+        assert "data" not in result
 
         result2 = yield client.send_notification()
         # We shouldn't store headers for blank messages.
-        ok_(result2 is not None)
-        eq_(result2["messageType"], "notification")
-        ok_("headers" not in result2)
-        ok_("data" not in result2)
+        assert result2 is not None
+        assert result2["messageType"] == "notification"
+        assert "headers" not in result2
+        assert "data" not in result2
 
         yield client.ack(result["channelID"], result["version"])
         yield client.ack(result2["channelID"], result2["version"])
@@ -1127,9 +1123,9 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result3 = yield client.get_notification()
-        ok_(result3 is not None)
-        ok_("headers" not in result3)
-        ok_("data" not in result3)
+        assert result3 is not None
+        assert "headers" not in result3
+        assert "data" not in result3
         yield client.ack(result3["channelID"], result3["version"])
 
         yield self.shut_down(client)
@@ -1138,14 +1134,14 @@ class TestWebPush(IntegrationBase):
     def test_delete_saved_notification(self):
         client = yield self.quick_register()
         yield client.disconnect()
-        ok_(client.channels)
+        assert client.channels
         chan = client.channels.keys()[0]
         yield client.send_notification()
         yield client.delete_notification(chan)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        eq_(result, None)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -1166,22 +1162,22 @@ class TestWebPush(IntegrationBase):
 
         # Verify the move
         c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
-        eq_(c["current_month"], last_month)
+        assert c["current_month"] == last_month
 
         # Verify last_connect is current, then move that back
-        ok_(has_connected_this_month(c))
+        assert has_connected_this_month(c)
         today = get_month(delta=-1)
-        c["last_connect"] = "%s%s020001" % (today.year,
-                                            str(today.month).zfill(2))
+        c["last_connect"] = int("%s%s020001" % (today.year,
+                                str(today.month).zfill(2)))
         yield deferToThread(c.partial_save)
-        eq_(False, has_connected_this_month(c))
+        assert has_connected_this_month(c) is False
 
         # Move the clients channels back one month
         exists, chans = yield deferToThread(
             self.conn.db.message.all_channels, client.uaid
         )
-        eq_(exists, True)
-        eq_(len(chans), 1)
+        assert exists is True
+        assert len(chans) == 1
         yield deferToThread(
             lm_message.save_channels,
             client.uaid,
@@ -1200,8 +1196,8 @@ class TestWebPush(IntegrationBase):
             self.conn.db.message.all_channels,
             client.uaid
         )
-        eq_(exists, False)
-        eq_(len(chans), 0)
+        assert exists is False
+        assert len(chans) == 0
 
         # Send in a notification, verify it landed in last months notification
         # table
@@ -1211,7 +1207,7 @@ class TestWebPush(IntegrationBase):
         ts, notifs = yield deferToThread(lm_message.fetch_timestamp_messages,
                                          uuid.UUID(client.uaid),
                                          " ")
-        eq_(len(notifs), 1)
+        assert len(notifs) == 1
 
         # Connect the client, verify the migration
         yield client.connect()
@@ -1220,12 +1216,12 @@ class TestWebPush(IntegrationBase):
         # Pull down the notification
         result = yield client.get_notification()
         chan = client.channels.keys()[0]
-        ok_(result is not None)
-        eq_(chan, result["channelID"])
+        assert result is not None
+        assert chan == result["channelID"]
 
         # Check that the client is going to rotate the month
         server_client = self.conn.clients[client.uaid]
-        eq_(server_client.ps.rotate_message_table, True)
+        assert server_client.ps.rotate_message_table is True
 
         # Acknowledge the notification, which triggers the migration
         yield client.ack(chan, result["version"])
@@ -1243,19 +1239,19 @@ class TestWebPush(IntegrationBase):
         # Verify the month update in the router table
         c = yield deferToThread(
             self.conn.db.router.get_uaid, client.uaid)
-        eq_(c["current_month"], self.conn.db.current_msg_month)
-        eq_(server_client.ps.rotate_message_table, False)
+        assert c["current_month"] == self.conn.db.current_msg_month
+        assert server_client.ps.rotate_message_table is False
 
         # Verify the client moved last_connect
-        eq_(True, has_connected_this_month(c))
+        assert has_connected_this_month(c) is True
 
         # Verify the channels were moved
         exists, chans = yield deferToThread(
             self.conn.db.message.all_channels,
             client.uaid
         )
-        eq_(exists, True)
-        eq_(len(chans), 1)
+        assert exists is True
+        assert len(chans) == 1
 
         yield self.shut_down(client)
 
@@ -1277,22 +1273,22 @@ class TestWebPush(IntegrationBase):
 
         # Verify the move
         c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
-        eq_(c["current_month"], last_month)
+        assert c["current_month"] == last_month
 
         # Verify last_connect is current, then move that back
-        ok_(has_connected_this_month(c))
+        assert has_connected_this_month(c)
         today = get_month(delta=-1)
-        c["last_connect"] = "%s%s020001" % (today.year,
-                                            str(today.month).zfill(2))
+        c["last_connect"] = int("%s%s020001" % (today.year,
+                                str(today.month).zfill(2)))
         yield deferToThread(c.partial_save)
-        eq_(False, has_connected_this_month(c))
+        assert has_connected_this_month(c) is False
 
         # Move the clients channels back one month
         exists, chans = yield deferToThread(
             self.conn.db.message.all_channels, client.uaid
         )
-        eq_(exists, True)
-        eq_(len(chans), 1)
+        assert exists is True
+        assert len(chans) == 1
         yield deferToThread(
             lm_message.save_channels,
             client.uaid,
@@ -1307,7 +1303,7 @@ class TestWebPush(IntegrationBase):
         _, notifs = yield deferToThread(lm_message.fetch_timestamp_messages,
                                         uuid.UUID(client.uaid),
                                         " ")
-        eq_(len(notifs), 1)
+        assert len(notifs) == 1
 
         # Connect the client, verify the migration
         yield client.connect()
@@ -1316,12 +1312,12 @@ class TestWebPush(IntegrationBase):
         # Pull down the notification
         result = yield client.get_notification()
         chan = client.channels.keys()[0]
-        ok_(result is not None)
-        eq_(chan, result["channelID"])
+        assert result is not None
+        assert chan == result["channelID"]
 
         # Check that the client is going to rotate the month
         server_client = self.conn.clients[client.uaid]
-        eq_(server_client.ps.rotate_message_table, True)
+        assert server_client.ps.rotate_message_table is True
 
         # Acknowledge the notification, which triggers the migration
         yield client.ack(chan, result["version"])
@@ -1338,19 +1334,19 @@ class TestWebPush(IntegrationBase):
 
         # Verify the month update in the router table
         c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
-        eq_(c["current_month"], self.conn.db.current_msg_month)
-        eq_(server_client.ps.rotate_message_table, False)
+        assert c["current_month"] == self.conn.db.current_msg_month
+        assert server_client.ps.rotate_message_table is False
 
         # Verify the client moved last_connect
-        eq_(True, has_connected_this_month(c))
+        assert has_connected_this_month(c) is True
 
         # Verify the channels were moved
         exists, chans = yield deferToThread(
             self.conn.db.message.all_channels,
             client.uaid
         )
-        eq_(exists, True)
-        eq_(len(chans), 1)
+        assert exists is True
+        assert len(chans) == 1
 
         yield self.shut_down(client)
 
@@ -1373,15 +1369,15 @@ class TestWebPush(IntegrationBase):
 
         # Verify the move
         c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
-        eq_(c["current_month"], last_month)
+        assert c["current_month"] == last_month
 
         # Verify there's no channels
         exists, chans = yield deferToThread(
             self.conn.db.message.all_channels,
             client.uaid
         )
-        eq_(exists, False)
-        eq_(len(chans), 0)
+        assert exists is False
+        assert len(chans) == 0
 
         # Connect the client, verify the migration
         yield client.connect()
@@ -1389,7 +1385,7 @@ class TestWebPush(IntegrationBase):
 
         # Check that the client is going to rotate the month
         server_client = self.conn.clients[client.uaid]
-        eq_(server_client.ps.rotate_message_table, True)
+        assert server_client.ps.rotate_message_table is True
 
         # Wait up to 2 seconds for the table rotation to occur
         start = time.time()
@@ -1403,8 +1399,8 @@ class TestWebPush(IntegrationBase):
 
         # Verify the month update in the router table
         c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
-        eq_(c["current_month"], self.conn.db.current_msg_month)
-        eq_(server_client.ps.rotate_message_table, False)
+        assert c["current_month"] == self.conn.db.current_msg_month
+        assert server_client.ps.rotate_message_table is False
 
         yield self.shut_down(client)
 
@@ -1458,13 +1454,13 @@ class TestClientCerts(SSLEndpointMixin, IntegrationBase):
         client = yield self.quick_register(
             sslcontext=self._create_context(self.auth_client))
         yield client.disconnect()
-        ok_(client.channels)
+        assert client.channels
         chan = client.channels.keys()[0]
 
         yield client.send_notification()
         yield client.delete_notification(chan)
         result = yield client.get_notification()
-        eq_(result, None)
+        assert result is None
 
         yield self.shut_down(client)
 
@@ -1482,19 +1478,19 @@ class TestClientCerts(SSLEndpointMixin, IntegrationBase):
             sslcontext=self._create_context(certfile))
         yield client.disconnect()
         yield client.send_notification(status=401)
-        ok_(self.logs.logged(
+        assert self.logs.logged(
             lambda e: (e['log_format'] == "Failed TLS auth" and
                        (not certfile or
-                        e['client_info']['tls_failed_cn'] == 'localhost'))
-        ))
+                        e['client_info']['tls_failed_cn'] == 'localhost')
+                       ))
 
         response, body = yield _agent(
             'DELETE',
             "https://localhost:9020/m/foo",
             contextFactory=self.client_SSLCF(certfile))
-        eq_(response.code, 401)
+        assert response.code == 401
         wwwauth = response.headers.getRawHeaders('www-authenticate')
-        eq_(wwwauth, ['Transport mode="tls-client-certificate"'])
+        assert wwwauth == ['Transport mode="tls-client-certificate"']
 
     @inlineCallbacks
     def test_log_check_skips_auth(self):
@@ -1510,9 +1506,9 @@ class TestClientCerts(SSLEndpointMixin, IntegrationBase):
             'GET',
             "https://localhost:9020/v1/err",
             contextFactory=self.client_SSLCF(certfile))
-        eq_(response.code, 418)
+        assert response.code == 418
         payload = json.loads(body)
-        eq_(payload['error'], "Test Error")
+        assert payload['error'] == "Test Error"
 
     @inlineCallbacks
     def test_status_skips_auth(self):
@@ -1528,9 +1524,9 @@ class TestClientCerts(SSLEndpointMixin, IntegrationBase):
             'GET',
             "https://localhost:9020/status",
             contextFactory=self.client_SSLCF(certfile))
-        eq_(response.code, 200)
+        assert response.code == 200
         payload = json.loads(body)
-        eq_(payload, dict(status="OK", version=__version__))
+        assert payload == dict(status="OK", version=__version__)
 
     @inlineCallbacks
     def test_health_skips_auth(self):
@@ -1546,18 +1542,18 @@ class TestClientCerts(SSLEndpointMixin, IntegrationBase):
             'GET',
             "https://localhost:9020/health",
             contextFactory=self.client_SSLCF(certfile))
-        eq_(response.code, 200)
+        assert response.code == 200
         payload = json.loads(body)
-        eq_(payload['version'], __version__)
+        assert payload['version'] == __version__
 
 
 class TestHealth(IntegrationBase):
     @inlineCallbacks
     def test_status(self):
         response, body = yield _agent('GET', "http://localhost:9010/status")
-        eq_(response.code, 200)
+        assert response.code == 200
         payload = json.loads(body)
-        eq_(payload, dict(status="OK", version=__version__))
+        assert payload == dict(status="OK", version=__version__)
 
 
 class TestGCMBridgeIntegration(IntegrationBase):
@@ -1615,7 +1611,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
              "token": uuid.uuid4().hex,
              }
         ))
-        eq_(response.code, 200)
+        assert response.code == 200
         jbody = json.loads(body)
 
         # Send a fake message
@@ -1640,14 +1636,14 @@ class TestGCMBridgeIntegration(IntegrationBase):
         )
 
         ca_data = self._mock_send.call_args[0][0].data
-        eq_(response.code, 201)
+        assert response.code == 201
         # ChannelID here MUST match what we got from the registration call.
         # Currently, this is a lowercase, hex UUID without dashes.
-        eq_(ca_data['chid'], jbody['channelID'])
-        eq_(ca_data['con'], content_encoding)
-        eq_(ca_data['cryptokey'], crypto_key)
-        eq_(ca_data['enc'], salt)
-        eq_(ca_data['body'], base64url_encode(data))
+        assert ca_data['chid'] == jbody['channelID']
+        assert ca_data['con'] == content_encoding
+        assert ca_data['cryptokey'] == crypto_key
+        assert ca_data['enc'] == salt
+        assert ca_data['body'] == base64url_encode(data)
 
     @inlineCallbacks
     def test_invalid_registration(self):
@@ -1663,7 +1659,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
              "token": uuid.uuid4().hex,
              }
         ))
-        eq_(response.code, 400)
+        assert response.code == 400
 
     @inlineCallbacks
     def test_registration_aes128gcm(self):
@@ -1679,7 +1675,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
              "token": uuid.uuid4().hex,
              }
         ))
-        eq_(response.code, 200)
+        assert response.code == 200
         jbody = json.loads(body)
 
         # Send a fake message
@@ -1699,13 +1695,13 @@ class TestGCMBridgeIntegration(IntegrationBase):
         )
 
         ca_data = self._mock_send.call_args[0][0].data
-        eq_(response.code, 201)
+        assert response.code == 201
         # ChannelID here MUST match what we got from the registration call.
         # Currently, this is a lowercase, hex UUID without dashes.
-        eq_(ca_data['chid'], jbody['channelID'])
-        eq_(ca_data['con'], content_encoding)
-        eq_(ca_data['body'], base64url_encode(data))
-        ok_('enc' not in ca_data)
+        assert ca_data['chid'] == jbody['channelID']
+        assert ca_data['con'] == content_encoding
+        assert ca_data['body'] == base64url_encode(data)
+        assert 'enc' not in ca_data
 
     @inlineCallbacks
     def test_registration_aes128gcm_bad_(self):
@@ -1721,7 +1717,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
              "token": uuid.uuid4().hex,
              }
         ))
-        eq_(response.code, 200)
+        assert response.code == 200
         jbody = json.loads(body)
 
         # Send a fake message
@@ -1744,8 +1740,8 @@ class TestGCMBridgeIntegration(IntegrationBase):
             body=data
         )
 
-        eq_(response.code, 400)
-        ok_("do not include 'dh' in " in body.lower())
+        assert response.code == 400
+        assert "do not include 'dh' in " in body.lower()
         response, body = yield _agent(
             'POST',
             str(jbody['endpoint']),
@@ -1756,8 +1752,8 @@ class TestGCMBridgeIntegration(IntegrationBase):
             }),
             body=data
         )
-        eq_(response.code, 400)
-        ok_("do not include 'salt' in " in body.lower())
+        assert response.code == 400
+        assert "do not include 'salt' in " in body.lower()
 
     @inlineCallbacks
     def test_registration_no_token(self):
@@ -1772,9 +1768,9 @@ class TestGCMBridgeIntegration(IntegrationBase):
             {
                 "chid": str(uuid.uuid4()),
                 "token": '',
-             }
+            }
         ))
-        eq_(response.code, 400)
+        assert response.code == 400
 
 
 class TestFCMBridgeIntegration(IntegrationBase):
@@ -1823,7 +1819,7 @@ class TestFCMBridgeIntegration(IntegrationBase):
              "token": uuid.uuid4().hex,
              }
         ))
-        eq_(response.code, 200)
+        assert response.code == 200
         jbody = json.loads(body)
 
         # Send a fake message
@@ -1849,14 +1845,14 @@ class TestFCMBridgeIntegration(IntegrationBase):
 
         ca = json.loads(self._mock_send.call_args[0][0][0])
         ca_data = ca['data']
-        eq_(response.code, 201)
+        assert response.code == 201
         # ChannelID here MUST match what we got from the registration call.
         # Currently, this is a lowercase, hex UUID without dashes.
-        eq_(ca_data['chid'], jbody['channelID'])
-        eq_(ca_data['con'], content_encoding)
-        eq_(ca_data['cryptokey'], crypto_key)
-        eq_(ca_data['enc'], salt)
-        eq_(ca_data['body'], base64url_encode(data))
+        assert ca_data['chid'] == jbody['channelID']
+        assert ca_data['con'] == content_encoding
+        assert ca_data['cryptokey'] == crypto_key
+        assert ca_data['enc'] == salt
+        assert ca_data['body'] == base64url_encode(data)
 
 
 class TestAPNSBridgeIntegration(IntegrationBase):
@@ -1901,7 +1897,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         response, body = yield _agent('POST', url, body=json.dumps(
             {"token": uuid.uuid4().hex}
         ))
-        eq_(response.code, 200)
+        assert response.code == 200
         jbody = json.loads(body)
 
         # Send a fake message
@@ -1927,17 +1923,17 @@ class TestAPNSBridgeIntegration(IntegrationBase):
 
         ca_data = json.loads(
             self._mock_connection.request.call_args[1]['body'])
-        eq_(response.code, 201)
+        assert response.code == 201
         # ChannelID here MUST match what we got from the registration call.
         # Currently, this is a lowercase, hex UUID without dashes.
-        eq_(ca_data['chid'], jbody['channelID'])
-        eq_(ca_data['con'], content_encoding)
-        eq_(ca_data['cryptokey'], crypto_key)
-        eq_(ca_data['enc'], salt)
-        ok_('mutable-content' in ca_data['aps'])
-        eq_(ca_data['aps']['alert']['title'], " ")
-        eq_(ca_data['aps']['alert']['body'], " ")
-        eq_(ca_data['body'], base64url_encode(data))
+        assert ca_data['chid'] == jbody['channelID']
+        assert ca_data['con'] == content_encoding
+        assert ca_data['cryptokey'] == crypto_key
+        assert ca_data['enc'] == salt
+        assert 'mutable-content' in ca_data['aps']
+        assert ca_data['aps']['alert']['title'] == " "
+        assert ca_data['aps']['alert']['body'] == " "
+        assert ca_data['body'] == base64url_encode(data)
 
     @inlineCallbacks
     def test_registration_no_token(self):
@@ -1951,7 +1947,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         response, body = yield _agent('POST', url, body=json.dumps(
             {"token": ''}
         ))
-        eq_(response.code, 400)
+        assert response.code == 400
 
     @inlineCallbacks
     def test_registration_aps_override(self):
@@ -1967,7 +1963,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
              "aps": {"foo": "bar", "gorp": "baz"}
              }
         ))
-        eq_(response.code, 200)
+        assert response.code == 200
         jbody = json.loads(body)
 
         # Send a fake message
@@ -1993,16 +1989,16 @@ class TestAPNSBridgeIntegration(IntegrationBase):
 
         ca_data = json.loads(
             self._mock_connection.request.call_args[1]['body'])
-        eq_(response.code, 201)
+        assert response.code == 201
         # ChannelID here MUST match what we got from the registration call.
         # Currently, this is a lowercase, hex UUID without dashes.
-        eq_(ca_data['chid'], jbody['channelID'])
-        eq_(ca_data['con'], content_encoding)
-        eq_(ca_data['cryptokey'], crypto_key)
-        eq_(ca_data['enc'], salt)
-        ok_('mutable-content' not in ca_data['aps'])
-        eq_(ca_data['aps']['foo'], "bar")
-        eq_(ca_data['body'], base64url_encode(data))
+        assert ca_data['chid'] == jbody['channelID']
+        assert ca_data['con'] == content_encoding
+        assert ca_data['cryptokey'] == crypto_key
+        assert ca_data['enc'] == salt
+        assert 'mutable-content' not in ca_data['aps']
+        assert ca_data['aps']['foo'] == "bar"
+        assert ca_data['body'] == base64url_encode(data)
 
 
 class TestProxyProtocol(IntegrationBase):
@@ -2024,10 +2020,10 @@ class TestProxyProtocol(IntegrationBase):
             '{}GET'.format(proto_line),
             "http://localhost:{}/v1/err".format(port),
         )
-        eq_(response.code, 418)
+        assert response.code == 418
         payload = json.loads(body)
-        eq_(payload['error'], "Test Error")
-        ok_(self.logs.logged_ci(lambda ci: ci.get('remote_ip') == ip))
+        assert payload['error'] == "Test Error"
+        assert self.logs.logged_ci(lambda ci: ci.get('remote_ip') == ip)
 
     @inlineCallbacks
     def test_no_proxy_protocol(self):
@@ -2035,9 +2031,9 @@ class TestProxyProtocol(IntegrationBase):
             'GET',
             "http://localhost:{}/v1/err".format(self.ep.conf.port),
         )
-        eq_(response.code, 418)
+        assert response.code == 418
         payload = json.loads(body)
-        eq_(payload['error'], "Test Error")
+        assert payload['error'] == "Test Error"
 
 
 class TestProxyProtocolSSL(SSLEndpointMixin, IntegrationBase):
@@ -2080,10 +2076,10 @@ class TestProxyProtocolSSL(SSLEndpointMixin, IntegrationBase):
                 http.close()
 
         response, body = yield deferToThread(proxy_request)
-        eq_(response.status, 418)
+        assert response.status == 418
         payload = json.loads(body)
-        eq_(payload['error'], "Test Error")
-        ok_(self.logs.logged_ci(lambda ci: ci.get('remote_ip') == ip))
+        assert payload['error'] == "Test Error"
+        assert self.logs.logged_ci(lambda ci: ci.get('remote_ip') == ip)
 
 
 class TestMemUsage(IntegrationBase):
@@ -2101,15 +2097,15 @@ class TestMemUsage(IntegrationBase):
             'GET',
             "http://localhost:{}/_memusage".format(port),
         )
-        eq_(response.code, 200)
-        ok_('rusage' in body)
-        ok_('Logger' in body)
+        assert response.code == 200
+        assert 'rusage' in body
+        assert 'Logger' in body
         if find_executable('pmap'):
-            ok_('RSS' in body or 'Rss' in body)  # pmap -x or -XX/X output
+            assert 'RSS' in body or 'Rss' in body  # pmap -x or -XX/X output
         if hasattr(sys, 'pypy_version_info'):  # pragma: nocover
-            ok_('size: ' in body)
-            ok_('rpy_unicode' in body)
-            ok_('get_stats_asmmemmgr: (' in body)
+            assert 'size: ' in body
+            assert 'rpy_unicode' in body
+            assert 'get_stats_asmmemmgr: (' in body
 
 
 @inlineCallbacks

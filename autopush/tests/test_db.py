@@ -11,7 +11,7 @@ from boto.dynamodb2.exceptions import (
 from boto.dynamodb2.layer1 import DynamoDBConnection
 from boto.dynamodb2.items import Item
 from mock import Mock
-from nose.tools import eq_, assert_raises, ok_
+import pytest
 
 from autopush.db import (
     get_rotating_message_table,
@@ -54,7 +54,7 @@ class DbCheckTestCase(unittest.TestCase):
         router.clear_node = Mock()
         router.clear_node.side_effect = raise_exc
 
-        with assert_raises(Exception):
+        with pytest.raises(Exception):
             preflight_check(message, router)
 
     def test_preflight_check(self):
@@ -65,8 +65,9 @@ class DbCheckTestCase(unittest.TestCase):
         preflight_check(message, router, pf_uaid)
         # now check that the database reports no entries.
         _, notifs = message.fetch_messages(uuid.UUID(pf_uaid))
-        eq_(len(notifs), 0)
-        assert_raises(ItemNotFound, router.get_uaid, pf_uaid)
+        assert len(notifs) == 0
+        with pytest.raises(ItemNotFound):
+            router.get_uaid(pf_uaid)
 
     def test_preflight_check_wait(self):
         router = Router(get_router_table(), SinkMetrics())
@@ -87,8 +88,9 @@ class DbCheckTestCase(unittest.TestCase):
         preflight_check(message, router, pf_uaid)
         # now check that the database reports no entries.
         _, notifs = message.fetch_messages(uuid.UUID(pf_uaid))
-        eq_(len(notifs), 0)
-        assert_raises(ItemNotFound, router.get_uaid, pf_uaid)
+        assert len(notifs) == 0
+        with pytest.raises(ItemNotFound):
+            router.get_uaid(pf_uaid)
 
     def test_get_month(self):
         from autopush.db import get_month
@@ -96,19 +98,19 @@ class DbCheckTestCase(unittest.TestCase):
         month1 = get_month(1)
         this_month = month0.month
         next_month = 1 if this_month == 12 else this_month + 1
-        eq_(next_month, month1.month)
+        assert next_month == month1.month
 
     def test_zero_fill_month(self):
         from autopush.db import make_rotating_tablename
-        eq_('test_2016_03',
-            make_rotating_tablename('test', date=datetime(2016, 3, 15)))
+        assert 'test_2016_03' == make_rotating_tablename(
+            'test', date=datetime(2016, 3, 15).date())
 
     def test_hasher(self):
         import autopush.db as db
         db.key_hash = "SuperSikkret"
         v = db.hasher("01234567123401234123456789ABCDEF")
-        eq_(v, '0530bb351921e7b4be66831e4c126c6' +
-            'd8f614d06cdd592cb8470f31177c8331a')
+        assert v == ('0530bb351921e7b4be66831e4c126c6'
+                     'd8f614d06cdd592cb8470f31177c8331a')
         db.key_hash = ""
 
     def test_normalize_id(self):
@@ -116,9 +118,10 @@ class DbCheckTestCase(unittest.TestCase):
         import autopush.db as db
         abnormal = "deadbeef00000000decafbad00000000"
         normal = "deadbeef-0000-0000-deca-fbad00000000"
-        eq_(db.normalize_id(abnormal), normal)
-        assert_raises(ValueError, db.normalize_id, "invalid")
-        eq_(db.normalize_id(abnormal.upper()), normal)
+        assert db.normalize_id(abnormal) == normal
+        with pytest.raises(ValueError):
+            db.normalize_id("invalid")
+        assert db.normalize_id(abnormal.upper()) == normal
 
 
 class MessageTestCase(unittest.TestCase):
@@ -140,7 +143,7 @@ class MessageTestCase(unittest.TestCase):
         # Verify its in the db
         rows = m.query_2(uaid__eq=self.uaid, chidmessageid__eq=" ")
         results = list(rows)
-        eq_(len(results), 1)
+        assert len(results) == 1
 
     def test_unregister(self):
         chid = str(uuid.uuid4())
@@ -151,16 +154,16 @@ class MessageTestCase(unittest.TestCase):
         # Verify its in the db
         rows = m.query_2(uaid__eq=self.uaid, chidmessageid__eq=" ")
         results = list(rows)
-        eq_(len(results), 1)
-        eq_(results[0]["chids"], set([chid]))
+        assert len(results) == 1
+        assert results[0]["chids"] == {chid}
 
         message.unregister_channel(self.uaid, chid)
 
         # Verify its not in the db
         rows = m.query_2(uaid__eq=self.uaid, chidmessageid__eq=" ")
         results = list(rows)
-        eq_(len(results), 1)
-        eq_(results[0]["chids"], None)
+        assert len(results) == 1
+        assert results[0]["chids"] is None
 
         # Test for the very unlikely case that there's no 'chid'
         m.connection.update_item = Mock()
@@ -168,7 +171,7 @@ class MessageTestCase(unittest.TestCase):
             'Attributes': {'uaid': {'S': self.uaid}},
             'ConsumedCapacityUnits': 0.5}
         r = message.unregister_channel(self.uaid, dummy_chid)
-        eq_(r, False)
+        assert r is False
 
     def test_all_channels(self):
         chid = str(uuid.uuid4())
@@ -179,13 +182,13 @@ class MessageTestCase(unittest.TestCase):
         message.register_channel(self.uaid, chid2)
 
         _, chans = message.all_channels(self.uaid)
-        ok_(chid in chans)
-        ok_(chid2 in chans)
+        assert chid in chans
+        assert chid2 in chans
 
         message.unregister_channel(self.uaid, chid2)
         _, chans = message.all_channels(self.uaid)
-        ok_(chid2 not in chans)
-        ok_(chid in chans)
+        assert chid2 not in chans
+        assert chid in chans
 
     def test_save_channels(self):
         chid = str(uuid.uuid4())
@@ -199,13 +202,13 @@ class MessageTestCase(unittest.TestCase):
         new_uaid = uuid.uuid4().hex
         message.save_channels(new_uaid, chans)
         _, new_chans = message.all_channels(new_uaid)
-        eq_(chans, new_chans)
+        assert chans == new_chans
 
     def test_all_channels_no_uaid(self):
         m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
         exists, chans = message.all_channels(dummy_uaid)
-        eq_(chans, set([]))
+        assert chans == set([])
 
     def test_message_storage(self):
         chid = str(uuid.uuid4())
@@ -221,7 +224,7 @@ class MessageTestCase(unittest.TestCase):
 
         _, all_messages = message.fetch_timestamp_messages(
             uuid.UUID(self.uaid), " ")
-        eq_(len(all_messages), 3)
+        assert len(all_messages) == 3
 
     def test_message_storage_overwrite(self):
         """Test that store_message can overwrite existing messages which
@@ -242,7 +245,7 @@ class MessageTestCase(unittest.TestCase):
         message.store_message(notif3)
 
         all_messages = list(message.fetch_messages(uuid.UUID(self.uaid)))
-        eq_(len(all_messages), 2)
+        assert len(all_messages) == 2
 
     def test_message_delete_fail_condition(self):
         notif = make_webpush_notification(dummy_uaid, dummy_chid)
@@ -256,24 +259,26 @@ class MessageTestCase(unittest.TestCase):
         message.table = Mock()
         message.table.delete_item.side_effect = raise_condition
         result = message.delete_message(notif)
-        eq_(result, False)
+        assert result is False
 
     def test_message_rotate_table_with_date(self):
         prefix = "message" + uuid.uuid4().hex
-        future = datetime.today() + timedelta(days=32)
+        future = (datetime.today() + timedelta(days=32)).date()
         tbl_name = make_rotating_tablename(prefix, date=future)
 
         m = get_rotating_message_table(prefix=prefix, date=future)
-        eq_(m.table_name, tbl_name)
+        assert m.table_name == tbl_name
 
 
 class RouterTestCase(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setup_class(self):
         table = get_router_table()
         self.real_table = table
         self.real_connection = table.connection
 
-    def tearDown(self):
+    @classmethod
+    def teardown_class(self):
         self.real_table.connection = self.real_connection
 
     def _create_minimal_record(self):
@@ -293,27 +298,28 @@ class RouterTestCase(unittest.TestCase):
             router.register_user(self._create_minimal_record())
 
         results = router.drop_old_users(months_ago=0)
-        eq_(list(results), [25, 25, 3])
+        assert list(results) == [25, 25, 3]
 
     def test_custom_tablename(self):
         db = DynamoDBConnection()
         db_name = "router_%s" % uuid.uuid4()
-        ok_(not table_exists(db, db_name))
+        assert not table_exists(db, db_name)
         create_router_table(db_name)
-        ok_(table_exists(db, db_name))
+        assert table_exists(db, db_name)
 
     def test_provisioning(self):
         db_name = "router_%s" % uuid.uuid4()
 
         r = create_router_table(db_name, 3, 17)
-        eq_(r.throughput["read"], 3)
-        eq_(r.throughput["write"], 17)
+        assert r.throughput["read"] == 3
+        assert r.throughput["write"] == 17
 
     def test_no_uaid_found(self):
         uaid = str(uuid.uuid4())
         r = get_router_table()
         router = Router(r, SinkMetrics())
-        assert_raises(ItemNotFound, router.get_uaid, uaid)
+        with pytest.raises(ItemNotFound):
+            router.get_uaid(uaid)
 
     def test_uaid_provision_failed(self):
         r = get_router_table()
@@ -324,7 +330,7 @@ class RouterTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         router.table.get_item.side_effect = raise_error
-        with assert_raises(ProvisionedThroughputExceededException):
+        with pytest.raises(ProvisionedThroughputExceededException):
             router.get_uaid(uaid="asdf")
 
     def test_register_user_provision_failed(self):
@@ -336,7 +342,7 @@ class RouterTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         router.table.connection.update_item.side_effect = raise_error
-        with assert_raises(ProvisionedThroughputExceededException):
+        with pytest.raises(ProvisionedThroughputExceededException):
             router.register_user(dict(uaid=dummy_uaid, node_id="me",
                                       connected_at=1234,
                                       router_type="webpush"))
@@ -350,7 +356,7 @@ class RouterTestCase(unittest.TestCase):
             raise ProvisionedThroughputExceededException(None, None)
 
         router.table.connection.put_item.side_effect = raise_error
-        with assert_raises(ProvisionedThroughputExceededException):
+        with pytest.raises(ProvisionedThroughputExceededException):
             router.clear_node(Item(r, dict(uaid=dummy_uaid,
                                            connected_at="1234",
                                            node_id="asdf",
@@ -369,8 +375,9 @@ class RouterTestCase(unittest.TestCase):
             router.register_user(dict(uaid=uaid))
         except AutopushException:
             pass
-        assert_raises(ItemNotFound, router.get_uaid, uaid)
-        ok_(router.drop_user.called)
+        with pytest.raises(ItemNotFound):
+            router.get_uaid(uaid)
+        assert router.drop_user.called
 
     def test_save_new(self):
         r = get_router_table()
@@ -382,7 +389,7 @@ class RouterTestCase(unittest.TestCase):
         result = router.register_user(dict(uaid="", node_id="me",
                                            router_type="webpush",
                                            connected_at=1234))
-        eq_(result[0], True)
+        assert result[0] is True
 
     def test_save_fail(self):
         r = get_router_table()
@@ -396,7 +403,7 @@ class RouterTestCase(unittest.TestCase):
         router_data = dict(uaid=dummy_uaid, node_id="asdf", connected_at=1234,
                            router_type="webpush")
         result = router.register_user(router_data)
-        eq_(result, (False, {}))
+        assert result == (False, {})
 
     def test_node_clear(self):
         r = get_router_table()
@@ -408,18 +415,18 @@ class RouterTestCase(unittest.TestCase):
                                   router_type="webpush"))
         # Verify
         user = router.get_uaid(dummy_uaid)
-        eq_(user["node_id"], "asdf")
-        eq_(user["connected_at"], 1234)
-        eq_(user["router_type"], "webpush")
+        assert user["node_id"] == "asdf"
+        assert user["connected_at"] == 1234
+        assert user["router_type"] == "webpush"
 
         # Clear
         router.clear_node(user)
 
         # Verify
         user = router.get_uaid(dummy_uaid)
-        eq_(user.get("node_id"), None)
-        eq_(user["connected_at"], 1234)
-        eq_(user["router_type"], "webpush")
+        assert user.get("node_id") is None
+        assert user["connected_at"] == 1234
+        assert user["router_type"] == "webpush"
 
     def test_node_clear_fail(self):
         r = get_router_table()
@@ -432,7 +439,7 @@ class RouterTestCase(unittest.TestCase):
         router.table.connection.put_item.side_effect = raise_condition
         data = dict(uaid=dummy_uaid, node_id="asdf", connected_at=1234)
         result = router.clear_node(Item(r, data))
-        eq_(result, False)
+        assert result is False
 
     def test_drop_user(self):
         uaid = str(uuid.uuid4())
@@ -443,7 +450,7 @@ class RouterTestCase(unittest.TestCase):
                                   router_type="webpush",
                                   connected_at=1234))
         result = router.drop_user(uaid)
-        eq_(result, True)
+        assert result is True
         # Deleting already deleted record should return false.
         result = router.drop_user(uaid)
-        eq_(result, False)
+        assert result is False

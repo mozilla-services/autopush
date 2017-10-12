@@ -3,11 +3,7 @@ import datetime
 import json
 
 from mock import Mock, patch
-from nose.tools import (
-    assert_raises,
-    eq_,
-    ok_
-)
+import pytest
 from twisted.internet.defer import Deferred
 from twisted.trial import unittest as trialtest
 import hyper
@@ -34,13 +30,13 @@ class ConfigTestCase(unittest.TestCase):
         ip = resolve_ip("example.com")
         conf = AutopushConfig(
             hostname="example.com", resolve_hostname=True)
-        eq_(conf.hostname, ip)
+        assert conf.hostname == ip
 
     @patch("autopush.utils.socket")
     def test_resolve_host_no_interface(self, mock_socket):
         mock_socket.getaddrinfo.return_value = ""
         ip = resolve_ip("example.com")
-        eq_(ip, "example.com")
+        assert ip == "example.com"
 
     def test_new_month(self):
         today = datetime.date.today()
@@ -56,7 +52,7 @@ class ConfigTestCase(unittest.TestCase):
         db._tomorrow = Mock()
         db._tomorrow.return_value = tomorrow
         db.create_initial_message_tables()
-        eq_(len(db.message_tables), 3)
+        assert len(db.message_tables) == 3
 
 
 class ConfigAsyncTestCase(trialtest.TestCase):
@@ -83,8 +79,8 @@ class ConfigAsyncTestCase(trialtest.TestCase):
         d = db.update_rotating_tables()
 
         def check_tables(result):
-            eq_(len(db.message_tables), 2)
-            eq_(db.current_month, get_month().month)
+            assert len(db.message_tables) == 2
+            assert db.current_month == get_month().month
 
         d.addCallback(check_tables)
         d.addBoth(lambda x: e.callback(True))
@@ -124,7 +120,7 @@ class ConfigAsyncTestCase(trialtest.TestCase):
         db.create_initial_message_tables()
 
         # We should have 3 tables, one for next/this/last month
-        eq_(len(db.message_tables), 3)
+        assert len(db.message_tables) == 3
 
         # Grab next month's table name and remove it
         next_month = get_rotating_message_table(
@@ -137,8 +133,8 @@ class ConfigAsyncTestCase(trialtest.TestCase):
         d = db.update_rotating_tables()
 
         def check_tables(result):
-            eq_(len(db.message_tables), 3)
-            ok_(next_month.table_name in db.message_tables)
+            assert len(db.message_tables) == 3
+            assert next_month.table_name in db.message_tables
 
         d.addCallback(check_tables)
         return d
@@ -164,7 +160,7 @@ class ConfigAsyncTestCase(trialtest.TestCase):
         d = db.update_rotating_tables()
 
         def check_tables(result):
-            eq_(len(db.message_tables), 1)
+            assert len(db.message_tables) == 1
 
         d.addCallback(check_tables)
         d.addBoth(lambda x: e.callback(True))
@@ -208,11 +204,11 @@ class ConnectionMainTestCase(unittest.TestCase):
         # Should skip setting up logging on the handler
         mock_handler = Mock()
         skip_request_logging(mock_handler)
-        eq_(len(mock_handler.mock_calls), 0)
+        assert len(mock_handler.mock_calls) == 0
 
 
 class EndpointMainTestCase(unittest.TestCase):
-    class TestArg:
+    class TestArg(AutopushConfig):
         # important stuff
         apns_creds = json.dumps({"firefox": {"cert": "cert.file",
                                              "key": "key.file"}})
@@ -295,13 +291,13 @@ class EndpointMainTestCase(unittest.TestCase):
             "--gcm_enabled",
             "--senderid_list='[Invalid'"
         ], False)
-        ok_(returncode not in (None, 0))
+        assert returncode not in (None, 0)
 
     def test_bad_apnsconf(self):
         returncode = endpoint_main([
             "--apns_creds='[Invalid'"
         ], False)
-        ok_(returncode not in (None, 0))
+        assert returncode not in (None, 0)
 
     def test_client_certs(self):
         cert = self.TestArg._client_certs['partner1'][0]
@@ -310,7 +306,7 @@ class EndpointMainTestCase(unittest.TestCase):
             "--ssl_key=keys/server.key",
             '--client_certs={"foo": ["%s"]}' % cert
         ], False)
-        ok_(not returncode)
+        assert not returncode
 
     def test_proxy_protocol_port(self):
         endpoint_main([
@@ -325,26 +321,23 @@ class EndpointMainTestCase(unittest.TestCase):
     @patch('hyper.tls', spec=hyper.tls)
     def test_client_certs_parse(self, mock):
         conf = AutopushConfig.from_argparse(self.TestArg)
-        eq_(conf.client_certs["1A:"*31 + "F9"], 'partner1')
-        eq_(conf.client_certs["2B:"*31 + "E8"], 'partner2')
-        eq_(conf.client_certs["3C:"*31 + "D7"], 'partner2')
+        assert conf.client_certs["1A:"*31 + "F9"] == 'partner1'
+        assert conf.client_certs["2B:"*31 + "E8"] == 'partner2'
+        assert conf.client_certs["3C:"*31 + "D7"] == 'partner2'
 
     def test_bad_client_certs(self):
         cert = self.TestArg._client_certs['partner1'][0]
         ssl_opts = ["--ssl_cert=keys/server.crt", "--ssl_key=keys/server.key"]
-        eq_(endpoint_main(ssl_opts + ["--client_certs='[Invalid'"], False),
-            1)
-        eq_(endpoint_main(
-            ssl_opts + ['--client_certs={"": ["%s"]}' % cert], False),
-            1)
-        eq_(endpoint_main(
-            ssl_opts + ['--client_certs={"quux": [""]}'], False),
-            1)
-        eq_(endpoint_main(
-            ssl_opts + ['--client_certs={"foo": "%s"}' % cert], False),
-            1)
-        eq_(endpoint_main(['--client_certs={"foo": ["%s"]}' % cert], False),
-            1)
+        assert endpoint_main(
+            ssl_opts + ["--client_certs='[Invalid'"], False) == 1
+        assert endpoint_main(
+            ssl_opts + ['--client_certs={"": ["%s"]}' % cert], False) == 1
+        assert endpoint_main(
+            ssl_opts + ['--client_certs={"quux": [""]}'], False) == 1
+        assert endpoint_main(
+            ssl_opts + ['--client_certs={"foo": "%s"}' % cert], False) == 1
+        assert endpoint_main(
+            ['--client_certs={"foo": ["%s"]}' % cert], False) == 1
 
     @patch('autopush.router.apns2.HTTP20Connection',
            spec=hyper.HTTP20Connection)
@@ -353,15 +346,16 @@ class EndpointMainTestCase(unittest.TestCase):
         conf = AutopushConfig.from_argparse(self.TestArg)
         app = EndpointApplication(conf)
         # verify that the hostname is what we said.
-        eq_(conf.hostname, self.TestArg.hostname)
-        eq_(app.routers["gcm"].router_conf['collapsekey'], "collapse")
-        eq_(app.routers["apns"].router_conf['firefox']['cert'], "cert.file")
-        eq_(app.routers["apns"].router_conf['firefox']['key'], "key.file")
+        assert conf.hostname == self.TestArg.hostname
+        assert app.routers["gcm"].router_conf['collapsekey'] == "collapse"
+        assert app.routers["apns"].router_conf['firefox']['cert'] == \
+            "cert.file"
+        assert app.routers["apns"].router_conf['firefox']['key'] == "key.file"
 
     def test_bad_senders(self):
         old_list = self.TestArg.senderid_list
         self.TestArg.senderid_list = "{}"
-        with assert_raises(InvalidConfig):
+        with pytest.raises(InvalidConfig):
             AutopushConfig.from_argparse(self.TestArg)
         self.TestArg.senderid_list = old_list
 
@@ -369,11 +363,11 @@ class EndpointMainTestCase(unittest.TestCase):
         old_auth = self.TestArg.fcm_auth
         old_senderid = self.TestArg.fcm_senderid
         self.TestArg.fcm_auth = ""
-        with assert_raises(InvalidConfig):
+        with pytest.raises(InvalidConfig):
             AutopushConfig.from_argparse(self.TestArg)
         self.TestArg.fcm_auth = old_auth
         self.TestArg.fcm_senderid = ""
-        with assert_raises(InvalidConfig):
+        with pytest.raises(InvalidConfig):
             AutopushConfig.from_argparse(self.TestArg)
         self.TestArg.fcm_senderid = old_senderid
 
@@ -394,4 +388,4 @@ class EndpointMainTestCase(unittest.TestCase):
         request_mock.return_value = MockReply
         self.TestArg.no_aws = False
         conf = AutopushConfig.from_argparse(self.TestArg)
-        eq_(conf.ami_id, "ami_123")
+        assert conf.ami_id == "ami_123"
