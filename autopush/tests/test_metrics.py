@@ -2,7 +2,7 @@ import unittest
 
 import twisted.internet.base
 
-from nose.tools import assert_raises, ok_, eq_
+import pytest
 from mock import Mock, patch
 
 from autopush.metrics import (
@@ -17,18 +17,21 @@ class IMetricsTestCase(unittest.TestCase):
     def test_default(self):
         im = IMetrics()
         im.start()
-        assert_raises(NotImplementedError, im.increment, "test")
-        assert_raises(NotImplementedError, im.gauge, "test", 10)
-        assert_raises(NotImplementedError, im.timing, "test", 10)
+        with pytest.raises(NotImplementedError):
+            im.increment("test")
+        with pytest.raises(NotImplementedError):
+            im.gauge("test", 10)
+        with pytest.raises(NotImplementedError):
+            im.timing("test", 10)
 
 
 class SinkMetricsTestCase(unittest.TestCase):
     def test_passing(self):
         sm = SinkMetrics()
         sm.start()
-        eq_(None, sm.increment("test"))
-        eq_(None, sm.gauge("test", 10))
-        eq_(None, sm.timing("test", 10))
+        assert sm.increment("test") is None
+        assert sm.gauge("test", 10) is None
+        assert sm.timing("test", 10) is None
 
 
 class TwistedMetricsTestCase(unittest.TestCase):
@@ -37,7 +40,7 @@ class TwistedMetricsTestCase(unittest.TestCase):
         twisted.internet.base.DelayedCall.debug = True
         m = TwistedMetrics('127.0.0.1')
         m.start()
-        ok_(len(mock_reactor.mock_calls) > 0)
+        assert len(mock_reactor.mock_calls) > 0
         m._metric = Mock()
         m.increment("test", 5)
         m._metric.increment.assert_called_with("test", 5)
@@ -54,7 +57,7 @@ class DatadogMetricsTestCase(unittest.TestCase):
 
         m = DatadogMetrics("someapikey", "someappkey", namespace="testpush",
                            hostname="localhost")
-        ok_(len(mock_dog.mock_calls) > 0)
+        assert len(mock_dog.mock_calls) > 0
         m._client = Mock()
         m.start()
         m._client.start.assert_called_with(flush_interval=10,

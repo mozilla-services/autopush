@@ -9,8 +9,8 @@ import factory
 from boto.dynamodb2.exceptions import ItemNotFound
 from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from mock import Mock
-from nose.tools import assert_raises, ok_, eq_
 from twisted.logger import globalLogPublisher
+import pytest
 
 from autopush.db import (
     DatabaseManager,
@@ -203,7 +203,7 @@ class TestWebPushServer(BaseSetup):
         ws = self._makeFUT()
         ws.start()
         try:
-            eq_(len(ws.workers), 2)
+            assert len(ws.workers) == 2
         finally:
             ws.stop()
 
@@ -217,8 +217,8 @@ class TestWebPushServer(BaseSetup):
                 uaid=hello.uaid.hex,
                 connected_at=hello.connected_at,
             ))
-            ok_("error" not in result)
-            ok_(hello.uaid.hex != result["uaid"])
+            assert "error" not in result
+            assert hello.uaid.hex != result["uaid"]
         finally:
             ws.stop()
 
@@ -232,20 +232,20 @@ class TestHelloProcessor(BaseSetup):
         p = self._makeFUT()
         hello = HelloFactory()
         result = p.process(hello)  # type: HelloResponse
-        ok_(isinstance(result, HelloResponse))
-        ok_(hello.uaid != result.uaid)
-        eq_(result.check_storage, False)
+        assert isinstance(result, HelloResponse)
+        assert hello.uaid != result.uaid
+        assert result.check_storage is False
 
     def test_existing_uaid(self):
         p = self._makeFUT()
         hello = HelloFactory()
         success, _ = self.db.router.register_user(UserItemFactory(
             uaid=hello.uaid.hex))
-        eq_(success, True)
+        assert success is True
         result = p.process(hello)  # type: HelloResponse
-        ok_(isinstance(result, HelloResponse))
-        eq_(hello.uaid.hex, result.uaid)
-        eq_(result.check_storage, True)
+        assert isinstance(result, HelloResponse)
+        assert hello.uaid.hex == result.uaid
+        assert result.check_storage is True
 
     def test_existing_newer_uaid(self):
         p = self._makeFUT()
@@ -255,8 +255,8 @@ class TestHelloProcessor(BaseSetup):
                             connected_at=hello.connected_at+10)
         )
         result = p.process(hello)  # type: HelloResponse
-        ok_(isinstance(result, HelloResponse))
-        eq_(result.uaid, None)
+        assert isinstance(result, HelloResponse)
+        assert result.uaid is None
 
 
 class TestCheckStorageProcessor(BaseSetup):
@@ -268,14 +268,14 @@ class TestCheckStorageProcessor(BaseSetup):
         p = self._makeFUT()
         check = CheckStorageFactory(message_month=self.db.current_msg_month)
         result = p.process(check)
-        eq_(len(result.messages), 0)
+        assert len(result.messages) == 0
 
     def test_five_messages(self):
         p = self._makeFUT()
         check = CheckStorageFactory(message_month=self.db.current_msg_month)
         self._store_messages(check.uaid, num=5)
         result = p.process(check)
-        eq_(len(result.messages), 5)
+        assert len(result.messages) == 5
 
     def test_many_messages(self):
         """Test many messages to fill the batches with topics and non-topic
@@ -290,7 +290,7 @@ class TestCheckStorageProcessor(BaseSetup):
         self._store_messages(check.uaid, topic=True, num=22)
         self._store_messages(check.uaid, num=15)
         result = p.process(check)
-        eq_(len(result.messages), 10)
+        assert len(result.messages) == 10
 
         # Delete all the messages returned
         for msg in result.messages:
@@ -300,7 +300,7 @@ class TestCheckStorageProcessor(BaseSetup):
         check.timestamp = result.timestamp
         check.include_topic = result.include_topic
         result = p.process(check)
-        eq_(len(result.messages), 10)
+        assert len(result.messages) == 10
 
         # Delete all the messages returned
         for msg in result.messages:
@@ -310,7 +310,7 @@ class TestCheckStorageProcessor(BaseSetup):
         check.timestamp = result.timestamp
         check.include_topic = result.include_topic
         result = p.process(check)
-        eq_(len(result.messages), 2)
+        assert len(result.messages) == 2
 
         # Delete all the messages returned
         for msg in result.messages:
@@ -320,12 +320,12 @@ class TestCheckStorageProcessor(BaseSetup):
         check.timestamp = result.timestamp
         check.include_topic = result.include_topic
         result = p.process(check)
-        eq_(len(result.messages), 10)
+        assert len(result.messages) == 10
 
         check.timestamp = result.timestamp
         check.include_topic = result.include_topic
         result = p.process(check)
-        eq_(len(result.messages), 5)
+        assert len(result.messages) == 5
 
 
 class TestIncrementStorageProcessor(BaseSetup):
@@ -345,7 +345,7 @@ class TestIncrementStorageProcessor(BaseSetup):
 
         # Pull 10 out
         check_result = check_command.process(check)
-        eq_(len(check_result.messages), 10)
+        assert len(check_result.messages) == 10
 
         # We should now have an updated timestamp returned, increment it
         inc = IncStoragePosition(uaid=uaid.hex,
@@ -359,7 +359,7 @@ class TestIncrementStorageProcessor(BaseSetup):
             message_month=self.db.current_msg_month
         )
         check_result = check_command.process(check)
-        eq_(len(check_result.messages), 5)
+        assert len(check_result.messages) == 5
 
 
 class TestDeleteMessageProcessor(BaseSetup):
@@ -378,7 +378,7 @@ class TestDeleteMessageProcessor(BaseSetup):
 
         # Fetch them
         results = check_command.process(check)
-        eq_(len(results.messages), 7)
+        assert len(results.messages) == 7
 
         # Delete 2 of them
         for notif in results.messages[:2]:
@@ -389,7 +389,7 @@ class TestDeleteMessageProcessor(BaseSetup):
 
         # Fetch messages again
         results = check_command.process(check)
-        eq_(len(results.messages), 5)
+        assert len(results.messages) == 5
 
 
 class TestDropUserProcessor(BaseSetup):
@@ -407,13 +407,13 @@ class TestDropUserProcessor(BaseSetup):
 
         # Check that its there
         item = self.db.router.get_uaid(uaid)
-        ok_(item is not None)
+        assert item is not None
 
         # Drop it
         drop_command.process(DropUser(uaid=uaid))
 
         # Verify its gone
-        with assert_raises(ItemNotFound):
+        with pytest.raises(ItemNotFound):
             self.db.router.get_uaid(uaid)
 
 
@@ -437,9 +437,9 @@ class TestMigrateUserProcessor(BaseSetup):
         # Check that it's there
         item = self.db.router.get_uaid(uaid)
         _, channels = self.db.message_tables[last_month].all_channels(uaid)
-        ok_(item["current_month"] != self.db.current_msg_month)
-        ok_(item is not None)
-        eq_(len(channels), 3)
+        assert item["current_month"] != self.db.current_msg_month
+        assert item is not None
+        assert len(channels) == 3
 
         # Migrate it
         migrate_command.process(
@@ -449,9 +449,9 @@ class TestMigrateUserProcessor(BaseSetup):
         # Check that it's in the new spot
         item = self.db.router.get_uaid(uaid)
         _, channels = self.db.message.all_channels(uaid)
-        eq_(item["current_month"], self.db.current_msg_month)
-        ok_(item is not None)
-        eq_(len(channels), 3)
+        assert item["current_month"] == self.db.current_msg_month
+        assert item is not None
+        assert len(channels) == 3
 
 
 class TestRegisterProcessor(BaseSetup):
@@ -468,14 +468,14 @@ class TestRegisterProcessor(BaseSetup):
             channel_id=chid,
             message_month=self.db.current_msg_month)
         )
-        ok_(result.endpoint)
-        ok_(self.metrics.increment.called)
-        eq_(self.metrics.increment.call_args[0][0], 'ua.command.register')
-        ok_(self.logs.logged(
+        assert result.endpoint
+        assert self.metrics.increment.called
+        assert self.metrics.increment.call_args[0][0] == 'ua.command.register'
+        assert self.logs.logged(
             lambda e: (e['log_format'] == "Register" and
                        e['channel_id'] == chid and
                        e['endpoint'] == result.endpoint)
-        ))
+        )
 
     def _test_invalid(self, chid, msg="use lower case, dashed format",
                       status=401):
@@ -485,9 +485,9 @@ class TestRegisterProcessor(BaseSetup):
             channel_id=chid,
             message_month=self.db.current_msg_month)
         )
-        ok_(result.error)
-        ok_(msg in result.error_msg)
-        eq_(status, result.status)
+        assert result.error
+        assert msg in result.error_msg
+        assert status == result.status
 
     def test_register_bad_chid(self):
         self._test_invalid("oof", "Invalid UUID")
@@ -518,13 +518,14 @@ class TestUnregisterProcessor(BaseSetup):
             channel_id=chid,
             message_month=self.db.current_msg_month)
         )
-        ok_(result.success)
-        ok_(self.metrics.increment.called)
-        eq_(self.metrics.increment.call_args[0][0], 'ua.command.unregister')
-        ok_(self.logs.logged(
+        assert result.success
+        assert self.metrics.increment.called
+        assert self.metrics.increment.call_args[0][0] == \
+            'ua.command.unregister'
+        assert self.logs.logged(
             lambda e: (e['log_format'] == "Unregister" and
                        e['channel_id'] == chid)
-        ))
+        )
 
     def test_unregister_bad_chid(self):
         cmd = self._makeFUT()
@@ -533,8 +534,8 @@ class TestUnregisterProcessor(BaseSetup):
             channel_id="quux",
             message_month=self.db.current_msg_month)
         )
-        ok_(result.error)
-        ok_("Invalid UUID" in result.error_msg)
+        assert result.error
+        assert "Invalid UUID" in result.error_msg
 
 
 class TestStoreMessagesProcessor(BaseSetup):
@@ -546,4 +547,4 @@ class TestStoreMessagesProcessor(BaseSetup):
         cmd = self._makeFUT()
         store_message = StoreMessageFactory()
         response = cmd.process(store_message)
-        eq_(response.success, True)
+        assert response.success is True

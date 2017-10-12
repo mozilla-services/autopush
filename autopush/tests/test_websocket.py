@@ -13,7 +13,7 @@ from boto.dynamodb2.exceptions import (
 )
 from boto.exception import JSONResponseError
 from mock import Mock, patch
-from nose.tools import assert_raises, eq_, ok_
+import pytest
 from twisted.internet import reactor
 from twisted.internet.defer import (
     inlineCallbacks,
@@ -191,8 +191,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.sendClose = self.orig_close
         self._connect()
         self.proto._sendAutoPing()
-        ok_(mock_reactor.callLater.called)
-        ok_(WebSocketServerProtocol.sendClose.called)
+        assert mock_reactor.callLater.called
+        assert WebSocketServerProtocol.sendClose.called
 
     @patch("autopush.websocket.reactor")
     def test_autoping_uaid_not_in_clients(self, mock_reactor):
@@ -203,8 +203,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto._sendAutoPing()
-        ok_(mock_reactor.callLater.called)
-        ok_(WebSocketServerProtocol.sendClose.called)
+        assert mock_reactor.callLater.called
+        assert WebSocketServerProtocol.sendClose.called
 
     @patch("autopush.websocket.reactor")
     def test_nuke_connection(self, mock_reactor):
@@ -221,25 +221,25 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto._shutdown_ran = True
         self.proto.nukeConnection()
-        eq_(len(mock_reactor.mock_calls), 0)
+        assert len(mock_reactor.mock_calls) == 0
 
     def test_producer_interface(self):
         self._connect()
         self.proto.ps.pauseProducing()
-        eq_(self.proto.paused, True)
+        assert self.proto.paused is True
         self.proto.ps.resumeProducing()
-        eq_(self.proto.paused, False)
-        eq_(self.proto.ps._should_stop, False)
+        assert self.proto.paused is False
+        assert self.proto.ps._should_stop is False
         self.proto.ps.stopProducing()
-        eq_(self.proto.paused, True)
-        eq_(self.proto.ps._should_stop, True)
+        assert self.proto.paused is True
+        assert self.proto.ps._should_stop is True
 
     def test_headers_locate(self):
         req = ConnectionRequest("localhost", {"user-agent": "Me"},
                                 "localhost", "/", {}, 1, "localhost",
                                 [], [])
         self.proto.onConnect(req)
-        eq_(self.proto.ps._user_agent, "Me")
+        assert self.proto.ps._user_agent == "Me"
 
     def test_base_tags(self):
         req = Mock()
@@ -249,34 +249,34 @@ class WebsocketTestCase(unittest.TestCase):
                           "CLR 3.5.30729)"}
         req.host = "example.com:8080"
         ps = PushState.from_request(request=req, db=self.proto.db)
-        eq_(sorted(ps._base_tags),
-            sorted(['ua_os_family:Windows',
-                    'ua_browser_family:Firefox',
-                    'host:example.com:8080']))
+        assert sorted(ps._base_tags) == sorted(
+            ['ua_os_family:Windows',
+             'ua_browser_family:Firefox',
+             'host:example.com:8080'])
 
     def test_handshake_sub(self):
         self.factory.externalPort = 80
 
         def check_subbed(s):
-            eq_(self.factory.externalPort, None)
+            assert self.factory.externalPort is None
             return False
 
         self.proto.parent_class = Mock(**{"processHandshake.side_effect":
                                           check_subbed})
         self.proto.processHandshake()
-        eq_(self.factory.externalPort, 80)
+        assert self.factory.externalPort == 80
 
     def test_handshake_nosub(self):
         self.conf.port = self.factory.externalPort = 80
 
         def check_subbed(s):
-            eq_(self.factory.externalPort, 80)
+            assert self.factory.externalPort == 80
             return False
 
         self.proto.parent_class = Mock(**{"processHandshake.side_effect":
                                           check_subbed})
         self.proto.processHandshake()
-        eq_(self.factory.externalPort, 80)
+        assert self.factory.externalPort == 80
 
     def test_handshake_decode_error(self):
         self.proto.factory = Mock(externalPort=80)
@@ -302,7 +302,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.parent_class = Mock(**{"processHandshake.side_effect":
                                           check_subbed})
 
-        with assert_raises(ValueError):
+        with pytest.raises(ValueError):
             self.proto.processHandshake()
 
         self.proto._log_exc = True
@@ -331,7 +331,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(data="wassup"))
         close_args = yield self._wait_for_close()
         _, kwargs = close_args
-        eq_(len(kwargs), 0)
+        assert len(kwargs) == 0
 
     @inlineCallbacks
     def test_unknown_messagetype(self):
@@ -340,7 +340,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="wassup"))
         close_args = yield self._wait_for_close()
         _, kwargs = close_args
-        eq_(len(kwargs), 0)
+        assert len(kwargs) == 0
 
     def test_close_with_cleanup(self):
         self._connect()
@@ -351,10 +351,10 @@ class WebsocketTestCase(unittest.TestCase):
         notif_mock = Mock()
         self.proto.ps._callbacks.append(notif_mock)
         self.proto.onClose(True, None, None)
-        eq_(len(self.factory.clients), 0)
-        eq_(len(list(notif_mock.mock_calls)), 1)
+        assert len(self.factory.clients) == 0
+        assert len(list(notif_mock.mock_calls)) == 1
         name, _, _ = notif_mock.mock_calls[0]
-        eq_(name, "cancel")
+        assert name == "cancel"
 
     @inlineCallbacks
     def test_close_with_cleanup_no_node(self):
@@ -370,7 +370,7 @@ class WebsocketTestCase(unittest.TestCase):
         mock_get.return_value = dict(foo="bar")
         self.proto.onClose(True, None, None)
         yield sleep(.25)
-        eq_(len(self.factory.clients), 0)
+        assert len(self.factory.clients) == 0
 
     @inlineCallbacks
     def test_close_with_delivery_cleanup(self):
@@ -432,7 +432,7 @@ class WebsocketTestCase(unittest.TestCase):
         # Close the connection
         self.proto.onClose(True, None, None)
         yield self._wait_for(lambda: len(self.metrics.mock_calls) > 0)
-        eq_(self.metrics.timing.call_args[0][0], 'ua.connection.lifespan')
+        assert self.metrics.timing.call_args[0][0] == 'ua.connection.lifespan'
         # Wait for final cleanup (no error or metric produced)
         yield sleep(.25)
 
@@ -490,12 +490,12 @@ class WebsocketTestCase(unittest.TestCase):
                                use_webpush=True))
 
         msg = yield self.get_response()
-        eq_(self.proto.ps.rotate_message_table, False)
+        assert self.proto.ps.rotate_message_table is False
         # it's fine you've not connected in a while, but you should
         # recycle your endpoints since they're probably invalid by now
         # anyway.
-        eq_(msg["status"], 200)
-        ok_(msg["uaid"] != orig_uaid)
+        assert msg["status"] == 200
+        assert msg["uaid"] != orig_uaid
 
     @inlineCallbacks
     def test_hello_tomorrow(self):
@@ -549,12 +549,12 @@ class WebsocketTestCase(unittest.TestCase):
         # it's fine you've not connected in a while, but you should
         # recycle your endpoints since they're probably invalid by now
         # anyway.
-        eq_(msg["status"], 200)
-        eq_(msg["uaid"], orig_uaid)
+        assert msg["status"] == 200
+        assert msg["uaid"] == orig_uaid
 
         # Wait to see that the message table gets rotated
         yield self._wait_for(lambda: not self.proto.ps.rotate_message_table)
-        eq_(self.proto.ps.rotate_message_table, False)
+        assert self.proto.ps.rotate_message_table is False
 
     @inlineCallbacks
     def test_hello_tomorrow_provision_error(self):
@@ -621,14 +621,14 @@ class WebsocketTestCase(unittest.TestCase):
             # it's fine you've not connected in a while, but
             # you should recycle your endpoints since they're probably
             # invalid by now anyway.
-            eq_(msg["status"], 200)
-            eq_(msg["uaid"], orig_uaid)
+            assert msg["status"] == 200
+            assert msg["uaid"] == orig_uaid
 
             # Wait to see that the message table gets rotated
             yield self._wait_for(
                 lambda: not self.proto.ps.rotate_message_table
             )
-            eq_(self.proto.ps.rotate_message_table, False)
+            assert self.proto.ps.rotate_message_table is False
         finally:
             patch_range.stop()
 
@@ -641,9 +641,9 @@ class WebsocketTestCase(unittest.TestCase):
                                 channelIDs=[]))
         msg = yield self.get_response()
         yield self._wait_for(lambda: len(db.DB_CALLS) > 2, duration=3)
-        eq_(db.DB_CALLS,
-            ['register_user', 'fetch_messages', 'fetch_timestamp_messages'])
-        eq_(msg["status"], 200)
+        assert db.DB_CALLS == [
+            'register_user', 'fetch_messages', 'fetch_timestamp_messages']
+        assert msg["status"] == 200
         db.DB_CALLS = []
         db.TRACK_DB_CALLS = False
 
@@ -652,10 +652,10 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
-        eq_(self.proto.base_tags, ['use_webpush:True'])
+        assert self.proto.base_tags == ['use_webpush:True']
         msg = yield self.get_response()
-        eq_(msg["status"], 200)
-        ok_("use_webpush" in msg)
+        assert msg["status"] == 200
+        assert "use_webpush" in msg
 
     @inlineCallbacks
     def test_hello_with_missing_current_month(self):
@@ -670,8 +670,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 uaid=uaid, use_webpush=True))
         msg = yield self.get_response()
-        eq_(msg["status"], 200)
-        ok_(msg["uaid"] != uaid)
+        assert msg["status"] == 200
+        assert msg["uaid"] != uaid
 
     @inlineCallbacks
     def test_hello_with_bad_uaid(self):
@@ -680,8 +680,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 use_webpush=True, uaid=uaid))
         msg = yield self.get_response()
-        eq_(msg["status"], 200)
-        ok_(msg["uaid"] != uaid)
+        assert msg["status"] == 200
+        assert msg["uaid"] != uaid
 
     @inlineCallbacks
     def test_hello_with_bad_uaid_dash(self):
@@ -690,8 +690,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 use_webpush=True, uaid=uaid))
         msg = yield self.get_response()
-        eq_(msg["status"], 200)
-        ok_(msg["uaid"] != uaid)
+        assert msg["status"] == 200
+        assert msg["uaid"] != uaid
 
     @inlineCallbacks
     def test_hello_with_bad_uaid_case(self):
@@ -700,8 +700,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 use_webpush=True, uaid=uaid))
         msg = yield self.get_response()
-        eq_(msg["status"], 200)
-        ok_(msg["uaid"] != uaid)
+        assert msg["status"] == 200
+        assert msg["uaid"] != uaid
 
     @inlineCallbacks
     def test_hello_failure(self):
@@ -713,8 +713,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 use_webpush=True, stop=1))
         msg = yield self.get_response()
-        eq_(msg["status"], 503)
-        eq_(msg["reason"], "error")
+        assert msg["status"] == 503
+        assert msg["reason"] == "error"
         self.flushLoggedErrors()
 
     @inlineCallbacks
@@ -732,8 +732,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()
-        eq_(msg["status"], 503)
-        eq_(msg["reason"], "error - overloaded")
+        assert msg["status"] == 503
+        assert msg["reason"] == "error - overloaded"
         self.flushLoggedErrors()
 
     @inlineCallbacks
@@ -752,8 +752,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()
-        eq_(msg["status"], 503)
-        eq_(msg["reason"], "error - overloaded")
+        assert msg["status"] == 503
+        assert msg["reason"] == "error - overloaded"
         self.flushLoggedErrors()
 
     @inlineCallbacks
@@ -768,9 +768,9 @@ class WebsocketTestCase(unittest.TestCase):
                                 channelIDs=[]))
         msg = yield self.get_response()
         calls = self.proto.db.router.register_user.mock_calls
-        eq_(len(calls), 1)
-        eq_(msg["status"], 500)
-        eq_(msg["reason"], "already_connected")
+        assert len(calls) == 1
+        assert msg["status"] == 500
+        assert msg["reason"] == "already_connected"
 
     @inlineCallbacks
     def test_hello_dupe(self):
@@ -778,13 +778,13 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()
-        eq_(msg["status"], 200)
+        assert msg["status"] == 200
 
         # Send another hello
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()
-        eq_(msg["status"], 401)
+        assert msg["status"] == 401
 
     @inlineCallbacks
     def test_hello_timeout(self):
@@ -793,8 +793,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         close_args = yield self._wait_for_close()
         _, kwargs = close_args
-        eq_(len(kwargs), 0)
-        ok_(time.time() - connected >= 3)
+        assert len(kwargs) == 0
+        assert time.time() - connected >= 3
 
     @inlineCallbacks
     def test_not_hello(self):
@@ -802,7 +802,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="wooooo"))
         close_args = yield self._wait_for_close()
         _, kwargs = close_args
-        eq_(len(kwargs), 0)
+        assert len(kwargs) == 0
 
     @inlineCallbacks
     def test_hello_env(self):
@@ -810,7 +810,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()
-        eq_(msg["env"], "test")
+        assert msg["env"] == "test"
 
     @inlineCallbacks
     def test_ping(self):
@@ -818,10 +818,10 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()
-        eq_(msg["status"], 200)
+        assert msg["status"] == 200
         self._send_message({})
         msg = yield self.get_response()
-        eq_(msg, {})
+        assert msg == {}
 
     @inlineCallbacks
     def test_ping_too_much(self):
@@ -829,18 +829,18 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()
-        eq_(msg["status"], 200)
+        assert msg["status"] == 200
         self.proto.ps.last_ping = time.time() - 30
         self.proto.sendClose = Mock()
         self._send_message({})
-        ok_(self.proto.sendClose.called)
+        assert self.proto.sendClose.called
 
     def test_auto_ping(self):
         self.proto.ps.ping_time_out = False
         self.proto.dropConnection = Mock()
         self.proto.onAutoPingTimeout()
-        ok_(self.proto.ps.ping_time_out, True)
-        ok_(self.proto.dropConnection.called)
+        assert self.proto.ps.ping_time_out is True
+        assert self.proto.dropConnection.called
 
     def test_defer_to_later(self):
         self._connect()
@@ -849,7 +849,7 @@ class WebsocketTestCase(unittest.TestCase):
             raise twisted.internet.defer.CancelledError
 
         def fail2(failure):
-            ok_(failure)
+            assert failure
 
         def check_result(result):  # pragma: nocover
             pass
@@ -857,7 +857,7 @@ class WebsocketTestCase(unittest.TestCase):
         d = self.proto.deferToLater(0, fail)
         d.addCallback(check_result)
         d.addErrback(fail2)
-        ok_(d is not None)
+        assert d is not None
 
     def test_defer_to_later_cancel(self):
         self._connect()
@@ -895,12 +895,12 @@ class WebsocketTestCase(unittest.TestCase):
                     return True
 
         def check_result(result):
-            eq_(result, True)
+            assert result is True
             self.flushLoggedErrors()
 
         d = self.proto.force_retry(Fail())
         d.addCallback(check_result)
-        ok_(d is not None)
+        assert d is not None
         return d
 
     @inlineCallbacks
@@ -909,14 +909,14 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 use_webpush=True, stop=1))
         msg = yield self.get_response()
-        ok_("messageType" in msg)
+        assert "messageType" in msg
 
         self._send_message(dict(messageType="register",
                                 channelID=str(uuid.uuid4())))
         msg = yield self.get_response()
-        eq_(msg["status"], 200)
-        eq_(msg["messageType"], "register")
-        ok_("pushEndpoint" in msg)
+        assert msg["status"] == 200
+        assert msg["messageType"] == "register"
+        assert "pushEndpoint" in msg
         assert_called_included(self.proto.log.info, format="Register")
 
     @inlineCallbacks
@@ -927,7 +927,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.db.message.register_channel = Mock()
 
         yield self.proto.process_register(dict(channelID=chid))
-        ok_(self.proto.db.message.register_channel.called)
+        assert self.proto.db.message.register_channel.called
         assert_called_included(self.proto.log.info, format="Register")
 
     @inlineCallbacks
@@ -953,9 +953,9 @@ class WebsocketTestCase(unittest.TestCase):
             dict(channelID=chid,
                  key=base64url_encode(test_key))
         )
-        eq_(test_endpoint,
-            self.proto.sendJSON.call_args[0][0]['pushEndpoint'])
-        ok_(self.proto.db.message.register_channel.called)
+        assert test_endpoint == self.proto.sendJSON.call_args[0][0][
+            'pushEndpoint']
+        assert self.proto.db.message.register_channel.called
         assert_called_included(self.proto.log.info, format="Register")
 
     @inlineCallbacks
@@ -964,12 +964,12 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()
-        ok_("messageType" in msg)
+        assert "messageType" in msg
 
         self._send_message(dict(messageType="register"))
         msg = yield self.get_response()
-        eq_(msg["status"], 401)
-        eq_(msg["messageType"], "register")
+        assert msg["status"] == 401
+        assert msg["messageType"] == "register"
 
     @inlineCallbacks
     def test_register_bad_chid(self):
@@ -977,12 +977,12 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()
-        ok_("messageType" in msg)
+        assert "messageType" in msg
 
         self._send_message(dict(messageType="register", channelID="oof"))
         msg = yield self.get_response()
-        eq_(msg["status"], 401)
-        eq_(msg["messageType"], "register")
+        assert msg["status"] == 401
+        assert msg["messageType"] == "register"
 
     @inlineCallbacks
     def test_register_bad_chid_upper(self):
@@ -990,13 +990,13 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()
-        ok_("messageType" in msg)
+        assert "messageType" in msg
 
         self._send_message(dict(messageType="register",
                                 channelID=str(uuid.uuid4()).upper()))
         msg = yield self.get_response()
-        eq_(msg["status"], 401)
-        eq_(msg["messageType"], "register")
+        assert msg["status"] == 401
+        assert msg["messageType"] == "register"
 
     @inlineCallbacks
     def test_register_bad_chid_nodash(self):
@@ -1004,13 +1004,13 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()
-        ok_("messageType" in msg)
+        assert "messageType" in msg
 
         self._send_message(dict(messageType="register",
                                 channelID=str(uuid.uuid4()).replace('-', '')))
         msg = yield self.get_response()
-        eq_(msg["status"], 401)
-        eq_(msg["messageType"], "register")
+        assert msg["status"] == 401
+        assert msg["messageType"] == "register"
 
     @inlineCallbacks
     def test_register_bad_crypto(self):
@@ -1024,8 +1024,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="register",
                                 channelID=str(uuid.uuid4())))
         msg = yield self.get_response()
-        eq_(msg["status"], 500)
-        eq_(msg["messageType"], "register")
+        assert msg["status"] == 500
+        assert msg["messageType"] == "register"
         self.proto.log.failure.assert_called()
 
     def test_register_kill_others(self):
@@ -1067,12 +1067,12 @@ class WebsocketTestCase(unittest.TestCase):
         register.side_effect = throw_provisioned
 
         yield self.proto.process_register(dict(channelID=chid))
-        ok_(self.proto.db.message.register_channel.called)
-        ok_(self.send_mock.called)
+        assert self.proto.db.message.register_channel.called
+        assert self.send_mock.called
         args, _ = self.send_mock.call_args
         msg = json.loads(args[0])
-        eq_(msg["messageType"], "error")
-        eq_(msg["reason"], "overloaded")
+        assert msg["messageType"] == "error"
+        assert msg["reason"] == "overloaded"
 
     def test_check_kill_self(self):
         self._connect()
@@ -1090,8 +1090,8 @@ class WebsocketTestCase(unittest.TestCase):
         res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
         # the current one should be dropped.
-        eq_(ff.sendClose.call_count, 0)
-        eq_(self.proto.sendClose.call_count, 1)
+        assert ff.sendClose.call_count == 0
+        assert self.proto.sendClose.call_count == 1
 
     def test_check_kill_existing(self):
         self._connect()
@@ -1108,15 +1108,15 @@ class WebsocketTestCase(unittest.TestCase):
         res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
         # the existing one should be dropped.
-        eq_(ff.sendClose.call_count, 1)
-        eq_(self.proto.sendClose.call_count, 0)
+        assert ff.sendClose.call_count == 1
+        assert self.proto.sendClose.call_count == 0
 
     def test_unregister_with_webpush(self):
         chid = str(uuid.uuid4())
         self._connect()
         self.proto.force_retry = Mock()
         self.proto.process_unregister(dict(channelID=chid))
-        ok_(self.proto.force_retry.called)
+        assert self.proto.force_retry.called
 
     @inlineCallbacks
     def test_ws_unregister(self):
@@ -1125,16 +1125,16 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()
-        eq_(msg["messageType"], "hello")
-        eq_(msg["status"], 200)
+        assert msg["messageType"] == "hello"
+        assert msg["status"] == 200
 
         self._send_message(dict(messageType="unregister",
                                 code=104,
                                 channelID=chid))
         msg = yield self.get_response()
-        eq_(msg["status"], 200)
-        eq_(msg["channelID"], chid)
-        eq_(len(self.proto.log.mock_calls), 2)
+        assert msg["status"] == 200
+        assert msg["channelID"] == chid
+        assert len(self.proto.log.mock_calls) == 2
         assert_called_included(self.proto.log.info, format="Unregister")
 
     @inlineCallbacks
@@ -1143,8 +1143,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = uuid.uuid4().hex
         self._send_message(dict(messageType="unregister"))
         msg = yield self.get_response()
-        eq_(msg["status"], 401)
-        eq_(msg["messageType"], "unregister")
+        assert msg["status"] == 401
+        assert msg["messageType"] == "unregister"
 
     @inlineCallbacks
     def test_ws_unregister_bad_chid(self):
@@ -1153,8 +1153,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="unregister",
                                 channelID="}{$@!asdf"))
         msg = yield self.get_response()
-        eq_(msg["status"], 401)
-        eq_(msg["messageType"], "unregister")
+        assert msg["status"] == 401
+        assert msg["messageType"] == "unregister"
 
     def test_notification_with_webpush(self):
         self._connect()
@@ -1178,11 +1178,12 @@ class WebsocketTestCase(unittest.TestCase):
 
         # Check the call result
         args = json.loads(self.send_mock.call_args[0][0])
-        eq_(args, {"messageType": "notification",
-                   "channelID": chid,
-                   "data": dummy_data,
-                   "version": "10",
-                   "headers": fixed_headers})
+        assert args == {
+            "messageType": "notification",
+            "channelID": chid,
+            "data": dummy_data,
+            "version": "10",
+            "headers": fixed_headers}
 
     @inlineCallbacks
     def test_hello_not_webpush(self):
@@ -1190,8 +1191,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="hello",
                                 channelIDs=[]))
         msg = yield self.get_response()
-        eq_(msg['status'], 401)
-        ok_('Simplepush not supported' in msg['reason'])
+        assert msg['status'] == 401
+        assert 'Simplepush not supported' in msg['reason']
 
     @inlineCallbacks
     def test_ack(self):
@@ -1204,7 +1205,7 @@ class WebsocketTestCase(unittest.TestCase):
         notif = make_webpush_notification(self.proto.ps.uaid, chid)
         self.proto.ps.direct_updates[chid] = [notif]
         msg = yield self.get_response()
-        eq_(msg["status"], 200)
+        assert msg["status"] == 200
 
         # Send our ack
         self._send_message(dict(messageType="ack",
@@ -1212,8 +1213,9 @@ class WebsocketTestCase(unittest.TestCase):
                                           "version": notif.version}]))
 
         # Verify it was cleared out
-        eq_(len(self.proto.ps.direct_updates.get(str(notif.channel_id))), 0)
-        eq_(len(self.proto.log.debug.mock_calls), 2)
+        assert len(self.proto.ps.direct_updates.get(
+            str(notif.channel_id))) == 0
+        assert len(self.proto.log.debug.mock_calls) == 2
         assert_called_included(self.proto.log.debug,
                                format="Ack",
                                router_key="webpush",
@@ -1222,7 +1224,7 @@ class WebsocketTestCase(unittest.TestCase):
 
     def test_ack_with_bad_input(self):
         self._connect()
-        eq_(self.proto.ack_update(None), None)
+        assert self.proto.ack_update(None) is None
 
     def test_ack_with_webpush_from_storage(self):
         self._connect()
@@ -1240,9 +1242,9 @@ class WebsocketTestCase(unittest.TestCase):
             version=dummy_version,
             code=200
         ))
-        ok_(self.proto.force_retry.called)
-        ok_(mock_defer.addBoth.called)
-        eq_(len(self.proto.log.debug.mock_calls), 1)
+        assert self.proto.force_retry.called
+        assert mock_defer.addBoth.called
+        assert len(self.proto.log.debug.mock_calls) == 1
         assert_called_included(self.proto.log.debug,
                                format="Ack",
                                router_key="webpush",
@@ -1256,7 +1258,7 @@ class WebsocketTestCase(unittest.TestCase):
             version=dummy_version,
             code=200
         )), False)
-        eq_(len(self.proto.log.debug.mock_calls), 1)
+        assert len(self.proto.log.debug.mock_calls) == 1
 
     def test_nack_no_version(self):
         self._connect()
@@ -1265,14 +1267,14 @@ class WebsocketTestCase(unittest.TestCase):
             messageType="nack",
             code=200
         )), False)
-        eq_(len(self.proto.log.debug.mock_calls), 0)
+        assert len(self.proto.log.debug.mock_calls) == 0
 
     def test_ack_remove(self):
         self._connect()
         notif = dummy_notif()
         self.proto.ps.updates_sent[dummy_chid_str] = [notif]
         self.proto._handle_webpush_update_remove(None, dummy_chid_str, notif)
-        eq_(self.proto.ps.updates_sent[dummy_chid_str], [])
+        assert self.proto.ps.updates_sent[dummy_chid_str] == []
 
     def test_ack_remove_not_set(self):
         self._connect()
@@ -1294,7 +1296,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._send_message(dict(messageType="ack"))
 
         calls = self.proto.sendJSON.call_args_list
-        eq_(len(calls), 0)
+        assert len(calls) == 0
 
     def test_ack_missing_chid_version(self):
         self._connect()
@@ -1304,7 +1306,7 @@ class WebsocketTestCase(unittest.TestCase):
                                 updates=[{"something": 2}]))
 
         calls = self.send_mock.call_args_list
-        eq_(len(calls), 0)
+        assert len(calls) == 0
 
     def test_process_notifications(self):
         twisted.internet.base.DelayedCall.debug = True
@@ -1331,7 +1333,7 @@ class WebsocketTestCase(unittest.TestCase):
         notif_d.addErrback(lambda x: d.errback(x))
 
         def wait(result):
-            eq_(self.proto.ps._notification_fetch, None)
+            assert self.proto.ps._notification_fetch is None
             d.callback(True)
         self.proto.ps._notification_fetch.addCallback(wait)
         self.proto.ps._notification_fetch.addErrback(lambda x: d.errback(x))
@@ -1363,8 +1365,8 @@ class WebsocketTestCase(unittest.TestCase):
 
         def wait(result):
             fail = self.proto.log.failure
-            ok_(fail.called)
-            eq_(fail.call_args[1].get('failure').value[0], 'Krikey')
+            assert fail.called
+            assert fail.call_args[1].get('failure').value[0] == 'Krikey'
             d.callback(True)
 
         self.proto.ps._notification_fetch.addCallback(wait)
@@ -1400,7 +1402,7 @@ class WebsocketTestCase(unittest.TestCase):
         notif_d.addErrback(lambda x: d.errback(x))
 
         def wait(result):
-            ok_(self.proto.deferToLater.called)
+            assert self.proto.deferToLater.called
             d.callback(True)
 
         self.proto.ps._notification_fetch.addCallback(wait)
@@ -1413,8 +1415,8 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.updates_sent[dummy_chid_str] = [dummy_notif()]
         self.proto.deferToLater = Mock()
         self.proto.process_notifications()
-        ok_(self.proto.deferToLater.called)
-        eq_(self.proto.ps._notification_fetch, None)
+        assert self.proto.deferToLater.called
+        assert self.proto.ps._notification_fetch is None
 
     def test_process_notif_doesnt_run_when_paused(self):
         self._connect()
@@ -1422,21 +1424,21 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.pauseProducing()
         with patch("autopush.websocket.reactor") as mr:
             self.proto.process_notifications()
-            ok_(mr.callLater.mock_calls > 0)
+            assert mr.callLater.mock_calls > 0
 
     def test_process_notif_doesnt_run_after_stop(self):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ps._should_stop = True
         self.proto.process_notifications()
-        eq_(self.proto.ps._notification_fetch, None)
+        assert self.proto.ps._notification_fetch is None
 
     def test_check_notif_doesnt_run_after_stop(self):
         self._connect()
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ps._should_stop = True
         self.proto.check_missed_notifications(None)
-        eq_(self.proto.ps._notification_fetch, None)
+        assert self.proto.ps._notification_fetch is None
 
     def test_process_notif_paused_on_finish(self):
         self._connect()
@@ -1444,7 +1446,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.pauseProducing()
         with patch("autopush.websocket.reactor") as mr:
             self.proto.finish_notifications(None)
-            ok_(mr.callLater.mock_calls > 0)
+            assert mr.callLater.mock_calls > 0
 
     def test_notif_finished_with_webpush(self):
         self._connect()
@@ -1453,7 +1455,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps._check_notifications = True
         self.proto.ps.scan_timestamps = True
         self.proto.finish_notifications((None, []))
-        ok_(self.proto.deferToLater.called)
+        assert self.proto.deferToLater.called
 
     def test_notif_finished_with_webpush_with_notifications(self):
         self._connect()
@@ -1468,7 +1470,7 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.updates_sent[str(notif.channel_id)] = []
 
         self.proto.finish_webpush_notifications((None, [notif]))
-        ok_(self.send_mock.called)
+        assert self.send_mock.called
 
     def test_notif_finished_with_webpush_with_old_notifications(self):
         self._connect()
@@ -1485,8 +1487,8 @@ class WebsocketTestCase(unittest.TestCase):
 
         self.proto.force_retry = Mock()
         self.proto.finish_webpush_notifications((None, [notif]))
-        ok_(self.proto.force_retry.called)
-        ok_(not self.send_mock.called)
+        assert self.proto.force_retry.called
+        assert not self.send_mock.called
 
     def test_notif_finished_with_too_many_messages(self):
         self._connect()
@@ -1510,9 +1512,10 @@ class WebsocketTestCase(unittest.TestCase):
         d = Deferred()
 
         def check(*args, **kwargs):
-            eq_(self.metrics.increment.call_args[1]['tags'], ["source:Direct"])
-            ok_(self.proto.force_retry.called)
-            ok_(self.send_mock.called)
+            assert self.metrics.increment.call_args[1]['tags'] == [
+                "source:Direct"]
+            assert self.proto.force_retry.called
+            assert self.send_mock.called
             d.callback(True)
 
         self.proto.force_retry = Mock()
@@ -1529,9 +1532,9 @@ class WebsocketTestCase(unittest.TestCase):
         }
         self.proto.ps.uaid = uaid
         reply = self.proto._verify_user_record()
-        eq_(reply, None)
-        ok_(fr.called)
-        eq_(fr.call_args[0], (mm.drop_user, uaid))
+        assert reply is None
+        assert fr.called
+        assert fr.call_args[0] == (mm.drop_user, uaid)
 
 
 class RouterHandlerTestCase(unittest.TestCase):
@@ -1553,23 +1556,23 @@ class RouterHandlerTestCase(unittest.TestCase):
         uaid = dummy_uaid_str
         self.app.clients[uaid] = client_mock = Mock(paused=False)
         resp = yield self.client.put(self.url(uaid=uaid), body="{}")
-        eq_(resp.get_status(), 200)
-        eq_(resp.content, "Client accepted for delivery")
+        assert resp.get_status() == 200
+        assert resp.content == "Client accepted for delivery"
         client_mock.send_notification.assert_called_once()
 
     @inlineCallbacks
     def test_client_not_connected(self):
         resp = yield self.client.put(self.url(uaid=dummy_uaid_str), body="{}")
-        eq_(resp.get_status(), 404)
-        eq_(resp.content, "Client not connected.")
+        assert resp.get_status() == 404
+        assert resp.content == "Client not connected."
 
     @inlineCallbacks
     def test_client_connected_but_busy(self):
         uaid = dummy_uaid_str
         self.app.clients[uaid] = Mock(accept_notification=False)
         resp = yield self.client.put(self.url(uaid=uaid), body="{}")
-        eq_(resp.get_status(), 503)
-        eq_(resp.content, "Client busy.")
+        assert resp.get_status() == 503
+        assert resp.content == "Client busy."
 
 
 class NotificationHandlerTestCase(unittest.TestCase):
@@ -1597,8 +1600,8 @@ class NotificationHandlerTestCase(unittest.TestCase):
         uaid = dummy_uaid_str
         self.app.clients[uaid] = client_mock = Mock(paused=False)
         resp = yield self.client.put(self.url(uaid=uaid), body="{}")
-        eq_(resp.get_status(), 200)
-        eq_(resp.content, "Notification check started")
+        assert resp.get_status() == 200
+        assert resp.content == "Notification check started"
         client_mock.process_notifications.assert_called_once()
 
     @inlineCallbacks
@@ -1609,15 +1612,15 @@ class NotificationHandlerTestCase(unittest.TestCase):
             _check_notifications=False
         )
         resp = yield self.client.put(self.url(uaid=uaid), body="{}")
-        eq_(resp.get_status(), 202)
-        eq_(resp.content, "Flagged for Notification check")
-        eq_(client_mock._check_notifications, True)
+        assert resp.get_status() == 202
+        assert resp.content == "Flagged for Notification check"
+        assert client_mock._check_notifications is True
 
     @inlineCallbacks
     def test_not_connected(self):
         resp = yield self.client.put(self.url(uaid=dummy_uaid_str), body="{}")
-        eq_(resp.get_status(), 404)
-        eq_(resp.content, "Client not connected.")
+        assert resp.get_status() == 404
+        assert resp.content == "Client not connected."
 
     @inlineCallbacks
     def test_delete(self):
@@ -1630,6 +1633,6 @@ class NotificationHandlerTestCase(unittest.TestCase):
         resp = yield self.client.delete(
             self.url(uaid=uaid, connected_at=str(now))
         )
-        eq_(resp.get_status(), 200)
-        eq_(resp.content, "Terminated duplicate")
+        assert resp.get_status() == 200
+        assert resp.content == "Terminated duplicate"
         client_mock.sendClose.assert_called_once()

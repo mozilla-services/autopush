@@ -3,7 +3,6 @@ import json
 import twisted.internet.base
 from boto.dynamodb2.exceptions import InternalServerError
 from mock import Mock
-from nose.tools import eq_
 from twisted.internet.defer import inlineCallbacks
 from twisted.logger import globalLogPublisher
 from twisted.trial import unittest
@@ -118,10 +117,10 @@ class HealthTestCase(unittest.TestCase):
     def _assert_reply(self, reply, exception=None):
         resp = yield self.client.get('/health')
         if exception:
-            eq_(resp.get_status(), 503)
+            assert resp.get_status() == 503
             self.flushLoggedErrors(exception)
         payload = json.loads(resp.content)
-        eq_(payload, reply)
+        assert payload == reply
 
 
 class StatusTestCase(unittest.TestCase):
