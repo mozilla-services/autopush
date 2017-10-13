@@ -1,3 +1,24 @@
+<a name="1.38.0"></a>
+## 1.38.0 (2017-10-13)
+
+
+#### Bug Fixes
+
+*   Handle legacy simplepush records as candidate webpush records ([a0c7dfae](https://github.com/mozilla-services/autopush/commit/a0c7dfaee117bad13642cc067e237bf3997c7d95), closes [#1033](https://github.com/mozilla-services/autopush/issues/1033))
+
+#### Breaking Changes
+
+*   update dependencies to the latest versions ([564c4d87](https://github.com/mozilla-services/autopush/commit/564c4d879575fdcb5888dce47d8ae6c42a273a09), closes [#1040](https://github.com/mozilla-services/autopush/issues/1040), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+
+#### Features
+
+*   move tests to pytest ([774948f8](https://github.com/mozilla-services/autopush/commit/774948f808da2df6621d1ee64b7fa6e809da64e2))
+*   update dependencies to the latest versions ([564c4d87](https://github.com/mozilla-services/autopush/commit/564c4d879575fdcb5888dce47d8ae6c42a273a09), closes [#1040](https://github.com/mozilla-services/autopush/issues/1040), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+*   upgrade to pypy 5.9.0 ([d01f1aa1](https://github.com/mozilla-services/autopush/commit/d01f1aa1d2b17b46c946ca2a4d14fb0df4f62a4a), closes [#1036](https://github.com/mozilla-services/autopush/issues/1036))
+*   add Strict-Transport-Security header ([4e79dcef](https://github.com/mozilla-services/autopush/commit/4e79dcef00b9b85e858dfc26d368407d5b3f4011), closes [#1031](https://github.com/mozilla-services/autopush/issues/1031))
+
+
+
 <a name="1.37.0"></a>
 ## 1.37.0 (2017-10-02)
 
