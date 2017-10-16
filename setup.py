@@ -10,9 +10,19 @@ with io.open(os.path.join(here, 'README.md'), encoding='utf8') as f:
 with io.open(os.path.join(here, 'CHANGELOG.md'), encoding='utf8') as f:
     CHANGES = f.read()
 
+WITH_RUST = os.environ.get('WITH_RUST', 'true').lower() not in ('false', '0')
+
 extra_options = {
     "packages": find_packages(),
 }
+if WITH_RUST:
+    extra_options.update(
+        setup_requires=['snaek'],
+        install_requires=['snaek'],
+        snaek_rust_modules=[
+            ('autopush_rs._native', 'autopush_rs/'),
+        ],
+    )
 
 
 setup(name="AutoPush",
@@ -45,10 +55,5 @@ setup(name="AutoPush",
       [nose.plugins]
       object-tracker = autopush.noseplugin:ObjectTracker
       """,
-      setup_requires=['snaek'],
-      install_requires=['snaek'],
-      snaek_rust_modules=[
-          ('autopush_rs._native', 'autopush_rs/'),
-      ],
       **extra_options
       )
