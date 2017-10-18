@@ -97,6 +97,10 @@ def add_shared_args(parser):
                         help="Max Strict Transport Age in seconds",
                         type=int, default=31536000,
                         env_var="STS_MAX_AGE")
+    parser.add_argument('--_no_sslcontext_cache',
+                        help="Don't cache ssl.wrap_socket's SSLContexts",
+                        action="store_true", default=False,
+                        env_var="_NO_SSLCONTEXT_CACHE")
     # No ENV because this is for humans
     _add_external_router_args(parser)
     _obsolete_args(parser)

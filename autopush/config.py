@@ -173,6 +173,9 @@ class AutopushConfig(object):
     # Strict-Transport-Security max age (Default 1 year in secs)
     sts_max_age = attrib(default=31536000)  # type: int
 
+    # Don't cache ssl.wrap_socket's SSLContexts
+    no_sslcontext_cache = attrib(default=False)  # type: bool
+
     def __attrs_post_init__(self):
         """Initialize the Settings object"""
         # Setup hosts/ports/urls
@@ -303,6 +306,7 @@ class AutopushConfig(object):
             connect_timeout=ns.connection_timeout,
             memusage_port=ns.memusage_port,
             use_cryptography=ns.use_cryptography,
+            no_sslcontext_cache=ns._no_sslcontext_cache,
             router_table=dict(
                 tablename=ns.router_tablename,
                 read_throughput=ns.router_read_throughput,

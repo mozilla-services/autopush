@@ -1,6 +1,17 @@
 """Custom SSL configuration"""
+from __future__ import absolute_import
+import socket  # noqa
+import ssl
+from typing import (  # noqa
+    Any,
+    Dict,
+    FrozenSet,
+    Optional,
+    Tuple,
+)
+
 from OpenSSL import SSL
-from twisted.internet import ssl
+from twisted.internet.ssl import DefaultOpenSSLContextFactory
 
 MOZILLA_INTERMEDIATE_CIPHERS = (
     'ECDHE-RSA-AES128-GCM-SHA256:'
@@ -36,13 +47,13 @@ MOZILLA_INTERMEDIATE_CIPHERS = (
 )
 
 
-class AutopushSSLContextFactory(ssl.DefaultOpenSSLContextFactory):
+class AutopushSSLContextFactory(DefaultOpenSSLContextFactory):
     """A SSL context factory"""
 
     def __init__(self, *args, **kwargs):
         self.dh_file = kwargs.pop('dh_file', None)
         self.require_peer_certs = kwargs.pop('require_peer_certs', False)
-        ssl.DefaultOpenSSLContextFactory.__init__(self, *args, **kwargs)
+        DefaultOpenSSLContextFactory.__init__(self, *args, **kwargs)
 
     def cacheContext(self):
         """Setup the main context factory with custom SSL settings"""
@@ -77,3 +88,67 @@ class AutopushSSLContextFactory(ssl.DefaultOpenSSLContextFactory):
         # skip verification: we only care about whitelisted signatures
         # on file
         return True
+
+
+def monkey_patch_ssl_wrap_socket():
+    """Replace ssl.wrap_socket with ssl_wrap_socket_cached"""
+    ssl.wrap_socket = ssl_wrap_socket_cached
+
+
+def undo_monkey_patch_ssl_wrap_socket():
+    """Undo monkey_patch_ssl_wrap_socket"""
+    ssl.wrap_socket = _orig_ssl_wrap_socket
+
+
+_CacheKey = FrozenSet[Tuple[str, Any]]
+_sslcontext_cache = {}  # type: Dict[_CacheKey, ssl.SSLContext]
+_orig_ssl_wrap_socket = ssl.wrap_socket
+
+
+def ssl_wrap_socket_cached(
+        sock,                          # type: socket.socket
+        keyfile=None,                  # type: Optional[str]
+        certfile=None,                 # type: Optional[str]
+        server_side=False,             # type: bool
+        cert_reqs=ssl.CERT_NONE,       # type: int
+        ssl_version=ssl.PROTOCOL_TLS,  # type: int
+        ca_certs=None,                 # type: Optional[str]
+        do_handshake_on_connect=True,  # type: bool
+        suppress_ragged_eofs=True,     # type: bool
+        ciphers=None                   # type: Optional[str]
+        ):
+    # type: (...) -> ssl.SSLSocket
+    """ssl.wrap_socket replacement that caches SSLContexts"""
+    key_kwargs = (
+        ('keyfile', keyfile),
+        ('certfile', certfile),
+        ('cert_reqs', cert_reqs),
+        ('ssl_version', ssl_version),
+        ('ca_certs', ca_certs),
+        ('ciphers', ciphers),
+    )
+    key = frozenset(key_kwargs)
+
+    context = _sslcontext_cache.get(key)
+    if context is not None:
+        return context.wrap_socket(
+            sock,
+            server_side=server_side,
+            do_handshake_on_connect=do_handshake_on_connect,
+            suppress_ragged_eofs=suppress_ragged_eofs
+        )
+
+    wrapped = _orig_ssl_wrap_socket(
+        sock,
+        keyfile=keyfile,
+        certfile=certfile,
+        server_side=server_side,
+        cert_reqs=cert_reqs,
+        ssl_version=ssl_version,
+        ca_certs=ca_certs,
+        do_handshake_on_connect=do_handshake_on_connect,
+        suppress_ragged_eofs=suppress_ragged_eofs,
+        ciphers=ciphers
+    )
+    _sslcontext_cache[key] = wrapped.context
+    return wrapped

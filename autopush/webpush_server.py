@@ -11,7 +11,13 @@ from attr import (
 )
 from boto.dynamodb2.exceptions import ItemNotFound
 from boto.exception import JSONResponseError
-from typing import Dict, List, Optional  # noqa
+from typing import (  # noqa
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Union
+)
 from twisted.logger import Logger
 
 from autopush.db import (  # noqa
@@ -201,7 +207,7 @@ class StoreMessagesResponse(OutputCommand):
 ###############################################################################
 class WebPushServer(object):
     def __init__(self, conf, db, num_threads=10):
-        # type: (AutopushConfig, DatabaseManager) -> WebPushServer
+        # type: (AutopushConfig, DatabaseManager, int) -> WebPushServer
         self.conf = conf
         self.db = db
         self.db.setup_tables()

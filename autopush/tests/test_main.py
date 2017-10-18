@@ -257,6 +257,7 @@ class EndpointMainTestCase(unittest.TestCase):
         disable_simplepush = True
         use_cryptography = False
         sts_max_age = 1234
+        _no_sslcontext_cache = False
 
     def setUp(self):
         patchers = [
@@ -318,8 +319,7 @@ class EndpointMainTestCase(unittest.TestCase):
             "--memusage_port=8083",
         ], False)
 
-    @patch('hyper.tls', spec=hyper.tls)
-    def test_client_certs_parse(self, mock):
+    def test_client_certs_parse(self):
         conf = AutopushConfig.from_argparse(self.TestArg)
         assert conf.client_certs["1A:"*31 + "F9"] == 'partner1'
         assert conf.client_certs["2B:"*31 + "E8"] == 'partner2'
@@ -377,11 +377,8 @@ class EndpointMainTestCase(unittest.TestCase):
             """--senderid_list={"123":{"auth":"abcd"}}""",
         ], False)
 
-    @patch('autopush.router.apns2.HTTP20Connection',
-           spec=hyper.HTTP20Connection)
-    @patch('hyper.tls', spec=hyper.tls)
     @patch("requests.get")
-    def test_aws_ami_id(self, request_mock, mt, mc):
+    def test_aws_ami_id(self, request_mock):
         class MockReply:
             content = "ami_123"
 
@@ -389,3 +386,10 @@ class EndpointMainTestCase(unittest.TestCase):
         self.TestArg.no_aws = False
         conf = AutopushConfig.from_argparse(self.TestArg)
         assert conf.ami_id == "ami_123"
+
+    def test_no_sslcontext_cache(self):
+        conf = AutopushConfig.from_argparse(self.TestArg)
+        assert not conf.no_sslcontext_cache
+        self.TestArg._no_sslcontext_cache = True
+        conf = AutopushConfig.from_argparse(self.TestArg)
+        assert conf.no_sslcontext_cache
