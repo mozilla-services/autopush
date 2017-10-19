@@ -124,8 +124,11 @@ endpoint_port = 8082
 ;        "key": "path_to_key_file",
 ;        "topic": "com.mozilla.org.Firefox",  // Bundle ID for associated app
 ;        "max_connections": 100, // Max number of connection pool entries.
-;        "sandbox": False},  // Use the APNs sandbox feature
-;     ... }
-; e.g {"firefox":{"cert":"certs/main.cert","key":"certs/main.key","topic":"com.mozilla.org.Firefox"},"beta":{"cert":"certs/beta.cert","key":"certs/beta.key","topic":"com.mozilla.org.FirefoxBeta"}}
+;        "sandbox": False,  // Use the APNs sandbox feature
+;        "max_retry": 2, // Max number of retries in event of an HTTP2 error
+;        },
+;       ...
+; }
+; e.g {"firefox":{"cert":"certs/main.cert","key":"certs/main.key","topic":"com.mozilla.org.Firefox","max_retry":2},"beta":{"cert":"certs/beta.cert","key":"certs/beta.key","topic":"com.mozilla.org.FirefoxBeta"}}
 #apns_creds =
 

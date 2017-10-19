@@ -234,7 +234,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
             d = self.ws.recv()
             log.debug("Recv: %s", d)
             return json.loads(d)
-        except:
+        except Exception:
             return None
         finally:
             self.ws.settimeout(orig_timeout)

@@ -374,7 +374,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             try:
                 result = func(*args, **kwargs)
                 d.callback(result)
-            except:
+            except Exception:
                 d.errback(failure.Failure())
         reactor.callLater(when, f)
         return d
@@ -498,7 +498,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         data = None
         try:
             data = json.loads(payload.decode('utf8'))
-        except:
+        except (TypeError, ValueError):
             pass
 
         if not isinstance(data, dict):

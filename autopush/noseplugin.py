@@ -10,7 +10,7 @@ except ImportError:
 
 try:
     from pympler import asizeof
-except:
+except Exception:
     asizeof = None
 
 

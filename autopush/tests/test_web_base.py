@@ -136,7 +136,7 @@ class TestBase(unittest.TestCase):
 
         try:
             raise TestX()
-        except:
+        except Exception:
             exc_info = sys.exc_info()
 
         self.base.write_error(999, exc_info=exc_info)

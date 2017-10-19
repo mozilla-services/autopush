@@ -41,7 +41,8 @@ class APNSClient(object):
                  alt=False, use_sandbox=False,
                  max_connections=APNS_MAX_CONNECTIONS,
                  logger=None, metrics=None,
-                 load_connections=True):
+                 load_connections=True,
+                 max_retry=2):
         """Create the APNS client connector.
 
         The cert_file and key_file can be derived from the exported `.p12`
@@ -76,6 +77,8 @@ class APNSClient(object):
         :type metrics: autopush.metrics.IMetric
         :param load_connections: used for testing
         :type load_connections: bool
+        :param max_retry: Number of HTTP2 transmit attempts
+        :type max_retry: int
 
         """
         self.server = SANDBOX if use_sandbox else SERVER
@@ -84,6 +87,7 @@ class APNSClient(object):
         self.metrics = metrics
         self.topic = topic
         self._max_connections = max_connections
+        self._max_retry = max_retry
         self.connections = deque(maxlen=max_connections)
         if load_connections:
             self.ssl_context = hyper.tls.init_context(cert=(cert_file,
@@ -128,34 +132,41 @@ class APNSClient(object):
         if exp:
             headers['apns-expiration'] = str(exp)
         url = '/3/device/' + router_token
-        connection = self._get_connection()
-        try:
-            # request auto-opens closed connections, so if a connection
-            # has timed out or failed for other reasons, it's automatically
-            # re-established.
-            stream_id = connection.request(
-                'POST', url=url, body=body, headers=headers)
-            # get_response() may return an AttributeError. Not really sure
-            # how it happens, but the connected socket may get set to None.
-            # We'll treat that as a premature socket closure.
-            response = connection.get_response(stream_id)
-            if response.status != 200:
-                reason = json.loads(response.read().decode('utf-8'))['reason']
-                raise RouterException(
-                    "APNS Transmit Error {}:{}".format(response.status,
-                                                       reason),
-                    status_code=502,
-                    response_body="APNS could not process "
-                                  "your message {}".format(reason),
-                    log_exception=False
-                )
-        except (HTTP20Error, AttributeError):
-            connection.close()
-            raise
-        finally:
-            # Returning a closed connection to the pool is ok.
-            # hyper will reconnect on .request()
-            self._return_connection(connection)
+        attempt = 0
+        while True:
+            try:
+                connection = self._get_connection()
+                # request auto-opens closed connections, so if a connection
+                # has timed out or failed for other reasons, it's automatically
+                # re-established.
+                stream_id = connection.request(
+                    'POST', url=url, body=body, headers=headers)
+                # get_response() may return an AttributeError. Not really sure
+                # how it happens, but the connected socket may get set to None.
+                # We'll treat that as a premature socket closure.
+                response = connection.get_response(stream_id)
+                if response.status != 200:
+                    reason = json.loads(
+                            response.read().decode('utf-8'))['reason']
+                    raise RouterException(
+                        "APNS Transmit Error {}:{}".format(response.status,
+                                                           reason),
+                        status_code=502,
+                        response_body="APNS could not process "
+                                      "your message {}".format(reason),
+                        log_exception=False
+                    )
+                break
+            except HTTP20Error:
+                connection.close()
+                attempt += 1
+                if attempt < self._max_retry:
+                    continue
+                raise
+            finally:
+                # Returning a closed connection to the pool is ok.
+                # hyper will reconnect on .request()
+                self._return_connection(connection)
 
     def _get_connection(self):
         try:
