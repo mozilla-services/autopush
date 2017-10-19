@@ -35,6 +35,10 @@ from autopush.haproxy import HAProxyServerEndpoint
 from autopush.logging import PushLogger
 from autopush.main_argparse import parse_connection, parse_endpoint
 from autopush.router import routers_from_config
+from autopush.ssl import (
+    monkey_patch_ssl_wrap_socket,
+    undo_monkey_patch_ssl_wrap_socket,
+)
 from autopush.webpush_server import WebPushServer
 from autopush.websocket import (
     ConnectionWSSite,
@@ -75,7 +79,8 @@ class AutopushMultiService(MultiService):
     def setup(self, rotate_tables=True):
         # type: (bool) -> None
         """Initialize the services"""
-        raise NotImplementedError  # pragma: nocover
+        if not self.conf.no_sslcontext_cache:
+            monkey_patch_ssl_wrap_socket()
 
     def add_maybe_ssl(self, port, factory, ssl_cf):
         # type: (int, ServerFactory, Optional[Any]) -> None
@@ -106,6 +111,8 @@ class AutopushMultiService(MultiService):
     def stopService(self):
         yield self.agent._pool.closeCachedConnections()
         yield super(AutopushMultiService, self).stopService()
+        if not self.conf.no_sslcontext_cache:
+            undo_monkey_patch_ssl_wrap_socket()
 
     @classmethod
     def _from_argparse(cls, ns, **kwargs):
@@ -171,6 +178,8 @@ class EndpointApplication(AutopushMultiService):
         self.routers = routers_from_config(conf, self.db, self.agent)
 
     def setup(self, rotate_tables=True):
+        super(EndpointApplication, self).setup(rotate_tables)
+
         self.db.setup(self.conf.preflight_uaid)
 
         self.add_endpoint()
@@ -237,6 +246,8 @@ class ConnectionApplication(AutopushMultiService):
         self.clients = {}  # type: Dict[str, PushServerProtocol]
 
     def setup(self, rotate_tables=True):
+        super(ConnectionApplication, self).setup(rotate_tables)
+
         self.db.setup(self.conf.preflight_uaid)
 
         self.add_internal_router()
@@ -309,6 +320,8 @@ class RustConnectionApplication(AutopushMultiService):
         super(RustConnectionApplication, self).__init__(conf)
 
     def setup(self, rotate_tables=True):
+        super(RustConnectionApplication, self).setup(rotate_tables)
+
         self.db.setup(self.conf.preflight_uaid)
 
         if self.conf.memusage_port:

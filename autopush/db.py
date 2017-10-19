@@ -65,6 +65,7 @@ from typing import (  # noqa
     Set,
     TypeVar,
     Tuple,
+    Union,
 )
 from twisted.internet.defer import Deferred  # noqa
 from twisted.internet.defer import inlineCallbacks, returnValue
@@ -504,7 +505,7 @@ class Message(object):
     def fetch_timestamp_messages(
             self,
             uaid,  # type: uuid.UUID
-            timestamp=None,  # type: Optional[int or str]
+            timestamp=None,  # type: Optional[Union[int, str]]
             limit=10,  # type: int
             ):
         # type: (...) -> Tuple[Optional[int], List[WebPushNotification]]
