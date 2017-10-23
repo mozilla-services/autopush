@@ -19,7 +19,7 @@ def make_cert(filename, cacert=None, cakey=None):
     subject.ST = b"Çorum"
     subject.L = b"Başmakçı"
     subject.CN = b"localhost"
-    subject.O = b"Mozilla Test"
+    subject.O = b"Mozilla Test"  # noqa: E741
     subject.OU = b"Autopush Test %s" % filename
     subject.emailAddress = b"otto.push@example.com"
     subjectAltName = X509Extension(b'subjectAltName', False, b'DNS:localhost')

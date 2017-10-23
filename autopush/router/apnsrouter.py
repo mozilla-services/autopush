@@ -5,7 +5,6 @@ from typing import Any  # noqa
 from hyper.http20.exceptions import ConnectionError, HTTP20Error
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
-from twisted.python.failure import Failure
 
 from autopush.exceptions import RouterException
 from autopush.metrics import make_tags
@@ -46,7 +45,9 @@ class APNSRouter(object):
             topic=cert_info.get("topic", default_topic),
             logger=self.log,
             metrics=self.metrics,
-            load_connections=load_connections)
+            load_connections=load_connections,
+            max_retry=cert_info.get('max_retry', 2)
+        )
 
     def __init__(self, conf, router_conf, metrics, load_connections=True):
         """Create a new APNS router and connect to APNS
@@ -139,31 +140,31 @@ class APNSRouter(object):
                 "alert": {"title": " ", "body": " "}
             })
         apns_id = str(uuid.uuid4()).lower()
+        # APNs may force close a connection on us without warning.
+        # if that happens, retry the message.
+        success = False
         try:
             apns_client.send(router_token=router_token, payload=payload,
                              apns_id=apns_id)
-        except (ConnectionError, AttributeError) as ex:
-            self.metrics.increment("notification.bridge.error",
+            success = True
+        except ConnectionError:
+            self.metrics.increment("notification.bridge.connection.error",
+                                   tags=make_tags(
+                                       self._base_tags,
+                                       application=rel_channel,
+                                       reason="connection_error"))
+        except HTTP20Error:
+            self.metrics.increment("notification.bridge.connection.error",
                                    tags=make_tags(self._base_tags,
                                                   application=rel_channel,
-                                                  reason="connection_error"))
-            self.log.error("Connection Error sending to APNS",
-                           log_failure=Failure(ex))
+                                                  reason="http2_error"))
+        if not success:
             raise RouterException(
                 "Server error",
                 status_code=502,
                 response_body="APNS returned an error processing request",
                 log_exception=False,
             )
-        except HTTP20Error as ex:
-            self.log.error("HTTP2 Error sending to APNS",
-                           log_failure=Failure(ex))
-            raise RouterException(
-                "Server error",
-                status_code=502,
-                response_body="APNS returned an error processing request",
-            )
-
         location = "%s/m/%s" % (self.conf.endpoint_url, notification.version)
         self.metrics.increment("notification.bridge.sent",
                                tags=make_tags(self._base_tags,

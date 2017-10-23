@@ -37,7 +37,7 @@ class GCMRouter(object):
             self.senderIDs[sid] = auth
             try:
                 self.gcm[sid] = gcmclient.GCM(auth)
-            except:
+            except Exception:
                 raise IOError("GCM Bridge not initiated in main")
         self._base_tags = ["platform:gcm"]
         self.log.debug("Starting GCM router...")
