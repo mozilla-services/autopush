@@ -13,8 +13,8 @@ import pytest
 
 from autopush.db import (
     DatabaseManager,
-    make_rotating_tablename,
     generate_last_connect,
+    make_rotating_tablename,
 )
 from autopush.metrics import SinkMetrics
 from autopush.config import AutopushConfig
@@ -234,6 +234,9 @@ class TestHelloProcessor(BaseSetup):
         assert isinstance(result, HelloResponse)
         assert hello.uaid != result.uaid
         assert result.check_storage is False
+        assert result.connected_at == hello.connected_at
+        assert self.metrics.increment.called
+        assert self.metrics.increment.call_args[0][0] == 'ua.command.hello'
 
     def test_existing_uaid(self):
         p = self._makeFUT()
@@ -245,6 +248,9 @@ class TestHelloProcessor(BaseSetup):
         assert isinstance(result, HelloResponse)
         assert hello.uaid.hex == result.uaid
         assert result.check_storage is True
+        assert result.connected_at == hello.connected_at
+        assert self.metrics.increment.called
+        assert self.metrics.increment.call_args[0][0] == 'ua.command.hello'
 
     def test_existing_newer_uaid(self):
         p = self._makeFUT()

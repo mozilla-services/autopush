@@ -178,6 +178,7 @@ pub struct HelloResponse {
     pub check_storage: bool,
     pub reset_uaid: bool,
     pub rotate_message_table: bool,
+    pub connected_at: u64,
 }
 
 #[derive(Deserialize)]

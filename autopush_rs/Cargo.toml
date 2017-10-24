@@ -8,6 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 bytes = "0.4"
+cadence = "0.12.1"
 env_logger = { version = "0.4", default-features = false }
 error-chain = "0.10"
 futures = "0.1"

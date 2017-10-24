@@ -27,6 +27,7 @@ use std::any::Any;
 use std::error;
 use std::io;
 
+use cadence;
 use futures::Future;
 use httparse;
 use serde_json;
@@ -38,6 +39,7 @@ error_chain! {
         Io(io::Error);
         Json(serde_json::Error);
         Httparse(httparse::Error);
+        MetricError(cadence::MetricError);
     }
 
     errors {
