@@ -11,7 +11,6 @@ from twisted.trial import unittest
 import autopush.utils as utils
 from autopush.config import AutopushConfig
 from autopush.db import (
-    ProvisionedThroughputExceededException,
     Message,
     ItemNotFound,
     has_connected_this_month,
@@ -121,11 +120,18 @@ class MessageTestCase(unittest.TestCase):
     def test_delete_db_error(self):
         tok = ":".join(["m", dummy_uaid.hex, str(dummy_chid)])
         self.fernet_mock.decrypt.return_value = tok
-        self.message_mock.configure_mock(**{
-            "delete_message.side_effect":
-            ProvisionedThroughputExceededException(None, None)})
+
+        def raise_condition(*args, **kwargs):
+            import autopush.db
+            raise autopush.db.g_client.exceptions.ClientError(
+                {'Error': {'Code': 'ConditionalCheckFailedException'}},
+                'mock_update_item'
+            )
+
+        self.message_mock.configure_mock(**{"delete_message.return_value":
+                                            False})
         resp = yield self.client.delete(self.url(message_id="ignored"))
-        assert resp.get_status() == 503
+        assert 204 == resp.get_status()
 
 
 class RegistrationTestCase(unittest.TestCase):

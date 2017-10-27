@@ -40,7 +40,7 @@ class HealthHandler(BaseWebHandler):
 
     def _check_table(self, table, name_over=None):
         """Checks the tables known about in DynamoDB"""
-        d = deferToThread(table_exists, table.connection, table.table_name)
+        d = deferToThread(table_exists, table.table_name, self.db.client)
         d.addCallback(self._check_success, name_over or table.table_name)
         d.addErrback(self._check_error, name_over or table.table_name)
         return d

@@ -49,10 +49,9 @@ from autobahn.twisted.websocket import (
 )
 from autobahn.websocket.protocol import ConnectionRequest  # noqa
 from boto.dynamodb2.exceptions import (
-    ProvisionedThroughputExceededException,
     ItemNotFound
 )
-from boto.exception import JSONResponseError
+from botocore.exceptions import ClientError
 from twisted.internet import reactor
 from twisted.internet.defer import (
     Deferred,
@@ -89,7 +88,6 @@ from autopush.db import (
     has_connected_this_month,
     hasher,
     generate_last_connect,
-    dump_uaid,
 )
 from autopush.db import DatabaseManager, Message  # noqa
 from autopush.exceptions import MessageOverloadException
@@ -665,7 +663,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         :param disconnect: Whether the client should be disconnected or not.
 
         """
-        failure.trap(JSONResponseError)
+        failure.trap(ClientError)
 
         if disconnect:
             self.transport.pauseProducing()
@@ -673,6 +671,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                                   self.err_finish_overload, message_type)
             d.addErrback(self.trap_cancel)
         else:
+            if (failure.value.response["Error"]["Code"] !=
+                    "ProvisionedThroughputExceededException"):
+                return failure  # pragma nocover
             send = {"messageType": "error", "reason": "overloaded",
                     "status": 503}
             self.sendJSON(send)
@@ -765,7 +766,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if "router_type" not in record or "connected_at" not in record:
             self.log.debug(format="Dropping User", code=104,
                            uaid_hash=self.ps.uaid_hash,
-                           uaid_record=dump_uaid(record))
+                           uaid_record=repr(record))
             tags = ['code:104']
             self.metrics.increment("ua.expiration", tags=tags)
             self.force_retry(self.db.router.drop_user, self.ps.uaid)
@@ -777,7 +778,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                 not in self.db.message_tables:
             self.log.debug(format="Dropping User", code=105,
                            uaid_hash=self.ps.uaid_hash,
-                           uaid_record=dump_uaid(record))
+                           uaid_record=repr(record))
             self.force_retry(self.db.router.drop_user,
                              self.ps.uaid)
             tags = ['code:105']
@@ -916,9 +917,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def error_notification_overload(self, fail):
         """errBack for provisioned errors during notification check"""
-        fail.trap(ProvisionedThroughputExceededException)
+        fail.trap(ClientError)
+
+        if (fail.value.response["Error"]["Code"] !=
+                "ProvisionedThroughputExceededException"):
+            return fail  # pragma nocover
         # Silently ignore the error, and reschedule the notification check
-        # to run up to a minute in the future to distribute load farther out
+        # to run up to a minute in the future to distribute load farther
+        # out
         d = self.deferToLater(randrange(5, 60), self.process_notifications)
         d.addErrback(self.trap_cancel)
 
@@ -1068,7 +1074,10 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         websocket client flow is returned in the meantime.
 
         """
-        fail.trap(ProvisionedThroughputExceededException)
+        fail.trap(ClientError)
+        if (fail.value.response['Error']['Code'] !=
+                "ProvisionedThroughputExceededException"):
+            return fail  # pragma nocover
         self.transport.resumeProducing()
         d = self.deferToLater(randrange(1, 30*60), self.process_notifications)
         d.addErrback(self.trap_cancel)

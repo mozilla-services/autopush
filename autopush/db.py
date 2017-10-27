@@ -32,6 +32,7 @@ scheme was adopted.
 from __future__ import absolute_import
 
 import datetime
+import os
 import random
 import time
 import uuid
@@ -43,16 +44,16 @@ from attr import (
     attrib,
     Factory
 )
-from boto.exception import JSONResponseError
+
 from boto.dynamodb2.exceptions import (
-    ConditionalCheckFailedException,
     ItemNotFound,
-    ProvisionedThroughputExceededException,
 )
-from boto.dynamodb2.fields import HashKey, RangeKey, GlobalKeysOnlyIndex
-from boto.dynamodb2.layer1 import DynamoDBConnection
-from boto.dynamodb2.table import Table, Item
-from boto.dynamodb2.types import NUMBER
+import boto3
+import botocore
+from boto3.dynamodb.conditions import Key
+from boto3.exceptions import Boto3Error
+from botocore.exceptions import ClientError
+
 from typing import (  # noqa
     TYPE_CHECKING,
     Any,
@@ -72,6 +73,7 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.threads import deferToThread
 
 import autopush.metrics
+from autopush import MAX_EXPIRY
 from autopush.exceptions import AutopushException
 from autopush.metrics import IMetrics  # noqa
 from autopush.types import ItemLike  # noqa
@@ -91,6 +93,16 @@ T = TypeVar('T')  # noqa
 key_hash = ""
 TRACK_DB_CALLS = False
 DB_CALLS = []
+
+# See https://botocore.readthedocs.io/en/stable/reference/config.html for
+# additional config options
+g_dynamodb = boto3.resource(
+    'dynamodb',
+    config=botocore.config.Config(
+        region_name=os.getenv("AWS_REGION_NAME", "us-east-1")
+    )
+)
+g_client = g_dynamodb.meta.client
 
 
 def get_month(delta=0):
@@ -121,21 +133,6 @@ def hasher(uaid):
     return uaid
 
 
-def dump_uaid(uaid_data):
-    # type: (ItemLike) -> str
-    """Return a dict for a uaid.
-
-    This is utilized instead of repr since some db methods return a
-    DynamoDB Item which does not actually show its dict key/values
-    when dumped via repr.
-
-    """
-    if isinstance(uaid_data, Item):
-        return repr(uaid_data.items())
-    else:
-        return repr(uaid_data)
-
-
 def make_rotating_tablename(prefix, delta=0, date=None):
     # type: (str, int, Optional[datetime.date]) -> str
     """Creates a tablename for table rotation based on a prefix with a given
@@ -151,12 +148,54 @@ def create_rotating_message_table(prefix="message", delta=0, date=None,
     # type: (str, int, Optional[datetime.date], int, int) -> Table
     """Create a new message table for webpush style message storage"""
     tablename = make_rotating_tablename(prefix, delta, date)
-    return Table.create(tablename,
-                        schema=[HashKey("uaid"),
-                                RangeKey("chidmessageid")],
-                        throughput=dict(read=read_throughput,
-                                        write=write_throughput),
-                        )
+
+    try:
+        table = g_dynamodb.Table(tablename)
+        if table.table_status == 'ACTIVE':  # pragma nocover
+            return table
+    except ClientError as ex:
+        if ex.response['Error']['Code'] != 'ResourceNotFoundException':
+            # If we hit this, our boto3 is misconfigured and we need to bail.
+            raise ex  # pragma nocover
+    table = g_dynamodb.create_table(
+        TableName=tablename,
+        KeySchema=[
+            {
+                'AttributeName': 'uaid',
+                'KeyType': 'HASH'
+            },
+            {
+                'AttributeName': 'chidmessageid',
+                'KeyType': 'RANGE'
+            }],
+        AttributeDefinitions=[
+            {
+                'AttributeName': 'uaid',
+                'AttributeType': 'S'
+            },
+            {
+                'AttributeName': 'chidmessageid',
+                'AttributeType': 'S'
+            }],
+        ProvisionedThroughput={
+            'ReadCapacityUnits': read_throughput,
+            'WriteCapacityUnits': write_throughput
+        })
+    table.meta.client.get_waiter('table_exists').wait(
+        TableName=tablename)
+    try:
+        table.meta.client.update_time_to_live(
+            TableName=tablename,
+            TimeToLiveSpecification={
+                'Enabled': True,
+                'AttributeName': 'expiry'
+            }
+        )
+    except ClientError as ex:  # pragma nocover
+        if ex.response['Error']['Code'] != 'UnknownOperationException':
+            # DynamoDB local library does not yet support TTL
+            raise
+    return table
 
 
 def get_rotating_message_table(prefix="message", delta=0, date=None,
@@ -165,14 +204,14 @@ def get_rotating_message_table(prefix="message", delta=0, date=None,
     # type: (str, int, Optional[datetime.date], int, int) -> Table
     """Gets the message table for the current month."""
     tablename = make_rotating_tablename(prefix, delta, date)
-    if not table_exists(DynamoDBConnection(), tablename):
+    if not table_exists(tablename):
         return create_rotating_message_table(
             prefix=prefix, delta=delta, date=date,
             read_throughput=message_read_throughput,
             write_throughput=message_write_throughput,
         )
     else:
-        return Table(tablename)
+        return g_dynamodb.Table(tablename)
 
 
 def create_router_table(tablename="router", read_throughput=5,
@@ -191,27 +230,84 @@ def create_router_table(tablename="router", read_throughput=5,
     cost of additional queries during GC to locate expired users.
 
     """
-    return Table.create(tablename,
-                        schema=[HashKey("uaid")],
-                        throughput=dict(read=read_throughput,
-                                        write=write_throughput),
-                        global_indexes=[
-                            GlobalKeysOnlyIndex(
-                                'AccessIndex',
-                                parts=[
-                                    HashKey('last_connect',
-                                            data_type=NUMBER)],
-                                throughput=dict(read=5, write=5))],
-                        )
+
+    table = g_dynamodb.create_table(
+        TableName=tablename,
+        KeySchema=[
+            {
+                'AttributeName': 'uaid',
+                'KeyType': 'HASH'
+            }
+        ],
+        AttributeDefinitions=[
+            {
+                'AttributeName': 'uaid',
+                'AttributeType': 'S'
+            },
+            {
+                'AttributeName': 'last_connect',
+                'AttributeType': 'N'
+            }],
+        ProvisionedThroughput={
+            'ReadCapacityUnits': read_throughput,
+            'WriteCapacityUnits': write_throughput,
+        },
+        GlobalSecondaryIndexes=[
+            {
+                'IndexName': 'AccessIndex',
+                'KeySchema': [
+                    {
+                        'AttributeName': "last_connect",
+                        'KeyType': "HASH"
+                    }
+                ],
+                'Projection': {
+                    'ProjectionType': 'INCLUDE',
+                    'NonKeyAttributes': [
+                        'last_connect'
+                    ],
+                },
+                'ProvisionedThroughput': {
+                    'ReadCapacityUnits': read_throughput,
+                    'WriteCapacityUnits': write_throughput,
+                }
+            }
+        ]
+    )
+    table.meta.client.get_waiter('table_exists').wait(
+        TableName=tablename)
+    try:
+        table.meta.client.update_time_to_live(
+            TableName=tablename,
+            TimeToLiveSpecification={
+                'Enabled': True,
+                'AttributeName': 'expiry'
+            }
+        )
+    except ClientError as ex:  # pragma nocover
+        if ex.response["Error"]["Code"] != "UnknownOperationException":
+            raise
+    return table
+
+
+def _drop_table(tablename):
+    try:
+        g_client.delete_table(TableName=tablename)
+    except ClientError:  # pragma nocover
+        pass
 
 
 def _make_table(table_func, tablename, read_throughput, write_throughput):
     # type: (Callable[[str, int, int], Table], str, int, int) -> Table
     """Private common function to make a table with a table func"""
-    if not table_exists(DynamoDBConnection(), tablename):
+    if not table_exists(tablename):
         return table_func(tablename, read_throughput, write_throughput)
     else:
-        return Table(tablename)
+        return g_dynamodb.Table(tablename)
+
+
+def _expiry(ttl):
+    return int(time.time() + ttl)
 
 
 def get_router_table(tablename="router", read_throughput=5,
@@ -238,8 +334,7 @@ def preflight_check(message, router, uaid="deadbeef00000000deadbeef00000000"):
     # Verify tables are ready for use if they just got created
     ready = False
     while not ready:
-        tbl_status = [x.describe()["Table"]["TableStatus"]
-                      for x in [message.table, router.table]]
+        tbl_status = [x.table_status() for x in [message, router]]
         ready = all([status == "ACTIVE" for status in tbl_status])
         if not ready:
             time.sleep(1)
@@ -333,11 +428,14 @@ def generate_last_connect_values(date):
             yield int(val)
 
 
-def list_tables(conn):
+def list_tables(client=g_client):
     """Return a list of the names of all DynamoDB tables."""
     start_table = None
     while True:
-        result = conn.list_tables(exclusive_start_table_name=start_table)
+        if start_table:  # pragma nocover
+            result = client.list_tables(ExclusiveStartTableName=start_table)
+        else:
+            result = client.list_tables()
         for table in result.get('TableNames', []):
             yield table
         start_table = result.get('LastEvaluatedTableName', None)
@@ -345,14 +443,16 @@ def list_tables(conn):
             break
 
 
-def table_exists(conn, tablename):
+def table_exists(tablename, client=None):
     """Determine if the specified Table exists"""
-    return any(tablename == name for name in list_tables(conn))
+    if not client:
+        client = g_client
+    return tablename in list_tables(client)
 
 
 class Message(object):
     """Create a Message table abstraction on top of a DynamoDB Table object"""
-    def __init__(self, table, metrics):
+    def __init__(self, table, metrics, max_ttl=MAX_EXPIRY):
         # type: (Table, IMetrics) -> None
         """Create a new Message object
 
@@ -363,23 +463,29 @@ class Message(object):
         """
         self.table = table
         self.metrics = metrics
-        self.encode = table._encode_keys
+        self._max_ttl = max_ttl
+
+    def table_status(self):
+        return self.table.table_status
 
     @track_provisioned
-    def register_channel(self, uaid, channel_id):
-        # type: (str, str) -> bool
+    def register_channel(self, uaid, channel_id, ttl=None):
+        # type: (str, str, int) -> bool
         """Register a channel for a given uaid"""
-        conn = self.table.connection
-        db_key = self.encode({"uaid": hasher(uaid), "chidmessageid": " "})
         # Generate our update expression
-        expr = "ADD chids :channel_id"
-        expr_values = self.encode({":channel_id":
-                                  set([normalize_id(channel_id)])})
-        conn.update_item(
-            self.table.table_name,
-            db_key,
-            update_expression=expr,
-            expression_attribute_values=expr_values,
+        if ttl is None:
+            ttl = self._max_ttl
+        expr_values = {
+            ":channel_id": set([normalize_id(channel_id)]),
+            ":expiry": _expiry(ttl)
+        }
+        self.table.update_item(
+            Key={
+                'uaid': hasher(uaid),
+                'chidmessageid': ' ',
+            },
+            UpdateExpression='ADD chids :channel_id, expiry :expiry',
+            ExpressionAttributeValues=expr_values,
         )
         return True
 
@@ -387,23 +493,23 @@ class Message(object):
     def unregister_channel(self, uaid, channel_id, **kwargs):
         # type: (str, str, **str) -> bool
         """Remove a channel registration for a given uaid"""
-        conn = self.table.connection
-        db_key = self.encode({"uaid": hasher(uaid), "chidmessageid": " "})
         expr = "DELETE chids :channel_id"
         chid = normalize_id(channel_id)
-        expr_values = self.encode({":channel_id": set([chid])})
+        expr_values = {":channel_id": set([chid])}
 
-        result = conn.update_item(
-            self.table.table_name,
-            db_key,
-            update_expression=expr,
-            expression_attribute_values=expr_values,
-            return_values="UPDATED_OLD",
+        response = self.table.update_item(
+            Key={
+                'uaid': hasher(uaid),
+                'chidmessageid': ' ',
+            },
+            UpdateExpression=expr,
+            ExpressionAttributeValues=expr_values,
+            ReturnValues="UPDATED_OLD",
         )
-        chids = result.get('Attributes', {}).get('chids', {})
+        chids = response.get('Attributes', {}).get('chids', {})
         if chids:
             try:
-                return chid in self.table._dynamizer.decode(chids)
+                return chid in chids
             except (TypeError, AttributeError):  # pragma: nocover
                 pass
         # if, for some reason, there are no chids defined, return False.
@@ -417,23 +523,31 @@ class Message(object):
         # Note: This only returns the chids associated with the UAID.
         # Functions that call store_message() would be required to
         # update that list as well using register_channel()
-        try:
-            result = self.table.get_item(consistent=True,
-                                         uaid=hasher(uaid),
-                                         chidmessageid=" ")
-            return (True, result["chids"] or set([]))
-        except ItemNotFound:
+        result = self.table.get_item(
+            Key={
+                'uaid': hasher(uaid),
+                'chidmessageid': ' ',
+            },
+            ConsistentRead=True
+        )
+        if result['ResponseMetadata']['HTTPStatusCode'] != 200:
             return False, set([])
+        if 'Item' not in result:
+            return False, set([])
+        return True, result['Item'].get("chids", set([]))
 
     @track_provisioned
     def save_channels(self, uaid, channels):
         # type: (str, Set[str]) -> None
         """Save out a set of channels"""
-        self.table.put_item(data=dict(
-            uaid=hasher(uaid),
-            chidmessageid=" ",
-            chids=channels
-        ), overwrite=True)
+        self.table.put_item(
+            Item={
+                'uaid': hasher(uaid),
+                'chidmessageid': ' ',
+                'chids': channels,
+                'expiry': _expiry(self._max_ttl),
+            },
+        )
 
     @track_provisioned
     def store_message(self, notification):
@@ -442,13 +556,17 @@ class Message(object):
         item = dict(
             uaid=hasher(notification.uaid.hex),
             chidmessageid=notification.sort_key,
-            data=notification.data,
             headers=notification.headers,
             ttl=notification.ttl,
             timestamp=notification.timestamp,
-            updateid=notification.update_id
+            updateid=notification.update_id,
+            expiry=_expiry(min(
+                notification.ttl or 0,
+                self._max_ttl))
         )
-        self.table.put_item(data=item, overwrite=True)
+        if notification.data:
+            item['data'] = notification.data
+        self.table.put_item(Item=item)
 
     @track_provisioned
     def delete_message(self, notification):
@@ -457,16 +575,24 @@ class Message(object):
         if notification.update_id:
             try:
                 self.table.delete_item(
-                    uaid=hasher(notification.uaid.hex),
-                    chidmessageid=notification.sort_key,
-                    expected={'updateid__eq': notification.update_id})
-            except ConditionalCheckFailedException:
+                    Key={
+                        'uaid': hasher(notification.uaid.hex),
+                        'chidmessageid': notification.sort_key
+                    },
+                    Expected={
+                        'updateid': {
+                            'Exists': True,
+                            'Value': notification.update_id
+                            }
+                    })
+            except ClientError:
                 return False
         else:
             self.table.delete_item(
-                uaid=hasher(notification.uaid.hex),
-                chidmessageid=notification.sort_key,
-            )
+                Key={
+                    'uaid': hasher(notification.uaid.hex),
+                    'chidmessageid': notification.sort_key,
+                })
         return True
 
     @track_provisioned
@@ -483,10 +609,13 @@ class Message(object):
 
         """
         # Eagerly fetches all results in the result set.
-        results = list(self.table.query_2(uaid__eq=hasher(uaid.hex),
-                                          chidmessageid__lt="02",
-                                          consistent=True, limit=limit))
-
+        response = self.table.query(
+            KeyConditionExpression=(Key("uaid").eq(hasher(uaid.hex))
+                                    & Key('chidmessageid').lt('02')),
+            ConsistentRead=True,
+            Limit=limit,
+        )
+        results = list(response['Items'])
         # First extract the position if applicable, slightly higher than 01:
         # to ensure we don't load any 01 remainders that didn't get deleted
         # yet
@@ -525,11 +654,15 @@ class Message(object):
         else:
             sortkey = "01;"
 
-        results = list(self.table.query_2(uaid__eq=hasher(uaid.hex),
-                                          chidmessageid__gt=sortkey,
-                                          consistent=True, limit=limit))
+        response = self.table.query(
+            KeyConditionExpression=(Key('uaid').eq(hasher(uaid.hex))
+                                    & Key('chidmessageid').gt(sortkey)),
+            ConsistentRead=True,
+            Limit=limit
+        )
         notifs = [
-            WebPushNotification.from_message_table(uaid, x) for x in results
+            WebPushNotification.from_message_table(uaid, x) for x in
+            response.get("Items")
         ]
         ts_notifs = [x for x in notifs if x.sortkey_timestamp]
         last_position = None
@@ -541,22 +674,23 @@ class Message(object):
     def update_last_message_read(self, uaid, timestamp):
         # type: (uuid.UUID, int) -> bool
         """Update the last read timestamp for a user"""
-        conn = self.table.connection
-        db_key = self.encode({"uaid": hasher(uaid.hex), "chidmessageid": " "})
-        expr = "SET current_timestamp=:timestamp"
-        expr_values = self.encode({":timestamp": timestamp})
-        conn.update_item(
-            self.table.table_name,
-            db_key,
-            update_expression=expr,
-            expression_attribute_values=expr_values,
+        expr = "SET current_timestamp=:timestamp, expiry=:expiry"
+        expr_values = {":timestamp": timestamp,
+                       ":expiry": _expiry(self._max_ttl)}
+        self.table.update_item(
+            Key={
+                "uaid": hasher(uaid.hex),
+                "chidmessageid": " "
+            },
+            UpdateExpression=expr,
+            ExpressionAttributeValues=expr_values,
         )
         return True
 
 
 class Router(object):
     """Create a Router table abstraction on top of a DynamoDB Table object"""
-    def __init__(self, table, metrics):
+    def __init__(self, table, metrics, max_ttl=MAX_EXPIRY):
         # type: (Table, IMetrics) -> None
         """Create a new Router object
 
@@ -567,7 +701,10 @@ class Router(object):
         """
         self.table = table
         self.metrics = metrics
-        self.encode = table._encode_keys
+        self._max_ttl = max_ttl
+
+    def table_status(self):
+        return self.table.table_status
 
     def get_uaid(self, uaid):
         # type: (str) -> Item
@@ -580,18 +717,24 @@ class Router(object):
 
         """
         try:
-            item = self.table.get_item(consistent=True, uaid=hasher(uaid))
+            item = self.table.get_item(
+                Key={
+                    'uaid': hasher(uaid)
+                },
+                ConsistentRead=True,
+            )
+
+            if item.get('ResponseMetadata').get('HTTPStatusCode') != 200:
+                raise ItemNotFound('uaid not found')
+            item = item.get('Item')
+            if item is None:
+                raise ItemNotFound("uaid not found")
             if item.keys() == ['uaid']:
                 # Incomplete record, drop it.
                 self.drop_user(uaid)
                 raise ItemNotFound("uaid not found")
             return item
-        except ProvisionedThroughputExceededException:
-            # We unfortunately have to catch this here, as track_provisioned
-            # will not see this, since JSONResponseError is a subclass and
-            # will capture it
-            raise
-        except JSONResponseError:  # pragma: nocover
+        except Boto3Error:  # pragma: nocover
             # We trap JSONResponseError because Moto returns text instead of
             # JSON when looking up values in empty tables. We re-throw the
             # correct ItemNotFound exception
@@ -612,8 +755,7 @@ class Router(object):
 
         """
         # Fetch a senderid for this user
-        conn = self.table.connection
-        db_key = self.encode({"uaid": hasher(data["uaid"])})
+        db_key = {"uaid": hasher(data["uaid"])}
         del data["uaid"]
         if "router_type" not in data or "connected_at" not in data:
             # Not specifying these values will generate an exception in AWS.
@@ -621,7 +763,7 @@ class Router(object):
                                     "or connected_at")
         # Generate our update expression
         expr = "SET " + ", ".join(["%s=:%s" % (x, x) for x in data.keys()])
-        expr_values = self.encode({":%s" % k: v for k, v in data.items()})
+        expr_values = {":%s" % k: v for k, v in data.items()}
         try:
             cond = """(
                 attribute_not_exists(router_type) or
@@ -630,13 +772,12 @@ class Router(object):
                 attribute_not_exists(node_id) or
                 (connected_at < :connected_at)
             )"""
-            result = conn.update_item(
-                self.table.table_name,
-                db_key,
-                update_expression=expr,
-                condition_expression=cond,
-                expression_attribute_values=expr_values,
-                return_values="ALL_OLD",
+            result = self.table.update_item(
+                Key=db_key,
+                UpdateExpression=expr,
+                ConditionExpression=cond,
+                ExpressionAttributeValues=expr_values,
+                ReturnValues="ALL_OLD",
             )
             if "Attributes" in result:
                 r = {}
@@ -649,8 +790,13 @@ class Router(object):
                         r[key] = value
                 result = r
             return (True, result)
-        except ConditionalCheckFailedException:
-            return (False, {})
+        except ClientError as ex:
+            # ClientErrors are generated by a factory, and while they have a
+            # class, it's dynamically generated.
+            if ex.response['Error']['Code'] == \
+                    'ConditionalCheckFailedException':
+                return (False, {})
+            raise
 
     @track_provisioned
     def drop_user(self, uaid):
@@ -658,16 +804,26 @@ class Router(object):
         """Drops a user record"""
         # The following hack ensures that only uaids that exist and are
         # deleted return true.
-        huaid = hasher(uaid)
-        return self.table.delete_item(uaid=huaid,
-                                      expected={"uaid__eq": huaid})
+        try:
+            item = self.table.get_item(
+                Key={
+                    'uaid': hasher(uaid)
+                },
+                ConsistentRead=True,
+            )
+            if 'Item' not in item:
+                return False
+        except ClientError:
+            pass
+        result = self.table.delete_item(Key={'uaid': hasher(uaid)})
+        return result['ResponseMetadata']['HTTPStatusCode'] == 200
 
     def delete_uaids(self, uaids):
         # type: (List[str]) -> None
         """Issue a batch delete call for the given uaids"""
-        with self.table.batch_write() as batch:
+        with self.table.batch_writer() as batch:
             for uaid in uaids:
-                batch.delete_item(uaid=uaid)
+                batch.delete_item(Key={'uaid': uaid})
 
     def drop_old_users(self, months_ago=2):
         # type: (int) -> Iterable[int]
@@ -699,10 +855,11 @@ class Router(object):
 
         batched = []
         for hash_key in generate_last_connect_values(prior_date):
-            result_set = self.table.query_2(
-                last_connect__eq=hash_key,
-                index="AccessIndex",
+            response = self.table.query(
+                KeyConditionExpression=Key("last_connect").eq(hash_key),
+                IndexName="AccessIndex",
             )
+            result_set = response.get('Items', [])
             for result in result_set:
                 batched.append(result["uaid"])
 
@@ -717,6 +874,14 @@ class Router(object):
             yield len(batched)
 
     @track_provisioned
+    def _update_last_connect(self, uaid, last_connect):
+        self.table.update_item(
+            Key={"uaid": hasher(uaid)},
+            UpdateExpression="SET last_connect=:last_connect",
+            ExpressionAttributeValues={":last_connect": last_connect}
+        )
+
+    @track_provisioned
     def update_message_month(self, uaid, month):
         # type: (str, str) -> bool
         """Update the route tables current_message_month
@@ -727,23 +892,23 @@ class Router(object):
         timestamp.
 
         """
-        conn = self.table.connection
-        db_key = self.encode({"uaid": hasher(uaid)})
-        expr = ("SET current_month=:curmonth, last_connect=:last_connect")
-        expr_values = self.encode({":curmonth": month,
-                                   ":last_connect": generate_last_connect(),
-                                   })
-        conn.update_item(
-            self.table.table_name,
-            db_key,
-            update_expression=expr,
-            expression_attribute_values=expr_values,
+        db_key = {"uaid": hasher(uaid)}
+        expr = ("SET current_month=:curmonth, last_connect=:last_connect, "
+                "expiry=:expiry")
+        expr_values = {":curmonth": month,
+                       ":last_connect": generate_last_connect(),
+                       ":expiry": _expiry(self._max_ttl),
+                       }
+        self.table.update_item(
+            Key=db_key,
+            UpdateExpression=expr,
+            ExpressionAttributeValues=expr_values,
         )
         return True
 
     @track_provisioned
     def clear_node(self, item):
-        # type: (Item) -> bool
+        # type: (dict) -> bool
         """Given a router item and remove the node_id
 
         The node_id will only be cleared if the ``connected_at`` matches up
@@ -755,24 +920,26 @@ class Router(object):
             exceeds throughput.
 
         """
-        conn = self.table.connection
         # Pop out the node_id
         node_id = item["node_id"]
         del item["node_id"]
 
         try:
             cond = "(node_id = :node) and (connected_at = :conn)"
-            conn.put_item(
-                self.table.table_name,
-                item=self.encode(item),
-                condition_expression=cond,
-                expression_attribute_values=self.encode({
+            self.table.put_item(
+                Item=item,
+                ConditionExpression=cond,
+                ExpressionAttributeValues={
                     ":node": node_id,
                     ":conn": item["connected_at"],
-                }),
+                },
             )
             return True
-        except ConditionalCheckFailedException:
+        except ClientError as ex:
+            if (ex.response["Error"]["Code"] ==
+                    "ProvisionedThroughputExceededException"):
+                raise
+            # UAID not found.
             return False
 
 
@@ -789,6 +956,8 @@ class DatabaseManager(object):
     message_tables = attrib(default=Factory(dict))  # type: Dict[str, Message]
     current_msg_month = attrib(init=False)          # type: Optional[str]
     current_month = attrib(init=False)              # type: Optional[int]
+    # for testing:
+    client = attrib(default=g_client)                    # type: Optional[Any]
 
     def __attrs_post_init__(self):
         """Initialize sane defaults"""
