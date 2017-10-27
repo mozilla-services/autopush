@@ -1,3 +1,18 @@
+<a name="1.39.0"></a>
+## 1.39.0 (2017-10-26)
+
+
+#### Chore
+
+*   allow WITH_RUST=false to disable the rust build ([7da04f10](https://github.com/mozilla-services/autopush/commit/7da04f100cfdc1c9685a2a8c71d467fcf85abff6))
+
+#### Features
+
+*   address HTTP2 errors in APNS ([acea77c5](https://github.com/mozilla-services/autopush/commit/acea77c5953e68ae708e5b47b0d8245ecd6ee7bd), closes [#1052](https://github.com/mozilla-services/autopush/issues/1052))
+*   cache SSLContexts created by ssl.wrap_socket ([6dcbba20](https://github.com/mozilla-services/autopush/commit/6dcbba2057ad2c82491504534e97ee4207648fff))
+
+
+
 <a name="1.38.0"></a>
 ## 1.38.0 (2017-10-13)
 
