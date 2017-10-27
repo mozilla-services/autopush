@@ -13,6 +13,12 @@ from typing import (  # noqa
 from OpenSSL import SSL
 from twisted.internet.ssl import DefaultOpenSSLContextFactory
 
+try:
+    SSL_PROTO = ssl.PROTOCOL_TLS
+except AttributeError:
+    SSL_PROTO = ssl.PROTOCOL_SSLv23
+
+
 MOZILLA_INTERMEDIATE_CIPHERS = (
     'ECDHE-RSA-AES128-GCM-SHA256:'
     'ECDHE-ECDSA-AES128-GCM-SHA256:'
@@ -111,7 +117,7 @@ def ssl_wrap_socket_cached(
         certfile=None,                 # type: Optional[str]
         server_side=False,             # type: bool
         cert_reqs=ssl.CERT_NONE,       # type: int
-        ssl_version=ssl.PROTOCOL_TLS,  # type: int
+        ssl_version=SSL_PROTO,         # type: int
         ca_certs=None,                 # type: Optional[str]
         do_handshake_on_connect=True,  # type: bool
         suppress_ragged_eofs=True,     # type: bool
