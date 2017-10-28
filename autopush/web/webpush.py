@@ -54,6 +54,8 @@ MAX_TTL = 60 * 60 * 24 * 60
 # Base64 URL validation
 VALID_BASE64_URL = re.compile(r'^[0-9A-Za-z\-_]+=*$')
 
+VALID_ROUTER_TYPES = ["simplepush", "webpush", "gcm", "fcm", "apns"]
+
 
 class WebPushSubscriptionSchema(Schema):
     uaid = fields.UUID(required=True)
@@ -86,13 +88,25 @@ class WebPushSubscriptionSchema(Schema):
         except ItemNotFound:
             raise InvalidRequest("UAID not found", status_code=410, errno=103)
 
-        if (result.get("router_type") in ["gcm", "fcm"]
+        # We must have a router_type to validate the user
+        router_type = result.get("router_type")
+        if router_type not in VALID_ROUTER_TYPES:
+            self.context["log"].debug(format="Dropping User", code=102,
+                                      uaid_hash=hasher(result["uaid"]),
+                                      uaid_record=dump_uaid(result))
+            self.context["metrics"].increment("updates.drop_user",
+                                              tags=make_tags(errno=102))
+            self.context["db"].router.drop_user(result["uaid"])
+            raise InvalidRequest("No such subscription", status_code=410,
+                                 errno=106)
+
+        if (router_type in ["gcm", "fcm"]
             and 'senderID' not in result.get('router_data',
                                              {}).get("creds", {})):
-                # Make sure we note that this record is bad.
-                result['critical_failure'] = \
-                    result.get('critical_failure', "Missing SenderID")
-                db.router.register_user(result)
+            # Make sure we note that this record is bad.
+            result['critical_failure'] = \
+                result.get('critical_failure', "Missing SenderID")
+            db.router.register_user(result)
 
         if result.get("critical_failure"):
             raise InvalidRequest("Critical Failure: %s" %

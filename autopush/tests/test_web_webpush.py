@@ -187,6 +187,19 @@ class TestWebpushHandler(unittest.TestCase):
         assert resp.get_status() == 401
 
     @inlineCallbacks
+    def test_request_no_router_type(self):
+        self.fernet_mock.decrypt.return_value = 'a' * 32
+        self.db.router.get_uaid.return_value = dict(
+            uaid=dummy_uaid,
+            chid=dummy_chid,
+        )
+        resp = yield self.client.post(
+            self.url(api_ver='v1', token='ignored'),
+            headers={'authorization': 'webpush dummy.key'}
+        )
+        assert resp.get_status() == 410
+
+    @inlineCallbacks
     def test_request_bad_v2_id_bad_pubkey(self):
         self.fernet_mock.decrypt.return_value = 'a' * 64
         resp = yield self.client.post(
