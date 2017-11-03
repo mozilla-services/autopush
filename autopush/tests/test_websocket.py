@@ -8,10 +8,6 @@ from collections import defaultdict
 import twisted.internet.base
 from autobahn.twisted.util import sleep
 from autobahn.websocket.protocol import ConnectionRequest
-from boto.dynamodb2.exceptions import (
-    ProvisionedThroughputExceededException,
-)
-from boto.exception import JSONResponseError
 from mock import Mock, patch
 import pytest
 from twisted.internet import reactor
@@ -166,7 +162,8 @@ class WebsocketTestCase(unittest.TestCase):
 
         """
         calls = self.send_mock.call_args_list
-        yield self._wait_for(lambda: len(calls))
+        yield self._wait_for(lambda: len(calls),
+                             duration=4000)
         args = calls.pop(0)
         msg = args[0][0]
         returnValue(json.loads(msg))
@@ -454,12 +451,14 @@ class WebsocketTestCase(unittest.TestCase):
             "current_month": msg_date,
         }
         router = self.proto.db.router
-        router.table.put_item(data=dict(
-            uaid=orig_uaid,
-            connected_at=ms_time(),
-            current_month=msg_date,
-            router_type="webpush"
-        ))
+        router.table.put_item(
+            Item=dict(
+                uaid=orig_uaid,
+                connected_at=ms_time(),
+                current_month=msg_date,
+                router_type="webpush"
+            )
+        )
 
         def fake_msg(data):
             return (True, msg_data)
@@ -600,11 +599,15 @@ class WebsocketTestCase(unittest.TestCase):
         mock_patch = patch_range.start()
         mock_patch.return_value = 1
 
-        def raise_error(*args):
-            raise ProvisionedThroughputExceededException(None, None)
+        def raise_condition(*args, **kwargs):
+            import autopush.db
+            raise autopush.db.g_client.exceptions.ClientError(
+                {'Error': {'Code': 'ProvisionedThroughputExceededException'}},
+                'mock_update_item'
+            )
 
         self.proto.db.router.update_message_month = MockAssist([
-            raise_error,
+            raise_condition,
             Mock(),
         ])
 
@@ -708,7 +711,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         # Fail out the register_user call
         router = self.proto.db.router
-        router.table.connection.update_item = Mock(side_effect=KeyError)
+        router.table.update_item = Mock(side_effect=KeyError)
 
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 use_webpush=True, stop=1))
@@ -723,31 +726,15 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.randrange = Mock(return_value=0.1)
         # Fail out the register_user call
 
-        def throw_error(*args, **kwargs):
-            raise ProvisionedThroughputExceededException(None, None)
+        def raise_condition(*args, **kwargs):
+            import autopush.db
+            raise autopush.db.g_client.exceptions.ClientError(
+                {'Error': {'Code': 'ProvisionedThroughputExceededException'}},
+                'mock_update_item'
+            )
 
         router = self.proto.db.router
-        router.table.connection.update_item = Mock(side_effect=throw_error)
-
-        self._send_message(dict(messageType="hello", use_webpush=True,
-                                channelIDs=[]))
-        msg = yield self.get_response()
-        assert msg["status"] == 503
-        assert msg["reason"] == "error - overloaded"
-        self.flushLoggedErrors()
-
-    @inlineCallbacks
-    def test_hello_jsonresponseerror(self):
-        self._connect()
-
-        self.proto.randrange = Mock()
-        self.proto.randrange.return_value = 0.1
-
-        def throw_error(*args, **kwargs):
-            raise JSONResponseError(None, None)
-
-        router = self.proto.db.router
-        router.table.connection.update_item = Mock(side_effect=throw_error)
+        router.table.update_item = Mock(side_effect=raise_condition)
 
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
@@ -1061,10 +1048,14 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.db.message.register_channel = register = Mock()
 
-        def throw_provisioned(*args, **kwargs):
-            raise ProvisionedThroughputExceededException(None, None)
+        def raise_condition(*args, **kwargs):
+            import autopush.db
+            raise autopush.db.g_client.exceptions.ClientError(
+                {'Error': {'Code': 'ProvisionedThroughputExceededException'}},
+                'mock_update_item'
+            )
 
-        register.side_effect = throw_provisioned
+        register.side_effect = raise_condition
 
         yield self.proto.process_register(dict(channelID=chid))
         assert self.proto.db.message.register_channel.called
@@ -1374,12 +1365,13 @@ class WebsocketTestCase(unittest.TestCase):
         return d
 
     def test_process_notifications_provision_err(self):
-        from boto.dynamodb2.exceptions import (
-            ProvisionedThroughputExceededException
-        )
 
-        def throw(*args, **kwargs):
-            raise ProvisionedThroughputExceededException(500, "whoops")
+        def raise_condition(*args, **kwargs):
+            import autopush.db
+            raise autopush.db.g_client.exceptions.ClientError(
+                {'Error': {'Code': 'ProvisionedThroughputExceededException'}},
+                'mock_update_item'
+            )
 
         twisted.internet.base.DelayedCall.debug = True
         self._connect()
@@ -1387,9 +1379,9 @@ class WebsocketTestCase(unittest.TestCase):
             return_value=(None, [])
         )
         self.proto.db.message.fetch_messages = Mock(
-            side_effect=throw)
+            side_effect=raise_condition)
         self.proto.db.message.fetch_timestamp_messages = Mock(
-            side_effect=throw)
+            side_effect=raise_condition)
         self.proto.deferToLater = Mock()
         self.proto.ps.uaid = uuid.uuid4().hex
 
@@ -1402,7 +1394,7 @@ class WebsocketTestCase(unittest.TestCase):
         notif_d.addErrback(lambda x: d.errback(x))
 
         def wait(result):
-            assert self.proto.deferToLater.called
+            assert self.proto.deferToLater.called, "Defer not called"
             d.callback(True)
 
         self.proto.ps._notification_fetch.addCallback(wait)

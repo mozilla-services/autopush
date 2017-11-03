@@ -2,8 +2,8 @@ import json
 import time
 from functools import wraps
 
-from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from boto.exception import BotoServerError
+from botocore.exceptions import ClientError
 from marshmallow.schema import UnmarshalResult  # noqa
 from typing import (  # noqa
     Any,
@@ -247,11 +247,18 @@ class BaseWebHandler(BaseHandler):
 
     def _overload_err(self, fail):
         """errBack for throughput provisioned exceptions"""
-        fail.trap(ProvisionedThroughputExceededException)
-        self.log.debug(format="Throughput Exceeded", status_code=503,
-                       errno=201, client_info=self._client_info)
-        self._write_response(503, 201,
-                             message="Please slow message send rate")
+        fail.trap(ClientError)
+        if (fail.value.response['Error']['Code'] ==
+                "ProvisionedThroughputExceededException"):
+            self.log.debug(format="Throughput Exceeded", status_code=503,
+                           errno=201, client_info=self._client_info)
+            self._write_response(503, 201,
+                                 message="Please slow message send rate")
+            return
+        self.log.debug(format="Unhandled Client Error: {}".format(
+            json.dumps(fail.value.response)), status_code=500,
+            client_info=self._client_info)
+        self._write_response(500, 999, message="Unexpected Error")
 
     def _boto_err(self, fail):
         """errBack for random boto exceptions"""

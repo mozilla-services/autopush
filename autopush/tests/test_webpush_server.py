@@ -7,7 +7,6 @@ from uuid import uuid4, UUID
 import attr
 import factory
 from boto.dynamodb2.exceptions import ItemNotFound
-from boto.dynamodb2.exceptions import ProvisionedThroughputExceededException
 from mock import Mock
 from twisted.logger import globalLogPublisher
 import pytest
@@ -499,8 +498,16 @@ class TestRegisterProcessor(BaseSetup):
         self._test_invalid(uuid4().hex)
 
     def test_register_over_provisioning(self):
-        self.db.message.register_channel = Mock(
-            side_effect=ProvisionedThroughputExceededException(None, None))
+
+        def raise_condition(*args, **kwargs):
+            import autopush.db
+            raise autopush.db.g_client.exceptions.ClientError(
+                {'Error': {'Code': 'ProvisionedThroughputExceededException'}},
+                'mock_update_item'
+            )
+
+        self.db.message.table.update_item = Mock(
+            side_effect=raise_condition)
         self._test_invalid(str(uuid4()), "overloaded", 503)
 
 

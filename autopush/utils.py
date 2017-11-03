@@ -1,4 +1,3 @@
-"""A small collection of Autopush utility functions"""
 import base64
 import hashlib
 import hmac
@@ -475,7 +474,6 @@ class WebPushNotification(object):
         key_info = cls.parse_sort_key(item["chidmessageid"])
         if key_info["api_ver"] in ["01", "02"]:
             key_info["message_id"] = item["updateid"]
-
         notif = cls(
             uaid=uaid,
             channel_id=uuid.UUID(key_info["channel_id"]),
@@ -505,9 +503,13 @@ class WebPushNotification(object):
         """
         sub = data["subscription"]
         notif = cls(
-            uaid=sub["uaid"], channel_id=sub["chid"], data=data["body"],
-            headers=data["headers"], ttl=data["headers"]["ttl"],
-            topic=data["headers"]["topic"], legacy=legacy,
+            uaid=sub["uaid"],
+            channel_id=sub["chid"],
+            data=data["body"],
+            headers=data["headers"],
+            ttl=data["headers"]["ttl"],
+            topic=data["headers"]["topic"],
+            legacy=legacy,
         )
 
         if notif.data:

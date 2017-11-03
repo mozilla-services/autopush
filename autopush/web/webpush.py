@@ -28,7 +28,7 @@ from jose import JOSEError, JWTError
 from autopush.crypto_key import CryptoKey
 from autopush.db import DatabaseManager  # noqa
 from autopush.metrics import Metrics, make_tags  # noqa
-from autopush.db import dump_uaid, hasher
+from autopush.db import hasher
 from autopush.exceptions import (
     InvalidRequest,
     InvalidTokenException,
@@ -93,7 +93,7 @@ class WebPushSubscriptionSchema(Schema):
         if router_type not in VALID_ROUTER_TYPES:
             self.context["log"].debug(format="Dropping User", code=102,
                                       uaid_hash=hasher(result["uaid"]),
-                                      uaid_record=dump_uaid(result))
+                                      uaid_record=repr(result))
             self.context["metrics"].increment("updates.drop_user",
                                               tags=make_tags(errno=102))
             self.context["db"].router.drop_user(result["uaid"])
@@ -134,9 +134,8 @@ class WebPushSubscriptionSchema(Schema):
         if 'current_month' not in result:
             log.debug(format="Dropping User", code=102,
                       uaid_hash=hasher(uaid),
-                      uaid_record=dump_uaid(result))
-            metrics.increment("updates.drop_user",
-                              tags=make_tags(errno=102))
+                      uaid_record=repr(result))
+            metrics.increment("updates.drop_user", tags=make_tags(errno=102))
             db.router.drop_user(uaid)
             raise InvalidRequest("No such subscription", status_code=410,
                                  errno=106)
@@ -145,9 +144,8 @@ class WebPushSubscriptionSchema(Schema):
         if month_table not in db.message_tables:
             log.debug(format="Dropping User", code=103,
                       uaid_hash=hasher(uaid),
-                      uaid_record=dump_uaid(result))
-            metrics.increment("updates.drop_user",
-                              tags=make_tags(errno=103))
+                      uaid_record=repr(result))
+            metrics.increment("updates.drop_user", tags=make_tags(errno=103))
             db.router.drop_user(uaid)
             raise InvalidRequest("No such subscription", status_code=410,
                                  errno=106)
@@ -533,7 +531,7 @@ class WebPushHandler(BaseWebHandler):
                 # this record.
                 self.log.debug(format="Dropping User", code=100,
                                uaid_hash=hasher(uaid_data["uaid"]),
-                               uaid_record=dump_uaid(uaid_data),
+                               uaid_record=repr(uaid_data),
                                client_info=self._client_info)
                 d = deferToThread(self.db.router.drop_user, uaid_data["uaid"])
                 d.addCallback(lambda x: self._router_response(response,

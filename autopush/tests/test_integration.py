@@ -320,12 +320,14 @@ class IntegrationBase(unittest.TestCase):
 
         # Endpoint HTTP router
         self.ep = ep = EndpointApplication(ep_conf)
+        ep.db.client = db.g_client
         ep.setup(rotate_tables=False)
         ep.startService()
         self.addCleanup(ep.stopService)
 
         # Websocket server
         self.conn = conn = ConnectionApplication(conn_conf)
+        conn.db.client = db.g_client
         conn.setup(rotate_tables=False)
         conn.startService()
         self.addCleanup(conn.stopService)
@@ -1167,9 +1169,15 @@ class TestWebPush(IntegrationBase):
         # Verify last_connect is current, then move that back
         assert has_connected_this_month(c)
         today = get_month(delta=-1)
-        c["last_connect"] = int("%s%s020001" % (today.year,
-                                str(today.month).zfill(2)))
-        yield deferToThread(c.partial_save)
+        last_connect = int("%s%s020001" % (today.year,
+                                           str(today.month).zfill(2)))
+
+        yield deferToThread(
+            self.conn.db.router._update_last_connect,
+            client.uaid,
+            last_connect,
+        )
+        c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
         assert has_connected_this_month(c) is False
 
         # Move the clients channels back one month
@@ -1187,9 +1195,8 @@ class TestWebPush(IntegrationBase):
         # Remove the channels entry entirely from this month
         yield deferToThread(
             self.conn.db.message.table.delete_item,
-            uaid=client.uaid,
-            chidmessageid=" "
-        )
+            Key={'uaid': client.uaid, 'chidmessageid': ' '}
+         )
 
         # Verify the channel is gone
         exists, chans = yield deferToThread(
@@ -1278,9 +1285,12 @@ class TestWebPush(IntegrationBase):
         # Verify last_connect is current, then move that back
         assert has_connected_this_month(c)
         today = get_month(delta=-1)
-        c["last_connect"] = int("%s%s020001" % (today.year,
-                                str(today.month).zfill(2)))
-        yield deferToThread(c.partial_save)
+        yield deferToThread(
+            self.conn.db.router._update_last_connect,
+            client.uaid,
+            int("%s%s020001" % (today.year, str(today.month).zfill(2)))
+        )
+        c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
         assert has_connected_this_month(c) is False
 
         # Move the clients channels back one month

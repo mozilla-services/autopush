@@ -10,7 +10,7 @@ from attr import (
     attrib,
 )
 from boto.dynamodb2.exceptions import ItemNotFound
-from boto.exception import JSONResponseError
+from botocore.exceptions import ClientError
 from typing import (  # noqa
     Dict,
     List,
@@ -570,8 +570,11 @@ class RegisterCommand(ProcessorCommand):
         message = self.db.message_tables[command.message_month]
         try:
             message.register_channel(command.uaid.hex, command.channel_id)
-        except JSONResponseError:
-            return RegisterErrorResponse(error_msg="overloaded", status=503)
+        except ClientError as ex:
+            if (ex.response['Error']['Code'] ==
+                    "ProvisionedThroughputExceededException"):
+                return RegisterErrorResponse(error_msg="overloaded",
+                                             status=503)
 
         self.metrics.increment('ua.command.register')
         log.info(

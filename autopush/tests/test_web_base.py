@@ -2,6 +2,7 @@ import sys
 import uuid
 
 from boto.exception import BotoServerError
+from botocore.exceptions import ClientError
 from mock import Mock, patch
 from twisted.internet.defer import Deferred
 from twisted.logger import Logger
@@ -9,7 +10,6 @@ from twisted.python.failure import Failure
 from twisted.trial import unittest
 
 from autopush.config import AutopushConfig
-from autopush.db import ProvisionedThroughputExceededException
 from autopush.http import EndpointHTTPFactory
 from autopush.exceptions import InvalidRequest
 from autopush.metrics import SinkMetrics
@@ -195,11 +195,29 @@ class TestBase(unittest.TestCase):
 
     def test_overload_err(self):
         try:
-            raise ProvisionedThroughputExceededException("error", None, None)
-        except ProvisionedThroughputExceededException:
+            import autopush.db
+            raise autopush.db.g_client.exceptions.ClientError(
+                {'Error': {
+                    'Code': 'ProvisionedThroughputExceededException'}},
+                'mock_update_item'
+            )
+        except ClientError:
             fail = Failure()
         self.base._overload_err(fail)
         self.status_mock.assert_called_with(503, reason=None)
+
+    def test_client_err(self):
+        try:
+            import autopush.db
+            raise autopush.db.g_client.exceptions.ClientError(
+                {'Error': {
+                    'Code': 'Flibbertygidgit'}},
+                'mock_update_item'
+            )
+        except ClientError:
+            fail = Failure()
+        self.base._overload_err(fail)
+        self.status_mock.assert_called_with(500, reason=None)
 
     def test_boto_err(self):
         try:

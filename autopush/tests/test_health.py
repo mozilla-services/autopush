@@ -7,6 +7,7 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.logger import globalLogPublisher
 from twisted.trial import unittest
 
+import autopush.db
 from autopush import __version__
 from autopush.config import AutopushConfig
 from autopush.db import DatabaseManager
@@ -27,7 +28,9 @@ class HealthTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
+
         db = DatabaseManager.from_config(conf)
+        db.client = autopush.db.g_client
         db.setup_tables()
 
         # ignore logging
@@ -52,32 +55,36 @@ class HealthTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_aws_error(self):
-        from autopush.db import make_rotating_tablename
 
         def raise_error(*args, **kwargs):
             raise InternalServerError(None, None)
-        self.router_table.connection.list_tables = Mock(
-            side_effect=raise_error)
-        table_name = make_rotating_tablename("message")
-        self.message.table.connection.list_tables = Mock(
-            return_value={"TableNames": [table_name]})
+
+        safe = self.client.app.db.client
+        self.client.app.db.client = Mock()
+        self.client.app.db.client.list_tables = Mock(side_effect=raise_error)
 
         yield self._assert_reply({
             "status": "NOT OK",
             "version": __version__,
             "clients": 0,
-            "storage": {"status": "OK"},
+            "storage": {
+                "status": "NOT OK",
+                "error": "Server error"
+            },
             "router": {
                 "status": "NOT OK",
                 "error": "Server error"
             }
         }, InternalServerError)
 
+        self.client.app.db.client = safe
+
     @inlineCallbacks
     def test_nonexistent_table(self):
         no_tables = Mock(return_value={"TableNames": []})
-        self.message.table.connection.list_tables = no_tables
-        self.router_table.connection.list_tables = no_tables
+        safe = self.client.app.db.client
+        self.client.app.db.client = Mock()
+        self.client.app.db.client.list_tables = no_tables
 
         yield self._assert_reply({
             "status": "NOT OK",
@@ -92,15 +99,18 @@ class HealthTestCase(unittest.TestCase):
                 "error": "Nonexistent table"
             }
         }, MissingTableException)
+        self.client.app.db.client = safe
 
     @inlineCallbacks
     def test_internal_error(self):
         def raise_error(*args, **kwargs):
             raise Exception("synergies not aligned")
-        self.router_table.connection.list_tables = Mock(
-            return_value={"TableNames": ["router"]})
-        self.message.table.connection.list_tables = Mock(
-            side_effect=raise_error)
+
+        safe = self.client.app.db.client
+        self.client.app.db.client = Mock()
+        self.client.app.db.client.list_tables = Mock(
+            side_effect=raise_error
+        )
 
         yield self._assert_reply({
             "status": "NOT OK",
@@ -110,8 +120,12 @@ class HealthTestCase(unittest.TestCase):
                 "status": "NOT OK",
                 "error": "Internal error"
             },
-            "router": {"status": "OK"}
+            "router": {
+                "status": "NOT OK",
+                "error": "Internal error"
+            }
         }, Exception)
+        self.client.app.db.client = safe
 
     @inlineCallbacks
     def _assert_reply(self, reply, exception=None):
