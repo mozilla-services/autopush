@@ -15,7 +15,6 @@ from twisted.web.client import Agent
 
 import hyper
 import hyper.tls
-import gcmclient
 import pyfcm
 from hyper.http20.exceptions import HTTP20Error
 
@@ -30,7 +29,7 @@ from autopush.router import (
     GCMRouter,
     WebPushRouter,
     FCMRouter,
-)
+    gcmclient)
 from autopush.router.interface import RouterResponse, IRouter
 from autopush.tests import MockAssist
 from autopush.tests.support import test_db
@@ -298,7 +297,7 @@ class APNSRouterTestCase(unittest.TestCase):
 
 class GCMRouterTestCase(unittest.TestCase):
 
-    @patch("gcmclient.gcm.GCM", spec=gcmclient.gcm.GCM)
+    @patch("autopush.router.gcmclient.GCM", spec=gcmclient.GCM)
     def setUp(self, fgcm):
         conf = AutopushConfig(
             hostname="localhost",
@@ -327,17 +326,19 @@ class GCMRouterTestCase(unittest.TestCase):
             router_data=dict(
                 token="connect_data",
                 creds=dict(senderID="test123", auth="12345678abcdefg")))
-        mock_result = Mock(spec=gcmclient.gcm.Result)
+        mock_result = Mock(spec=gcmclient.Result)
         mock_result.canonical = dict()
         mock_result.failed = dict()
         mock_result.not_registered = dict()
-        mock_result.needs_retry.return_value = False
+        mock_result.retry_after = None
         self.mock_result = mock_result
         fgcm.send.return_value = mock_result
 
-    def _check_error_call(self, exc, code, response=None):
+    def _check_error_call(self, exc, code, response=None, errno=None):
         assert isinstance(exc, RouterException)
         assert exc.status_code == code
+        if errno is not None:
+            assert exc.errno == errno
         assert self.router.gcm['test123'].send.called
         if response:
             assert exc.response_body == response
@@ -371,7 +372,7 @@ class GCMRouterTestCase(unittest.TestCase):
                 router_data={"token": "abcd1234"},
                 app_id="invalid123")
 
-    @patch("gcmclient.GCM")
+    @patch("autopush.router.gcmclient.GCM")
     def test_gcmclient_fail(self, fgcm):
         fgcm.side_effect = Exception
         conf = AutopushConfig(
@@ -393,7 +394,8 @@ class GCMRouterTestCase(unittest.TestCase):
             assert isinstance(result, RouterResponse)
             assert self.router.gcm['test123'].send.called
             # Make sure the data was encoded as base64
-            data = self.router.gcm['test123'].send.call_args[0][0].data
+            data = self.router.gcm[
+                'test123'].send.call_args[0][0].payload['data']
             assert data['body'] == 'q60d6g'
             assert data['enc'] == 'test'
             assert data['chid'] == dummy_chid
@@ -421,15 +423,15 @@ class GCMRouterTestCase(unittest.TestCase):
             assert "TTL" in result.headers
             assert self.router.gcm['test123'].send.called
             # Make sure the data was encoded as base64
-            data = self.router.gcm['test123'].send.call_args[0][0].data
-            options = self.router.gcm['test123'].send.call_args[0][0].options
+            payload = self.router.gcm['test123'].send.call_args[0][0].payload
+            data = payload['data']
             assert data['body'] == 'q60d6g'
             assert data['enc'] == 'test'
             assert data['chid'] == dummy_chid
             assert data['enckey'] == 'test'
             assert data['con'] == 'aesgcm'
             # use the defined min TTL
-            assert options['time_to_live'] == 60
+            assert payload['time_to_live'] == 60
         d.addCallback(check_results)
         return d
 
@@ -449,15 +451,15 @@ class GCMRouterTestCase(unittest.TestCase):
             assert isinstance(result, RouterResponse)
             assert self.router.gcm['test123'].send.called
             # Make sure the data was encoded as base64
-            data = self.router.gcm['test123'].send.call_args[0][0].data
-            options = self.router.gcm['test123'].send.call_args[0][0].options
+            payload = self.router.gcm['test123'].send.call_args[0][0].payload
+            data = payload['data']
             assert data['body'] == 'q60d6g'
             assert data['enc'] == 'test'
             assert data['chid'] == dummy_chid
             assert data['enckey'] == 'test'
             assert data['con'] == 'aesgcm'
             # use the defined min TTL
-            assert options['time_to_live'] == 2419200
+            assert payload['time_to_live'] == 2419200
         d.addCallback(check_results)
         return d
 
@@ -501,7 +503,7 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
-            self._check_error_call(fail.value, 500, "Server error")
+            self._check_error_call(fail.value, 500, "Server error", 901)
         d.addBoth(check_results)
         return d
 
@@ -528,7 +530,7 @@ class GCMRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
-            self._check_error_call(fail.value, 502, "Server error")
+            self._check_error_call(fail.value, 502, "Server error", 902)
         d.addBoth(check_results)
         return d
 
@@ -587,7 +589,7 @@ class GCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_router_notification_gcm_needs_retry(self):
-        self.mock_result.needs_retry.return_value = True
+        self.mock_result.retry_after = 1000
         self.router.gcm['test123'] = self.gcm
         self.router.metrics = Mock()
         d = self.router.route_notification(self.notif, self.router_data)
@@ -609,7 +611,10 @@ class GCMRouterTestCase(unittest.TestCase):
                                            {"router_data": {"token": "abc"}})
 
         def check_results(fail):
-            assert fail.value.status_code == 500, "Server error"
+            assert isinstance(fail.value, RouterException)
+            assert fail.value.message == "Server error"
+            assert fail.value.status_code == 500
+            assert fail.value.errno == 900
         d.addBoth(check_results)
         return d
 
@@ -942,11 +947,11 @@ class WebPushRouterTestCase(unittest.TestCase):
             message_id=uuid.uuid4().hex,
         )
         self.notif.cleanup_headers()
-        mock_result = Mock(spec=gcmclient.gcm.Result)
+        mock_result = Mock(spec=gcmclient.Result)
         mock_result.canonical = dict()
         mock_result.failed = dict()
         mock_result.not_registered = dict()
-        mock_result.needs_retry.return_value = False
+        mock_result.retry_after = 1000
         self.router_mock = db.router
         self.message_mock = db.message = Mock(spec=Message)
         self.conf = conf

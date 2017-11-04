@@ -1566,11 +1566,8 @@ class TestGCMBridgeIntegration(IntegrationBase):
         failed_items = dict()
         not_registered = dict()
         failed = dict()
-        _needs_retry = False
-
-        @classmethod
-        def needs_retry(cls=None):
-            return False
+        retry_after = False
+        retry_message = None
 
     def _add_router(self):
         from autopush.router.gcm import GCMRouter
@@ -1635,7 +1632,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
             body=data
         )
 
-        ca_data = self._mock_send.call_args[0][0].data
+        ca_data = self._mock_send.call_args[0][0].payload['data']
         assert response.code == 201
         # ChannelID here MUST match what we got from the registration call.
         # Currently, this is a lowercase, hex UUID without dashes.
@@ -1694,7 +1691,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
             body=data
         )
 
-        ca_data = self._mock_send.call_args[0][0].data
+        ca_data = self._mock_send.call_args[0][0].payload['data']
         assert response.code == 201
         # ChannelID here MUST match what we got from the registration call.
         # Currently, this is a lowercase, hex UUID without dashes.
