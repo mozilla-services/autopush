@@ -7,6 +7,7 @@
 
 use std::rc::Rc;
 
+use cadence::prelude::*;
 use futures::AsyncSink;
 use futures::future::Either;
 use futures::sync::mpsc;
@@ -48,6 +49,7 @@ pub struct WebPushClient {
     // Highest version from stored, retained for use with increment
     // when all the unacked storeds are ack'd
     unacked_stored_highest: Option<i64>,
+    connected_at: u64,
 }
 
 impl WebPushClient {
@@ -172,6 +174,16 @@ where
                 if more_messages.is_some() {
                     let mut messages = more_messages.take().unwrap();
                     if let Some(message) = messages.pop() {
+                        if let Some(_) = message.topic {
+                            self.data.srv.metrics.incr("ua.notification.topic")?;
+                        }
+                        // XXX: tags
+                        self.data.srv.metrics.count(
+                            "ua.message_data",
+                            message.data.as_ref().map_or(0, |d| {
+                                d.len() as i64
+                            }),
+                        )?;
                         ClientState::FinishSend(
                             Some(ServerMessage::Notification(message)),
                             Some(Box::new(ClientState::SendMessages(if messages.len() > 0 {
@@ -220,8 +232,10 @@ where
                     } => uaid,
                     _ => return Err("Invalid message, must be hello".into()),
                 };
-                let ms_time = time::precise_time_ns() / 1000;
-                ClientState::WaitingForProcessHello(self.data.srv.hello(&ms_time, uaid.as_ref()))
+                let connected_at = time::precise_time_ns() / 1000;
+                ClientState::WaitingForProcessHello(
+                    self.data.srv.hello(&connected_at, uaid.as_ref()),
+                )
             }
             ClientState::WaitingForProcessHello(ref mut response) => {
                 debug!("State: WaitingForProcessHello");
@@ -232,6 +246,7 @@ where
                         check_storage,
                         reset_uaid,
                         rotate_message_table,
+                        connected_at,
                     } => {
                         self.data.process_hello(
                             uaid,
@@ -239,6 +254,7 @@ where
                             reset_uaid,
                             rotate_message_table,
                             check_storage,
+                            connected_at,
                         )
                     }
                     call::HelloResponse { uaid: None, .. } => {
@@ -466,6 +482,7 @@ where
         reset_uaid: bool,
         rotate_message_table: bool,
         check_storage: bool,
+        connected_at: u64,
     ) -> ClientState {
         let (tx, rx) = mpsc::unbounded();
         let mut flags = ClientFlags::new();
@@ -480,6 +497,7 @@ where
             unacked_direct_notifs: Vec::new(),
             unacked_stored_notifs: Vec::new(),
             unacked_stored_highest: None,
+            connected_at: connected_at,
         });
         self.srv.connect_client(
             RegisteredClient { uaid: uaid, tx: tx },
@@ -523,6 +541,7 @@ where
     }
 
     fn process_acks(&mut self, updates: Vec<ClientAck>) -> ClientState {
+        self.srv.metrics.incr("ua.command.ack").ok();
         let webpush = self.webpush.as_mut().unwrap();
         let mut fut: Option<MyFuture<call::DeleteMessageResponse>> = None;
         for notif in updates.iter() {
@@ -588,8 +607,14 @@ where
 
     pub fn shutdown(&mut self) {
         // If we made it past hello, do more cleanup
+
         if self.webpush.is_some() {
             let webpush = self.webpush.take().unwrap();
+            let now = time::precise_time_ns() / 1000;
+            let elapsed = now - webpush.connected_at;
+            // XXX: tags
+            self.srv.metrics.time("ua.connection.lifespan", elapsed).ok();
+
             // If there's direct unack'd messages, they need to be saved out without blocking
             // here
             self.srv.disconnet_client(&webpush.uaid);

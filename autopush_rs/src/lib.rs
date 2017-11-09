@@ -61,6 +61,7 @@
 //! Otherwise be sure to check out each module for more documentation!
 
 extern crate bytes;
+extern crate cadence;
 extern crate env_logger;
 #[macro_use]
 extern crate futures;

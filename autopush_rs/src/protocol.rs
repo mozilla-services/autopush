@@ -87,7 +87,7 @@ pub struct Notification {
     pub topic: Option<String>,
     pub timestamp: u64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    data: Option<String>,
+    pub data: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     headers: Option<HashMap<String, String>>,
 }

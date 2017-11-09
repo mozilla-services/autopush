@@ -165,6 +165,7 @@ class HelloResponse(OutputCommand):
     message_month = attrib()  # type: str
     check_storage = attrib()  # type: bool
     reset_uaid = attrib()  # type: bool
+    connected_at = attrib()  # type: int
     rotate_message_table = attrib(default=False)  # type: bool
 
 
@@ -212,7 +213,6 @@ class WebPushServer(object):
         self.db = db
         self.db.setup_tables()
         self.num_threads = num_threads
-        self.metrics = self.db.metrics
         self.incoming = AutopushQueue()
         self.workers = []  # type: List[Thread]
         self.command_processor = CommandProcessor(conf, self.db)
@@ -357,10 +357,12 @@ class HelloCommand(ProcessorCommand):
         # Save the UAID as register_user removes it
         uaid = user_item["uaid"]  # type: str
         success, _ = self.db.router.register_user(user_item)
+        flags["connected_at"] = hello.connected_at
         if not success:
             # User has already connected more recently elsewhere
             return HelloResponse(uaid=None, **flags)
 
+        self.metrics.increment('ua.command.hello')
         return HelloResponse(uaid=uaid, **flags)
 
     def lookup_user(self, hello):
@@ -380,13 +382,13 @@ class HelloCommand(ProcessorCommand):
         # All records must have a router_type and connected_at, in some odd
         # cases a record exists for some users without it
         if "router_type" not in record or "connected_at" not in record:
-            self.db.router.drop_user(uaid)
+            self.drop_user(uaid, record, 104)
             return None, flags
 
         # Current month must exist and be a valid prior month
         if ("current_month" not in record) or record["current_month"] \
                 not in self.db.message_tables:
-            self.db.router.drop_user(uaid)
+            self.drop_user(uaid, record, 105)
             return None, flags
 
         # If we got here, its a valid user that needs storage checked
@@ -424,6 +426,18 @@ class HelloCommand(ProcessorCommand):
             record_version=USER_RECORD_VERSION,
             current_month=self.db.current_msg_month,
         )
+
+    def drop_user(self, uaid, uaid_record, code):
+        # type: (str, dict, int) -> None
+        """Drop a user record"""
+        log.debug(
+            "Dropping User",
+            code=code,
+            uaid_hash=hasher(uaid),
+            uaid_record=repr(uaid_record)
+        )
+        self.metrics.increment('ua.expiration', tags=['code:{}'.format(code)])
+        self.db.router.drop_user(uaid)
 
 
 class CheckStorageCommand(ProcessorCommand):

@@ -10,6 +10,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Instant, Duration};
 
+use cadence::StatsdClient;
 use futures::sync::oneshot;
 use futures::task;
 use futures::{Stream, Future, Sink, Async, Poll, AsyncSink, StartSend};
@@ -30,10 +31,12 @@ use protocol::{ClientMessage, ServerMessage, ServerNotification, Notification};
 use queue::{self, AutopushQueue};
 use rt::{self, AutopushError, UnwindGuard};
 use server::dispatch::{Dispatch, RequestType};
+use server::metrics::metrics_from_opts;
 use server::webpush_io::WebpushIo;
 use util::{self, RcObject, timeout};
 
 mod dispatch;
+mod metrics;
 mod tls;
 mod webpush_io;
 
@@ -66,6 +69,8 @@ pub struct AutopushServerOptions {
     pub max_connections: u32,
     pub close_handshake_timeout: u32,
     pub json_logging: i32,
+    pub statsd_host: *const c_char,
+    pub statsd_port: u16,
 }
 
 pub struct Server {
@@ -75,6 +80,7 @@ pub struct Server {
     pub tx: queue::Sender,
     pub opts: Arc<ServerOptions>,
     pub handle: Handle,
+    pub metrics: StatsdClient,
 }
 
 pub struct ServerOptions {
@@ -92,6 +98,8 @@ pub struct ServerOptions {
     pub auto_ping_timeout: Duration,
     pub max_connections: Option<u32>,
     pub close_handshake_timeout: Option<Duration>,
+    pub statsd_host: Option<String>,
+    pub statsd_port: u16,
 }
 
 fn resolve(host: &str) -> IpAddr {
@@ -145,6 +153,8 @@ pub extern "C" fn autopush_server_new(
                 .to_string(),
             port: opts.port,
             router_port: opts.router_port,
+            statsd_host: to_s(opts.statsd_host).map(|s| s.to_string()),
+            statsd_port: opts.statsd_port,
             url: to_s(opts.url).expect("url must be specified").to_string(),
             ssl_key: to_s(opts.ssl_key).map(PathBuf::from),
             ssl_cert: to_s(opts.ssl_cert).map(PathBuf::from),
@@ -232,7 +242,7 @@ impl Server {
     fn start(
         opts: &Arc<ServerOptions>,
         tx: queue::Sender,
-    ) -> io::Result<(oneshot::Sender<()>, thread::JoinHandle<()>)> {
+    ) -> Result<(oneshot::Sender<()>, thread::JoinHandle<()>)> {
         let (donetx, donerx) = oneshot::channel();
         let (inittx, initrx) = oneshot::channel();
 
@@ -278,7 +288,7 @@ impl Server {
         }
     }
 
-    fn new(opts: &Arc<ServerOptions>, tx: queue::Sender) -> io::Result<(Rc<Server>, Core)> {
+    fn new(opts: &Arc<ServerOptions>, tx: queue::Sender) -> Result<(Rc<Server>, Core)> {
         let core = Core::new()?;
         let srv = Rc::new(Server {
             opts: opts.clone(),
@@ -287,6 +297,7 @@ impl Server {
             handle: core.handle(),
             tx: tx,
             tls_acceptor: tls::configure(opts),
+            metrics: metrics_from_opts(opts)?,
         });
         let host_ip = resolve(&srv.opts.host_ip);
         let addr = format!("{}:{}", host_ip, srv.opts.port);
