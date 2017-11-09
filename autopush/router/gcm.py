@@ -1,13 +1,13 @@
 """GCM Router"""
 from typing import Any  # noqa
 
-import gcmclient
 from requests.exceptions import ConnectionError
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
 from autopush.exceptions import RouterException
 from autopush.metrics import make_tags
+from autopush.router import gcmclient
 from autopush.router.interface import RouterResponse
 from autopush.types import JSONDict  # noqa
 
@@ -115,12 +115,16 @@ class GCMRouter(object):
         try:
             gcm = self.gcm[router_data['creds']['senderID']]
             result = gcm.send(payload)
+        except RouterException:
+            raise  # pragma nocover
         except KeyError:
             self.log.critical("Missing GCM bridge credentials")
-            raise RouterException("Server error", status_code=500)
+            raise RouterException("Server error", status_code=500,
+                                  errno=900)
         except gcmclient.GCMAuthenticationError as e:
             self.log.error("GCM Authentication Error: %s" % e)
-            raise RouterException("Server error", status_code=500)
+            raise RouterException("Server error", status_code=500,
+                                  errno=901)
         except ConnectionError as e:
             self.log.warn("GCM Unavailable: %s" % e)
             self.metrics.increment("notification.bridge.error",
@@ -128,6 +132,7 @@ class GCMRouter(object):
                                        self._base_tags,
                                        reason="connection_unavailable"))
             raise RouterException("Server error", status_code=502,
+                                  errno=902,
                                   log_exception=False)
         except Exception as e:
             self.log.error("Unhandled exception in GCM Routing: %s" % e)
@@ -181,7 +186,7 @@ class GCMRouter(object):
                                   )
 
         # retries:
-        if reply.needs_retry():
+        if reply.retry_after:
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(self._base_tags,
                                                   reason="retry"))
@@ -189,7 +194,11 @@ class GCMRouter(object):
                           failed=lambda: repr(reply.failed.items()))
             raise RouterException("GCM failure to deliver, retry",
                                   status_code=503,
-                                  response_body="Please try request later.",
+                                  headers={"Retry-After": reply.retry_after},
+                                  response_body="Please try request "
+                                                "in {} seconds.".format(
+                                       reply.retry_after
+                                  ),
                                   log_exception=False)
 
         self.metrics.increment("notification.bridge.sent",
