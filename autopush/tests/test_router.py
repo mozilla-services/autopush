@@ -17,6 +17,7 @@ import hyper
 import hyper.tls
 import pyfcm
 from hyper.http20.exceptions import HTTP20Error
+import requests
 
 from autopush.config import AutopushConfig
 from autopush.db import (
@@ -297,8 +298,7 @@ class APNSRouterTestCase(unittest.TestCase):
 
 class GCMRouterTestCase(unittest.TestCase):
 
-    @patch("autopush.router.gcmclient.GCM", spec=gcmclient.GCM)
-    def setUp(self, fgcm):
+    def setUp(self):
         conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
@@ -307,8 +307,24 @@ class GCMRouterTestCase(unittest.TestCase):
                            'ttl': 60,
                            'senderIDs': {'test123':
                                          {"auth": "12345678abcdefg"}}}
-        self.gcm = fgcm
+        self.response = Mock(spec=requests.Response)
+        self.response.status_code = 200
+        self.response.headers = dict()
+        self.response.content = json.dumps({
+            "multicast_id": 5174939174563864884,
+            "success": 1,
+            "failure": 0,
+            "canonical_ids": 0,
+            "results": [
+                {
+                    "message_id": "0:1510011451922224%7a0e7efbaab8b7cc"
+                }
+            ]
+        })
+        self.gcm = gcmclient.GCM(api_key="SomeKey")
+        self.gcm._sender = Mock(return_value=self.response)
         self.router = GCMRouter(conf, self.gcm_config, SinkMetrics())
+        self.router.gcm['test123'] = self.gcm
         self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
@@ -326,20 +342,13 @@ class GCMRouterTestCase(unittest.TestCase):
             router_data=dict(
                 token="connect_data",
                 creds=dict(senderID="test123", auth="12345678abcdefg")))
-        mock_result = Mock(spec=gcmclient.Result)
-        mock_result.canonical = dict()
-        mock_result.failed = dict()
-        mock_result.not_registered = dict()
-        mock_result.retry_after = None
-        self.mock_result = mock_result
-        fgcm.send.return_value = mock_result
 
     def _check_error_call(self, exc, code, response=None, errno=None):
         assert isinstance(exc, RouterException)
         assert exc.status_code == code
         if errno is not None:
             assert exc.errno == errno
-        assert self.router.gcm['test123'].send.called
+        assert self.gcm._sender.called
         if response:
             assert exc.response_body == response
         self.flushLoggedErrors()
@@ -365,37 +374,22 @@ class GCMRouterTestCase(unittest.TestCase):
         with pytest.raises(RouterException):
             self.router.register("uaid", router_data={}, app_id="")
         with pytest.raises(RouterException):
-            self.router.register("uaid", router_data={}, app_id='')
+            self.router.register("uaid", router_data={}, app_id=None)
         with pytest.raises(RouterException):
             self.router.register(
                 "uaid",
                 router_data={"token": "abcd1234"},
                 app_id="invalid123")
 
-    @patch("autopush.router.gcmclient.GCM")
-    def test_gcmclient_fail(self, fgcm):
-        fgcm.side_effect = Exception
-        conf = AutopushConfig(
-            hostname="localhost",
-            statsd_host=None,
-        )
-        with pytest.raises(IOError):
-            GCMRouter(
-                conf,
-                {"senderIDs": {"test123": {"auth": "abcd"}}},
-                SinkMetrics()
-            )
-
     def test_route_notification(self):
-        self.router.gcm['test123'] = self.gcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             assert isinstance(result, RouterResponse)
-            assert self.router.gcm['test123'].send.called
+            assert self.gcm._sender.called
             # Make sure the data was encoded as base64
-            data = self.router.gcm[
-                'test123'].send.call_args[0][0].payload['data']
+            payload = json.loads(self.gcm._sender.call_args[1]['data'])
+            data = payload['data']
             assert data['body'] == 'q60d6g'
             assert data['enc'] == 'test'
             assert data['chid'] == dummy_chid
@@ -405,7 +399,6 @@ class GCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_ttl_none(self):
-        self.router.gcm['test123'] = self.gcm
         self.notif = WebPushNotification(
             uaid=uuid.UUID(dummy_uaid),
             channel_id=uuid.UUID(dummy_chid),
@@ -421,9 +414,9 @@ class GCMRouterTestCase(unittest.TestCase):
             assert result.status_code == 201
             assert result.logged_status == 200
             assert "TTL" in result.headers
-            assert self.router.gcm['test123'].send.called
+            assert self.gcm._sender.called
             # Make sure the data was encoded as base64
-            payload = self.router.gcm['test123'].send.call_args[0][0].payload
+            payload = json.loads(self.gcm._sender.call_args[1]['data'])
             data = payload['data']
             assert data['body'] == 'q60d6g'
             assert data['enc'] == 'test'
@@ -436,7 +429,6 @@ class GCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_ttl_high(self):
-        self.router.gcm['test123'] = self.gcm
         self.notif = WebPushNotification(
             uaid=uuid.UUID(dummy_uaid),
             channel_id=uuid.UUID(dummy_chid),
@@ -449,9 +441,9 @@ class GCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             assert isinstance(result, RouterResponse)
-            assert self.router.gcm['test123'].send.called
+            assert self.gcm._sender.called
             # Make sure the data was encoded as base64
-            payload = self.router.gcm['test123'].send.call_args[0][0].payload
+            payload = json.loads(self.gcm._sender.call_args[1]['data'])
             data = payload['data']
             assert data['body'] == 'q60d6g'
             assert data['enc'] == 'test'
@@ -464,7 +456,6 @@ class GCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_long_data(self):
-        self.router.gcm['test123'] = self.gcm
         bad_notif = WebPushNotification(
             uaid=uuid.UUID(dummy_uaid),
             channel_id=uuid.UUID(dummy_chid),
@@ -484,22 +475,18 @@ class GCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_route_crypto_notification(self):
-        self.router.gcm['test123'] = self.gcm
         del(self.notif.headers['encryption_key'])
         self.notif.headers['crypto_key'] = 'crypto'
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             assert isinstance(result, RouterResponse)
-            assert self.router.gcm['test123'].send.called
+            assert self.gcm._sender.called
         d.addCallback(check_results)
         return d
 
     def test_router_notification_gcm_auth_error(self):
-        def throw_auth(arg):
-            raise gcmclient.GCMAuthenticationError()
-        self.gcm.send.side_effect = throw_auth
-        self.router.gcm['test123'] = self.gcm
+        self.response.status_code = 401
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -510,8 +497,8 @@ class GCMRouterTestCase(unittest.TestCase):
     def test_router_notification_gcm_other_error(self):
         def throw_other(arg):
             raise Exception("oh my!")
-        self.gcm.send.side_effect = throw_other
-        self.router.gcm['test123'] = self.gcm
+
+        self.gcm._sender.side_effect = throw_other
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -525,8 +512,7 @@ class GCMRouterTestCase(unittest.TestCase):
         def throw_other(*args, **kwargs):
             raise ConnectionError("oh my!")
 
-        self.gcm.send.side_effect = throw_other
-        self.router.gcm['test123'] = self.gcm
+        self.gcm._sender.side_effect = throw_other
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -535,8 +521,18 @@ class GCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_router_notification_gcm_id_change(self):
-        self.mock_result.canonical["old"] = "new"
-        self.router.gcm['test123'] = self.gcm
+        self.response.content = json.dumps({
+            "multicast_id": 5174939174563864884,
+            "success": 1,
+            "failure": 0,
+            "canonical_ids": 1,
+            "results": [
+                {
+                    "message_id": "0:1510011451922224%7a0e7efbaab8b7cc",
+                    "registration_id": "new",
+                }
+            ]
+        })
         self.router.metrics = Mock()
         d = self.router.route_notification(self.notif, self.router_data)
 
@@ -548,13 +544,22 @@ class GCMRouterTestCase(unittest.TestCase):
             self.router.metrics.increment.call_args[1]['tags'].sort()
             assert self.router.metrics.increment.call_args[1]['tags'] == [
                 'platform:gcm', 'reason:reregister']
-            assert self.router.gcm['test123'].send.called
+            assert self.gcm._sender.called
         d.addCallback(check_results)
         return d
 
     def test_router_notification_gcm_not_regged(self):
-        self.mock_result.not_registered = {"connect_data": True}
-        self.router.gcm['test123'] = self.gcm
+        self.response.content = json.dumps({
+            "multicast_id": 5174939174563864884,
+            "success": 0,
+            "failure": 1,
+            "canonical_ids": 0,
+            "results": [
+                {
+                    "error": "NotRegistered"
+                }
+            ]
+        })
         self.router.metrics = Mock()
         d = self.router.route_notification(self.notif, self.router_data)
 
@@ -566,13 +571,22 @@ class GCMRouterTestCase(unittest.TestCase):
             self.router.metrics.increment.call_args[1]['tags'].sort()
             assert self.router.metrics.increment.call_args[1]['tags'] == [
                 'platform:gcm', 'reason:unregistered']
-            assert self.router.gcm['test123'].send.called
+            assert self.gcm._sender.called
         d.addCallback(check_results)
         return d
 
     def test_router_notification_gcm_failed_items(self):
-        self.mock_result.failed = dict(connect_data=True)
-        self.router.gcm['test123'] = self.gcm
+        self.response.content = json.dumps({
+            "multicast_id": 5174939174563864884,
+            "success": 0,
+            "failure": 1,
+            "canonical_ids": 0,
+            "results": [
+                {
+                    "error": "InvalidRegistration"
+                }
+            ]
+        })
         self.router.metrics = Mock()
         d = self.router.route_notification(self.notif, self.router_data)
 
@@ -589,8 +603,9 @@ class GCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_router_notification_gcm_needs_retry(self):
-        self.mock_result.retry_after = 1000
-        self.router.gcm['test123'] = self.gcm
+        self.response.headers['Retry-After'] = "123"
+        self.response.status_code = 500
+        self.response.content = ""
         self.router.metrics = Mock()
         d = self.router.route_notification(self.notif, self.router_data)
 
