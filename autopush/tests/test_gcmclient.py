@@ -51,7 +51,7 @@ class GCMClientTestCase(unittest.TestCase):
             "multicast_id": 5174939174563864884,
             "success": 1,
             "failure": 0,
-            "canonical_ids": 0,
+            "canonical_ids": 1,
             "results": [
                 {
                     "message_id": "0:1510011451922224%7a0e7efbaab8b7cc",
