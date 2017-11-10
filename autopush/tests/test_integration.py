@@ -1572,7 +1572,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
 
     class MockReply(object):
         success = dict()
-        canonical = dict()
+        canonicals = dict()
         failed_items = dict()
         not_registered = dict()
         failed = dict()

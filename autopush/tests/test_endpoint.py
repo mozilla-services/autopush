@@ -121,13 +121,6 @@ class MessageTestCase(unittest.TestCase):
         tok = ":".join(["m", dummy_uaid.hex, str(dummy_chid)])
         self.fernet_mock.decrypt.return_value = tok
 
-        def raise_condition(*args, **kwargs):
-            import autopush.db
-            raise autopush.db.g_client.exceptions.ClientError(
-                {'Error': {'Code': 'ConditionalCheckFailedException'}},
-                'mock_update_item'
-            )
-
         self.message_mock.configure_mock(**{"delete_message.return_value":
                                             False})
         resp = yield self.client.delete(self.url(message_id="ignored"))
