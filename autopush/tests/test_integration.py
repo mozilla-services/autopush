@@ -1005,7 +1005,7 @@ class TestWebPush(IntegrationBase):
         data2 = str(uuid.uuid4())
         client = yield self.quick_register()
         yield client.disconnect()
-        for x in range(0, 12):
+        for x in range(0, 7):
             yield client.send_notification(data=data, ttl=1)
 
         yield client.send_notification(data=data2)
@@ -1572,7 +1572,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
 
     class MockReply(object):
         success = dict()
-        canonical = dict()
+        canonicals = dict()
         failed_items = dict()
         not_registered = dict()
         failed = dict()

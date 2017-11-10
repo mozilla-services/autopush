@@ -1,5 +1,6 @@
 import unittest
 import uuid
+import time
 from datetime import datetime, timedelta
 
 from autopush.websocket import ms_time
@@ -224,6 +225,15 @@ class MessageTestCase(unittest.TestCase):
         assert chid2 not in chans
         assert chid in chans
 
+    def test_all_channels_expiry(self):
+        chid = str(uuid.uuid4())
+        m = get_rotating_message_table()
+        message = Message(m, SinkMetrics())
+        message.register_channel(self.uaid, chid, -100)
+
+        _, chans = message.all_channels(self.uaid)
+        assert chid not in chans
+
     def test_all_channels_fail(self):
         m = get_rotating_message_table()
         message = Message(m, SinkMetrics())
@@ -273,6 +283,24 @@ class MessageTestCase(unittest.TestCase):
         _, all_messages = message.fetch_timestamp_messages(
             uuid.UUID(self.uaid), " ")
         assert len(all_messages) == 3
+
+    def test_message_storage_expiry(self):
+        chid = str(uuid.uuid4())
+        chidx = str(uuid.uuid4())
+        m = get_rotating_message_table()
+        message = Message(m, SinkMetrics())
+        message.register_channel(self.uaid, chid)
+
+        expired = make_webpush_notification(self.uaid, chidx)
+        expired.ttl = -100
+        message.store_message(make_webpush_notification(self.uaid, chid))
+        message.store_message(expired)
+
+        _, all_messages = message.fetch_timestamp_messages(
+            uuid.UUID(self.uaid), " ")
+        assert len(all_messages) == 1
+        for x in all_messages:
+            assert x.channel_id != expired.channel_id
 
     def test_message_storage_overwrite(self):
         """Test that store_message can overwrite existing messages which
@@ -373,6 +401,23 @@ class RouterTestCase(unittest.TestCase):
         router = Router(r, SinkMetrics())
         with pytest.raises(ItemNotFound):
             router.get_uaid(uaid)
+
+    def test_uaid_expiry(self):
+        uaid = uuid.uuid4()
+        r = get_router_table()
+        router = Router(r, SinkMetrics())
+        router.table.get_item = Mock()
+        router.table.get_item.return_value = {
+            "ResponseMetadata": {
+                "HTTPStatusCode": 200
+            },
+            "Item": {
+                "uaid": uaid.hex,
+                "expiry": int(time.time()) - 100
+            }
+        }
+        with pytest.raises(ItemNotFound):
+            router.get_uaid(str(uaid))
 
     def test_uaid_provision_failed(self):
         r = get_router_table()

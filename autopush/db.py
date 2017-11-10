@@ -523,6 +523,7 @@ class Message(object):
         # Note: This only returns the chids associated with the UAID.
         # Functions that call store_message() would be required to
         # update that list as well using register_channel()
+        # TODO: once expiry is properly integrated, use FilterExpression
         result = self.table.get_item(
             Key={
                 'uaid': hasher(uaid),
@@ -533,6 +534,9 @@ class Message(object):
         if result['ResponseMetadata']['HTTPStatusCode'] != 200:
             return False, set([])
         if 'Item' not in result:
+            return False, set([])
+        now = int(time.time())
+        if result['Item'].get('expiry', now) < now:
             return False, set([])
         return True, result['Item'].get("chids", set([]))
 
@@ -609,6 +613,7 @@ class Message(object):
 
         """
         # Eagerly fetches all results in the result set.
+        # TODO: once expiry is properly integrated, use FilterExpression
         response = self.table.query(
             KeyConditionExpression=(Key("uaid").eq(hasher(uaid.hex))
                                     & Key('chidmessageid').lt('02')),
@@ -654,15 +659,17 @@ class Message(object):
         else:
             sortkey = "01;"
 
+        # TODO: once expiry is properly integrated, use FilterExpression
         response = self.table.query(
             KeyConditionExpression=(Key('uaid').eq(hasher(uaid.hex))
                                     & Key('chidmessageid').gt(sortkey)),
             ConsistentRead=True,
             Limit=limit
         )
+        now = int(time.time())
         notifs = [
             WebPushNotification.from_message_table(uaid, x) for x in
-            response.get("Items")
+            response.get("Items") if x.get('expiry', now) >= now
         ]
         ts_notifs = [x for x in notifs if x.sortkey_timestamp]
         last_position = None
@@ -717,6 +724,7 @@ class Router(object):
 
         """
         try:
+            # TODO: once expiry is properly integrated, use FilterExpression
             item = self.table.get_item(
                 Key={
                     'uaid': hasher(uaid)
@@ -728,6 +736,9 @@ class Router(object):
                 raise ItemNotFound('uaid not found')
             item = item.get('Item')
             if item is None:
+                raise ItemNotFound("uaid not found")
+            now = int(time.time())
+            if item.get('expiry', now) < now:
                 raise ItemNotFound("uaid not found")
             if item.keys() == ['uaid']:
                 # Incomplete record, drop it.
@@ -813,7 +824,7 @@ class Router(object):
             )
             if 'Item' not in item:
                 return False
-        except ClientError:
+        except ClientError:  # pragma nocover
             pass
         result = self.table.delete_item(Key={'uaid': hasher(uaid)})
         return result['ResponseMetadata']['HTTPStatusCode'] == 200

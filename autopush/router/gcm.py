@@ -151,7 +151,7 @@ class GCMRouter(object):
         # acks:
         #  for reg_id, msg_id in reply.success.items():
         # updates
-        for old_id, new_id in reply.canonical.items():
+        for old_id, new_id in reply.canonicals.items():
             self.log.debug("GCM id changed : {old} => {new}",
                            old=old_id, new=new_id)
             self.metrics.increment("notification.bridge.error",
@@ -182,7 +182,6 @@ class GCMRouter(object):
                            failed=lambda: repr(reply.failed.items()))
             raise RouterException("GCM unable to deliver", status_code=410,
                                   response_body="GCM recipient not available.",
-                                  log_exception=False,
                                   )
 
         # retries:
