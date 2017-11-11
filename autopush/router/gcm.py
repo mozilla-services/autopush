@@ -35,10 +35,7 @@ class GCMRouter(object):
         for sid in router_conf.get("senderIDs"):
             auth = router_conf.get("senderIDs").get(sid).get("auth")
             self.senderIDs[sid] = auth
-            try:
-                self.gcm[sid] = gcmclient.GCM(auth)
-            except Exception:
-                raise IOError("GCM Bridge not initiated in main")
+            self.gcm[sid] = gcmclient.GCM(auth)
         self._base_tags = ["platform:gcm"]
         self.log.debug("Starting GCM router...")
 
@@ -151,7 +148,7 @@ class GCMRouter(object):
         # acks:
         #  for reg_id, msg_id in reply.success.items():
         # updates
-        for old_id, new_id in reply.canonical.items():
+        for old_id, new_id in reply.canonicals.items():
             self.log.debug("GCM id changed : {old} => {new}",
                            old=old_id, new=new_id)
             self.metrics.increment("notification.bridge.error",
