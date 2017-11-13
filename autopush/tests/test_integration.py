@@ -1928,8 +1928,10 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         assert ca_data['cryptokey'] == crypto_key
         assert ca_data['enc'] == salt
         assert 'mutable-content' in ca_data['aps']
-        assert ca_data['aps']['alert']['title'] == " "
-        assert ca_data['aps']['alert']['body'] == " "
+        assert ca_data["aps"]["alert"]["loc-key"] == \
+            "SentTab.NoTabArrivingNotification.body"
+        assert ca_data["aps"]["alert"]["title-loc-key"] == \
+            "SentTab.NoTabArrivingNotification.title"
         assert ca_data['body'] == base64url_encode(data)
 
     @inlineCallbacks
