@@ -10,8 +10,17 @@ class GCMAuthenticationError(Exception):
 
 
 class Result(object):
+    """Abstraction object for GCM response"""
 
     def __init__(self, message, response):
+        """Process GCM message and response into abstracted object
+
+        :param message: Message payload
+        :type message: JSONMessage
+        :param response: GCM response
+        :type response: requests.Response
+
+        """
         self.success = {}
         self.canonicals = {}
         self.unavailable = []
@@ -48,13 +57,29 @@ class Result(object):
 
 
 class JSONMessage(object):
+    """GCM formatted payload
 
+    """
     def __init__(self,
                  registration_ids,
                  collapse_key,
                  time_to_live,
                  dry_run,
                  data):
+        """Convert data elements into a GCM payload.
+
+        :param registration_ids: Single or list of registration ids to send to
+        :type registration_ids: str or list
+        :param collapse_key: GCM collapse key for the data.
+        :type collapse_key: str
+        :param time_to_live: Seconds to keep message alive
+        :type time_to_live: int
+        :param dry_run: GCM Dry run flag to allow remote verification
+        :type dry_run: bool
+        :param data: Data elements to send
+        :type data: dict
+
+        """
         if not registration_ids:
             raise RouterException("No Registration IDs specified")
         if not isinstance(registration_ids, list):
@@ -72,6 +97,7 @@ class JSONMessage(object):
 
 
 class GCM(object):
+    """Primitive HTTP GCM service handler."""
 
     def __init__(self,
                  api_key=None,
@@ -80,6 +106,20 @@ class GCM(object):
                  endpoint="gcm-http.googleapis.com/gcm/send",
                  **options):
 
+        """Initialize the GCM primitive.
+
+        :param api_key: The GCM API key (from the Google developer console)
+        :type api_key: str
+        :param logger: Status logger
+        :type logger: logger
+        :param metrics: Metric recorder
+        :type metrics: autopush.metrics.IMetric
+        :param endpoint: GCM endpoint override
+        :type endpoint: str
+        :param options: Additional options
+        :type options: dict
+
+        """
         self._endpoint = "https://{}".format(endpoint)
         self._api_key = api_key
         self.metrics = metrics
@@ -88,6 +128,13 @@ class GCM(object):
         self._sender = requests.post
 
     def send(self, payload):
+        """Send a payload to GCM
+
+        :param payload: Dictionary of GCM formatted data
+        :type payload: JSONMessage
+        :return: Result
+
+        """
         headers = {
             'Content-Type': 'application/json',
             'Authorization': 'key={}'.format(self._api_key),
