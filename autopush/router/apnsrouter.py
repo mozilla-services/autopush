@@ -137,7 +137,10 @@ class APNSRouter(object):
                 payload["enckey"] = notification.headers["encryption_key"]
             payload['aps'] = router_data.get('aps', {
                 "mutable-content": 1,
-                "alert": {"title": " ", "body": " "}
+                "alert": {
+                    "loc-key": "SentTab.NoTabArrivingNotification.body",
+                    "title-loc-key": "SentTab.NoTabArrivingNotification.title",
+                }
             })
         apns_id = str(uuid.uuid4()).lower()
         # APNs may force close a connection on us without warning.

@@ -182,7 +182,10 @@ class APNSRouterTestCase(unittest.TestCase):
             "ver": 10,
             "aps": {
                 "mutable-content": 1,
-                "alert": {"title": " ", "body": " "}
+                "alert": {
+                    "loc-key": "SentTab.NoTabArrivingNotification.body",
+                    "title-loc-key": "SentTab.NoTabArrivingNotification.title",
+                },
             },
             "enckey": "test",
             "con": "aesgcm",
