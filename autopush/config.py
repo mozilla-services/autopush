@@ -89,6 +89,7 @@ class DDBTableConfig(object):
     tablename = attrib()  # type: str
     read_throughput = attrib(default=5)  # type: int
     write_throughput = attrib(default=5)  # type: int
+    migrate_tablename = attrib(default=None)  # type: str
 
 
 @attrs
@@ -310,7 +311,8 @@ class AutopushConfig(object):
             router_table=dict(
                 tablename=ns.router_tablename,
                 read_throughput=ns.router_read_throughput,
-                write_throughput=ns.router_write_throughput
+                write_throughput=ns.router_write_throughput,
+                migrate_tablename=ns.router_migrate_tablename,
             ),
             message_table=dict(
                 tablename=ns.message_tablename,

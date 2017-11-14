@@ -48,7 +48,7 @@ class DbUtilsTest(unittest.TestCase):
         fake_table = "DoesNotExist_{}".format(uuid.uuid4())
 
         _make_table(fake_func, fake_table, 5, 10)
-        assert fake_func.call_args[0] == (fake_table, 5, 10)
+        assert fake_func.call_args[0] == (fake_table, 5, 10, True)
 
 
 class DbCheckTestCase(unittest.TestCase):
@@ -586,3 +586,46 @@ class RouterTestCase(unittest.TestCase):
         # Deleting already deleted record should return false.
         result = router.drop_user(uaid)
         assert result is False
+
+    def test_drop_user_client_error(self):
+        uaid = str(uuid.uuid4())
+        r = get_router_table()
+        router = Router(r, SinkMetrics())
+        r.get_item = Mock()
+
+        def raise_condition(*args, **kwargs):
+            raise ClientError({}, "whatever")
+
+        r.get_item.side_effect = raise_condition
+        result = router.drop_user(uaid)
+        assert result
+
+    def test_migrate_user(self):
+        import time
+
+        rt_o = get_router_table()
+        rt_n = get_router_table("exp_router")
+        uaid = str(uuid.uuid4())
+        prior = int(time.time() - 86400)
+        mmetric = Mock()
+        r_old = Router(rt_o, SinkMetrics())
+        r_new = Router(rt_o, mmetric, migrate_table=rt_n)
+        # add user to the "old" router
+        data = dict(
+            uaid=uaid,
+            router_type="test",
+            connected_at=prior,
+            somekey="someval"
+        )
+        r_old.register_user(data=data)
+        n_data = r_new.get_uaid(uaid)
+        assert data == n_data
+        assert mmetric.increment.call_args[0] == (
+            'notification.router.user_migrated',)
+        n_data = r_new.get_uaid_from_table(uaid, r_new._migrate_table)
+        for key in ['router_type', 'somekey']:
+            assert data[key] == n_data[key]
+
+        r_new.drop_user(uaid)
+        with pytest.raises(ItemNotFound):
+            r_new.get_uaid(uaid)

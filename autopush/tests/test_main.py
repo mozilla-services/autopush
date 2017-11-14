@@ -186,6 +186,11 @@ class ConnectionMainTestCase(unittest.TestCase):
     def test_basic(self):
         connection_main([], False)
 
+    def test_basic_migration(self):
+        connection_main([
+            "--router_migrate_tablename=router_ttl"
+        ], False)
+
     def test_ssl(self):
         connection_main([
             "--ssl_dh_param=keys/dhparam.pem",
@@ -229,6 +234,7 @@ class EndpointMainTestCase(unittest.TestCase):
         router_tablename = "none"
         router_read_throughput = 0
         router_write_throughput = 0
+        router_migrate_tablename = None
         resolve_hostname = False
         message_tablename = "None"
         message_read_throughput = 0
