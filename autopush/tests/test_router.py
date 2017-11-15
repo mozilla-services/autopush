@@ -5,6 +5,7 @@ import time
 import json
 import decimal
 import requests
+import ssl
 
 from autopush.utils import WebPushNotification
 from mock import Mock, PropertyMock, patch
@@ -88,7 +89,8 @@ class APNSRouterTestCase(unittest.TestCase):
         }
         self.mock_connection = mc
         mc.return_value = mc
-        self.router = APNSRouter(conf, apns_config, SinkMetrics())
+        self.metrics = metrics = Mock(spec=SinkMetrics)
+        self.router = APNSRouter(conf, apns_config, metrics)
         self.mock_response = Mock()
         self.mock_response.status = 200
         mc.get_response.return_value = self.mock_response
@@ -253,6 +255,30 @@ class APNSRouterTestCase(unittest.TestCase):
         assert ex.value.message == "Server error"
         assert ex.value.response_body == 'APNS returned an error ' \
                                          'processing request'
+        assert self.metrics.increment.called
+        assert self.metrics.increment.call_args[0][0] == \
+            'notification.bridge.connection.error'
+        self.flushLoggedErrors()
+
+    @inlineCallbacks
+    def test_fail_send_bad_write_retry(self):
+        def throw(*args, **kwargs):
+            raise ssl.SSLError(
+                ssl.SSL_ERROR_SSL,
+                "[SSL: BAD_WRITE_RETRY] bad write retry"
+            )
+
+        self.router.apns['firefox'].connections[0].request.side_effect = throw
+        with pytest.raises(RouterException) as ex:
+            yield self.router.route_notification(self.notif, self.router_data)
+        assert isinstance(ex.value, RouterException)
+        assert ex.value.status_code == 502
+        assert ex.value.message == "Server error"
+        assert ex.value.response_body == 'APNS returned an error ' \
+                                         'processing request'
+        assert self.metrics.increment.called
+        assert self.metrics.increment.call_args[0][0] == \
+            'notification.bridge.connection.error'
         self.flushLoggedErrors()
 
     def test_too_many_connections(self):
