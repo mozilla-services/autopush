@@ -497,7 +497,7 @@ class WebPushHandler(BaseWebHandler):
         self._client_info.update(
             message_id=notification.message_id,
             uaid_hash=hasher(user_data.get("uaid")),
-            channel_id=user_data.get("chid"),
+            channel_id=notification.channel_id.hex,
             router_key=user_data["router_type"],
             message_size=notification.data_length,
             message_ttl=notification.ttl,
