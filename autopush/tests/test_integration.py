@@ -1562,15 +1562,12 @@ class TestGCMBridgeIntegration(IntegrationBase):
 
     class MockReply(object):
         success = dict()
-        canonical = dict()
+        canonicals = dict()
         failed_items = dict()
         not_registered = dict()
         failed = dict()
-        _needs_retry = False
-
-        @classmethod
-        def needs_retry(cls=None):
-            return False
+        retry_after = False
+        retry_message = None
 
     def _add_router(self):
         from autopush.router.gcm import GCMRouter
@@ -1635,7 +1632,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
             body=data
         )
 
-        ca_data = self._mock_send.call_args[0][0].data
+        ca_data = self._mock_send.call_args[0][0].payload['data']
         assert response.code == 201
         # ChannelID here MUST match what we got from the registration call.
         # Currently, this is a lowercase, hex UUID without dashes.
@@ -1694,7 +1691,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
             body=data
         )
 
-        ca_data = self._mock_send.call_args[0][0].data
+        ca_data = self._mock_send.call_args[0][0].payload['data']
         assert response.code == 201
         # ChannelID here MUST match what we got from the registration call.
         # Currently, this is a lowercase, hex UUID without dashes.
@@ -1931,8 +1928,10 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         assert ca_data['cryptokey'] == crypto_key
         assert ca_data['enc'] == salt
         assert 'mutable-content' in ca_data['aps']
-        assert ca_data['aps']['alert']['title'] == " "
-        assert ca_data['aps']['alert']['body'] == " "
+        assert ca_data["aps"]["alert"]["loc-key"] == \
+            "SentTab.NoTabArrivingNotification.body"
+        assert ca_data["aps"]["alert"]["title-loc-key"] == \
+            "SentTab.NoTabArrivingNotification.title"
         assert ca_data['body'] == base64url_encode(data)
 
     @inlineCallbacks

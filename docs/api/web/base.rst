@@ -10,11 +10,6 @@
     :private-members:
     :member-order: bysource
 
-.. autoclass:: Notification
-    :members:
-    :private-members:
-    :member-order: bysource
-
 .. autoclass:: BaseWebHandler
     :members:
     :private-members:
