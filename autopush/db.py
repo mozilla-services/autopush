@@ -73,7 +73,6 @@ from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.threads import deferToThread
 
 import autopush.metrics
-from autopush import MAX_EXPIRY
 from autopush.exceptions import AutopushException
 from autopush.metrics import IMetrics  # noqa
 from autopush.types import ItemLike  # noqa
@@ -86,6 +85,9 @@ from autopush.utils import (
 if TYPE_CHECKING:  # pragma: nocover
     from autopush.config import AutopushConfig, DDBTableConfig  # noqa
 
+
+# Max DynamoDB record lifespan (~ 30 days)
+MAX_EXPIRY = 2592000  # pragma: nocover
 
 # Typing
 T = TypeVar('T')  # noqa
