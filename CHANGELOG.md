@@ -1,3 +1,24 @@
+<a name="1.39.1"></a>
+## 1.39.1 (2017-11-20)
+
+
+#### Features
+
+*   assimilate the gcm client code ([b0b64c10](https://github.com/mozilla-services/autopush/commit/b0b64c102eee182679cad47371879595380dd913))
+
+#### Doc
+
+*   Update docs to include gcmclient, reference to rust ([565e4b3d](https://github.com/mozilla-services/autopush/commit/565e4b3d74533162ccbaccecec2f56f1b8793d9f))
+
+#### Bug Fixes
+
+*   handle an obscure SSLError seen w/ apns ([443c3683](https://github.com/mozilla-services/autopush/commit/443c36838e8e64ca7eee113b7699d988162a09b2))
+*   Update APNs APS block ([5ded81ab](https://github.com/mozilla-services/autopush/commit/5ded81abcbd9a8c7a79fb8d7e81b985587045001), closes [#1076](https://github.com/mozilla-services/autopush/issues/1076))
+*   fix up tests and integration for new gcmclient ([996716ac](https://github.com/mozilla-services/autopush/commit/996716ac6d2719f522d2ab3e08e851b00ee689da))
+*   drop users with no router_type recorded ([b7f667ab](https://github.com/mozilla-services/autopush/commit/b7f667ab2b9bacf8d99e7ac8e76b5bf8a739d8ae), closes [#1058](https://github.com/mozilla-services/autopush/issues/1058))
+
+
+
 <a name="1.39.0"></a>
 ## 1.39.0 (2017-10-26)
 
