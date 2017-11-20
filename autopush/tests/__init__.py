@@ -20,7 +20,8 @@ ddb_process = None
 
 
 def setUp():
-    logging.getLogger('boto').setLevel(logging.CRITICAL)
+    for name in ('boto', 'boto3', 'botocore'):
+        logging.getLogger(name).setLevel(logging.CRITICAL)
     global ddb_process
     cmd = " ".join([
         "java", "-Djava.library.path=%s" % ddb_lib_dir,

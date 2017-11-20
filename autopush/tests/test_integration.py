@@ -40,7 +40,7 @@ from autopush.db import (
 )
 from autopush.logging import begin_or_register
 from autopush.main import ConnectionApplication, EndpointApplication
-from autopush.utils import base64url_encode
+from autopush.utils import base64url_encode, normalize_id
 from autopush.metrics import SinkMetrics, DatadogMetrics
 from autopush.tests.support import TestingLogObserver
 from autopush.websocket import PushServerFactory
@@ -434,6 +434,8 @@ class Test_Data(IntegrationBase):
         assert result["channelID"] == chan
         assert result["data"] == "wyigoeIooQ"
         assert self.logs.logged_ci(lambda ci: 'message_size' in ci)
+        assert self.logs.logged_ci(
+            lambda ci: normalize_id(ci['channel_id']) == chan)
         assert self.logs.logged_ci(
             lambda ci: ci['encoding'] == "aesgcm"
         )
