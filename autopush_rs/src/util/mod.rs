@@ -1,18 +1,21 @@
 //! Various small utilities accumulated over time for the WebPush server
-use std::env;
+use std::io;
 use std::time::Duration;
-use std::sync::atomic::{ATOMIC_BOOL_INIT, AtomicBool, Ordering};
 
-use env_logger;
 use futures::future::{Either, Future, IntoFuture};
-use log::LogRecord;
-use serde_json;
+use slog;
+use slog_async;
+use slog_term;
+use slog_scope;
+use slog_stdlog;
+use slog::Drain;
 use tokio_core::reactor::{Handle, Timeout};
 
 use errors::*;
 
 mod send_all;
 mod rc;
+mod autojson;
 
 pub use self::send_all::MySendAll;
 pub use self::rc::RcObject;
@@ -41,52 +44,41 @@ where
     }))
 }
 
-static LOG_JSON: AtomicBool = ATOMIC_BOOL_INIT;
 
-pub fn init_logging(json: bool) {
-    // We only initialize once, so ignore initialization errors related to
-    // calling this function twice.
-    let mut builder = env_logger::LogBuilder::new();
-
-    if env::var("RUST_LOG").is_ok() {
-        builder.parse(&env::var("RUST_LOG").unwrap());
-    }
-
-    builder.target(env_logger::LogTarget::Stdout).format(
-        maybe_json_record,
-    );
-
-    if builder.init().is_ok() {
-        LOG_JSON.store(json, Ordering::SeqCst);
-    }
+// Hold a reference to the log guards for scoped logging which requires these to stay alive
+// for the implicit logger to be passed into logging calls
+pub struct LogGuards {
+    _scope_guard: slog_scope::GlobalLoggerGuard,
 }
 
-fn maybe_json_record(record: &LogRecord) -> String {
-    #[derive(Serialize)]
-    struct Message<'a> {
-        msg: String,
-        level: String,
-        target: &'a str,
-        module: &'a str,
-        file: &'a str,
-        line: u32,
-    }
-
-    if LOG_JSON.load(Ordering::SeqCst) {
-        serde_json::to_string(&Message {
-            msg: record.args().to_string(),
-            level: record.level().to_string(),
-            target: record.target(),
-            module: record.location().module_path(),
-            file: record.location().file(),
-            line: record.location().line(),
-        }).unwrap()
+pub fn init_logging(json: bool, hostname: &'static str) -> LogGuards {
+    let decorator = slog_term::TermDecorator::new().build();
+    if json {
+        let drain = autojson::AutoJson::new(io::stdout())
+            .add_default_keys()
+            .add_key_value(o!(
+                "Hostname" => hostname,
+                "Type" => "autopush_rs:log",
+                "EnvVersion" => "2.0",
+                "Logger" => format!("AutopushRust-{}", env!("CARGO_PKG_VERSION")),
+            ))
+            .build()
+            .fuse();
+        let drain = slog_async::Async::new(drain).build().fuse();
+        let logger = slog::Logger::root(drain, o!());
+        let _scope_guard = slog_scope::set_global_logger(logger);
+        slog_stdlog::init().ok();
+        LogGuards {
+            _scope_guard: _scope_guard,
+        }
     } else {
-        format!(
-            "{}:{}: {}",
-            record.level(),
-            record.location().module_path(),
-            record.args()
-        )
+        let drain = slog_term::FullFormat::new(decorator).build().fuse();
+        let drain = slog_async::Async::new(drain).build().fuse();
+        let logger = slog::Logger::root(drain, slog_o!("Hostname" => hostname, "Type" => "autopush_rs:log", "EnvVersion" => "2.0", "Logger" => format!("AutopushRust-{}", env!("CARGO_PKG_VERSION"))));
+        let _scope_guard = slog_scope::set_global_logger(logger);
+        slog_stdlog::init().ok();
+        LogGuards {
+            _scope_guard: _scope_guard,
+        }
     }
 }

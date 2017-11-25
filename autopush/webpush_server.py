@@ -316,10 +316,14 @@ class CommandProcessor(object):
                 error_msg="Command not found",
             )
         from pprint import pformat
-        log.info('command: %r %r' % (pformat(command), input))
+        log.debug(
+            'command: {command} {input}',
+            command=pformat(command),
+            input=input
+        )
         command_obj = self.deserialize[command](**input)
         response = attr.asdict(self.command_dict[command].process(command_obj))
-        log.info('response: %s' % response)
+        log.debug('response: {response}', response=response)
         return response
 
 

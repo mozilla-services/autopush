@@ -102,7 +102,8 @@ g_dynamodb = boto3.resource(
     'dynamodb',
     config=botocore.config.Config(
         region_name=os.getenv("AWS_REGION_NAME", "us-east-1")
-    )
+    ),
+    endpoint_url=os.getenv("AWS_LOCAL_DYNAMODB")
 )
 g_client = g_dynamodb.meta.client
 
