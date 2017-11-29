@@ -21,12 +21,14 @@ use time;
 use tokio_core::net::TcpListener;
 use tokio_core::reactor::{Core, Timeout, Handle};
 use tokio_io;
-use tokio_tungstenite::{accept_async, WebSocketStream};
+use tokio_tungstenite::{accept_hdr_async, WebSocketStream};
+use tungstenite::handshake::server::Request;
 use tungstenite::Message;
 use uuid::Uuid;
 
 use client::{Client, RegisteredClient};
 use errors::*;
+use errors::{Error, Result};
 use protocol::{ClientMessage, ServerMessage, ServerNotification, Notification};
 use queue::{self, AutopushQueue};
 use rt::{self, AutopushError, UnwindGuard};
@@ -39,6 +41,8 @@ mod dispatch;
 mod metrics;
 mod tls;
 mod webpush_io;
+
+const UAHEADER: &str = "User-Agent";
 
 #[repr(C)]
 pub struct AutopushServer {
@@ -100,6 +104,7 @@ pub struct ServerOptions {
     pub close_handshake_timeout: Option<Duration>,
     pub statsd_host: Option<String>,
     pub statsd_port: u16,
+    pub logger: util::LogGuards,
 }
 
 fn resolve(host: &str) -> IpAddr {
@@ -141,8 +146,11 @@ pub extern "C" fn autopush_server_new(
     rt::catch(err, || unsafe {
         let opts = &*opts;
 
-        util::init_logging(opts.json_logging != 0);
+        let hostname = to_s(opts.host_ip)
+            .expect("hostname must be specified")
+            .as_ref();
 
+        let logger = util::init_logging(opts.json_logging != 0, hostname);
         let opts = ServerOptions {
             debug: opts.debug != 0,
             host_ip: to_s(opts.host_ip)
@@ -170,6 +178,7 @@ pub extern "C" fn autopush_server_new(
                 Some(opts.max_connections)
             },
             open_handshake_timeout: ito_dur(opts.open_handshake_timeout),
+            logger: logger,
         };
 
         Box::new(AutopushServer {
@@ -256,8 +265,7 @@ impl Server {
                 Err(e) => return inittx.send(Some(e)).unwrap(),
             };
 
-            // For now during development spin up a dummy HTTP server which is
-            // used to send notifications to clients.
+            // Internal HTTP server setup
             {
                 use hyper::server::Http;
 
@@ -273,7 +281,7 @@ impl Server {
                     Ok(())
                 });
                 core.handle().spawn(push_srv.then(|res| {
-                    info!("Http server {:?}", res);
+                    debug!("Http server {:?}", res);
                     Ok(())
                 }));
             }
@@ -335,14 +343,32 @@ impl Server {
                 let request = timeout(request, srv.opts.open_handshake_timeout, &handle);
                 let srv2 = srv.clone();
                 let handle2 = handle.clone();
+
+                let host = format!("{}", addr.ip());
+
+                // Setup oneshot to extract the user-agent from the header callback
+                let (uatx, uarx) = oneshot::channel();
+                let callback = |req: &Request| {
+                    if let Some(value) = req.headers.find_first(UAHEADER) {
+                        let mut valstr = String::new();
+                        for c in value.iter() {
+                            let c = *c as char;
+                            valstr.push(c);
+                        }
+                        debug!("Found user-agent string"; "user-agent" => valstr.as_str());
+                        uatx.send(valstr).unwrap();
+                    }
+                    debug!("No agent string found");
+                    Ok(None)
+                };
+
                 let client = request.and_then(move |(socket, request)| -> MyFuture<_> {
                     match request {
                         RequestType::Status => write_status(socket),
                         RequestType::Websocket => {
                             // Perform the websocket handshake on each
                             // connection, but don't let it take too long.
-                            let ws =
-                                accept_async(socket, None).chain_err(|| "failed to accept client");
+                            let ws = accept_hdr_async(socket, callback).chain_err(|| "failed to accept client");
                             let ws = timeout(ws, srv2.opts.open_handshake_timeout, &handle2);
 
                             // Once the handshake is done we'll start the main
@@ -351,7 +377,7 @@ impl Server {
                             // the internal state machine.
                             Box::new(
                                 ws.and_then(move |ws| {
-                                    PingManager::new(&srv2, ws).chain_err(
+                                    PingManager::new(&srv2, ws, uarx, host).chain_err(
                                         || "failed to make ping handler",
                                     )
                                 }).flatten(),
@@ -369,7 +395,7 @@ impl Server {
                             error.push_str("\n");
                             error.push_str(&err.to_string());
                         }
-                        error!("{}: {}", addr, error);
+                        debug!("{}: {}", addr, error);
                     }
                     Ok(())
                 }));
@@ -409,7 +435,7 @@ impl Server {
                 .tx
                 .unbounded_send(ServerNotification::Notification(notif))
                 .unwrap();
-            info!("Dropped notification in queue");
+            debug!("Dropped notification in queue");
             return Ok(());
         }
         Err("User not connected".into())
@@ -450,7 +476,12 @@ enum CloseState<T> {
 }
 
 impl PingManager {
-    fn new(srv: &Rc<Server>, socket: WebSocketStream<WebpushIo>) -> io::Result<PingManager> {
+    fn new(
+        srv: &Rc<Server>,
+        socket: WebSocketStream<WebpushIo>,
+        uarx: oneshot::Receiver<String>,
+        host: String)
+        -> io::Result<PingManager> {
         // The `socket` is itself a sink and a stream, and we've also got a sink
         // (`tx`) and a stream (`rx`) to send messages. Half of our job will be
         // doing all this proxying: reading messages from `socket` and sending
@@ -470,7 +501,7 @@ impl PingManager {
             timeout: Timeout::new(srv.opts.auto_ping_interval, &srv.handle)?,
             waiting: WaitingFor::SendPing,
             socket: socket.clone(),
-            client: CloseState::Exchange(Client::new(socket, srv)),
+            client: CloseState::Exchange(Client::new(socket, srv, uarx, host)),
             srv: srv.clone(),
         })
     }
@@ -540,6 +571,7 @@ impl Future for PingManager {
                         if let CloseState::Exchange(ref mut client) = self.client {
                             client.shutdown();
                         }
+                        // So did the shutdown not work? We must call shutdown but no client here?
                         return Err("close handshake took too long".into());
                     }
                 }

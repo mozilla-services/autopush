@@ -11,10 +11,12 @@ use cadence::prelude::*;
 use futures::AsyncSink;
 use futures::future::Either;
 use futures::sync::mpsc;
+use futures::sync::oneshot::Receiver;
 use futures::{Stream, Sink, Future, Poll, Async};
 use tokio_core::reactor::Timeout;
 use time;
 use uuid::Uuid;
+use woothee::parser::{Parser, WootheeResult};
 
 use call;
 use errors::*;
@@ -24,6 +26,26 @@ use server::Server;
 pub struct RegisteredClient {
     pub uaid: Uuid,
     pub tx: mpsc::UnboundedSender<ServerNotification>,
+}
+
+// Websocket session statistics
+#[derive(Clone)]
+struct SessionStatistics {
+    // User data
+    uaid: String,
+    uaid_reset: bool,
+    existing_uaid: bool,
+    connection_type: String,
+    host: String,
+
+    // Usage data
+    direct_acked: i32,
+    direct_storage: i32,
+    stored_retrieved: i32,
+    stored_acked: i32,
+    nacks: i32,
+    unregisters: i32,
+    registers: i32,
 }
 
 // Represents a websocket client connection that may or may not be authenticated
@@ -36,6 +58,8 @@ pub struct ClientData<T> {
     webpush: Option<WebPushClient>,
     srv: Rc<Server>,
     ws: T,
+    user_agent: String,
+    host: String,
 }
 
 // Represent the state for a valid WebPush client that is authenticated
@@ -50,6 +74,7 @@ pub struct WebPushClient {
     // when all the unacked storeds are ack'd
     unacked_stored_highest: Option<i64>,
     connected_at: u64,
+    stats: SessionStatistics,
 }
 
 impl WebPushClient {
@@ -128,15 +153,31 @@ where
     /// the various state behind the server. This provides transitive access to
     /// various configuration options of the server as well as the ability to
     /// call back into Python.
-    pub fn new(ws: T, srv: &Rc<Server>) -> Client<T> {
+    pub fn new(ws: T, srv: &Rc<Server>, mut uarx: Receiver<String>, host: String) -> Client<T> {
         let srv = srv.clone();
         let timeout = Timeout::new(srv.opts.open_handshake_timeout.unwrap(), &srv.handle).unwrap();
+
+        // Pull out the user-agent, which we should have by now
+        let uastr = match uarx.poll() {
+            Ok(Async::Ready(ua)) => ua,
+            Ok(Async::NotReady) => {
+                error!("Failed to parse the user-agent");
+                String::from("")
+            }
+            Err(_) => {
+                error!("Failed to receive a value");
+                String::from("")
+            }
+        };
+
         Client {
             state: ClientState::WaitingForHello(timeout),
             data: ClientData {
                 webpush: None,
                 srv: srv.clone(),
                 ws: ws,
+                user_agent: uastr,
+                host,
             },
         }
     }
@@ -310,6 +351,7 @@ where
                 debug!("State: WaitingForRegister");
                 let msg = match try_ready!(response.poll()) {
                     call::RegisterResponse::Success { endpoint } => {
+                        self.data.webpush.as_mut().unwrap().stats.registers += 1;
                         ServerMessage::Register {
                             channel_id: channel_id,
                             status: 200,
@@ -337,6 +379,7 @@ where
                 let msg = match try_ready!(response.poll()) {
                     call::UnRegisterResponse::Success { success } => {
                         debug!("Got the unregister response");
+                        self.data.webpush.as_mut().unwrap().stats.unregisters += 1;
                         ServerMessage::Unregister {
                             channel_id: channel_id,
                             status: if success { 200 } else { 500 },
@@ -489,15 +532,30 @@ where
         flags.check = check_storage;
         flags.reset_uaid = reset_uaid;
         flags.rotate_message_table = rotate_message_table;
+
         self.webpush = Some(WebPushClient {
-            uaid: uaid,
-            flags: flags,
-            rx: rx,
-            message_month: message_month,
+            uaid,
+            flags,
+            rx,
+            message_month,
             unacked_direct_notifs: Vec::new(),
             unacked_stored_notifs: Vec::new(),
             unacked_stored_highest: None,
-            connected_at: connected_at,
+            connected_at,
+            stats: SessionStatistics {
+                uaid: uaid.hyphenated().to_string(),
+                uaid_reset: reset_uaid,
+                existing_uaid: check_storage,
+                connection_type: String::from("webpush"),
+                host: String::from("unknown"),
+                direct_acked: 0,
+                direct_storage: 0,
+                stored_retrieved: 0,
+                stored_acked: 0,
+                nacks: 0,
+                registers: 0,
+                unregisters: 0,
+            },
         });
         self.srv.connect_client(
             RegisteredClient { uaid: uaid, tx: tx },
@@ -511,7 +569,7 @@ where
     }
 
     fn process_register(&mut self, channel_id: Uuid, key: Option<String>) -> ClientState {
-        debug!("Got a register command");
+        debug!("Got a register command"; "channel_id" => channel_id.hyphenated().to_string());
         let webpush = self.webpush.as_ref().unwrap();
         let uaid = webpush.uaid.clone();
         let message_month = webpush.message_month.clone();
@@ -549,6 +607,7 @@ where
                 v.channel_id == notif.channel_id && v.version == notif.version
             })
             {
+                webpush.stats.direct_acked += 1;
                 webpush.unacked_direct_notifs.remove(pos);
                 continue;
             };
@@ -556,6 +615,7 @@ where
                 v.channel_id == notif.channel_id && v.version == notif.version
             })
             {
+                webpush.stats.stored_acked += 1;
                 let message_month = webpush.message_month.clone();
                 let n = webpush.unacked_stored_notifs.remove(pos);
                 if n.topic.is_some() {
@@ -618,7 +678,10 @@ where
             // If there's direct unack'd messages, they need to be saved out without blocking
             // here
             self.srv.disconnet_client(&webpush.uaid);
-            if webpush.unacked_direct_notifs.len() > 0 {
+            let mut stats = webpush.stats.clone();
+            let unacked_direct_notifs = webpush.unacked_direct_notifs.len();
+            if unacked_direct_notifs > 0 {
+                stats.direct_storage += unacked_direct_notifs as i32;
                 self.srv.handle.spawn(
                     self.srv
                         .store_messages(
@@ -632,6 +695,50 @@ where
                         }),
                 )
             }
+
+            // Parse the user-agent string
+            let parser = Parser::new();
+            let ua_result = parser.parse(self.user_agent.as_str());
+            let mut ua_os_family = String::new();
+            let mut ua_os_ver = String::new();
+            let mut ua_browser_family = String::new();
+            let mut ua_browser_ver = String::new();
+            let mut ua_name = String::new();
+            let mut ua_category = String::new();
+            match ua_result {
+                Some(WootheeResult { name, os, os_version, version, vendor, category, .. }) => {
+                    ua_name = String::from(name);
+                    ua_os_family = String::from(os);
+                    ua_os_ver = os_version;
+                    ua_browser_family = String::from(vendor);
+                    ua_browser_ver = version;
+                    ua_category = String::from(category);
+                }
+                None => ()
+            };
+
+            // Log out the final stats message
+            info!("Session";
+                "uaid_hash" => stats.uaid.as_str(),
+                "uaid_reset" => stats.uaid_reset,
+                "existing_uaid" => stats.existing_uaid,
+                "connection_type" => stats.connection_type.as_str(),
+                "host" => self.host.clone(),
+                "ua_name" => ua_name.as_str(),
+                "ua_os_family" => ua_os_family.as_str(),
+                "ua_os_ver" => ua_os_ver.as_str(),
+                "ua_browser_family" => ua_browser_family.as_str(),
+                "ua_browser_ver" => ua_browser_ver.as_str(),
+                "ua_category" => ua_category.as_str(),
+                "connection_time" => elapsed,
+                "direct_acked" => stats.direct_acked,
+                "direct_storage" => stats.direct_storage,
+                "stored_retrieved" => stats.stored_retrieved,
+                "stored_acked" => stats.stored_acked,
+                "nacks" => stats.nacks,
+                "registers" => stats.registers,
+                "unregisters" => stats.unregisters,
+            );
         };
     }
 }

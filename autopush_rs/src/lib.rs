@@ -62,18 +62,24 @@
 
 extern crate bytes;
 extern crate cadence;
-extern crate env_logger;
+extern crate chrono;
 #[macro_use]
 extern crate futures;
 extern crate httparse;
 extern crate hyper;
 extern crate libc;
-#[macro_use]
-extern crate log;
 extern crate openssl;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+#[macro_use]
+extern crate slog;
+#[macro_use]
+extern crate slog_scope;
+extern crate slog_term;
+extern crate slog_async;
+extern crate slog_json;
+extern crate slog_stdlog;
 #[macro_use]
 extern crate serde_json;
 extern crate time;
@@ -84,6 +90,7 @@ extern crate tokio_service;
 extern crate tokio_tungstenite;
 extern crate tungstenite;
 extern crate uuid;
+extern crate woothee;
 
 #[macro_use]
 extern crate error_chain;
