@@ -4,6 +4,7 @@ use std::ffi::CStr;
 use std::io;
 use std::net::{IpAddr, ToSocketAddrs};
 use std::panic;
+use std::panic::PanicInfo;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -11,11 +12,13 @@ use std::thread;
 use std::time::{Instant, Duration};
 
 use cadence::StatsdClient;
+use futures;
 use futures::sync::oneshot;
 use futures::task;
 use futures::{Stream, Future, Sink, Async, Poll, AsyncSink, StartSend};
 use libc::c_char;
 use openssl::ssl::SslAcceptor;
+use sentry;
 use serde_json;
 use time;
 use tokio_core::net::TcpListener;
@@ -297,6 +300,25 @@ impl Server {
     }
 
     fn new(opts: &Arc<ServerOptions>, tx: queue::Sender) -> Result<(Rc<Server>, Core)> {
+        // Setup Sentry logging if a SENTRY_DSN exists
+        let sentry_dsn_option = option_env!("SENTRY_DSN");
+        if let Some(sentry_dsn) = sentry_dsn_option {
+            // Spin up a new thread with a new reactor core for the sentry handler
+            thread::spawn(move || {
+                let creds = sentry_dsn
+                    .parse::<sentry::SentryCredential>()
+                    .expect("Invalid Sentry DSN specified");
+                let mut core = Core::new().expect("Unable to create core");
+                let sentry = sentry::Sentry::from_settings(core.handle(), Default::default(), creds);
+                // Get the prior panic hook
+                let hook = panic::take_hook();
+                sentry.register_panic_handler(Some(move |info: &PanicInfo| -> () {
+                    hook(info);
+                }));
+                core.run(futures::empty::<(), ()>()).expect("Error starting sentry thread");
+            });
+        }
+
         let core = Core::new()?;
         let srv = Rc::new(Server {
             opts: opts.clone(),

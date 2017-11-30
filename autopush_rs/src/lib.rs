@@ -69,6 +69,7 @@ extern crate httparse;
 extern crate hyper;
 extern crate libc;
 extern crate openssl;
+extern crate sentry;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
