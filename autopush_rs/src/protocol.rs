@@ -40,6 +40,12 @@ pub enum ClientMessage {
     },
 
     Ack { updates: Vec<ClientAck> },
+
+    Nack {
+        code: Option<i32>,
+        version: String,
+    },
+
 }
 
 #[derive(Deserialize)]

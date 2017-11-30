@@ -409,6 +409,11 @@ where
                     ClientMessage::Unregister { channel_id, code } => {
                         self.data.process_unregister(channel_id, code)
                     }
+                    ClientMessage::Nack { .. } => {
+                        self.data.srv.metrics.incr("ua.command.nack").ok();
+                        self.data.webpush.as_mut().unwrap().stats.nacks += 1;
+                        ClientState::WaitingForAcks
+                    }
                     ClientMessage::Ack { updates } => self.data.process_acks(updates),
                     _ => return Err("Invalid state transition".into()),
                 }
@@ -434,6 +439,11 @@ where
                     }
                     Either::A(ClientMessage::Unregister { channel_id, code }) => {
                         self.data.process_unregister(channel_id, code)
+                    }
+                    Either::A(ClientMessage::Nack { .. }) => {
+                        self.data.srv.metrics.incr("ua.command.nack").ok();
+                        self.data.webpush.as_mut().unwrap().stats.nacks += 1;
+                        ClientState::WaitingForAcks
                     }
                     Either::B(ServerNotification::Notification(notif)) => {
                         let webpush = self.data.webpush.as_mut().unwrap();
