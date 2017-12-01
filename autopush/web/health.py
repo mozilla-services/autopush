@@ -97,7 +97,7 @@ class StatusHandler(BaseWebHandler):
 
 
 class MemUsageHandler(BaseWebHandler):
-    """Spits out a tarball of some memory stats.
+    """Spits out some memory stats.
 
     Should be ran on its own port, not accessible externally.
 
@@ -110,11 +110,18 @@ class MemUsageHandler(BaseWebHandler):
     def get(self):
         """HTTP Get
 
-        Returns that this node is alive, and the version.
+        Returns the memory stats.
 
         """
         from autopush.memusage import memusage
-        d = deferToThread(memusage)
+
+        def enabled(name):
+            return self.get_argument(name, u'true').lower() != u'false'
+        d = deferToThread(
+            memusage,
+            do_dump_rpy_heap=enabled('dump_rpy_heap'),
+            do_objgraph=enabled('objgraph')
+        )
         d.addCallback(self.write)
         d.addCallback(self.finish)
         d.addErrback(self._response_err)
