@@ -7,13 +7,14 @@ import subprocess
 import tempfile
 import zlib
 from StringIO import StringIO
+from typing import Optional  # noqa
 
 from autopush.gcdump import Stat
 
 
-def memusage():
+def memusage(do_dump_rpy_heap=True, do_objgraph=True):
     """Returning a str of memory usage stats"""
-    # type() -> str
+    # type: (Optional[bool], Optional[bool]) -> str
     def trap_err(func, *args, **kwargs):
         try:
             return func(*args, **kwargs)
@@ -25,12 +26,14 @@ def memusage():
     rusage = trap_err(resource.getrusage, resource.RUSAGE_SELF)
     buf.writelines([repr(rusage), '\n\n'])
     trap_err(pmap_extended, buf)
-    # dump rpython's heap before objgraph potentially pollutes the
-    # heap with its heavy workload
-    trap_err(dump_rpy_heap, buf)
+    if do_dump_rpy_heap:
+        # dump rpython's heap before objgraph potentially pollutes the
+        # heap with its heavy workload
+        trap_err(dump_rpy_heap, buf)
     trap_err(get_stats_asmmemmgr, buf)
     buf.write('\n\n')
-    trap_err(objgraph.show_most_common_types, limit=0, file=buf)
+    if do_objgraph:
+        trap_err(objgraph.show_most_common_types, limit=0, file=buf)
     return buf.getvalue()
 
 

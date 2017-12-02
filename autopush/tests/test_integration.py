@@ -2109,7 +2109,7 @@ class TestMemUsage(IntegrationBase):
             "http://localhost:{}/_memusage".format(port),
         )
         assert response.code == 200
-        assert 'rusage' in body
+        assert 'ru_maxrss=' in body
         assert 'Logger' in body
         if find_executable('pmap'):
             assert 'RSS' in body or 'Rss' in body  # pmap -x or -XX/X output
@@ -2117,6 +2117,21 @@ class TestMemUsage(IntegrationBase):
             assert 'size: ' in body
             assert 'rpy_unicode' in body
             assert 'get_stats_asmmemmgr: (' in body
+
+    @inlineCallbacks
+    def test_memusage_options(self):
+        port = self.ep.conf.memusage_port
+        url = ("http://localhost:{}/_memusage?objgraph=false&"
+               "dump_rpy_heap=false").format(port)
+        response, body = yield _agent('GET', url)
+        assert response.code == 200
+        assert 'ru_maxrss=' in body
+        assert 'Logger' not in body
+        if find_executable('pmap'):
+            assert 'RSS' in body or 'Rss' in body  # pmap -x or -XX/X output
+        if hasattr(sys, 'pypy_version_info'):  # pragma: nocover
+            assert 'size: ' not in body
+            assert 'rpy_unicode' not in body
 
 
 @inlineCallbacks
