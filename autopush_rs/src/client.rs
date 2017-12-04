@@ -187,6 +187,7 @@ where
     }
 
     fn transition(&mut self) -> Poll<ClientState, Error> {
+        let host = self.data.host.clone();
         let next_state = match self.state {
             ClientState::FinishSend(None, None) => {
                 return Err("Bad state, should not have nothing to do".into())
@@ -466,7 +467,12 @@ where
             ClientState::ShutdownCleanup(ref mut err) => {
                 debug!("State: ShutdownCleanup");
                 if let Some(err_obj) = err.take() {
-                    debug!("Error for shutdown: {}", err_obj);
+                    let mut error = err_obj.to_string();
+                    for err in err_obj.iter().skip(1) {
+                        error.push_str("\n");
+                        error.push_str(&err.to_string());
+                    }
+                    debug!("Error for shutdown of {}: {}", host, error);
                 };
                 self.data.shutdown();
                 ClientState::Done
