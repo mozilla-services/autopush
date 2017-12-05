@@ -47,3 +47,10 @@ class DiagnosticCLITestCase(unittest.TestCase):
             "http://something/wpush/v1/legit_endpoint",
         ], use_files=False)
         mock_message_table.all_channels.assert_called()
+
+    def test_parser_tuple(self):
+        from autopush.diagnostic_cli import EndpointDiagnosticCLI
+
+        edc = EndpointDiagnosticCLI(("http://someendpoint",))
+        assert edc is not None
+        assert edc._endpoint == "http://someendpoint"

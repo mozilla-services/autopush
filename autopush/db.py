@@ -363,6 +363,7 @@ def preflight_check(message, router, uaid="deadbeef00000000deadbeef00000000"):
     # Store a router entry, fetch it, delete it
     router.register_user(dict(uaid=uaid.hex, node_id=node_id,
                               connected_at=connected_at,
+                              current_month=datetime.date.today().month,
                               router_type="webpush"))
     item = router.get_uaid(uaid.hex)
     assert item.get("node_id") == node_id
@@ -694,7 +695,7 @@ class Message(object):
 class Router(object):
     """Create a Router table abstraction on top of a DynamoDB Table object"""
     def __init__(self, table, metrics, max_ttl=MAX_EXPIRY):
-        # type: (Table, IMetrics) -> None
+        # type: (Table, IMetrics, int) -> None
         """Create a new Router object
 
         :param table: :class:`Table` object.
