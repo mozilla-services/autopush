@@ -63,6 +63,10 @@ def add_shared_args(parser):
     parser.add_argument('--router_write_throughput',
                         help="DynamoDB router write throughput",
                         type=int, default=5, env_var="ROUTER_WRITE_THROUGHPUT")
+    parser.add_argument('--router_migrate_tablename',
+                        help="Expiring table to migrate router entries",
+                        type=str, default=None,
+                        env_var="ROUTER_MIGRATE_TABLENAME")
     parser.add_argument('--connection_timeout',
                         help="Seconds to wait for connection timeout",
                         type=int, default=1, env_var="CONNECTION_TIMEOUT")

@@ -39,7 +39,6 @@ import uuid
 from functools import wraps
 
 from attr import (
-    asdict,
     attrs,
     attrib,
     Factory
@@ -218,8 +217,8 @@ def get_rotating_message_table(prefix="message", delta=0, date=None,
 
 
 def create_router_table(tablename="router", read_throughput=5,
-                        write_throughput=5):
-    # type: (str, int, int) -> Table
+                        write_throughput=5, expires=True):
+    # type: (str, int, int, bool) -> Table
     """Create a new router table
 
     The last_connect index is a value used to determine the last month a user
@@ -234,28 +233,32 @@ def create_router_table(tablename="router", read_throughput=5,
 
     """
 
-    table = g_dynamodb.create_table(
-        TableName=tablename,
-        KeySchema=[
-            {
-                'AttributeName': 'uaid',
-                'KeyType': 'HASH'
-            }
-        ],
-        AttributeDefinitions=[
-            {
-                'AttributeName': 'uaid',
-                'AttributeType': 'S'
-            },
-            {
-                'AttributeName': 'last_connect',
-                'AttributeType': 'N'
-            }],
-        ProvisionedThroughput={
-            'ReadCapacityUnits': read_throughput,
-            'WriteCapacityUnits': write_throughput,
-        },
-        GlobalSecondaryIndexes=[
+    args = dict(TableName=tablename,
+                KeySchema=[
+                    {
+                        'AttributeName': 'uaid',
+                        'KeyType': 'HASH'
+                    }
+                ],
+                AttributeDefinitions=[
+                    {
+                        'AttributeName': 'uaid',
+                        'AttributeType': 'S'
+                    }
+                ],
+                ProvisionedThroughput={
+                    'ReadCapacityUnits': read_throughput,
+                    'WriteCapacityUnits': write_throughput,
+                },
+                )
+    if not expires:
+        args['AttributeDefinitions'].append(
+                {
+                    'AttributeName': 'last_connect',
+                    'AttributeType': 'N'
+                }
+        )
+        args['GlobalSecondaryIndexes'] = [
             {
                 'IndexName': 'AccessIndex',
                 'KeySchema': [
@@ -276,7 +279,7 @@ def create_router_table(tablename="router", read_throughput=5,
                 }
             }
         ]
-    )
+    table = g_dynamodb.create_table(**args)
     table.meta.client.get_waiter('table_exists').wait(
         TableName=tablename)
     try:
@@ -300,11 +303,13 @@ def _drop_table(tablename):
         pass
 
 
-def _make_table(table_func, tablename, read_throughput, write_throughput):
-    # type: (Callable[[str, int, int], Table], str, int, int) -> Table
+def _make_table(table_func, tablename, read_throughput, write_throughput,
+                expires=True):
+    # type: (Callable[[str, int, int, bool], Table], str, int, int, bool) -> Table  # noqa
     """Private common function to make a table with a table func"""
     if not table_exists(tablename):
-        return table_func(tablename, read_throughput, write_throughput)
+        return table_func(tablename, read_throughput, write_throughput,
+                          expires)
     else:
         return g_dynamodb.Table(tablename)
 
@@ -314,16 +319,20 @@ def _expiry(ttl):
 
 
 def get_router_table(tablename="router", read_throughput=5,
-                     write_throughput=5):
-    # type: (str, int, int) -> Table
+                     write_throughput=5, expires=False,
+                     migrate_tablename=None):
+    # type: (str, int, int, bool, str) -> Table
     """Get the main router table object
 
     Creates the table if it doesn't already exist, otherwise returns the
     existing table.
 
     """
-    return _make_table(create_router_table, tablename, read_throughput,
-                       write_throughput)
+    return _make_table(create_router_table,
+                       tablename=tablename,
+                       read_throughput=read_throughput,
+                       write_throughput=write_throughput,
+                       expires=expires)
 
 
 def preflight_check(message, router, uaid="deadbeef00000000deadbeef00000000"):
@@ -693,23 +702,39 @@ class Message(object):
 
 class Router(object):
     """Create a Router table abstraction on top of a DynamoDB Table object"""
-    def __init__(self, table, metrics, max_ttl=MAX_EXPIRY):
-        # type: (Table, IMetrics) -> None
+    def __init__(self, table, metrics, max_ttl=MAX_EXPIRY, migrate_table=None):
+        # type: (Table, IMetrics, int, Table) -> None
         """Create a new Router object
 
         :param table: :class:`Table` object.
         :param metrics: Metrics object that implements the
                         :class:`autopush.metrics.IMetrics` interface.
+        :param max_ttl: Maximum record TTL
+        :param migrate_table: The expiring router table
 
         """
         self.table = table
         self.metrics = metrics
         self._max_ttl = max_ttl
+        self._migrate_table = migrate_table
 
     def table_status(self):
-        return self.table.table_status
+        table = self._migrate_table or self.table
+        return table.table_status
 
     def get_uaid(self, uaid):
+        if self._migrate_table:
+            try:
+                item = self.get_uaid_from_table(uaid, self._migrate_table)
+            except ItemNotFound:
+                self.metrics.increment("notification.router.user_migrated")
+                item = self.get_uaid_from_table(uaid, self.table)
+                self.register_user(item)
+                self.drop_user(uaid, self.table)
+            return item
+        return self.get_uaid_from_table(uaid, self.table)
+
+    def get_uaid_from_table(self, uaid, table):
         # type: (str) -> Item
         """Get the database record for the UAID
 
@@ -720,7 +745,7 @@ class Router(object):
 
         """
         try:
-            item = self.table.get_item(
+            item = table.get_item(
                 Key={
                     'uaid': hasher(uaid)
                 },
@@ -758,6 +783,7 @@ class Router(object):
 
         """
         # Fetch a senderid for this user
+        table = self._migrate_table or self.table
         db_key = {"uaid": hasher(data["uaid"])}
         del data["uaid"]
         if "router_type" not in data or "connected_at" not in data:
@@ -775,7 +801,7 @@ class Router(object):
                 attribute_not_exists(node_id) or
                 (connected_at < :connected_at)
             )"""
-            result = self.table.update_item(
+            result = table.update_item(
                 Key=db_key,
                 UpdateExpression=expr,
                 ConditionExpression=cond,
@@ -786,7 +812,7 @@ class Router(object):
                 r = {}
                 for key, value in result["Attributes"].items():
                     try:
-                        r[key] = self.table._dynamizer.decode(value)
+                        r[key] = table._dynamizer.decode(value)
                     except (TypeError, AttributeError):  # pragma: nocover
                         # Included for safety as moto has occasionally made
                         # this not work
@@ -802,13 +828,15 @@ class Router(object):
             raise
 
     @track_provisioned
-    def drop_user(self, uaid):
-        # type: (str) -> bool
+    def drop_user(self, uaid, table=None):
+        # type: (str, Table) -> bool
         """Drops a user record"""
         # The following hack ensures that only uaids that exist and are
         # deleted return true.
+        if not table:
+            table = self._migrate_table or self.table
         try:
-            item = self.table.get_item(
+            item = table.get_item(
                 Key={
                     'uaid': hasher(uaid)
                 },
@@ -818,15 +846,16 @@ class Router(object):
                 return False
         except ClientError:
             pass
-        result = self.table.delete_item(Key={'uaid': hasher(uaid)})
+        result = table.delete_item(Key={'uaid': hasher(uaid)})
         return result['ResponseMetadata']['HTTPStatusCode'] == 200
 
     def delete_uaids(self, uaids):
         # type: (List[str]) -> None
         """Issue a batch delete call for the given uaids"""
-        with self.table.batch_writer() as batch:
+        table = self._migrate_table or self.table
+        with table.batch_writer() as batch:
             for uaid in uaids:
-                batch.delete_item(Key={'uaid': uaid})
+                batch.delete_item(Key={'uaid': hasher(uaid)})
 
     def drop_old_users(self, months_ago=2):
         # type: (int) -> Iterable[int]
@@ -878,7 +907,8 @@ class Router(object):
 
     @track_provisioned
     def _update_last_connect(self, uaid, last_connect):
-        self.table.update_item(
+        table = self.table
+        table.update_item(
             Key={"uaid": hasher(uaid)},
             UpdateExpression="SET last_connect=:last_connect",
             ExpressionAttributeValues={":last_connect": last_connect}
@@ -889,20 +919,18 @@ class Router(object):
         # type: (str, str) -> bool
         """Update the route tables current_message_month
 
-        Note that we also update the last_connect at this point since webpush
-        users when connecting will always call this once that month. The
-        current_timestamp is also reset as a new month has no last read
+        The current_timestamp is reset as a new month has no last read
         timestamp.
 
         """
+        table = self._migrate_table or self.table
         db_key = {"uaid": hasher(uaid)}
-        expr = ("SET current_month=:curmonth, last_connect=:last_connect, "
+        expr = ("SET current_month=:curmonth, "
                 "expiry=:expiry")
         expr_values = {":curmonth": month,
-                       ":last_connect": generate_last_connect(),
                        ":expiry": _expiry(self._max_ttl),
                        }
-        self.table.update_item(
+        table.update_item(
             Key=db_key,
             UpdateExpression=expr,
             ExpressionAttributeValues=expr_values,
@@ -923,13 +951,14 @@ class Router(object):
             exceeds throughput.
 
         """
+        table = self._migrate_table or self.table
         # Pop out the node_id
         node_id = item["node_id"]
         del item["node_id"]
 
         try:
             cond = "(node_id = :node) and (connected_at = :conn)"
-            self.table.put_item(
+            table.put_item(
                 Item=item,
                 ConditionExpression=cond,
                 ExpressionAttributeValues={
@@ -992,9 +1021,27 @@ class DatabaseManager(object):
 
     def setup_tables(self):
         """Lookup or create the database tables"""
+
+        # Once we've fully migrated as many router entries as we deem
+        # sufficient, remove this migration table creation in favor of
+        # calling the migrated table
+        migrate_table = None
+        if self._router_conf.migrate_tablename:
+            migrate_table = get_router_table(
+                tablename=self._router_conf.migrate_tablename,
+                read_throughput=self._router_conf.read_throughput,
+                write_throughput=self._router_conf.write_throughput,
+                expires=True,
+            )
         self.router = Router(
-            get_router_table(**asdict(self._router_conf)),
-            self.metrics
+            get_router_table(
+                tablename=self._router_conf.tablename,
+                read_throughput=self._router_conf.read_throughput,
+                write_throughput=self._router_conf.write_throughput,
+                expires=False,
+            ),
+            self.metrics,
+            migrate_table=migrate_table
         )
         # Used to determine whether a connection is out of date with current
         # db objects. There are three noteworty cases:
