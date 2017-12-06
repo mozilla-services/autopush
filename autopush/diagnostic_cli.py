@@ -30,11 +30,11 @@ class EndpointDiagnosticCLI(object):
     def _load_args(self, sysargs, use_files):
         shared_config_files = AutopushMultiService.shared_config_files
         if use_files:
-            config_files = shared_config_files + [  # pragma: nocover
+            config_files = shared_config_files + (  # pragma: nocover
                 '/etc/autopush_endpoint.ini',
                 '~/.autopush_endpoint.ini',
                 '.autopush_endpoint.ini'
-            ]
+            )
         else:
             config_files = []  # pragma: nocover
 
@@ -68,10 +68,11 @@ class EndpointDiagnosticCLI(object):
         self._pp.pprint(rec._data)
         print("\n")
 
-        mess_table = rec["current_month"]
-        chans = self.db.message_tables[mess_table].all_channels(uaid)
-        print("Channels in message table:")
-        self._pp.pprint(chans)
+        if "current_month" in rec:
+            mess_table = rec["current_month"]
+            chans = self.db.message_tables[mess_table].all_channels(uaid)
+            print("Channels in message table:")
+            self._pp.pprint(chans)
 
 
 def run_endpoint_diagnostic_cli(sysargs=None, use_files=True):
