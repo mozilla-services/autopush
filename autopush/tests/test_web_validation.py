@@ -593,7 +593,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         assert cm.value.status_code == 410
         assert cm.value.errno == 106
-        assert cm.value.message == "No such subscription"
+        assert cm.value.message == "Subscription elapsed"
 
     def test_old_current_month(self):
         schema = self._make_fut()
@@ -616,7 +616,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         assert cm.value.status_code == 410
         assert cm.value.errno == 106
-        assert cm.value.message == "No such subscription"
+        assert cm.value.message == "Subscription expired"
 
 
 class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
