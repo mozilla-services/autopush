@@ -2098,6 +2098,7 @@ class TestMemUsage(IntegrationBase):
         )
         assert response.code == 200
         assert 'ru_maxrss=' in body
+        assert '<malloc ' in body
         assert 'Logger' in body
         if find_executable('pmap'):
             assert 'RSS' in body or 'Rss' in body  # pmap -x or -XX/X output
@@ -2114,6 +2115,7 @@ class TestMemUsage(IntegrationBase):
         response, body = yield _agent('GET', url)
         assert response.code == 200
         assert 'ru_maxrss=' in body
+        assert '<malloc ' in body
         assert 'Logger' not in body
         if find_executable('pmap'):
             assert 'RSS' in body or 'Rss' in body  # pmap -x or -XX/X output

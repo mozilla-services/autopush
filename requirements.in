@@ -3,6 +3,7 @@ attrs
 autobahn[twisted]
 boto
 boto3
+cffi
 click
 configargparse
 cryptography
