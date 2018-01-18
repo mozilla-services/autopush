@@ -55,6 +55,22 @@ def uaid_from_str(input):
         return None
 
 
+def dict_to_webpush_message(input):
+    if isinstance(input, dict):
+        return WebPushMessage(
+            uaid=input.get("uaid"),
+            timestamp=input["timestamp"],
+            channelID=input["channelID"],
+            ttl=input["ttl"],
+            topic=input.get("topic"),
+            version=input["version"],
+            sortkey_timestamp=input.get("sortkey_timestamp"),
+            data=input.get("data"),
+            headers=input.get("headers"),
+        )
+    return input
+
+
 @attrs(slots=True)
 class WebPushMessage(object):
     """Serializable version of attributes needed for message delivery"""
@@ -64,7 +80,7 @@ class WebPushMessage(object):
     ttl = attrib()  # type: int
     topic = attrib()  # type: str
     version = attrib()  # type: str
-    sortkey_timestamp = attrib(default=None)  # type: Optional[int]
+    sortkey_timestamp = attrib(default=None)  # type: Optional[str]
     data = attrib(default=None)  # type: Optional[str]
     headers = attrib(default=None)  # type: Optional[JSONDict]
 
@@ -84,7 +100,7 @@ class WebPushMessage(object):
 
     def to_WebPushNotification(self):
         # type: () -> WebPushNotification
-        return WebPushNotification(
+        notif = WebPushNotification(
             uaid=UUID(self.uaid),
             channel_id=self.channelID,
             data=self.data,
@@ -94,7 +110,14 @@ class WebPushMessage(object):
             timestamp=self.timestamp,
             message_id=self.version,
             update_id=self.version,
+            sortkey_timestamp=self.sortkey_timestamp,
         )
+
+        # If there's no sortkey_timestamp and no topic, its legacy
+        if not notif.sortkey_timestamp and not notif.topic:
+            notif.legacy = True
+
+        return notif
 
 
 ###############################################################################
@@ -129,7 +152,7 @@ class IncStoragePosition(InputCommand):
 @attrs(slots=True)
 class DeleteMessage(InputCommand):
     message_month = attrib()  # type: str
-    message = attrib()  # type: WebPushMessage
+    message = attrib(convert=dict_to_webpush_message)  # type: WebPushMessage
 
 
 @attrs(slots=True)
@@ -353,7 +376,10 @@ class HelloCommand(ProcessorCommand):
             reset_uaid=False
         )
         if hello.uaid:
-            user_item, flags = self.lookup_user(hello)
+            user_item, new_flags = self.lookup_user(hello)
+            if user_item:
+                # Only swap for the new flags if the user exists
+                flags = new_flags
 
         if not user_item:
             user_item = self.create_user(hello)
@@ -447,8 +473,6 @@ class HelloCommand(ProcessorCommand):
 class CheckStorageCommand(ProcessorCommand):
     def process(self, command):
         # type: (CheckStorage) -> CheckStorageResponse
-
-        # First, determine if there's any messages to retrieve
         timestamp, messages, include_topic = self._check_storage(command)
         return CheckStorageResponse(
             timestamp=timestamp,
@@ -482,6 +506,11 @@ class CheckStorageCommand(ProcessorCommand):
             )
         messages = [WebPushMessage.from_WebPushNotification(m)
                     for m in messages]
+
+        # If we're out of messages, timestamp is set to None, so we return
+        # the last timestamp supplied
+        if not timestamp:
+            timestamp = command.timestamp
         return timestamp, messages, False
 
 

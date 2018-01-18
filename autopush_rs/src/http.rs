@@ -26,18 +26,18 @@ impl Service for Push {
 
     fn call(&self, req: hyper::Request) -> Self::Future {
         if *req.method() != Method::Put && *req.method() != Method::Post {
-            println!("not a PUT: {}", req.method());
+            debug!("not a PUT: {}", req.method());
             return Box::new(err(hyper::Error::Method));
         }
         if req.uri().path().len() == 0 {
-            println!("empty uri path");
+            debug!("empty uri path");
             return Box::new(err(hyper::Error::Incomplete));
         }
         let req_uaid = req.uri().path()[6..].to_string();
         let uaid = match Uuid::parse_str(&req_uaid) {
             Ok(id) => id,
             Err(_) => {
-                println!("uri not uuid: {}", req_uaid);
+                debug!("uri not uuid: {}", req.uri().to_string());
                 return Box::new(err(hyper::Error::Status));
             }
         };

@@ -72,7 +72,7 @@ pub struct WebPushClient {
     unacked_stored_notifs: Vec<Notification>,
     // Highest version from stored, retained for use with increment
     // when all the unacked storeds are ack'd
-    unacked_stored_highest: Option<i64>,
+    unacked_stored_highest: Option<u64>,
     connected_at: u64,
     stats: SessionStatistics,
 }
@@ -200,6 +200,9 @@ where
             ClientState::FinishSend(ref mut msg, ref mut next_state) => {
                 debug!("State: FinishSend w/msg & next_state");
                 let item = msg.take().unwrap();
+                if let ServerMessage::Notification(ref notif) = item {
+                    debug!("Sending message: {:?}", notif);
+                }
                 let ret = self.data.ws.start_send(item).chain_err(|| "unable to send")?;
                 match ret {
                     AsyncSink::Ready => {
@@ -215,8 +218,9 @@ where
                 debug!("State: SendMessages");
                 if more_messages.is_some() {
                     let mut messages = more_messages.take().unwrap();
-                    if let Some(message) = messages.pop() {
-                        if let Some(_) = message.topic {
+                    if messages.len() > 0 {
+                        let message = messages.remove(0);
+                        if message.topic.is_some() {
                             self.data.srv.metrics.incr("ua.notification.topic")?;
                         }
                         // XXX: tags
@@ -258,6 +262,7 @@ where
             ClientState::IncrementStorage => {
                 debug!("State: IncrementStorage");
                 let webpush = self.data.webpush.as_ref().unwrap();
+                debug!("About to increment storage with: {:?}", webpush.unacked_stored_highest);
                 ClientState::WaitingForIncrementStorage(self.data.srv.increment_storage(
                     webpush.uaid.simple().to_string(),
                     webpush.message_month.clone(),
@@ -271,7 +276,7 @@ where
                         uaid,
                         use_webpush: Some(true),
                         ..
-                    } => uaid,
+                    } => uaid.and_then(|uaid| Uuid::parse_str(uaid.as_str()).ok()),
                     _ => return Err("Invalid message, must be hello".into()),
                 };
                 let connected_at = time::precise_time_ns() / 1000;
@@ -316,17 +321,30 @@ where
                 debug!("Got checkstorage response");
                 let webpush = self.data.webpush.as_mut().unwrap();
                 webpush.flags.include_topic = include_topic;
+                debug!("Setting unacked stored highest to {:?}", timestamp);
                 webpush.unacked_stored_highest = timestamp;
                 if messages.len() > 0 {
-                    webpush.flags.increment_storage = !include_topic;
-                    webpush.unacked_stored_notifs.extend(
-                        messages.iter().cloned(),
-                    );
-                    let message = ServerMessage::Notification(messages.pop().unwrap());
-                    ClientState::FinishSend(
-                        Some(message),
-                        Some(Box::new(ClientState::SendMessages(Some(messages)))),
-                    )
+                    // Filter out TTL expired messages
+                    let now = time::get_time().sec as u32;
+                    messages.retain(|ref msg| now < msg.ttl + msg.timestamp);
+                    webpush.flags.increment_storage = !include_topic && timestamp.is_some();
+                    // If there's still messages send them out
+                    if messages.len() > 0 {
+                        webpush.unacked_stored_notifs.extend(
+                            messages.iter().cloned(),
+                        );
+                        let message = ServerMessage::Notification(messages.remove(0));
+                        ClientState::FinishSend(
+                            Some(message),
+                            Some(Box::new(ClientState::SendMessages(Some(messages)))),
+                        )
+                    } else {
+                        // No messages remaining
+                        ClientState::FinishSend(
+                            None,
+                            Some(Box::new(ClientState::WaitingForAcks))
+                        )
+                    }
                 } else {
                     webpush.flags.check = false;
                     ClientState::Await
@@ -403,19 +421,36 @@ where
                 if let Some(next_state) = self.data.determine_acked_state() {
                     return Ok(next_state.into());
                 }
-                match try_ready!(self.data.input()) {
-                    ClientMessage::Register { channel_id, key } => {
+                match try_ready!(self.data.input_or_notif()) {
+                    Either::A(ClientMessage::Register { channel_id, key }) => {
                         self.data.process_register(channel_id, key)
                     }
-                    ClientMessage::Unregister { channel_id, code } => {
+                    Either::A(ClientMessage::Unregister { channel_id, code }) => {
                         self.data.process_unregister(channel_id, code)
                     }
-                    ClientMessage::Nack { .. } => {
+                    Either::A(ClientMessage::Nack { .. }) => {
                         self.data.srv.metrics.incr("ua.command.nack").ok();
                         self.data.webpush.as_mut().unwrap().stats.nacks += 1;
                         ClientState::WaitingForAcks
                     }
-                    ClientMessage::Ack { updates } => self.data.process_acks(updates),
+                    Either::A(ClientMessage::Ack { updates }) => self.data.process_acks(updates),
+                    Either::B(ServerNotification::Notification(notif)) => {
+                        let webpush = self.data.webpush.as_mut().unwrap();
+                        if notif.ttl != 0 {
+                            webpush.unacked_direct_notifs.push(notif.clone());
+                        }
+                        debug!("Got a notification to send, sending!");
+                        ClientState::FinishSend(
+                            Some(ServerMessage::Notification(notif)),
+                            Some(Box::new(ClientState::WaitingForAcks)),
+                        )
+                    }
+                    Either::B(ServerNotification::CheckStorage) => {
+                        let webpush = self.data.webpush.as_mut().unwrap();
+                        webpush.flags.include_topic = true;
+                        webpush.flags.check = true;
+                        ClientState::Await
+                    }
                     _ => return Err("Invalid state transition".into()),
                 }
             }
@@ -448,7 +483,9 @@ where
                     }
                     Either::B(ServerNotification::Notification(notif)) => {
                         let webpush = self.data.webpush.as_mut().unwrap();
-                        webpush.unacked_direct_notifs.push(notif.clone());
+                        if notif.ttl != 0 {
+                            webpush.unacked_direct_notifs.push(notif.clone());
+                        }
                         debug!("Got a notification to send, sending!");
                         ClientState::FinishSend(
                             Some(ServerMessage::Notification(notif)),
@@ -634,7 +671,8 @@ where
                 webpush.stats.stored_acked += 1;
                 let message_month = webpush.message_month.clone();
                 let n = webpush.unacked_stored_notifs.remove(pos);
-                if n.topic.is_some() {
+                // Topic/legacy messages have no sortkey_timestamp
+                if n.sortkey_timestamp.is_none() {
                     if fut.is_none() {
                         fut = Some(self.srv.delete_message(message_month, n))
                     } else {
