@@ -107,9 +107,10 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         else:
             chans = []
         hello_dict = dict(messageType="hello",
-                          uaid=uaid or self.uaid or "",
                           use_webpush=True,
                           channelIDs=chans)
+        if uaid or self.uaid:
+            hello_dict["uaid"] = uaid or self.uaid
         msg = json.dumps(hello_dict)
         log.debug("Send: %s", msg)
         self.ws.send(msg)
@@ -278,13 +279,16 @@ class IntegrationBase(unittest.TestCase):
     track_objects = True
     track_objects_excludes = [AutopushConfig, PushServerFactory]
 
+    connection_port = 9010
     endpoint_port = 9020
+    router_port = 9030
 
     _endpoint_defaults = dict(
         hostname='localhost',
         port=endpoint_port,
         endpoint_port=endpoint_port,
         endpoint_scheme='http',
+        router_port=router_port,
         statsd_host=None,
         router_table=dict(tablename=ROUTER_TABLE),
         message_table=dict(tablename=MESSAGE_TABLE),
@@ -293,9 +297,9 @@ class IntegrationBase(unittest.TestCase):
 
     _conn_defaults = dict(
         hostname='localhost',
-        port=9010,
+        port=connection_port,
         endpoint_port=endpoint_port,
-        router_port=9030,
+        router_port=router_port,
         endpoint_scheme='http',
         statsd_host=None,
         router_table=dict(tablename=ROUTER_TABLE),
@@ -340,7 +344,7 @@ class IntegrationBase(unittest.TestCase):
 
     @inlineCallbacks
     def quick_register(self, sslcontext=None):
-        client = Client("ws://localhost:9010/",
+        client = Client("ws://localhost:{}/".format(self.connection_port),
                         sslcontext=sslcontext)
         yield client.connect()
         yield client.hello()
@@ -498,7 +502,7 @@ class Test_Data(IntegrationBase):
             hostname="localhost")
         self.conn.db.metrics._client = Mock()
 
-        client = Client("ws://localhost:9010/")
+        client = Client("ws://localhost:{}/".format(self.connection_port))
         yield client.connect()
         yield client.hello()
         for chan, test in tests.items():
@@ -532,7 +536,7 @@ class Test_Data(IntegrationBase):
     def test_webpush_data_save_fail(self):
         chan = "d248d4e0-0ef4-41d9-8db5-2533ad8e4041"
         test = dict(data=b"\xe2\x82\x28\xf0\x28\x8c\xbc", result="4oIo8CiMvA")
-        client = Client("ws://localhost:9010/")
+        client = Client("ws://localhost:{}/".format(self.connection_port))
         yield client.connect()
         yield client.hello()
         yield client.register(chid=chan)
@@ -1365,7 +1369,7 @@ class TestWebPush(IntegrationBase):
     @inlineCallbacks
     def test_webpush_monthly_rotation_no_channels(self):
         from autopush.db import make_rotating_tablename
-        client = Client("ws://localhost:9010/")
+        client = Client("ws://localhost:{}/".format(self.connection_port))
         yield client.connect()
         yield client.hello()
         yield client.disconnect()
@@ -1562,7 +1566,8 @@ class TestClientCerts(SSLEndpointMixin, IntegrationBase):
 class TestHealth(IntegrationBase):
     @inlineCallbacks
     def test_status(self):
-        response, body = yield _agent('GET', "http://localhost:9010/status")
+        response, body = yield _agent(
+            'GET', "http://localhost:{}/status".format(self.connection_port))
         assert response.code == 200
         payload = json.loads(body)
         assert payload == dict(status="OK", version=__version__)

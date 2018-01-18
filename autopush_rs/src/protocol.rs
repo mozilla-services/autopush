@@ -20,7 +20,7 @@ pub enum ServerNotification {
 #[serde(tag = "messageType", rename_all = "lowercase")]
 pub enum ClientMessage {
     Hello {
-        uaid: Option<Uuid>,
+        uaid: Option<String>,
         #[serde(rename = "channelIDs", skip_serializing_if = "Option::is_none")]
         channel_ids: Option<Vec<Uuid>>,
         #[serde(skip_serializing_if = "Option::is_none")]
@@ -82,18 +82,26 @@ pub enum ServerMessage {
     Notification(Notification),
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Notification {
     pub uaid: Option<String>,
     #[serde(rename = "channelID")]
     pub channel_id: Uuid,
     pub version: String,
+    #[serde(default = "default_ttl")]
     pub ttl: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub topic: Option<String>,
-    pub timestamp: u64,
+    pub timestamp: u32,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<String>,
+    #[serde(skip_serializing)]
+    pub sortkey_timestamp: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     headers: Option<HashMap<String, String>>,
+}
+
+
+fn default_ttl() -> u32 {
+    0
 }

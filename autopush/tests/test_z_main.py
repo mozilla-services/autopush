@@ -1,3 +1,9 @@
+"""Test main instantiation
+
+This is named test_z_main.py to run it last. Due to issues in this test, the
+testing environment is unclean and no further tests can be run reliably.
+
+"""
 import unittest
 import datetime
 import json

@@ -141,7 +141,7 @@ enum Call {
         uaid: String,
         message_month: String,
         include_topic: bool,
-        timestamp: Option<i64>,
+        timestamp: Option<u64>,
     },
 
     DeleteMessage {
@@ -152,7 +152,7 @@ enum Call {
     IncStoragePosition {
         uaid: String,
         message_month: String,
-        timestamp: i64,
+        timestamp: u64,
     },
 
     DropUser { uaid: String },
@@ -210,7 +210,7 @@ pub enum UnRegisterResponse {
 pub struct CheckStorageResponse {
     pub include_topic: bool,
     pub messages: Vec<protocol::Notification>,
-    pub timestamp: Option<i64>,
+    pub timestamp: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -293,7 +293,7 @@ impl Server {
         uaid: String,
         message_month: String,
         include_topic: bool,
-        timestamp: Option<i64>,
+        timestamp: Option<u64>,
     ) -> MyFuture<CheckStorageResponse> {
         let (call, fut) = PythonCall::new(&Call::CheckStorage {
             uaid: uaid,
@@ -309,7 +309,7 @@ impl Server {
         &self,
         uaid: String,
         message_month: String,
-        timestamp: i64,
+        timestamp: u64,
     ) -> MyFuture<IncStorageResponse> {
         let (call, fut) = PythonCall::new(&Call::IncStoragePosition {
             uaid: uaid,
