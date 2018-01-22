@@ -1,3 +1,20 @@
+<a name="1.39.2"></a>
+## 1.39.2 (2018-01-22)
+
+
+#### Features
+
+*   allow optional use of jemalloc ([99b33457](https://github.com/mozilla-services/autopush/commit/99b33457be194bcbc1ca2056be54183240c5aea2), closes [#1100](https://github.com/mozilla-services/autopush/issues/1100))
+*   include glibc malloc & jemalloc stats in memusage ([b3755e42](https://github.com/mozilla-services/autopush/commit/b3755e42573cbbc02a72f61348bcf43d57d41be5), closes [#1101](https://github.com/mozilla-services/autopush/issues/1101))
+*   add some metrics for twisted's threadpool ([0b7b78a6](https://github.com/mozilla-services/autopush/commit/0b7b78a6a1224499b71b7fe4ed2dd188241b1941), closes [#1093](https://github.com/mozilla-services/autopush/issues/1093))
+*   make memusage's objgraph/dump_rpy_heap optional ([850d25e5](https://github.com/mozilla-services/autopush/commit/850d25e57a5cd11c599e3fdab72bdf561b9cabcf), closes [#1091](https://github.com/mozilla-services/autopush/issues/1091))
+
+#### Bug Fixes
+
+*   Make error responses more unique to assist in production debugging ([47851be5](https://github.com/mozilla-services/autopush/commit/47851be5720b4542c7f30430d917eeacfbee43c0), closes [#1087](https://github.com/mozilla-services/autopush/issues/1087))
+
+
+
 <a name="1.39.1"></a>
 ## 1.39.1 (2017-11-20)
 
