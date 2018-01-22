@@ -34,6 +34,7 @@ from autopush.exceptions import InvalidConfig
 from autopush.haproxy import HAProxyServerEndpoint
 from autopush.logging import PushLogger
 from autopush.main_argparse import parse_connection, parse_endpoint
+from autopush.metrics import periodic_reporter
 from autopush.router import routers_from_config
 from autopush.ssl import (
     monkey_patch_ssl_wrap_socket,
@@ -189,6 +190,8 @@ class EndpointApplication(AutopushMultiService):
         # Start the table rotation checker/updater
         if rotate_tables:
             self.add_timer(60, self.db.update_rotating_tables)
+        self.add_timer(15, periodic_reporter, self.db.metrics,
+                       prefix='autoendpoint')
 
     def add_endpoint(self):
         """Start the Endpoint HTTP router"""
@@ -259,6 +262,7 @@ class ConnectionApplication(AutopushMultiService):
         # Start the table rotation checker/updater
         if rotate_tables:
             self.add_timer(60, self.db.update_rotating_tables)
+        self.add_timer(15, periodic_reporter, self.db.metrics)
 
     def add_internal_router(self):
         """Start the internal HTTP notification router"""

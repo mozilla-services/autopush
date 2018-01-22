@@ -7,13 +7,27 @@ import subprocess
 import tempfile
 import zlib
 from StringIO import StringIO
+from typing import Optional  # noqa
 
 from autopush.gcdump import Stat
 
+from cffi import FFI
 
-def memusage():
+
+# cffi's API mode is preferable but it would assume jemalloc is always
+# available (and we LD_PRELOAD it)
+ffi = FFI()
+ffi.cdef("""
+int malloc_info(int options, FILE *stream);
+void malloc_stats_print(void (*write_cb) (void *, const char *),
+                        void *cbopaque, const char *opts);
+""")
+lib = ffi.dlopen(None)
+
+
+def memusage(do_dump_rpy_heap=True, do_objgraph=True):
     """Returning a str of memory usage stats"""
-    # type() -> str
+    # type: (Optional[bool], Optional[bool]) -> str
     def trap_err(func, *args, **kwargs):
         try:
             return func(*args, **kwargs)
@@ -25,12 +39,16 @@ def memusage():
     rusage = trap_err(resource.getrusage, resource.RUSAGE_SELF)
     buf.writelines([repr(rusage), '\n\n'])
     trap_err(pmap_extended, buf)
-    # dump rpython's heap before objgraph potentially pollutes the
-    # heap with its heavy workload
-    trap_err(dump_rpy_heap, buf)
+    trap_err(jemalloc_stats, buf)
+    trap_err(glibc_malloc_info, buf)
+    if do_dump_rpy_heap:
+        # dump rpython's heap before objgraph potentially pollutes the
+        # heap with its heavy workload
+        trap_err(dump_rpy_heap, buf)
     trap_err(get_stats_asmmemmgr, buf)
     buf.write('\n\n')
-    trap_err(objgraph.show_most_common_types, limit=0, file=buf)
+    if do_objgraph:
+        trap_err(objgraph.show_most_common_types, limit=0, file=buf)
     return buf.getvalue()
 
 
@@ -87,3 +105,33 @@ def get_stats_asmmemmgr(stream):  # pragma: nocover
     stream.write('\n\nget_stats_asmmemmgr: ')
     stream.write(repr(pypyjit.get_stats_asmmemmgr()))
     stream.write('\n')
+
+
+def glibc_malloc_info(stream):
+    """Write glib malloc's malloc_info(3)"""
+    with tempfile.NamedTemporaryFile('wb+') as fp:
+        if not lib.malloc_info(0, fp.file):
+            fp.seek(0)
+            stream.writelines(fp.readlines())
+
+
+def jemalloc_stats(stream):
+    """Write jemalloc's malloc_stats_print()"""
+    try:
+        malloc_stats_print = lib.malloc_stats_print
+    except AttributeError:
+        # not using jemalloc
+        return
+    malloc_stats_print(_jemalloc_write_cb, ffi.new_handle(stream), ffi.NULL)
+    stream.write('\n')
+
+
+@ffi.callback("void (*write_cb) (void *, const char *)")
+def _jemalloc_write_cb(handle, msg):
+    """Callback for jemalloc's malloc_stats_print
+
+    Writes to a Python stream passed via the cbopaque pointer
+
+    """
+    stream = ffi.from_handle(handle)
+    stream.write(ffi.string(msg))

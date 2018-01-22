@@ -97,7 +97,8 @@ class WebPushSubscriptionSchema(Schema):
             self.context["metrics"].increment("updates.drop_user",
                                               tags=make_tags(errno=102))
             self.context["db"].router.drop_user(result["uaid"])
-            raise InvalidRequest("No such subscription", status_code=410,
+            raise InvalidRequest("No route for subscription",
+                                 status_code=410,
                                  errno=106)
 
         if (router_type in ["gcm", "fcm"]
@@ -138,7 +139,8 @@ class WebPushSubscriptionSchema(Schema):
             metrics.increment("updates.drop_user",
                               tags=make_tags(errno=102))
             db.router.drop_user(uaid)
-            raise InvalidRequest("No such subscription", status_code=410,
+            raise InvalidRequest("Subscription elapsed",
+                                 status_code=410,
                                  errno=106)
 
         month_table = result["current_month"]
@@ -149,7 +151,8 @@ class WebPushSubscriptionSchema(Schema):
             metrics.increment("updates.drop_user",
                               tags=make_tags(errno=103))
             db.router.drop_user(uaid)
-            raise InvalidRequest("No such subscription", status_code=410,
+            raise InvalidRequest("Subscription expired",
+                                 status_code=410,
                                  errno=106)
         exists, chans = db.message_tables[month_table].all_channels(uaid=uaid)
 
@@ -157,7 +160,8 @@ class WebPushSubscriptionSchema(Schema):
                 in map(lambda x: normalize_id(x), chans)):
             log.debug("Unknown subscription: {channel_id}",
                       channel_id=channel_id)
-            raise InvalidRequest("No such subscription", status_code=410,
+            raise InvalidRequest("No such subscription for user",
+                                 status_code=410,
                                  errno=106)
 
 
