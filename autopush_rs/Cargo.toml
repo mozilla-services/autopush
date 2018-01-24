@@ -8,7 +8,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 bytes = "0.4.6"
-cadence = "0.12.2"
+cadence = { git = "https://github.com/tshlabs/cadence", rev = "1a3c90f73c88cab0"}
 chrono = "0.4.0"
 env_logger = { version = "0.5.3", default-features = false }
 error-chain = "0.11.0"

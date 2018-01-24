@@ -21,7 +21,7 @@ name = "autopush"
 version = "0.1.0"
 dependencies = [
  "bytes 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "cadence 0.12.2 (registry+https://github.com/rust-lang/crates.io-index)",
+ "cadence 0.12.2 (git+https://github.com/tshlabs/cadence?rev=1a3c90f73c88cab0)",
  "chrono 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "env_logger 0.5.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "error-chain 0.11.0 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -109,7 +109,7 @@ dependencies = [
 [[package]]
 name = "cadence"
 version = "0.12.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
+source = "git+https://github.com/tshlabs/cadence?rev=1a3c90f73c88cab0#1a3c90f73c88cab0f73349b7e04a33727d20ce62"
 dependencies = [
  "crossbeam 0.2.12 (registry+https://github.com/rust-lang/crates.io-index)",
 ]
@@ -1091,7 +1091,7 @@ dependencies = [
 "checksum bitflags 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)" = "b3c30d3802dfb7281680d6285f2ccdaa8c2d8fee41f93805dba5c4cf50dc23cf"
 "checksum byteorder 1.2.1 (registry+https://github.com/rust-lang/crates.io-index)" = "652805b7e73fada9d85e9a6682a4abd490cb52d96aeecc12e33a0de34dfd0d23"
 "checksum bytes 0.4.6 (registry+https://github.com/rust-lang/crates.io-index)" = "1b7db437d718977f6dc9b2e3fd6fc343c02ac6b899b73fdd2179163447bd9ce9"
-"checksum cadence 0.12.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7b8183488b4696bd166a383122be938b16a4382eb4b04d6a7dc47496cb0d3adf"
+"checksum cadence 0.12.2 (git+https://github.com/tshlabs/cadence?rev=1a3c90f73c88cab0)" = "<none>"
 "checksum cc 1.0.4 (registry+https://github.com/rust-lang/crates.io-index)" = "deaf9ec656256bb25b404c51ef50097207b9cbb29c933d31f92cae5a8a0ffee0"
 "checksum cfg-if 0.1.2 (registry+https://github.com/rust-lang/crates.io-index)" = "d4c819a1287eb618df47cc647173c5c4c66ba19d888a6e50d605672aed3140de"
 "checksum chrono 0.4.0 (registry+https://github.com/rust-lang/crates.io-index)" = "7c20ebe0b2b08b0aeddba49c609fe7957ba2e33449882cb186a180bc60682fa9"
