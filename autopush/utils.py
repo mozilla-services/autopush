@@ -309,7 +309,7 @@ class WebPushNotification(object):
 
             Encrypted('01' : uaid.hex : channel_id.hex : topic)
 
-        For topic messages, a sort_key version of 02 is used:
+        For non-topic messages, a sort_key version of 02 is used:
 
             Encrypted('02' : uaid.hex : channel_id.hex : timestamp)
 

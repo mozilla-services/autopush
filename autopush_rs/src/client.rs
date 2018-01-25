@@ -721,79 +721,73 @@ where
 
     pub fn shutdown(&mut self) {
         // If we made it past hello, do more cleanup
-
-        if self.webpush.is_some() {
-            let webpush = self.webpush.take().unwrap();
-            let now = time::precise_time_ns() / 1000;
-            let elapsed = now - webpush.connected_at;
-            // XXX: tags
-            self.srv.metrics.time("ua.connection.lifespan", elapsed).ok();
-
-            // If there's direct unack'd messages, they need to be saved out without blocking
-            // here
-            self.srv.disconnet_client(&webpush.uaid);
-            let mut stats = webpush.stats.clone();
-            let unacked_direct_notifs = webpush.unacked_direct_notifs.len();
-            if unacked_direct_notifs > 0 {
-                stats.direct_storage += unacked_direct_notifs as i32;
-                self.srv.handle.spawn(
-                    self.srv
-                        .store_messages(
-                            webpush.uaid.simple().to_string(),
-                            webpush.message_month,
-                            webpush.unacked_direct_notifs,
-                        )
-                        .then(|_| {
-                            debug!("Finished saving unacked direct notifications");
-                            Ok(())
-                        }),
-                )
-            }
-
-            // Parse the user-agent string
-            let parser = Parser::new();
-            let ua_result = parser.parse(self.user_agent.as_str());
-            let mut ua_os_family = String::new();
-            let mut ua_os_ver = String::new();
-            let mut ua_browser_family = String::new();
-            let mut ua_browser_ver = String::new();
-            let mut ua_name = String::new();
-            let mut ua_category = String::new();
-            match ua_result {
-                Some(WootheeResult { name, os, os_version, version, vendor, category, .. }) => {
-                    ua_name = String::from(name);
-                    ua_os_family = String::from(os);
-                    ua_os_ver = os_version;
-                    ua_browser_family = String::from(vendor);
-                    ua_browser_ver = version;
-                    ua_category = String::from(category);
-                }
-                None => ()
-            };
-
-            // Log out the final stats message
-            info!("Session";
-                "uaid_hash" => stats.uaid.as_str(),
-                "uaid_reset" => stats.uaid_reset,
-                "existing_uaid" => stats.existing_uaid,
-                "connection_type" => stats.connection_type.as_str(),
-                "host" => self.host.clone(),
-                "ua_name" => ua_name.as_str(),
-                "ua_os_family" => ua_os_family.as_str(),
-                "ua_os_ver" => ua_os_ver.as_str(),
-                "ua_browser_family" => ua_browser_family.as_str(),
-                "ua_browser_ver" => ua_browser_ver.as_str(),
-                "ua_category" => ua_category.as_str(),
-                "connection_time" => elapsed,
-                "direct_acked" => stats.direct_acked,
-                "direct_storage" => stats.direct_storage,
-                "stored_retrieved" => stats.stored_retrieved,
-                "stored_acked" => stats.stored_acked,
-                "nacks" => stats.nacks,
-                "registers" => stats.registers,
-                "unregisters" => stats.unregisters,
-            );
+        let webpush = match self.webpush.take() {
+            Some(webpush) => webpush,
+            None => return
         };
+
+        let now = time::precise_time_ns() / 1000;
+        let elapsed = now - webpush.connected_at;
+        // XXX: tags
+        self.srv.metrics.time("ua.connection.lifespan", elapsed).ok();
+
+        // If there's direct unack'd messages, they need to be saved out without blocking
+        // here
+        self.srv.disconnet_client(&webpush.uaid);
+        let mut stats = webpush.stats.clone();
+        let unacked_direct_notifs = webpush.unacked_direct_notifs.len();
+        if unacked_direct_notifs > 0 {
+            stats.direct_storage += unacked_direct_notifs as i32;
+            self.srv.handle.spawn(
+                self.srv
+                    .store_messages(
+                        webpush.uaid.simple().to_string(),
+                        webpush.message_month,
+                        webpush.unacked_direct_notifs,
+                    )
+                    .then(|_| {
+                        debug!("Finished saving unacked direct notifications");
+                        Ok(())
+                    }),
+            )
+        }
+
+        // Parse the user-agent string
+        let parser = Parser::new();
+        let ua_result = parser
+            .parse(&self.user_agent)
+            .unwrap_or_else(|| WootheeResult {
+                name: "",
+                category: "",
+                os: "",
+                os_version: "".to_string(),
+                browser_type: "",
+                version: "".to_string(),
+                vendor: "",
+            });
+
+        // Log out the final stats message
+        info!("Session";
+              "uaid_hash" => stats.uaid.as_str(),
+              "uaid_reset" => stats.uaid_reset,
+              "existing_uaid" => stats.existing_uaid,
+              "connection_type" => stats.connection_type.as_str(),
+              "host" => self.host.clone(),
+              "ua_name" => ua_result.name,
+              "ua_os_family" => ua_result.os,
+              "ua_os_ver" => ua_result.os_version,
+              "ua_browser_family" => ua_result.vendor,
+              "ua_browser_ver" => ua_result.version,
+              "ua_category" => ua_result.category,
+              "connection_time" => elapsed,
+              "direct_acked" => stats.direct_acked,
+              "direct_storage" => stats.direct_storage,
+              "stored_retrieved" => stats.stored_retrieved,
+              "stored_acked" => stats.stored_acked,
+              "nacks" => stats.nacks,
+              "registers" => stats.registers,
+              "unregisters" => stats.unregisters,
+        );
     }
 }
 
