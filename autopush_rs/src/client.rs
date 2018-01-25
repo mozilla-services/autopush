@@ -531,15 +531,6 @@ where
         + Sink<SinkItem = ServerMessage, SinkError = Error>
         + 'static,
 {
-    fn input(&mut self) -> Poll<ClientMessage, Error> {
-        let item = match self.ws.poll()? {
-            Async::Ready(None) => return Err("Client dropped".into()),
-            Async::Ready(Some(msg)) => Async::Ready(msg),
-            Async::NotReady => Async::NotReady,
-        };
-        Ok(item)
-    }
-
     fn input_with_timeout(&mut self, timeout: &mut Timeout) -> Poll<ClientMessage, Error> {
         let item = match timeout.poll()? {
             Async::Ready(_) => return Err("Client timed out".into()),

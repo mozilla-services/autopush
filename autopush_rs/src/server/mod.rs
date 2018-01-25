@@ -449,16 +449,31 @@ impl Server {
 
     /// A notification has come for the uaid
     pub fn notify_client(&self, uaid: Uuid, notif: Notification) -> Result<()> {
-        let mut uaids = self.uaids.borrow_mut();
-        if let Some(client) = uaids.get_mut(&uaid) {
+        let uaids = self.uaids.borrow();
+        if let Some(client) = uaids.get(&uaid) {
             debug!("Found a client to deliver a notification to");
-            // TODO: Don't unwrap, handle error properly
-            client
+            let result = client
                 .tx
-                .unbounded_send(ServerNotification::Notification(notif))
-                .unwrap();
-            debug!("Dropped notification in queue");
-            return Ok(());
+                .unbounded_send(ServerNotification::Notification(notif));
+            if result.is_ok() {
+                debug!("Dropped notification in queue");
+                return Ok(());
+            }
+        }
+        Err("User not connected".into())
+    }
+
+    /// A check for notification command has come for the uaid
+    pub fn check_client_storage(&self, uaid: Uuid) -> Result<()> {
+        let uaids = self.uaids.borrow();
+        if let Some(client) = uaids.get(&uaid) {
+            let result = client
+                .tx
+                .unbounded_send(ServerNotification::CheckStorage);
+            if result.is_ok() {
+                debug!("Told client to check storage");
+                return Ok(());
+            }
         }
         Err("User not connected".into())
     }
