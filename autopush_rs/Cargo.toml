@@ -7,39 +7,39 @@ authors = ["Alex Crichton <alex@alexcrichton.com>"]
 crate-type = ["cdylib"]
 
 [dependencies]
-bytes = "0.4"
-cadence = "0.12.1"
-chrono = "0.4"
-env_logger = { version = "0.4", default-features = false }
-error-chain = "0.10"
-futures = "0.1"
-httparse = "1.0"
-hyper = "0.11"
-libc = "0.2"
+bytes = "0.4.6"
+cadence = "0.12.2"
+chrono = "0.4.0"
+env_logger = { version = "0.5.3", default-features = false }
+error-chain = "0.11.0"
+futures = "0.1.18"
+httparse = "1.2.4"
+hyper = "0.11.15"
+libc = "0.2.36"
 # log: Use this version for debug builds
 #log = "0.3"
 # log: Use this for release builds (leave in for commits)
-log = { version = "0.3", features = ["max_level_trace", "release_max_level_warn"] }
-openssl = "0.9"
+log = { version = "0.4.1", features = ["max_level_trace", "release_max_level_warn"] }
+openssl = "0.10.2"
 sentry = "0.2.0"
-serde = "1.0"
-serde_derive = "1.0"
-serde_json = "1.0"
+serde = "1.0.27"
+serde_derive = "1.0.27"
+serde_json = "1.0.9"
 # slog: Use this first version for debug builds
 #slog = { version = "2.0.12" , features = ["max_level_trace", "release_max_level_debug"] }
 # slog: Use this for release builds (leave in for commits)
-slog = "2.0.12"
-slog-async = "2.1.0"
+slog = "2.1.1"
+slog-async = "2.2.0"
 slog-term = "2.3.0"
-slog-json = "2.0.2"
-slog-scope = "4.0.0"
+slog-json = "2.2.0"
+slog-scope = "4.0.1"
 slog-stdlog = "3.0.2"
-time = "0.1"
-tokio-core = "0.1"
-tokio-io = "0.1"
-tokio-openssl = "0.1"
-tokio-service = "0.1"
-tokio-tungstenite = { version = "0.4", default-features = false }
-tungstenite = { version = "0.5", default-features = false }
-uuid = { version = "0.5", features = ["serde", "v4"] }
+time = "0.1.39"
+tokio-core = "0.1.12"
+tokio-io = "0.1.4"
+tokio-openssl = "0.2.0"
+tokio-service = "0.1.0"
+tokio-tungstenite = { version = "0.5.1", default-features = false }
+tungstenite = { version = "0.5.3", default-features = false }
+uuid = { version = "0.5.1", features = ["serde", "v4"] }
 woothee = "0.7.3"
