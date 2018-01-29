@@ -16,6 +16,8 @@ use futures;
 use futures::sync::oneshot;
 use futures::task;
 use futures::{Stream, Future, Sink, Async, Poll, AsyncSink, StartSend};
+use hyper;
+use hyper::server::Http;
 use libc::c_char;
 use openssl::ssl::SslAcceptor;
 use sentry;
@@ -32,6 +34,7 @@ use uuid::Uuid;
 use client::{Client, RegisteredClient};
 use errors::*;
 use errors::{Error, Result};
+use http;
 use protocol::{ClientMessage, ServerMessage, ServerNotification, Notification};
 use queue::{self, AutopushQueue};
 use rt::{self, AutopushError, UnwindGuard};
@@ -270,17 +273,20 @@ impl Server {
 
             // Internal HTTP server setup
             {
-                use hyper::server::Http;
-
                 let handle = core.handle();
                 let router_ip = resolve(&srv.opts.router_ip);
                 let addr = format!("{}:{}", router_ip, srv.opts.router_port)
                     .parse()
                     .unwrap();
                 let push_listener = TcpListener::bind(&addr, &handle).unwrap();
-                let proto = Http::new();
-                let push_srv = push_listener.incoming().for_each(move |(socket, addr)| {
-                    proto.bind_connection(&handle, socket, addr, ::http::Push(srv.clone()));
+                let http = Http::<hyper::Chunk>::new();
+                let push_srv = push_listener.incoming().for_each(move |(socket, _)| {
+                    handle.spawn(
+                        http
+                            .serve_connection(socket, http::Push(srv.clone()))
+                            .map(|_| ())
+                            .map_err(|e| debug!("Http server connection error: {}", e)),
+                    );
                     Ok(())
                 });
                 core.handle().spawn(push_srv.then(|res| {

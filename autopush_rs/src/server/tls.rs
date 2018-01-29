@@ -14,8 +14,7 @@ use futures::future;
 use futures::{Poll, Future};
 use openssl::dh::Dh;
 use openssl::pkey::PKey;
-use openssl::ssl::{SslAcceptor, SslAcceptorBuilder, SslMethod};
-use openssl::ssl::SSL_MODE_RELEASE_BUFFERS;
+use openssl::ssl::{SslAcceptor, SslMethod, SslMode};
 use openssl::x509::X509;
 use tokio_core::net::TcpStream;
 use tokio_io::{AsyncRead, AsyncWrite};
@@ -39,20 +38,19 @@ pub fn configure(opts: &ServerOptions) -> Option<SslAcceptor> {
     let cert = read(opts.ssl_cert.as_ref().expect("ssl_cert not configured"));
     let cert = X509::from_pem(&cert).expect("failed to create certificate");
 
-    let mut builder = SslAcceptorBuilder::mozilla_intermediate(
-        SslMethod::tls(),
-        &key,
-        &cert,
-        Vec::<X509>::new(),
-    ).expect("failed to create ssl acceptor builder");
+    let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls())
+        .expect("failed to create ssl acceptor builder");
+    builder.set_private_key(&key).expect("failed to set private key");
+    builder.set_certificate(&cert).expect("failed to set certificate");
+    builder.check_private_key().expect("private key check failed");
 
     if let Some(dh_param) = opts.ssl_dh_param.as_ref() {
-        let dh_param = Dh::from_pem(&read(dh_param)).expect("failed to create dh");
-        builder.builder_mut().set_tmp_dh(&dh_param).expect("failed to set dh_param");
+        let dh_param = Dh::params_from_pem(&read(dh_param)).expect("failed to create dh");
+        builder.set_tmp_dh(&dh_param).expect("failed to set dh_param");
     }
 
     // Should help reduce peak memory consumption for idle connections
-    builder.builder_mut().set_mode(SSL_MODE_RELEASE_BUFFERS);
+    builder.set_mode(SslMode::RELEASE_BUFFERS);
 
     return Some(builder.build());
 
@@ -62,7 +60,7 @@ pub fn configure(opts: &ServerOptions) -> Option<SslAcceptor> {
             .expect(&format!("failed to open {:?}", path))
             .read_to_end(&mut out)
             .expect(&format!("failed to read {:?}", path));
-        return out
+        out
     }
 }
 
