@@ -25,6 +25,7 @@ from twisted.trial import unittest
 from twisted.logger import globalLogPublisher
 
 import autopush.db as db
+import autopush.tests
 from autopush.config import AutopushConfig
 from autopush.db import (
     DatabaseManager,
@@ -84,7 +85,6 @@ class TestRustWebPush(unittest.TestCase):
     )
 
     def setUp(self):
-        import autopush.db as db
         self.logs = TestingLogObserver()
         begin_or_register(self.logs)
         self.addCleanup(globalLogPublisher.removeObserver, self.logs)
@@ -104,14 +104,19 @@ class TestRustWebPush(unittest.TestCase):
         )
 
         # Endpoint HTTP router
-        self.ep = ep = EndpointApplication(ep_conf)
-        ep.db.client = db.g_client
+        self.ep = ep = EndpointApplication(
+            ep_conf,
+            resource=autopush.tests.boto_resource
+        )
         ep.setup(rotate_tables=False)
         ep.startService()
         self.addCleanup(ep.stopService)
 
         # Websocket server
-        db = DatabaseManager.from_config(conn_conf)
+        db = DatabaseManager.from_config(
+            conn_conf,
+            resource=autopush.tests.boto_resource
+        )
         self.conn = WebPushServer(conn_conf, db, num_threads=2)
         self.conn.start()
 

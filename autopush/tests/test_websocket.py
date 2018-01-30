@@ -8,6 +8,7 @@ from collections import defaultdict
 import twisted.internet.base
 from autobahn.twisted.util import sleep
 from autobahn.websocket.protocol import ConnectionRequest
+from botocore.exceptions import ClientError
 from mock import Mock, patch
 import pytest
 from twisted.internet import reactor
@@ -25,7 +26,6 @@ from autopush.config import AutopushConfig
 from autopush.db import DatabaseManager
 from autopush.http import InternalRouterHTTPFactory
 from autopush.metrics import SinkMetrics
-from autopush.tests import MockAssist
 from autopush.utils import WebPushNotification
 from autopush.tests.client import Client
 from autopush.tests.test_db import make_webpush_notification
@@ -37,6 +37,7 @@ from autopush.websocket import (
     WebSocketServerProtocol,
 )
 from autopush.utils import base64url_encode, ms_time
+import autopush.tests
 
 
 dummy_version = (u'gAAAAABX_pXhN22H-hvscOHsMulKvtC0hKJimrZivbgQPFB3sQAtOPmb'
@@ -101,7 +102,10 @@ class WebsocketTestCase(unittest.TestCase):
             statsd_host=None,
             env="test",
         )
-        db = DatabaseManager.from_config(conf)
+        db = DatabaseManager.from_config(
+            conf,
+            resource=autopush.tests.boto_resource
+        )
         self.metrics = db.metrics = Mock(spec=SinkMetrics)
         db.setup_tables()
 
@@ -381,7 +385,9 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.direct_updates[chid] = [notif]
 
         # Apply some mocks
-        self.proto.db.message.store_message = Mock()
+        msg_mock = Mock(spec=db.Message)
+        msg_mock.store_message = Mock()
+        self.proto.db.message_table = Mock(return_value=msg_mock)
         self.proto.db.router.get_uaid = mock_get = Mock()
         mock_get.return_value = dict(node_id="localhost:2000")
 
@@ -400,7 +406,9 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.direct_updates[dummy_chid_str] = [dummy_notif()]
 
         # Apply some mocks
-        self.proto.db.message.store_message = Mock()
+        msg_mock = Mock(spec=db.Message)
+        msg_mock.store_message = Mock()
+        self.proto.db.message_table = Mock(return_value=msg_mock)
         self.proto.db.router.get_uaid = mock_get = Mock()
         mock_get.return_value = dict(node_id="localhost:2000")
 
@@ -421,7 +429,9 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.direct_updates[chid] = [notif]
 
         # Apply some mocks
-        self.proto.db.message.store_message = Mock()
+        msg_mock = Mock(spec=db.Message)
+        msg_mock.store_message = Mock()
+        self.proto.db.message_table = Mock(return_value=msg_mock)
         self.proto.db.router.get_uaid = mock_get = Mock()
         mock_get.return_value = False
         self.metrics.reset_mock()
@@ -451,7 +461,7 @@ class WebsocketTestCase(unittest.TestCase):
             "current_month": msg_date,
         }
         router = self.proto.db.router
-        router.table.put_item(
+        router.table().put_item(
             Item=dict(
                 uaid=orig_uaid,
                 connected_at=ms_time(),
@@ -460,7 +470,7 @@ class WebsocketTestCase(unittest.TestCase):
             )
         )
 
-        def fake_msg(data):
+        def fake_msg(data, **kwargs):
             return (True, msg_data)
 
         mock_msg = Mock(wraps=db.Message)
@@ -473,12 +483,10 @@ class WebsocketTestCase(unittest.TestCase):
         # notifications are irrelevant for this test.
         self.proto.process_notifications = Mock()
         # massage message_tables to include our fake range
-        mt = self.proto.ps.db.message_tables
-        for k in mt.keys():
-            del(mt[k])
-        mt['message_2016_1'] = mock_msg
-        mt['message_2016_2'] = mock_msg
-        mt['message_2016_3'] = mock_msg
+        self.proto.ps.db.message_tables = [
+            'message_2016_1', 'message_2016_2', 'message_2016_3'
+        ]
+        self.proto.ps.db.message_table = Mock(return_value=mock_msg)
         with patch.object(datetime, 'date',
                           Mock(wraps=datetime.date)) as patched:
             patched.today.return_value = target_day
@@ -521,7 +529,7 @@ class WebsocketTestCase(unittest.TestCase):
             "current_month": msg_date,
         }
 
-        def fake_msg(data):
+        def fake_msg(data, **kwargs):
             return (True, msg_data)
 
         mock_msg = Mock(wraps=db.Message)
@@ -530,12 +538,10 @@ class WebsocketTestCase(unittest.TestCase):
         mock_msg.all_channels.return_value = (None, [])
         self.proto.db.router.register_user = fake_msg
         # massage message_tables to include our fake range
-        mt = self.proto.ps.db.message_tables
-        for k in mt.keys():
-            del(mt[k])
-        mt['message_2016_1'] = mock_msg
-        mt['message_2016_2'] = mock_msg
-        mt['message_2016_3'] = mock_msg
+        self.proto.db.message_table = Mock(return_value=mock_msg)
+        self.proto.ps.db.message_tables = [
+            'message_2016_1', 'message_2016_2', 'message_2016_3'
+        ]
         with patch.object(datetime, 'date',
                           Mock(wraps=datetime.date)) as patched:
             patched.today.return_value = target_day
@@ -559,10 +565,11 @@ class WebsocketTestCase(unittest.TestCase):
     def test_hello_tomorrow_provision_error(self):
         orig_uaid = "deadbeef00000000abad1dea00000000"
         router = self.proto.db.router
+        current_month = "message_2016_3"
         router.register_user(dict(
             uaid=orig_uaid,
             connected_at=ms_time(),
-            current_month="message_2016_3",
+            current_month=current_month,
             router_type="webpush",
         ))
 
@@ -580,36 +587,46 @@ class WebsocketTestCase(unittest.TestCase):
             "current_month": msg_date,
         }
 
-        def fake_msg(data):
-            return (True, msg_data)
-
         mock_msg = Mock(wraps=db.Message)
         mock_msg.fetch_messages.return_value = "01;", []
         mock_msg.fetch_timestamp_messages.return_value = None, []
         mock_msg.all_channels.return_value = (None, [])
-        self.proto.db.router.register_user = fake_msg
+        self.proto.db.router.register_user = Mock(
+            return_value=(True, msg_data)
+        )
         # massage message_tables to include our fake range
-        mt = self.proto.ps.db.message_tables
-        mt.clear()
-        mt['message_2016_1'] = mock_msg
-        mt['message_2016_2'] = mock_msg
-        mt['message_2016_3'] = mock_msg
-
+        self.proto.ps.db.message_tables = [
+            'message_2016_1', 'message_2016_2', current_month
+        ]
+        self.proto.db.message_table = Mock(return_value=mock_msg)
         patch_range = patch("autopush.websocket.randrange")
         mock_patch = patch_range.start()
         mock_patch.return_value = 1
+        self.flag = True
 
         def raise_condition(*args, **kwargs):
-            import autopush.db
-            raise autopush.db.g_client.exceptions.ClientError(
-                {'Error': {'Code': 'ProvisionedThroughputExceededException'}},
-                'mock_update_item'
-            )
+            if self.flag:
+                self.flag = False
+                raise ClientError(
+                    {'Error':
+                     {'Code': 'ProvisionedThroughputExceededException'}},
+                    'mock_update_item'
+                )
 
-        self.proto.db.router.update_message_month = MockAssist([
-            raise_condition,
-            Mock(),
-        ])
+        self.proto.db.register_user = Mock(return_value=(False, {}))
+        mock_router = Mock(spec=db.Router)
+        mock_router.register_user = Mock(return_value=(True, msg_data))
+        mock_router.update_message_month = Mock(side_effect=raise_condition)
+        self.proto.db.router = mock_router
+        self.proto.db.router.get_uaid = Mock(return_value={
+            "router_type": "webpush",
+            "connected_at": int(msg_day.strftime("%s")),
+            "current_month": 'message_2016_2',
+            "last_connect": int(msg_day.strftime("%s")),
+            "record_version": 1,
+        })
+        self.proto.db.current_msg_month = current_month
+        self.proto.ps.message_month = current_month
 
         with patch.object(datetime, 'date',
                           Mock(wraps=datetime.date)) as patched:
@@ -629,7 +646,8 @@ class WebsocketTestCase(unittest.TestCase):
 
             # Wait to see that the message table gets rotated
             yield self._wait_for(
-                lambda: not self.proto.ps.rotate_message_table
+                lambda: not self.proto.ps.rotate_message_table,
+                duration=5000
             )
             assert self.proto.ps.rotate_message_table is False
         finally:
@@ -711,7 +729,9 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         # Fail out the register_user call
         router = self.proto.db.router
-        router.table.update_item = Mock(side_effect=KeyError)
+        mock_up = Mock()
+        mock_up.update_item = Mock(side_effect=KeyError)
+        router.table = Mock(return_value=mock_up)
 
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 use_webpush=True, stop=1))
@@ -727,15 +747,15 @@ class WebsocketTestCase(unittest.TestCase):
         # Fail out the register_user call
 
         def raise_condition(*args, **kwargs):
-            import autopush.db
-            raise autopush.db.g_client.exceptions.ClientError(
+            raise ClientError(
                 {'Error': {'Code': 'ProvisionedThroughputExceededException'}},
                 'mock_update_item'
             )
 
         router = self.proto.db.router
-        router.table.update_item = Mock(side_effect=raise_condition)
-
+        mock_table = Mock()
+        mock_table.update_item = Mock(side_effect=raise_condition)
+        router.table = Mock(return_value=mock_table)
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()
@@ -911,10 +931,12 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         chid = str(uuid.uuid4())
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.db.message.register_channel = Mock()
+        msg_mock = Mock(spec=db.Message)
+        msg_mock.register_channel = Mock()
+        self.proto.db.message_table = Mock(return_value=msg_mock)
 
         yield self.proto.process_register(dict(channelID=chid))
-        assert self.proto.db.message.register_channel.called
+        assert msg_mock.register_channel.called
         assert_called_included(self.proto.log.info, format="Register")
 
     @inlineCallbacks
@@ -922,7 +944,8 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         chid = str(uuid.uuid4())
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.db.message.register_channel = Mock()
+        msg_mock = Mock(spec=db.Message)
+        self.proto.db.message_table = Mock(return_value=msg_mock)
         test_key = "SomeRandomCryptoKeyString"
         test_sha = sha256(test_key).hexdigest()
         test_endpoint = ('http://localhost/wpush/v2/' +
@@ -942,7 +965,7 @@ class WebsocketTestCase(unittest.TestCase):
         )
         assert test_endpoint == self.proto.sendJSON.call_args[0][0][
             'pushEndpoint']
-        assert self.proto.db.message.register_channel.called
+        assert msg_mock.register_channel.called
         assert_called_included(self.proto.log.info, format="Register")
 
     @inlineCallbacks
@@ -1046,11 +1069,12 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         chid = str(uuid.uuid4())
         self.proto.ps.uaid = uuid.uuid4().hex
-        self.proto.db.message.register_channel = register = Mock()
+        msg_mock = Mock(spec=db.Message)
+        msg_mock.register_channel = register = Mock()
+        self.proto.ps.db.message_table = Mock(return_value=msg_mock)
 
         def raise_condition(*args, **kwargs):
-            import autopush.db
-            raise autopush.db.g_client.exceptions.ClientError(
+            raise ClientError(
                 {'Error': {'Code': 'ProvisionedThroughputExceededException'}},
                 'mock_update_item'
             )
@@ -1058,7 +1082,7 @@ class WebsocketTestCase(unittest.TestCase):
         register.side_effect = raise_condition
 
         yield self.proto.process_register(dict(channelID=chid))
-        assert self.proto.db.message.register_channel.called
+        assert msg_mock.register_channel.called
         assert self.send_mock.called
         args, _ = self.send_mock.call_args
         msg = json.loads(args[0])
@@ -1305,9 +1329,11 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = uuid.uuid4().hex
 
         # Swap out fetch_notifications
-        self.proto.db.message.fetch_messages = Mock(
+        msg_mock = Mock(spec=db.Message)
+        msg_mock.fetch_messages = Mock(
             return_value=(None, [])
         )
+        self.proto.ps.db.message_table = Mock(return_value=msg_mock)
 
         self.proto.process_notifications()
 
@@ -1337,13 +1363,12 @@ class WebsocketTestCase(unittest.TestCase):
 
         twisted.internet.base.DelayedCall.debug = True
         self._connect()
-        self.proto.db.message.fetch_messages = Mock(
-            return_value=(None, [])
-        )
-        self.proto.db.message.fetch_messages = Mock(
+        msg_mock = Mock(spec=db.Message)
+        msg_mock.fetch_messages = Mock(
             side_effect=throw)
-        self.proto.db.message.fetch_timestamp_messages = Mock(
+        msg_mock.fetch_timestamp_messages = Mock(
             side_effect=throw)
+        self.proto.db.message_table = Mock(return_value=msg_mock)
         self.proto.ps.uaid = uuid.uuid4().hex
 
         self.proto.process_notifications()
@@ -1367,21 +1392,19 @@ class WebsocketTestCase(unittest.TestCase):
     def test_process_notifications_provision_err(self):
 
         def raise_condition(*args, **kwargs):
-            import autopush.db
-            raise autopush.db.g_client.exceptions.ClientError(
+            raise ClientError(
                 {'Error': {'Code': 'ProvisionedThroughputExceededException'}},
                 'mock_update_item'
             )
 
         twisted.internet.base.DelayedCall.debug = True
         self._connect()
-        self.proto.db.message.fetch_messages = Mock(
-            return_value=(None, [])
-        )
-        self.proto.db.message.fetch_messages = Mock(
+        msg_mock = Mock(spec=db.Message)
+        msg_mock.fetch_messages = Mock(
             side_effect=raise_condition)
-        self.proto.db.message.fetch_timestamp_messages = Mock(
+        msg_mock.fetch_timestamp_messages = Mock(
             side_effect=raise_condition)
+        self.proto.db.message_table = Mock(return_value=msg_mock)
         self.proto.deferToLater = Mock()
         self.proto.ps.uaid = uuid.uuid4().hex
 
@@ -1488,7 +1511,9 @@ class WebsocketTestCase(unittest.TestCase):
         self.proto.ps.uaid = uuid.uuid4().hex
         self.proto.ps._check_notifications = True
         self.proto.db.router.drop_user = Mock()
-        self.proto.ps.message.fetch_messages = Mock()
+        msg_mock = Mock()
+        msg_mock.fetch_messages = Mock()
+        self.proto.ps.db.message_table = Mock(return_value=msg_mock)
 
         notif = make_webpush_notification(
             self.proto.ps.uaid,
@@ -1496,7 +1521,7 @@ class WebsocketTestCase(unittest.TestCase):
             ttl=500
         )
         self.proto.ps.updates_sent = defaultdict(lambda: [])
-        self.proto.ps.message.fetch_messages.return_value = (
+        msg_mock.fetch_messages.return_value = (
             None,
             [notif, notif, notif]
         )

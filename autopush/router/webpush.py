@@ -231,7 +231,7 @@ class WebPushRouter(object):
                                            "Location": location},
                                   logged_status=204)
         return deferToThread(
-            self.db.message_tables[month_table].store_message,
+            self.db.message_table(month_table).store_message,
             notification=notification,
         )
 

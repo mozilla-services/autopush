@@ -36,12 +36,14 @@ from autopush import __version__
 from autopush.config import AutopushConfig
 from autopush.db import (
     get_month,
-    has_connected_this_month
+    has_connected_this_month,
+    Message,
 )
 from autopush.logging import begin_or_register
 from autopush.main import ConnectionApplication, EndpointApplication
 from autopush.utils import base64url_encode, normalize_id
 from autopush.metrics import SinkMetrics, DatadogMetrics
+import autopush.tests
 from autopush.tests.support import TestingLogObserver
 from autopush.websocket import PushServerFactory
 
@@ -131,7 +133,8 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                               key=key))
         log.debug("Send: %s", msg)
         self.ws.send(msg)
-        result = json.loads(self.ws.recv())
+        rcv = self.ws.recv()
+        result = json.loads(rcv)
         log.debug("Recv: %s", result)
         assert result["status"] == 200
         assert result["channelID"] == chid
@@ -323,15 +326,19 @@ class IntegrationBase(unittest.TestCase):
         )
 
         # Endpoint HTTP router
-        self.ep = ep = EndpointApplication(ep_conf)
-        ep.db.client = db.g_client
+        self.ep = ep = EndpointApplication(
+            conf=ep_conf,
+            resource=autopush.tests.boto_resource
+        )
         ep.setup(rotate_tables=False)
         ep.startService()
         self.addCleanup(ep.stopService)
 
         # Websocket server
-        self.conn = conn = ConnectionApplication(conn_conf)
-        conn.db.client = db.g_client
+        self.conn = conn = ConnectionApplication(
+            conf=conn_conf,
+            resource=autopush.tests.boto_resource
+        )
         conn.setup(rotate_tables=False)
         conn.startService()
         self.addCleanup(conn.stopService)
@@ -476,10 +483,10 @@ class Test_Data(IntegrationBase):
             return_value={'router_type': 'simplepush',
                           'uaid': uaid,
                           'current_month': self.ep.db.current_msg_month})
-        self.ep.db.message_tables[
-            self.ep.db.current_msg_month].all_channels = Mock(
-            return_value=(True, client.channels))
+        safe = db.Message.all_channels
+        db.Message.all_channels = Mock(return_value=(True, client.channels))
         yield client.send_notification()
+        db.Message.all_channels = safe
         yield self.shut_down(client)
 
     @patch("autopush.metrics.datadog")
@@ -541,12 +548,13 @@ class Test_Data(IntegrationBase):
         yield client.hello()
         yield client.register(chid=chan)
         yield client.disconnect()
-        self.ep.db.message_tables[
-            self.ep.db.current_msg_month].store_message = Mock(
+        safe = db.Message.store_message
+        db.Message.store_message = Mock(
             return_value=False)
         yield client.send_notification(channel=chan,
                                        data=test["data"],
                                        status=201)
+        db.Message.store_message = safe
         yield self.shut_down(client)
 
 
@@ -1161,15 +1169,16 @@ class TestWebPush(IntegrationBase):
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
             prefix=self.conn.conf.message_table.tablename, delta=-1)
-        lm_message = self.conn.db.message_tables[last_month]
+        lm_message = Message(last_month, boto_resource=self.conn.db.resource)
         yield deferToThread(
             self.conn.db.router.update_message_month,
             client.uaid,
-            last_month
+            last_month,
         )
 
         # Verify the move
-        c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
+        c = yield deferToThread(self.conn.db.router.get_uaid,
+                                client.uaid)
         assert c["current_month"] == last_month
 
         # Verify last_connect is current, then move that back
@@ -1181,33 +1190,34 @@ class TestWebPush(IntegrationBase):
         yield deferToThread(
             self.conn.db.router._update_last_connect,
             client.uaid,
-            last_connect,
-        )
-        c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
+            last_connect)
+        c = yield deferToThread(self.conn.db.router.get_uaid,
+                                client.uaid)
         assert has_connected_this_month(c) is False
 
         # Move the clients channels back one month
         exists, chans = yield deferToThread(
-            self.conn.db.message.all_channels, client.uaid
+            self.conn.db.message.all_channels,
+            client.uaid
         )
         assert exists is True
         assert len(chans) == 1
         yield deferToThread(
             lm_message.save_channels,
             client.uaid,
-            chans
+            chans,
         )
 
         # Remove the channels entry entirely from this month
         yield deferToThread(
-            self.conn.db.message.table.delete_item,
+            self.conn.db.message.table().delete_item,
             Key={'uaid': client.uaid, 'chidmessageid': ' '}
          )
 
         # Verify the channel is gone
         exists, chans = yield deferToThread(
             self.conn.db.message.all_channels,
-            client.uaid
+            client.uaid,
         )
         assert exists is False
         assert len(chans) == 0
@@ -1239,11 +1249,12 @@ class TestWebPush(IntegrationBase):
         # Acknowledge the notification, which triggers the migration
         yield client.ack(chan, result["version"])
 
-        # Wait up to 2 seconds for the table rotation to occur
+        # Wait up to 4 seconds for the table rotation to occur
         start = time.time()
-        while time.time()-start < 2:
+        while time.time()-start < 4:
             c = yield deferToThread(
-                self.conn.db.router.get_uaid, client.uaid)
+                self.conn.db.router.get_uaid,
+                client.uaid)
             if c["current_month"] == self.conn.db.current_msg_month:
                 break
             else:
@@ -1251,7 +1262,8 @@ class TestWebPush(IntegrationBase):
 
         # Verify the month update in the router table
         c = yield deferToThread(
-            self.conn.db.router.get_uaid, client.uaid)
+            self.conn.db.router.get_uaid,
+            client.uaid)
         assert c["current_month"] == self.conn.db.current_msg_month
         assert server_client.ps.rotate_message_table is False
 
@@ -1265,7 +1277,6 @@ class TestWebPush(IntegrationBase):
         )
         assert exists is True
         assert len(chans) == 1
-
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -1277,15 +1288,17 @@ class TestWebPush(IntegrationBase):
         # Move the client back one month to the past
         last_month = make_rotating_tablename(
             prefix=self.conn.conf.message_table.tablename, delta=-1)
-        lm_message = self.conn.db.message_tables[last_month]
+        lm_message = Message(last_month,
+                             boto_resource=autopush.tests.boto_resource)
         yield deferToThread(
             self.conn.db.router.update_message_month,
             client.uaid,
-            last_month
+            last_month,
         )
 
         # Verify the move
-        c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
+        c = yield deferToThread(self.conn.db.router.get_uaid,
+                                client.uaid)
         assert c["current_month"] == last_month
 
         # Verify last_connect is current, then move that back
@@ -1294,21 +1307,22 @@ class TestWebPush(IntegrationBase):
         yield deferToThread(
             self.conn.db.router._update_last_connect,
             client.uaid,
-            int("%s%s020001" % (today.year, str(today.month).zfill(2)))
+            int("%s%s020001" % (today.year, str(today.month).zfill(2))),
         )
         c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
         assert has_connected_this_month(c) is False
 
         # Move the clients channels back one month
         exists, chans = yield deferToThread(
-            self.conn.db.message.all_channels, client.uaid
+            self.conn.db.message.all_channels,
+            client.uaid,
         )
         assert exists is True
         assert len(chans) == 1
         yield deferToThread(
             lm_message.save_channels,
             client.uaid,
-            chans
+            chans,
         )
 
         # Send in a notification, verify it landed in last months notification
@@ -1338,11 +1352,12 @@ class TestWebPush(IntegrationBase):
         # Acknowledge the notification, which triggers the migration
         yield client.ack(chan, result["version"])
 
-        # Wait up to 2 seconds for the table rotation to occur
+        # Wait up to 4 seconds for the table rotation to occur
         start = time.time()
-        while time.time()-start < 2:
+        while time.time()-start < 4:
             c = yield deferToThread(
-                self.conn.db.router.get_uaid, client.uaid)
+                self.conn.db.router.get_uaid,
+                client.uaid)
             if c["current_month"] == self.conn.db.current_msg_month:
                 break
             else:
@@ -1363,7 +1378,6 @@ class TestWebPush(IntegrationBase):
         )
         assert exists is True
         assert len(chans) == 1
-
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -1384,13 +1398,15 @@ class TestWebPush(IntegrationBase):
         )
 
         # Verify the move
-        c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
+        c = yield deferToThread(self.conn.db.router.get_uaid,
+                                client.uaid
+                                )
         assert c["current_month"] == last_month
 
         # Verify there's no channels
         exists, chans = yield deferToThread(
             self.conn.db.message.all_channels,
-            client.uaid
+            client.uaid,
         )
         assert exists is False
         assert len(chans) == 0
@@ -1407,17 +1423,19 @@ class TestWebPush(IntegrationBase):
         start = time.time()
         while time.time()-start < 2:
             c = yield deferToThread(
-                self.conn.db.router.get_uaid, client.uaid)
+                self.conn.db.router.get_uaid,
+                client.uaid,
+            )
             if c["current_month"] == self.conn.db.current_msg_month:
                 break
             else:
                 yield deferToThread(time.sleep, 0.2)
 
         # Verify the month update in the router table
-        c = yield deferToThread(self.conn.db.router.get_uaid, client.uaid)
+        c = yield deferToThread(self.conn.db.router.get_uaid,
+                                client.uaid)
         assert c["current_month"] == self.conn.db.current_msg_month
         assert server_client.ps.rotate_message_table is False
-
         yield self.shut_down(client)
 
     @inlineCallbacks

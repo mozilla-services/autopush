@@ -1,15 +1,13 @@
 import json
 
 import twisted.internet.base
-from boto.dynamodb2.exceptions import InternalServerError
 from mock import Mock
 from twisted.internet.defer import inlineCallbacks
 from twisted.logger import globalLogPublisher
 from twisted.trial import unittest
 
-import autopush.db
 from autopush import __version__
-from autopush.config import AutopushConfig
+from autopush.config import AutopushConfig, DDBTableConfig
 from autopush.db import DatabaseManager
 from autopush.exceptions import MissingTableException
 from autopush.http import EndpointHTTPFactory
@@ -17,20 +15,24 @@ from autopush.logging import begin_or_register
 from autopush.tests.client import Client
 from autopush.tests.support import TestingLogObserver
 from autopush.web.health import HealthHandler, StatusHandler
+import autopush.tests
 
 
 class HealthTestCase(unittest.TestCase):
     def setUp(self):
-        self.timeout = 0.5
+        self.timeout = 4
         twisted.internet.base.DelayedCall.debug = True
 
         conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
+            router_table=DDBTableConfig(tablename="router_test"),
+            message_table=DDBTableConfig(tablename="message_int_test"),
         )
 
-        db = DatabaseManager.from_config(conf)
-        db.client = autopush.db.g_client
+        db = DatabaseManager.from_config(
+            conf,
+            resource=autopush.tests.boto_resource)
         db.setup_tables()
 
         # ignore logging
@@ -39,7 +41,6 @@ class HealthTestCase(unittest.TestCase):
         self.addCleanup(globalLogPublisher.removeObserver, logs)
 
         app = EndpointHTTPFactory.for_handler(HealthHandler, conf, db=db)
-        self.router_table = app.db.router.table
         self.message = app.db.message
         self.client = Client(app)
 
@@ -50,82 +51,23 @@ class HealthTestCase(unittest.TestCase):
             "version": __version__,
             "clients": 0,
             "storage": {"status": "OK"},
-            "router": {"status": "OK"}
+            "router_test": {"status": "OK"}
         })
 
     @inlineCallbacks
-    def test_aws_error(self):
-
-        def raise_error(*args, **kwargs):
-            raise InternalServerError(None, None)
-
-        safe = self.client.app.db.client
-        self.client.app.db.client = Mock()
-        self.client.app.db.client.list_tables = Mock(side_effect=raise_error)
-
-        yield self._assert_reply({
-            "status": "NOT OK",
-            "version": __version__,
-            "clients": 0,
-            "storage": {
-                "status": "NOT OK",
-                "error": "Server error"
-            },
-            "router": {
-                "status": "NOT OK",
-                "error": "Server error"
-            }
-        }, InternalServerError)
-
-        self.client.app.db.client = safe
-
-    @inlineCallbacks
     def test_nonexistent_table(self):
-        no_tables = Mock(return_value={"TableNames": []})
-        safe = self.client.app.db.client
-        self.client.app.db.client = Mock()
-        self.client.app.db.client.list_tables = no_tables
+        self.client.app.db.message.table().delete()
 
         yield self._assert_reply({
             "status": "NOT OK",
             "version": __version__,
             "clients": 0,
+            "router_test": {"status": "OK"},
             "storage": {
-                "status": "NOT OK",
-                "error": "Nonexistent table"
-            },
-            "router": {
                 "status": "NOT OK",
                 "error": "Nonexistent table"
             }
         }, MissingTableException)
-        self.client.app.db.client = safe
-
-    @inlineCallbacks
-    def test_internal_error(self):
-        def raise_error(*args, **kwargs):
-            raise Exception("synergies not aligned")
-
-        safe = self.client.app.db.client
-        self.client.app.db.client = Mock()
-        self.client.app.db.client.list_tables = Mock(
-            side_effect=raise_error
-        )
-
-        yield self._assert_reply({
-            "status": "NOT OK",
-            "version": __version__,
-            "clients": 0,
-            "storage": {
-                "status": "NOT OK",
-                "error": "Internal error"
-            },
-            "router": {
-                "status": "NOT OK",
-                "error": "Internal error"
-            }
-        }, Exception)
-        self.client.app.db.client = safe
 
     @inlineCallbacks
     def _assert_reply(self, reply, exception=None):

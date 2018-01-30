@@ -2,7 +2,7 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::ffi::CStr;
 use std::io;
-use std::net::{IpAddr, ToSocketAddrs};
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::panic;
 use std::panic::PanicInfo;
 use std::path::PathBuf;
@@ -113,8 +113,9 @@ pub struct ServerOptions {
     pub logger: util::LogGuards,
 }
 
-fn resolve(host: &str) -> IpAddr {
-    (host, 0).to_socket_addrs().unwrap().next().unwrap().ip()
+/// Resolve a hostname into a SocketAddr with a specific port
+fn resolve_with_port(host: &str, port: u16) -> Result<SocketAddr> {
+    (host, port).to_socket_addrs()?.next().ok_or(Error::from("invalid host/port"))
 }
 
 #[no_mangle]
@@ -274,10 +275,8 @@ impl Server {
             // Internal HTTP server setup
             {
                 let handle = core.handle();
-                let router_ip = resolve(&srv.opts.router_ip);
-                let addr = format!("{}:{}", router_ip, srv.opts.router_port)
-                    .parse()
-                    .unwrap();
+                let addr = resolve_with_port(&srv.opts.router_ip, srv.opts.router_port)
+                    .expect("Invalid router_ip/port");
                 let push_listener = TcpListener::bind(&addr, &handle).unwrap();
                 let http = Http::<hyper::Chunk>::new();
                 let push_srv = push_listener.incoming().for_each(move |(socket, _)| {
@@ -335,9 +334,9 @@ impl Server {
             tls_acceptor: tls::configure(opts),
             metrics: metrics_from_opts(opts)?,
         });
-        let host_ip = resolve(&srv.opts.host_ip);
-        let addr = format!("{}:{}", host_ip, srv.opts.port);
-        let ws_listener = TcpListener::bind(&addr.parse().unwrap(), &srv.handle)?;
+        let addr = resolve_with_port(&srv.opts.host_ip, srv.opts.port)
+            .expect("Invalid host_ip/port");
+        let ws_listener = TcpListener::bind(&addr, &srv.handle)?;
 
         let handle = core.handle();
         let srv2 = srv.clone();

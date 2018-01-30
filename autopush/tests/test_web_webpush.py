@@ -20,6 +20,7 @@ dummy_token = dummy_uaid + ":" + dummy_chid
 
 class TestWebpushHandler(unittest.TestCase):
     def setUp(self):
+        import autopush
         from autopush.web.webpush import WebPushHandler
 
         self.conf = conf = AutopushConfig(
@@ -30,11 +31,13 @@ class TestWebpushHandler(unittest.TestCase):
         self.fernet_mock = conf.fernet = Mock(spec=Fernet)
 
         self.db = db = test_db()
-        self.message_mock = db.message = Mock(spec=Message)
+        self.message_mock = db._message = Mock(spec=Message)
+        self.db.message_table = Mock(return_value=self.message_mock)
         self.message_mock.all_channels.return_value = (True, [dummy_chid])
 
         app = EndpointHTTPFactory.for_handler(WebPushHandler, conf, db=db)
         self.wp_router_mock = app.routers["webpush"] = Mock(spec=IRouter)
+        self.db.router = Mock(spec=autopush.db.Router)
         self.client = Client(app)
 
     def url(self, **kwargs):
@@ -48,16 +51,18 @@ class TestWebpushHandler(unittest.TestCase):
             public_key="asdfasdf",
         ))
         self.fernet_mock.decrypt.return_value = dummy_token
-        self.db.router.get_uaid.return_value = dict(
+        self.db.router.get_uaid = Mock(return_value=dict(
             router_type="webpush",
             router_data=dict(),
             uaid=dummy_uaid,
             current_month=self.db.current_msg_month,
-        )
+        ))
+        self.db.router.register_user = Mock(return_value=False)
         self.wp_router_mock.route_notification.return_value = RouterResponse(
             status_code=503,
             router_data=dict(token="new_connect"),
         )
+        self.db.message_tables.append(self.db.current_msg_month)
 
         resp = yield self.client.post(
             self.url(api_ver="v1", token=dummy_token),
@@ -85,6 +90,7 @@ class TestWebpushHandler(unittest.TestCase):
             status_code=503,
             router_data=dict(),
         )
+        self.db.message_tables.append(self.db.current_msg_month)
 
         resp = yield self.client.post(
             self.url(api_ver="v1", token=dummy_token),

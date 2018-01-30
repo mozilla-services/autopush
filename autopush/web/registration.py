@@ -149,8 +149,7 @@ class AuthorizationCheckSchema(Schema):
             auth_type, auth_token = re.sub(
                 r' +', ' ', auth.strip()).split(" ", 2)
         except ValueError:
-            raise InvalidRequest("Invalid Authentication",
-                                 status_code=401,
+            raise InvalidRequest("Invalid Authentication", status_code=401,
                                  errno=109,
                                  headers=request_pref_header)
         if auth_type.lower() not in AUTH_SCHEMES:
@@ -484,4 +483,4 @@ class ChannelRegistrationHandler(BaseRegistrationHandler):
         self.log.debug(format="CHID not found in AWS.",
                        status_code=410, errno=106,
                        **self._client_info)
-        self._write_response(410, 106, message="Invalid endpoint for user.")
+        self._write_response(410, 106, message="Invalid endpoint.")

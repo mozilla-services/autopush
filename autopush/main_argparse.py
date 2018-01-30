@@ -101,6 +101,10 @@ def add_shared_args(parser):
                         help="Don't cache ssl.wrap_socket's SSLContexts",
                         action="store_true", default=False,
                         env_var="_NO_SSLCONTEXT_CACHE")
+    parser.add_argument('--aws_ddb_endpoint',
+                        help="AWS DynamoDB endpoint override",
+                        type=str, default=None,
+                        env_var="AWS_LOCAL_DYNAMODB")
     # No ENV because this is for humans
     _add_external_router_args(parser)
     _obsolete_args(parser)

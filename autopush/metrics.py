@@ -129,21 +129,3 @@ def from_config(conf):
         return TwistedMetrics(conf.statsd_host, conf.statsd_port)
     else:
         return SinkMetrics()
-
-
-def periodic_reporter(metrics, prefix=''):
-    # type: (IMetrics, Optional[str]) -> None
-    """Emit metrics on twisted's thread pool.
-
-    Only meant to be called via a LoopingCall (TimerService).
-
-    """
-    # unfortunately stats only available via the private '_team'
-    stats = reactor.getThreadPool()._team.statistics()
-    for attr in ('idleWorkerCount', 'busyWorkerCount', 'backloggedWorkCount'):
-        name = '{}{}twisted.threadpool.{}'.format(
-            prefix,
-            '.' if prefix else '',
-            attr
-        )
-        metrics.gauge(name, getattr(stats, attr))

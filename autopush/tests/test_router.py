@@ -7,9 +7,8 @@ import decimal
 import requests
 import ssl
 
-from autopush.utils import WebPushNotification
-from mock import Mock, PropertyMock, patch
 import pytest
+from mock import Mock, PropertyMock, patch
 from twisted.trial import unittest
 from twisted.internet.error import ConnectionRefusedError
 from twisted.internet.defer import inlineCallbacks
@@ -35,6 +34,7 @@ from autopush.router import (
 from autopush.router.interface import RouterResponse, IRouter
 from autopush.tests import MockAssist
 from autopush.tests.support import test_db
+from autopush.utils import WebPushNotification
 
 
 class RouterInterfaceTestCase(TestCase):
@@ -999,7 +999,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         mock_result.not_registered = dict()
         mock_result.retry_after = 1000
         self.router_mock = db.router
-        self.message_mock = db.message = Mock(spec=Message)
+        self.message_mock = db._message = Mock(spec=Message)
         self.conf = conf
 
     def test_route_to_busy_node_saves_looks_up_and_sends_check_201(self):
@@ -1009,6 +1009,7 @@ class WebPushRouterTestCase(unittest.TestCase):
             side_effect=MockAssist([202, 200]))
         self.message_mock.store_message.return_value = True
         self.message_mock.all_channels.return_value = (True, [dummy_chid])
+        self.db.message_table = Mock(return_value=self.message_mock)
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
                            current_month=self.db.current_msg_month)
         self.router_mock.get_uaid.return_value = router_data
@@ -1033,6 +1034,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         self.agent_mock.request = Mock(side_effect=ConnectionRefusedError)
         self.message_mock.store_message.return_value = True
         self.message_mock.all_channels.return_value = (True, [dummy_chid])
+        self.db.message_table = Mock(return_value=self.message_mock)
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
                            current_month=self.db.current_msg_month)
         self.router_mock.get_uaid.return_value = router_data
@@ -1070,6 +1072,7 @@ class WebPushRouterTestCase(unittest.TestCase):
             side_effect=MockAssist([202, 200]))
         self.message_mock.store_message.return_value = True
         self.message_mock.all_channels.return_value = (True, [dummy_chid])
+        self.db.message_table = Mock(return_value=self.message_mock)
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
                            current_month=self.db.current_msg_month)
         self.router_mock.get_uaid.return_value = router_data
@@ -1100,9 +1103,8 @@ class WebPushRouterTestCase(unittest.TestCase):
 
         self.agent_mock.request.return_value = response_mock = Mock()
         response_mock.code = 202
-        self.message_mock.store_message.side_effect = MockAssist(
-            [throw]
-        )
+        self.message_mock.store_message.side_effect = MockAssist([throw])
+        self.db.message_table = Mock(return_value=self.message_mock)
         router_data = dict(node_id="http://somewhere",
                            uaid=dummy_uaid,
                            current_month=self.db.current_msg_month)
@@ -1123,6 +1125,7 @@ class WebPushRouterTestCase(unittest.TestCase):
             raise JSONResponseError(500, "Whoops")
 
         self.message_mock.store_message.return_value = True
+        self.db.message_table = Mock(return_value=self.message_mock)
         self.router_mock.get_uaid.side_effect = MockAssist(
             [throw]
         )
@@ -1144,6 +1147,7 @@ class WebPushRouterTestCase(unittest.TestCase):
             raise ItemNotFound()
 
         self.message_mock.store_message.return_value = True
+        self.db.message_table = Mock(return_value=self.message_mock)
         self.router_mock.get_uaid.side_effect = MockAssist(
             [throw]
         )
@@ -1160,9 +1164,8 @@ class WebPushRouterTestCase(unittest.TestCase):
 
     def test_route_lookup_uaid_no_nodeid(self):
         self.message_mock.store_message.return_value = True
-        self.router_mock.get_uaid.return_value = dict(
-
-        )
+        self.db.message_table = Mock(return_value=self.message_mock)
+        self.router_mock.get_uaid.return_value = dict()
         router_data = dict(node_id="http://somewhere",
                            uaid=dummy_uaid,
                            current_month=self.db.current_msg_month)
@@ -1179,6 +1182,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         self.agent_mock.request = Mock(side_effect=ConnectionRefusedError)
         self.message_mock.store_message.return_value = True
         self.message_mock.all_channels.return_value = (True, [dummy_chid])
+        self.db.message_table = Mock(return_value=self.message_mock)
         router_data = dict(node_id="http://somewhere", uaid=dummy_uaid,
                            current_month=self.db.current_msg_month)
         self.router_mock.get_uaid.return_value = router_data
