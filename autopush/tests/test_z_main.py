@@ -17,7 +17,11 @@ import hyper.tls
 
 import autopush.db
 from autopush.config import AutopushConfig
-from autopush.db import DatabaseManager, get_rotating_message_table
+from autopush.db import (
+    DatabaseManager,
+    get_rotating_message_tablename,
+    make_rotating_tablename,
+)
 from autopush.exceptions import InvalidConfig
 from autopush.http import skip_request_logging
 from autopush.main import (
@@ -26,6 +30,7 @@ from autopush.main import (
 )
 from autopush.tests.support import test_db
 from autopush.utils import resolve_ip
+import autopush.tests
 
 connection_main = ConnectionApplication.main
 endpoint_main = EndpointApplication.main
@@ -66,27 +71,30 @@ class ConfigAsyncTestCase(trialtest.TestCase):
         from autopush.db import get_month
         conf = AutopushConfig(
             hostname="example.com", resolve_hostname=True)
-        db = DatabaseManager.from_config(conf)
+        db = DatabaseManager.from_config(
+            conf,
+            resource=autopush.tests.boto_resource)
         db.create_initial_message_tables()
 
         # Erase the tables it has on init, and move current month back one
         last_month = get_month(-1)
         db.current_month = last_month.month
-        db.message_tables = {}
+        db.message_tables = [make_rotating_tablename("message", delta=-1),
+                             make_rotating_tablename("message", delta=0)]
 
         # Create the next month's table, just in case today is the day before
         # a new month, in which case the lack of keys will cause an error in
         # update_rotating_tables
         next_month = get_month(1)
-        db.message_tables[next_month.month] = None
+        assert next_month.month not in db.message_tables
 
         # Get the deferred back
         e = Deferred()
         d = db.update_rotating_tables()
 
         def check_tables(result):
-            assert len(db.message_tables) == 2
             assert db.current_month == get_month().month
+            assert len(db.message_tables) == 2
 
         d.addCallback(check_tables)
         d.addBoth(lambda x: e.callback(True))
@@ -121,7 +129,9 @@ class ConfigAsyncTestCase(trialtest.TestCase):
 
         conf = AutopushConfig(
             hostname="example.com", resolve_hostname=True)
-        db = DatabaseManager.from_config(conf)
+        db = DatabaseManager.from_config(
+            conf,
+            resource=autopush.tests.boto_resource)
         db._tomorrow = Mock(return_value=tomorrow)
         db.create_initial_message_tables()
 
@@ -129,37 +139,33 @@ class ConfigAsyncTestCase(trialtest.TestCase):
         assert len(db.message_tables) == 3
 
         # Grab next month's table name and remove it
-        next_month = get_rotating_message_table(
+        next_month = get_rotating_message_tablename(
             conf.message_table.tablename,
-            delta=1
+            delta=1,
+            boto_resource=db.resource
         )
-        db.message_tables.pop(next_month.table_name)
+        db.message_tables.pop(db.message_tables.index(next_month))
 
         # Get the deferred back
         d = db.update_rotating_tables()
 
         def check_tables(result):
             assert len(db.message_tables) == 3
-            assert next_month.table_name in db.message_tables
+            assert next_month in db.message_tables
 
         d.addCallback(check_tables)
         return d
 
     def test_update_not_needed(self):
-        from autopush.db import get_month
         conf = AutopushConfig(
             hostname="google.com", resolve_hostname=True)
-        db = DatabaseManager.from_config(conf)
+        db = DatabaseManager.from_config(
+            conf,
+            resource=autopush.tests.boto_resource)
         db.create_initial_message_tables()
 
         # Erase the tables it has on init, and move current month back one
-        db.message_tables = {}
-
-        # Create the next month's table, just in case today is the day before
-        # a new month, in which case the lack of keys will cause an error in
-        # update_rotating_tables
-        next_month = get_month(1)
-        db.message_tables[next_month.month] = None
+        db.message_tables = []
 
         # Get the deferred back
         e = Deferred()
@@ -190,7 +196,7 @@ class ConnectionMainTestCase(unittest.TestCase):
             mock.stop()
 
     def test_basic(self):
-        connection_main([], False)
+        connection_main([], False, resource=autopush.tests.boto_resource)
 
     def test_ssl(self):
         connection_main([
@@ -199,12 +205,12 @@ class ConnectionMainTestCase(unittest.TestCase):
             "--ssl_key=keys/server.key",
             "--router_ssl_cert=keys/server.crt",
             "--router_ssl_key=keys/server.key",
-        ], False)
+        ], False, resource=autopush.tests.boto_resource)
 
     def test_memusage(self):
         connection_main([
             "--memusage_port=8083",
-        ], False)
+        ], False, resource=autopush.tests.boto_resource)
 
     def test_skip_logging(self):
         # Should skip setting up logging on the handler
@@ -264,6 +270,7 @@ class EndpointMainTestCase(unittest.TestCase):
         use_cryptography = False
         sts_max_age = 1234
         _no_sslcontext_cache = False
+        aws_ddb_endpoint = None
 
     def setUp(self):
         patchers = [
@@ -283,15 +290,18 @@ class EndpointMainTestCase(unittest.TestCase):
         autopush.db.key_hash = ""
 
     def test_basic(self):
-        endpoint_main([
-        ], False)
+        endpoint_main(
+            [],
+            False,
+            resource=autopush.tests.boto_resource
+        )
 
     def test_ssl(self):
         endpoint_main([
             "--ssl_dh_param=keys/dhparam.pem",
             "--ssl_cert=keys/server.crt",
             "--ssl_key=keys/server.key",
-        ], False)
+        ], False, resource=autopush.tests.boto_resource)
 
     def test_bad_senderidlist(self):
         returncode = endpoint_main([
@@ -312,18 +322,18 @@ class EndpointMainTestCase(unittest.TestCase):
             "--ssl_cert=keys/server.crt",
             "--ssl_key=keys/server.key",
             '--client_certs={"foo": ["%s"]}' % cert
-        ], False)
+        ], False, resource=autopush.tests.boto_resource)
         assert not returncode
 
     def test_proxy_protocol_port(self):
         endpoint_main([
             "--proxy_protocol_port=8081",
-        ], False)
+        ], False, resource=autopush.tests.boto_resource)
 
     def test_memusage(self):
         endpoint_main([
             "--memusage_port=8083",
-        ], False)
+        ], False, resource=autopush.tests.boto_resource)
 
     def test_client_certs_parse(self):
         conf = AutopushConfig.from_argparse(self.TestArg)
@@ -350,7 +360,8 @@ class EndpointMainTestCase(unittest.TestCase):
     @patch('hyper.tls', spec=hyper.tls)
     def test_conf(self, *args):
         conf = AutopushConfig.from_argparse(self.TestArg)
-        app = EndpointApplication(conf)
+        app = EndpointApplication(conf,
+                                  resource=autopush.tests.boto_resource)
         # verify that the hostname is what we said.
         assert conf.hostname == self.TestArg.hostname
         assert app.routers["gcm"].router_conf['collapsekey'] == "collapse"
@@ -381,7 +392,7 @@ class EndpointMainTestCase(unittest.TestCase):
         endpoint_main([
             "--gcm_enabled",
             """--senderid_list={"123":{"auth":"abcd"}}""",
-        ], False)
+        ], False, resource=autopush.tests.boto_resource)
 
     @patch("requests.get")
     def test_aws_ami_id(self, request_mock):

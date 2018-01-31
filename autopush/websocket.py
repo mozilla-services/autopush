@@ -246,12 +246,6 @@ class PushState(object):
         self.reset_uaid = False
 
     @property
-    def message(self):
-        # type: () -> Message
-        """Property to access the currently used message table"""
-        return self.db.message_tables[self.message_month]
-
-    @property
     def user_agent(self):
         # type: () -> str
         return self._user_agent or "None"
@@ -596,7 +590,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def _save_webpush_notif(self, notif):
         """Save a direct_update webpush style notification"""
-        return deferToThread(self.ps.message.store_message,
+        message = self.db.message_table(self.ps.message_month)
+        return deferToThread(message.store_message,
                              notif).addErrback(self.log_failure)
 
     def _lookup_node(self, results):
@@ -648,7 +643,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if close:
             self.sendClose()
 
-    def err_overload(self, failure, message_type, disconnect=True):
+    def error_overload(self, failure, message_type, disconnect=True):
         """Handle database overloads and errors
 
         If ``disconnect`` is False, the an overload error is returned and the
@@ -668,7 +663,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         if disconnect:
             self.transport.pauseProducing()
             d = self.deferToLater(self.randrange(4, 9),
-                                  self.err_finish_overload, message_type)
+                                  self.error_finish_overload, message_type)
             d.addErrback(self.trap_cancel)
         else:
             if (failure.value.response["Error"]["Code"] !=
@@ -678,7 +673,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                     "status": 503}
             self.sendJSON(send)
 
-    def err_finish_overload(self, message_type):
+    def error_finish_overload(self, message_type):
         """Close the connection down and resume consuming input after the
         random interval from a db overload"""
         # Resume producing so we can finish the shutdown
@@ -716,8 +711,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         d = self.deferToThread(self._register_user, existing_user)
         d.addCallback(self._check_other_nodes)
         d.addErrback(self.trap_cancel)
-        d.addErrback(self.err_overload, "hello")
-        d.addErrback(self.err_hello)
+        d.addErrback(self.error_overload, "hello")
+        d.addErrback(self.error_hello)
         self.ps._register = d
         return d
 
@@ -779,8 +774,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.log.debug(format="Dropping User", code=105,
                            uaid_hash=self.ps.uaid_hash,
                            uaid_record=repr(record))
-            self.force_retry(self.db.router.drop_user,
-                             self.ps.uaid)
+            self.force_retry(self.db.router.drop_user, self.ps.uaid)
             tags = ['code:105']
             self.metrics.increment("ua.expiration", tags=tags)
             return None
@@ -806,7 +800,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         record["connected_at"] = self.ps.connected_at
         return record
 
-    def err_hello(self, failure):
+    def error_hello(self, failure):
         """errBack for hello failures"""
         self.transport.resumeProducing()
         self.log_failure(failure)
@@ -903,11 +897,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def webpush_fetch(self):
         """Helper to return an appropriate function to fetch messages"""
+        message = self.db.message_table(self.ps.message_month)
         if self.ps.scan_timestamps:
-            return partial(self.ps.message.fetch_timestamp_messages,
-                           self.ps.uaid_obj, self.ps.current_timestamp)
+            return partial(message.fetch_timestamp_messages,
+                           self.ps.uaid_obj,
+                           self.ps.current_timestamp)
         else:
-            return partial(self.ps.message.fetch_messages, self.ps.uaid_obj)
+            return partial(message.fetch_messages,
+                           self.ps.uaid_obj)
 
     def error_notifications(self, fail):
         """errBack for notification check failing"""
@@ -990,13 +987,15 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # Send out all the notifications
         now = int(time.time())
         messages_sent = False
+        message = self.db.message_table(self.ps.message_month)
         for notif in notifs:
             self.ps.stats.stored_retrieved += 1
             # If the TTL is too old, don't deliver and fire a delete off
             if notif.expired(at_time=now):
                 if not notif.sortkey_timestamp:
                     # Delete non-timestamped messages
-                    self.force_retry(self.ps.message.delete_message, notif)
+                    self.force_retry(message.delete_message,
+                                     notif)
 
                 # nocover here as coverage gets confused on the line below
                 # for unknown reasons
@@ -1010,7 +1009,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                 raise MessageOverloadException()
             if notif.topic:
                 self.metrics.increment("ua.notification.topic")
-            self.metrics.increment('ua.message_data', len(msg.get('data', '')),
+            self.metrics.increment('ua.message_data',
+                                   len(msg.get('data', '')),
                                    tags=make_tags(source=notif.source))
             self.sendJSON(msg)
 
@@ -1021,8 +1021,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # No messages sent, update the record if needed
         if self.ps.current_timestamp:
             self.force_retry(
-                self.ps.message.update_last_message_read,
-                self.ps.uaid_obj, self.ps.current_timestamp)
+                message.update_last_message_read,
+                self.ps.uaid_obj,
+                self.ps.current_timestamp)
 
         # Schedule a new process check
         self.check_missed_notifications(None)
@@ -1047,13 +1048,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
         """
         # Get the current channels for this month
-        _, channels = self.ps.message.all_channels(self.ps.uaid)
+        message = self.db.message_table(self.ps.message_month)
+        _, channels = message.all_channels(self.ps.uaid)
 
         # Get the current message month
         cur_month = self.db.current_msg_month
         if channels:
             # Save the current channels into this months message table
-            msg_table = self.db.message_tables[cur_month]
+            msg_table = self.db.message_table(cur_month)
             msg_table.save_channels(self.ps.uaid, channels)
 
         # Finally, update the route message month
@@ -1069,7 +1071,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def error_monthly_rotation_overload(self, fail):
         """Capture overload on monthly table rotation attempt
 
-        If a provision exdeeded error hits while attempting monthly table
+        If a provision exceeded error hits while attempting monthly table
         rotation, schedule it all over and re-scan the messages. Normal
         websocket client flow is returned in the meantime.
 
@@ -1137,12 +1139,13 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
 
     def finish_register(self, endpoint, chid):
         """callback for successful endpoint creation, sends register reply"""
-        d = self.deferToThread(self.ps.message.register_channel, self.ps.uaid,
+        message = self.db.message_table(self.ps.message_month)
+        d = self.deferToThread(message.register_channel, self.ps.uaid,
                                chid)
         d.addCallback(self.send_register_finish, endpoint, chid)
         # Note: No trap_cancel needed here since the deferred here is
         # returned to process_register which will trap it
-        d.addErrback(self.err_overload, "register", disconnect=False)
+        d.addErrback(self.error_overload, "register", disconnect=False)
         return d
 
     def send_register_finish(self, result, endpoint, chid):
@@ -1180,7 +1183,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.ps.updates_sent[chid] = []
 
         # Unregister the channel
-        self.force_retry(self.ps.message.unregister_channel, self.ps.uaid,
+        message = self.db.message_table(self.ps.message_month)
+        self.force_retry(message.unregister_channel, self.ps.uaid,
                          chid)
 
         data["status"] = 200
@@ -1238,6 +1242,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                            **self.ps.raw_agent)
             self.ps.stats.stored_acked += 1
 
+            message = self.db.message_table(self.ps.message_month)
             if msg.sortkey_timestamp:
                 # Is this the last un-acked message we're waiting for?
                 last_unacked = sum(
@@ -1249,7 +1254,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                     # If it's the last message in the batch, or last un-acked
                     # message
                     d = self.force_retry(
-                        self.ps.message.update_last_message_read,
+                        message.update_last_message_read,
                         self.ps.uaid_obj, self.ps.current_timestamp,
                     )
                     d.addBoth(self._handle_webpush_update_remove, chid, msg)
@@ -1260,7 +1265,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                     d = None
             else:
                 # No sortkey_timestamp, so legacy/topic message, delete
-                d = self.force_retry(self.ps.message.delete_message, msg)
+                d = self.force_retry(message.delete_message, msg)
                 # We don't remove the update until we know the delete ran
                 # This is because we don't use range queries on dynamodb and
                 # we need to make sure this notification is deleted from the

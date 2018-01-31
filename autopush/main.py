@@ -20,6 +20,7 @@ from typing import (  # noqa
     Sequence,
 )
 
+from autopush import constants
 from autopush.http import (
     InternalRouterHTTPFactory,
     EndpointHTTPFactory,
@@ -29,12 +30,11 @@ from autopush.http import (
 import autopush.utils as utils
 import autopush.logging as logging
 from autopush.config import AutopushConfig
-from autopush.db import DatabaseManager
+from autopush.db import DatabaseManager, DynamoDBResource  # noqa
 from autopush.exceptions import InvalidConfig
 from autopush.haproxy import HAProxyServerEndpoint
 from autopush.logging import PushLogger
 from autopush.main_argparse import parse_connection, parse_endpoint
-from autopush.metrics import periodic_reporter
 from autopush.router import routers_from_config
 from autopush.ssl import (
     monkey_patch_ssl_wrap_socket,
@@ -62,13 +62,11 @@ class AutopushMultiService(MultiService):
     config_files = None  # type: Sequence[str]
     logger_name = None   # type: str
 
-    THREAD_POOL_SIZE = 50
-
-    def __init__(self, conf):
-        # type: (AutopushConfig) -> None
+    def __init__(self, conf, resource=None):
+        # type: (AutopushConfig, DynamoDBResource) -> None
         super(AutopushMultiService, self).__init__()
         self.conf = conf
-        self.db = DatabaseManager.from_config(conf)
+        self.db = DatabaseManager.from_config(conf, resource=resource)
         self.agent = agent_from_config(conf)
 
     @staticmethod
@@ -104,7 +102,7 @@ class AutopushMultiService(MultiService):
 
     def run(self):
         """Start the services and run the reactor"""
-        reactor.suggestThreadPoolSize(self.THREAD_POOL_SIZE)
+        reactor.suggestThreadPoolSize(constants.THREAD_POOL_SIZE)
         self.startService()
         reactor.run()
 
@@ -116,8 +114,8 @@ class AutopushMultiService(MultiService):
             undo_monkey_patch_ssl_wrap_socket()
 
     @classmethod
-    def _from_argparse(cls, ns, **kwargs):
-        # type: (Namespace, **Any) -> AutopushMultiService
+    def _from_argparse(cls, ns, resource=None, **kwargs):
+        # type: (Namespace, DynamoDBResource, **Any) -> AutopushMultiService
         """Create an instance from argparse/additional kwargs"""
         # Add some entropy to prevent potential conflicts.
         postfix = os.urandom(4).encode('hex').ljust(8, '0')
@@ -127,11 +125,11 @@ class AutopushMultiService(MultiService):
             preflight_uaid="deadbeef00000000deadbeef" + postfix,
             **kwargs
         )
-        return cls(conf)
+        return cls(conf, resource=resource)
 
     @classmethod
-    def main(cls, args=None, use_files=True):
-        # type: (Sequence[str], bool) -> Any
+    def main(cls, args=None, use_files=True, resource=None):
+        # type: (Sequence[str], bool, DynamoDBResource) -> Any
         """Entry point to autopush's main command line scripts.
 
         aka autopush/autoendpoint.
@@ -149,7 +147,8 @@ class AutopushMultiService(MultiService):
             firehose_delivery_stream=ns.firehose_stream_name
         )
         try:
-            app = cls.from_argparse(ns)
+            cls.argparse = cls.from_argparse(ns, resource=resource)
+            app = cls.argparse
         except InvalidConfig as e:
             log.critical(str(e))
             return 1
@@ -173,9 +172,9 @@ class EndpointApplication(AutopushMultiService):
 
     endpoint_factory = EndpointHTTPFactory
 
-    def __init__(self, conf):
-        # type: (AutopushConfig) -> None
-        super(EndpointApplication, self).__init__(conf)
+    def __init__(self, conf, resource=None):
+        # type: (AutopushConfig, DynamoDBResource) -> None
+        super(EndpointApplication, self).__init__(conf, resource=resource)
         self.routers = routers_from_config(conf, self.db, self.agent)
 
     def setup(self, rotate_tables=True):
@@ -190,8 +189,6 @@ class EndpointApplication(AutopushMultiService):
         # Start the table rotation checker/updater
         if rotate_tables:
             self.add_timer(60, self.db.update_rotating_tables)
-        self.add_timer(15, periodic_reporter, self.db.metrics,
-                       prefix='autoendpoint')
 
     def add_endpoint(self):
         """Start the Endpoint HTTP router"""
@@ -212,8 +209,8 @@ class EndpointApplication(AutopushMultiService):
             self.addService(StreamServerEndpointService(ep, factory))
 
     @classmethod
-    def from_argparse(cls, ns):
-        # type: (Namespace) -> AutopushMultiService
+    def from_argparse(cls, ns, resource=None):
+        # type: (Namespace, DynamoDBResource) -> AutopushMultiService
         return super(EndpointApplication, cls)._from_argparse(
             ns,
             port=ns.port,
@@ -223,6 +220,8 @@ class EndpointApplication(AutopushMultiService):
             cors=not ns.no_cors,
             bear_hash_key=ns.auth_key,
             proxy_protocol_port=ns.proxy_protocol_port,
+            aws_ddb_endpoint=ns.aws_ddb_endpoint,
+            resource=resource
         )
 
 
@@ -243,9 +242,12 @@ class ConnectionApplication(AutopushMultiService):
     websocket_factory = PushServerFactory
     websocket_site_factory = ConnectionWSSite
 
-    def __init__(self, conf):
-        # type: (AutopushConfig) -> None
-        super(ConnectionApplication, self).__init__(conf)
+    def __init__(self, conf, resource=None):
+        # type: (AutopushConfig, DynamoDBResource) -> None
+        super(ConnectionApplication, self).__init__(
+            conf,
+            resource=resource
+        )
         self.clients = {}  # type: Dict[str, PushServerProtocol]
 
     def setup(self, rotate_tables=True):
@@ -262,7 +264,6 @@ class ConnectionApplication(AutopushMultiService):
         # Start the table rotation checker/updater
         if rotate_tables:
             self.add_timer(60, self.db.update_rotating_tables)
-        self.add_timer(15, periodic_reporter, self.db.metrics)
 
     def add_internal_router(self):
         """Start the internal HTTP notification router"""
@@ -280,8 +281,8 @@ class ConnectionApplication(AutopushMultiService):
         self.add_maybe_ssl(conf.port, site_factory, site_factory.ssl_cf())
 
     @classmethod
-    def from_argparse(cls, ns):
-        # type: (Namespace) -> AutopushMultiService
+    def from_argparse(cls, ns, resource=None):
+        # type: (Namespace, DynamoDBResource) -> AutopushMultiService
         return super(ConnectionApplication, cls)._from_argparse(
             ns,
             port=ns.port,
@@ -302,6 +303,8 @@ class ConnectionApplication(AutopushMultiService):
             auto_ping_timeout=ns.auto_ping_timeout,
             max_connections=ns.max_connections,
             close_handshake_timeout=ns.close_handshake_timeout,
+            aws_ddb_endpoint=ns.aws_ddb_endpoint,
+            resource=resource
         )
 
 
@@ -344,8 +347,8 @@ class RustConnectionApplication(AutopushMultiService):
         yield super(RustConnectionApplication, self).stopService()
 
     @classmethod
-    def from_argparse(cls, ns):
-        # type: (Namespace) -> AutopushMultiService
+    def from_argparse(cls, ns, resource=None):
+        # type: (Namespace, DynamoDBResource) -> AutopushMultiService
         return super(RustConnectionApplication, cls)._from_argparse(
             ns,
             port=ns.port,
@@ -367,11 +370,13 @@ class RustConnectionApplication(AutopushMultiService):
             auto_ping_timeout=ns.auto_ping_timeout,
             max_connections=ns.max_connections,
             close_handshake_timeout=ns.close_handshake_timeout,
+            aws_ddb_endpoint=ns.aws_ddb_endpoint,
+            resource=resource
         )
 
     @classmethod
-    def main(cls, args=None, use_files=True):
-        # type: (Sequence[str], bool) -> Any
+    def main(cls, args=None, use_files=True, resource=None):
+        # type: (Sequence[str], bool, DynamoDBResource) -> Any
         """Entry point to autopush's main command line scripts.
 
         aka autopush/autoendpoint.
@@ -389,7 +394,7 @@ class RustConnectionApplication(AutopushMultiService):
             firehose_delivery_stream=ns.firehose_stream_name
         )
         try:
-            app = cls.from_argparse(ns)
+            app = cls.from_argparse(ns, resource=resource)
         except InvalidConfig as e:
             log.critical(str(e))
             return 1

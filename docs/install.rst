@@ -40,7 +40,7 @@ Or a Debian based system (like Ubuntu):
     $ sudo apt-get install build-essential libffi-dev \
     libssl-dev pypy-dev python-virtualenv git --assume-yes
 
-Autopush uses the `Boto python library`_. Be sure to `properly set up your boto
+Autopush uses the `Boto3 python library`_. Be sure to `properly set up your boto
 config file`_.
 
 Notes on OS X
@@ -138,11 +138,10 @@ An example `boto config file`_ is provided in ``automock/boto.cfg`` that
 directs autopush to your local DynamoDB instance.
 
 .. _Mozilla Push Service - Code Development: http://mozilla-push-service.readthedocs.io/en/latest/development/#code-development
-.. _`boto config file`: https://boto.readthedocs.io/en/latest/boto_config_tut.html
+.. _`boto config file`: http://boto3.readthedocs.io/en/docs/guide/quickstart.html#configuration
 .. _`Local DynamoDB Java server`: http://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Tools.DynamoDBLocal.html
-.. _`Boto python library`: https://boto.readthedocs.io/en/latest/
-.. _`properly set up your boto config file`:
-     https://boto.readthedocs.io/en/latest/boto_config_tut.html
+.. _`Boto3 python library`: https://boto3.readthedocs.io/en/latest/
+.. _`properly set up your boto config file`: http://boto3.readthedocs.io/en/docs/guide/quickstart.html#configuration
 .. _`cryptography`: https://cryptography.io/en/latest/installation
 
 .. toctree::

@@ -8,6 +8,7 @@ from autopush.db import (
     Router,
 )
 from autopush.metrics import SinkMetrics
+import autopush.tests
 
 
 @implementer(ILogObserver)
@@ -44,5 +45,6 @@ def test_db(metrics=None):
         router_conf=DDBTableConfig(tablename='router'),
         router=Mock(spec=Router),
         message_conf=DDBTableConfig(tablename='message'),
-        metrics=SinkMetrics() if metrics is None else metrics
+        metrics=SinkMetrics() if metrics is None else metrics,
+        resource=autopush.tests.boto_resource,
     )

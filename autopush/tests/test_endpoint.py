@@ -14,6 +14,7 @@ from autopush.db import (
     Message,
     ItemNotFound,
     has_connected_this_month,
+    Router
 )
 from autopush.exceptions import RouterException
 from autopush.http import EndpointHTTPFactory
@@ -51,7 +52,7 @@ class MessageTestCase(unittest.TestCase):
             crypto_key='AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=',
         )
         db = test_db()
-        self.message_mock = db.message = Mock(spec=Message)
+        self.message_mock = db._message = Mock(spec=Message)
         self.fernet_mock = conf.fernet = Mock(spec=Fernet)
 
         app = EndpointHTTPFactory.for_handler(MessageHandler, conf, db=db)
@@ -140,6 +141,7 @@ class RegistrationTestCase(unittest.TestCase):
         self.fernet_mock = conf.fernet = Mock(spec=Fernet)
 
         self.db = db = test_db()
+        db.router = Mock(spec=Router)
         db.router.register_user.return_value = (True, {}, {})
         db.router.get_uaid.return_value = {
             "router_type": "test",

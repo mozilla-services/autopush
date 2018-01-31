@@ -15,6 +15,7 @@ from autopush.db import (
     DatabaseManager,
     generate_last_connect,
     make_rotating_tablename,
+    Message,
 )
 from autopush.metrics import SinkMetrics
 from autopush.config import AutopushConfig
@@ -35,6 +36,7 @@ from autopush.webpush_server import (
     Unregister,
     WebPushMessage,
 )
+import autopush.tests
 
 
 class AutopushCall(object):
@@ -170,14 +172,18 @@ class BaseSetup(unittest.TestCase):
         begin_or_register(self.logs)
         self.addCleanup(globalLogPublisher.removeObserver, self.logs)
 
-        self.db = db = DatabaseManager.from_config(self.conf)
+        self.db = db = DatabaseManager.from_config(
+            self.conf,
+            resource=autopush.tests.boto_resource)
         self.metrics = db.metrics = Mock(spec=SinkMetrics)
         db.setup_tables()
 
     def _store_messages(self, uaid, topic=False, num=5):
         try:
             item = self.db.router.get_uaid(uaid.hex)
-            message_table = self.db.message_tables[item["current_month"]]
+            message_table = Message(
+                item["current_month"],
+                boto_resource=autopush.tests.boto_resource)
         except ItemNotFound:
             message_table = self.db.message
         messages = [WebPushNotificationFactory(uaid=uaid)
@@ -441,7 +447,9 @@ class TestMigrateUserProcessor(BaseSetup):
 
         # Check that it's there
         item = self.db.router.get_uaid(uaid)
-        _, channels = self.db.message_tables[last_month].all_channels(uaid)
+        _, channels = Message(
+            last_month,
+            boto_resource=self.db.resource).all_channels(uaid)
         assert item["current_month"] != self.db.current_msg_month
         assert item is not None
         assert len(channels) == 3
@@ -504,16 +512,18 @@ class TestRegisterProcessor(BaseSetup):
         self._test_invalid(uuid4().hex)
 
     def test_register_over_provisioning(self):
+        import autopush
 
         def raise_condition(*args, **kwargs):
-            import autopush.db
-            raise autopush.db.g_client.exceptions.ClientError(
+            from botocore.exceptions import ClientError
+            raise ClientError(
                 {'Error': {'Code': 'ProvisionedThroughputExceededException'}},
                 'mock_update_item'
             )
 
-        self.db.message.table.update_item = Mock(
-            side_effect=raise_condition)
+        mock_table = Mock(spec=autopush.db.Message)
+        mock_table.register_channel = Mock(side_effect=raise_condition)
+        self.db.message_table = Mock(return_value=mock_table)
         self._test_invalid(str(uuid4()), "overloaded", 503)
 
 

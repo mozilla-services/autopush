@@ -176,6 +176,9 @@ class AutopushConfig(object):
     # Don't cache ssl.wrap_socket's SSLContexts
     no_sslcontext_cache = attrib(default=False)  # type: bool
 
+    # DynamoDB endpoint override
+    aws_ddb_endpoint = attrib(default=None)  # type: str
+
     def __attrs_post_init__(self):
         """Initialize the Settings object"""
         # Setup hosts/ports/urls

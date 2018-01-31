@@ -195,8 +195,7 @@ class TestBase(unittest.TestCase):
 
     def test_overload_err(self):
         try:
-            import autopush.db
-            raise autopush.db.g_client.exceptions.ClientError(
+            raise ClientError(
                 {'Error': {
                     'Code': 'ProvisionedThroughputExceededException'}},
                 'mock_update_item'
@@ -208,8 +207,7 @@ class TestBase(unittest.TestCase):
 
     def test_client_err(self):
         try:
-            import autopush.db
-            raise autopush.db.g_client.exceptions.ClientError(
+            raise ClientError(
                 {'Error': {
                     'Code': 'Flibbertygidgit'}},
                 'mock_update_item'

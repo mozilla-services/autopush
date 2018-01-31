@@ -33,14 +33,15 @@ class HealthHandler(BaseWebHandler):
         )
 
         dl = DeferredList([
-            self._check_table(self.db.router.table),
-            self._check_table(self.db.message.table, "storage")
+            self._check_table(self.db.router.table()),
+            self._check_table(self.db.message.table(), "storage"),
         ])
         dl.addBoth(self._finish_response)
 
     def _check_table(self, table, name_over=None):
         """Checks the tables known about in DynamoDB"""
-        d = deferToThread(table_exists, table.table_name, self.db.client)
+        d = deferToThread(table_exists, table.table_name,
+                          boto_resource=self.db.resource)
         d.addCallback(self._check_success, name_over or table.table_name)
         d.addErrback(self._check_error, name_over or table.table_name)
         return d
@@ -58,12 +59,12 @@ class HealthHandler(BaseWebHandler):
         self.log.failure(format=fmt, failure=failure, name=name)
 
         cause = self._health_checks[name] = {"status": "NOT OK"}
-        if failure.check(InternalServerError):
+        if failure.check(MissingTableException):
+            cause["error"] = failure.value.message
+        elif failure.check(InternalServerError):  # pragma nocover
             cause["error"] = "Server error"
-        elif failure.check(MissingTableException):
-            cause["error"] = failure.getErrorMessage()
         else:
-            cause["error"] = "Internal error"
+            cause["error"] = "Internal error"     # pragma nocover
 
     def _finish_response(self, results):
         """Returns whether the check succeeded or not"""

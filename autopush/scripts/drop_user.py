@@ -19,7 +19,6 @@ from autopush.metrics import SinkMetrics
 def drop_users(router_table_name, months_ago, batch_size, pause_time):
     router_table = get_router_table(router_table_name)
     router = Router(router_table, SinkMetrics())
-
     click.echo("Deleting users with a last_connect %s months ago."
                % months_ago)
 
