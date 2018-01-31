@@ -501,14 +501,10 @@ class Message(object):
         self.tablename = tablename
         self._max_ttl = max_ttl
         self.resource = boto_resource
-
-    def table(self, tablename=None):
-        if not tablename:
-            tablename = self.tablename
-        return DynamoDBTable(self.resource, tablename)
+        self.table = DynamoDBTable(self.resource, tablename)
 
     def table_status(self):
-        return self.table().table_status
+        return self.table.table_status
 
     @track_provisioned
     def register_channel(self, uaid, channel_id, ttl=None):
@@ -521,7 +517,7 @@ class Message(object):
             ":channel_id": set([normalize_id(channel_id)]),
             ":expiry": _expiry(ttl)
         }
-        self.table().update_item(
+        self.table.update_item(
             Key={
                 'uaid': hasher(uaid),
                 'chidmessageid': ' ',
@@ -539,7 +535,7 @@ class Message(object):
         chid = normalize_id(channel_id)
         expr_values = {":channel_id": set([chid])}
 
-        response = self.table().update_item(
+        response = self.table.update_item(
             Key={
                 'uaid': hasher(uaid),
                 'chidmessageid': ' ',
@@ -565,7 +561,7 @@ class Message(object):
         # Note: This only returns the chids associated with the UAID.
         # Functions that call store_message() would be required to
         # update that list as well using register_channel()
-        result = self.table().get_item(
+        result = self.table.get_item(
             Key={
                 'uaid': hasher(uaid),
                 'chidmessageid': ' ',
@@ -582,7 +578,7 @@ class Message(object):
     def save_channels(self, uaid, channels):
         # type: (str, Set[str]) -> None
         """Save out a set of channels"""
-        self.table().put_item(
+        self.table.put_item(
             Item={
                 'uaid': hasher(uaid),
                 'chidmessageid': ' ',
@@ -608,7 +604,7 @@ class Message(object):
         )
         if notification.data:
             item['data'] = notification.data
-        self.table().put_item(Item=item)
+        self.table.put_item(Item=item)
 
     @track_provisioned
     def delete_message(self, notification):
@@ -616,7 +612,7 @@ class Message(object):
         """Deletes a specific message"""
         if notification.update_id:
             try:
-                self.table().delete_item(
+                self.table.delete_item(
                     Key={
                         'uaid': hasher(notification.uaid.hex),
                         'chidmessageid': notification.sort_key
@@ -630,7 +626,7 @@ class Message(object):
             except ClientError:
                 return False
         else:
-            self.table().delete_item(
+            self.table.delete_item(
                 Key={
                     'uaid': hasher(notification.uaid.hex),
                     'chidmessageid': notification.sort_key,
@@ -651,7 +647,7 @@ class Message(object):
 
         """
         # Eagerly fetches all results in the result set.
-        response = self.table().query(
+        response = self.table.query(
             KeyConditionExpression=(Key("uaid").eq(hasher(uaid.hex))
                                     & Key('chidmessageid').lt('02')),
             ConsistentRead=True,
@@ -696,7 +692,7 @@ class Message(object):
         else:
             sortkey = "01;"
 
-        response = self.table().query(
+        response = self.table.query(
             KeyConditionExpression=(Key('uaid').eq(hasher(uaid.hex))
                                     & Key('chidmessageid').gt(sortkey)),
             ConsistentRead=True,
@@ -719,7 +715,7 @@ class Message(object):
         expr = "SET current_timestamp=:timestamp, expiry=:expiry"
         expr_values = {":timestamp": timestamp,
                        ":expiry": _expiry(self._max_ttl)}
-        self.table().update_item(
+        self.table.update_item(
             Key={
                 "uaid": hasher(uaid.hex),
                 "chidmessageid": " "
@@ -747,16 +743,13 @@ class Router(object):
         self._max_ttl = max_ttl
         self._cached_table = None
         self._resource = resource or DynamoDBResource(**asdict(self.conf))
-        self._table = get_router_table(
+        self.table = get_router_table(
             tablename=self.conf.tablename,
             boto_resource=self._resource
         )
 
-    def table(self):
-        return self._table
-
     def table_status(self):
-        return self.table().table_status
+        return self.table.table_status
 
     def get_uaid(self, uaid):
         # type: (str) -> Item
@@ -769,7 +762,7 @@ class Router(object):
 
         """
         try:
-            item = self.table().get_item(
+            item = self.table.get_item(
                 Key={
                     'uaid': hasher(uaid)
                 },
@@ -825,7 +818,7 @@ class Router(object):
                 attribute_not_exists(node_id) or
                 (connected_at < :connected_at)
             )"""
-            result = self.table().update_item(
+            result = self.table.update_item(
                 Key=db_key,
                 UpdateExpression=expr,
                 ConditionExpression=cond,
@@ -836,7 +829,7 @@ class Router(object):
                 r = {}
                 for key, value in result["Attributes"].items():
                     try:
-                        r[key] = self.table()._dynamizer.decode(value)
+                        r[key] = self.table._dynamizer.decode(value)
                     except (TypeError, AttributeError):  # pragma: nocover
                         # Included for safety as moto has occasionally made
                         # this not work
@@ -858,7 +851,7 @@ class Router(object):
         # The following hack ensures that only uaids that exist and are
         # deleted return true.
         try:
-            item = self.table().get_item(
+            item = self.table.get_item(
                 Key={
                     'uaid': hasher(uaid)
                 },
@@ -868,14 +861,14 @@ class Router(object):
                 return False
         except ClientError:  # pragma nocover
             pass
-        result = self.table().delete_item(
+        result = self.table.delete_item(
             Key={'uaid': hasher(uaid)})
         return result['ResponseMetadata']['HTTPStatusCode'] == 200
 
     def delete_uaids(self, uaids):
         # type: (List[str]) -> None
         """Issue a batch delete call for the given uaids"""
-        with self.table().batch_writer() as batch:
+        with self.table.batch_writer() as batch:
             for uaid in uaids:
                 batch.delete_item(Key={'uaid': uaid})
 
@@ -909,7 +902,7 @@ class Router(object):
 
         batched = []
         for hash_key in generate_last_connect_values(prior_date):
-            response = self.table().query(
+            response = self.table.query(
                 KeyConditionExpression=Key("last_connect").eq(hash_key),
                 IndexName="AccessIndex",
             )
@@ -929,7 +922,7 @@ class Router(object):
 
     @track_provisioned
     def _update_last_connect(self, uaid, last_connect):
-        self.table().update_item(
+        self.table.update_item(
             Key={"uaid": hasher(uaid)},
             UpdateExpression="SET last_connect=:last_connect",
             ExpressionAttributeValues={":last_connect": last_connect}
@@ -953,7 +946,7 @@ class Router(object):
                        ":last_connect": generate_last_connect(),
                        ":expiry": _expiry(self._max_ttl),
                        }
-        self.table().update_item(
+        self.table.update_item(
             Key=db_key,
             UpdateExpression=expr,
             ExpressionAttributeValues=expr_values,
@@ -980,7 +973,7 @@ class Router(object):
 
         try:
             cond = "(node_id = :node) and (connected_at = :conn)"
-            self.table().put_item(
+            self.table.put_item(
                 Item=item,
                 ConditionExpression=cond,
                 ExpressionAttributeValues={
@@ -1056,7 +1049,6 @@ class DatabaseManager(object):
             conf=self._router_conf,
             metrics=self.metrics,
             resource=self.resource)
-        self.router.table()
         # Used to determine whether a connection is out of date with current
         # db objects. There are three noteworty cases:
         # 1 "Last Month" the table requires a rollover.

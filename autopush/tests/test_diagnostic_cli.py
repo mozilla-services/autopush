@@ -23,7 +23,7 @@ class DiagnosticCLITestCase(unittest.TestCase):
             "--router_tablename=fred",
             "http://someendpoint",
         ])
-        assert cli.db.router.table().table_name == "fred"
+        assert cli.db.router.table.table_name == "fred"
 
     def test_bad_endpoint(self):
         cli = self._makeFUT([

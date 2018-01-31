@@ -461,7 +461,7 @@ class WebsocketTestCase(unittest.TestCase):
             "current_month": msg_date,
         }
         router = self.proto.db.router
-        router.table().put_item(
+        router.table.put_item(
             Item=dict(
                 uaid=orig_uaid,
                 connected_at=ms_time(),
@@ -731,7 +731,7 @@ class WebsocketTestCase(unittest.TestCase):
         router = self.proto.db.router
         mock_up = Mock()
         mock_up.update_item = Mock(side_effect=KeyError)
-        router.table = Mock(return_value=mock_up)
+        router.table = mock_up
 
         self._send_message(dict(messageType="hello", channelIDs=[],
                                 use_webpush=True, stop=1))
@@ -755,7 +755,7 @@ class WebsocketTestCase(unittest.TestCase):
         router = self.proto.db.router
         mock_table = Mock()
         mock_table.update_item = Mock(side_effect=raise_condition)
-        router.table = Mock(return_value=mock_table)
+        router.table = mock_table
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
         msg = yield self.get_response()

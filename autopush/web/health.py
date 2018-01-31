@@ -33,8 +33,8 @@ class HealthHandler(BaseWebHandler):
         )
 
         dl = DeferredList([
-            self._check_table(self.db.router.table()),
-            self._check_table(self.db.message.table(), "storage"),
+            self._check_table(self.db.router.table),
+            self._check_table(self.db.message.table, "storage"),
         ])
         dl.addBoth(self._finish_response)
 
