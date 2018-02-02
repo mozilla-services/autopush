@@ -3,13 +3,14 @@ import unittest
 import twisted.internet.base
 
 import pytest
-from mock import Mock, patch
+from mock import Mock, patch, call
 
 from autopush.metrics import (
     IMetrics,
     DatadogMetrics,
     TwistedMetrics,
     SinkMetrics,
+    periodic_reporter,
 )
 
 
@@ -71,3 +72,19 @@ class DatadogMetricsTestCase(unittest.TestCase):
         m.timing("lifespan", 113)
         m._client.timing.assert_called_with("testpush.lifespan", value=113,
                                             host=hostname)
+
+
+class PeriodicReporterTestCase(unittest.TestCase):
+
+    def test_periodic_reporter(self):
+        metrics = Mock(spec=SinkMetrics)
+        periodic_reporter(metrics)
+        periodic_reporter(metrics, prefix='foo')
+        metrics.gauge.assert_has_calls([
+            call('twisted.threadpool.idleWorkerCount', 0),
+            call('twisted.threadpool.busyWorkerCount', 0),
+            call('twisted.threadpool.backloggedWorkCount', 0),
+            call('foo.twisted.threadpool.idleWorkerCount', 0),
+            call('foo.twisted.threadpool.busyWorkerCount', 0),
+            call('foo.twisted.threadpool.backloggedWorkCount', 0),
+        ])
