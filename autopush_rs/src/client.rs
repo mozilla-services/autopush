@@ -16,12 +16,13 @@ use futures::{Stream, Sink, Future, Poll, Async};
 use tokio_core::reactor::Timeout;
 use time;
 use uuid::Uuid;
-use woothee::parser::{Parser, WootheeResult};
+use woothee::parser::Parser;
 
 use call;
 use errors::*;
 use protocol::{ClientAck, ClientMessage, ServerMessage, ServerNotification, Notification};
 use server::Server;
+use util::parse_user_agent;
 
 pub struct RegisteredClient {
     pub uaid: Uuid,
@@ -223,13 +224,12 @@ where
                         if message.topic.is_some() {
                             self.data.srv.metrics.incr("ua.notification.topic")?;
                         }
-                        // XXX: tags
-                        self.data.srv.metrics.count(
-                            "ua.message_data",
-                            message.data.as_ref().map_or(0, |d| {
-                                d.len() as i64
-                            }),
-                        )?;
+                        let mlen = message.data.as_ref().map_or(0, |d| d.len() as i64);
+                        // XXX: not emitted for direct notifications (nor was it in websocket.py)
+                        self.data.srv.metrics
+                            .count_with_tags("ua.message_data", mlen)
+                            .with_tag("source", "Stored")
+                            .send()?;
                         ClientState::FinishSend(
                             Some(ServerMessage::Notification(message)),
                             Some(Box::new(ClientState::SendMessages(if messages.len() > 0 {
@@ -591,7 +591,7 @@ where
                 uaid_reset: reset_uaid,
                 existing_uaid: check_storage,
                 connection_type: String::from("webpush"),
-                host: String::from("unknown"),
+                host: self.host.clone(),
                 direct_acked: 0,
                 direct_storage: 0,
                 stored_retrieved: 0,
@@ -719,8 +719,16 @@ where
 
         let now = time::precise_time_ns() / 1000;
         let elapsed = now - webpush.connected_at;
-        // XXX: tags
-        self.srv.metrics.time("ua.connection.lifespan", elapsed).ok();
+
+        let parser = Parser::new();
+        let (ua_result, metrics_os, metrics_browser) = parse_user_agent(&parser, &self.user_agent);
+        self.srv.metrics
+            .time_with_tags("ua.connection.lifespan", elapsed)
+            .with_tag("ua_os_family", metrics_os)
+            .with_tag("ua_browser_family", metrics_browser)
+            .with_tag("host", &webpush.stats.host)
+            .send()
+            .ok();
 
         // If there's direct unack'd messages, they need to be saved out without blocking
         // here
@@ -743,27 +751,13 @@ where
             )
         }
 
-        // Parse the user-agent string
-        let parser = Parser::new();
-        let ua_result = parser
-            .parse(&self.user_agent)
-            .unwrap_or_else(|| WootheeResult {
-                name: "",
-                category: "",
-                os: "",
-                os_version: "".to_string(),
-                browser_type: "",
-                version: "".to_string(),
-                vendor: "",
-            });
-
         // Log out the final stats message
         info!("Session";
-              "uaid_hash" => stats.uaid.as_str(),
+              "uaid_hash" => &stats.uaid,
               "uaid_reset" => stats.uaid_reset,
               "existing_uaid" => stats.existing_uaid,
-              "connection_type" => stats.connection_type.as_str(),
-              "host" => self.host.clone(),
+              "connection_type" => &stats.connection_type,
+              "host" => &stats.host,
               "ua_name" => ua_result.name,
               "ua_os_family" => ua_result.os,
               "ua_os_ver" => ua_result.os_version,

@@ -13,12 +13,14 @@ use tokio_core::reactor::{Handle, Timeout};
 
 use errors::*;
 
-mod send_all;
-mod rc;
 mod autojson;
+mod rc;
+mod send_all;
+mod user_agent;
 
 pub use self::send_all::MySendAll;
 pub use self::rc::RcObject;
+pub use self::user_agent::parse_user_agent;
 
 /// Convenience future to time out the resolution of `f` provided within the
 /// duration provided.

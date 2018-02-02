@@ -326,9 +326,12 @@ class RustConnectionApplication(AutopushMultiService):
     logger_name = "AutopushRust"
     push_server = None
 
-    def __init__(self, conf):
-        # type: (AutopushConfig) -> None
-        super(RustConnectionApplication, self).__init__(conf)
+    def __init__(self, conf, resource=None):
+        # type: (AutopushConfig, DynamoDBResource) -> None
+        super(RustConnectionApplication, self).__init__(
+            conf,
+            resource=resource
+        )
 
     def setup(self, rotate_tables=True):
         super(RustConnectionApplication, self).setup(rotate_tables)

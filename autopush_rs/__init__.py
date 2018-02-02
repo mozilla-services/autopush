@@ -39,19 +39,14 @@ class AutopushServer(object):
         cfg.statsd_host = ffi_from_buffer(conf.statsd_host)
         cfg.statsd_port = conf.statsd_port
 
-        self.cfg = cfg
         ptr = _call(lib.autopush_server_new, cfg)
         self.ffi = ffi.gc(ptr, lib.autopush_server_free)
         self.queue = queue
 
     def startService(self):
-        try:
-            _call(lib.autopush_server_start,
-                  self.ffi,
-                  self.queue.ffi)
-        except Exception as ex:
-            import pdb; pdb.set_trace()
-            print(ex)
+        _call(lib.autopush_server_start,
+              self.ffi,
+              self.queue.ffi)
 
     def stopService(self):
         if self.ffi is None:
