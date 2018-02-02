@@ -271,7 +271,7 @@ class MessageTestCase(unittest.TestCase):
             'Attributes': {'uaid': self.uaid},
             'ResponseMetaData': {}
         })
-        message.table = Mock(return_value=mtable)
+        message.table = mtable
         r = message.unregister_channel(self.uaid, dummy_chid)
         assert r is False
 
@@ -303,7 +303,7 @@ class MessageTestCase(unittest.TestCase):
                 "HTTPStatusCode": 400
             },
         }
-        message.table = Mock(return_value=mtable)
+        message.table = mtable
         res = message.all_channels(self.uaid)
         assert res == (False, set([]))
 
@@ -376,7 +376,7 @@ class MessageTestCase(unittest.TestCase):
 
         m_de = Mock()
         m_de.delete_item = Mock(side_effect=raise_condition)
-        message.table = Mock(return_value=m_de)
+        message.table = m_de
         result = message.delete_message(notif)
         assert result is False
 
@@ -461,7 +461,7 @@ class RouterTestCase(unittest.TestCase):
 
         mm = Mock()
         mm.get_item = Mock(side_effect=raise_condition)
-        router.table = Mock(return_value=mm)
+        router.table = mm
         with pytest.raises(ClientError) as ex:
             router.get_uaid(uaid="asdf")
         assert (ex.value.response['Error']['Code'] ==
@@ -472,7 +472,7 @@ class RouterTestCase(unittest.TestCase):
         mm = Mock()
         mm.client = Mock()
 
-        router.table = Mock(return_value=mm)
+        router.table = mm
 
         def raise_condition(*args, **kwargs):
             raise ClientError(
@@ -491,7 +491,7 @@ class RouterTestCase(unittest.TestCase):
     def test_register_user_condition_failed(self):
         router = Router(self.table_conf, SinkMetrics(),
                         resource=self.resource)
-        router.table().meta.client = Mock()
+        router.table.meta.client = Mock()
 
         def raise_error(*args, **kwargs):
             raise ClientError(
@@ -500,7 +500,7 @@ class RouterTestCase(unittest.TestCase):
             )
         mm = Mock()
         mm.update_item = Mock(side_effect=raise_error)
-        router.table = Mock(return_value=mm)
+        router.table = mm
         res = router.register_user(dict(uaid=dummy_uaid, node_id="me",
                                         connected_at=1234,
                                         router_type="webpush"))
@@ -518,7 +518,7 @@ class RouterTestCase(unittest.TestCase):
 
         mm = Mock()
         mm.put_item = Mock(side_effect=raise_condition)
-        router.table = Mock(return_value=mm)
+        router.table = mm
         with pytest.raises(ClientError) as ex:
             router.clear_node(dict(uaid=dummy_uaid,
                                    connected_at="1234",
@@ -539,8 +539,7 @@ class RouterTestCase(unittest.TestCase):
 
         mock_put = Mock()
         mock_put.put_item = Mock(side_effect=raise_error)
-        mock_table = Mock(return_value=mock_put)
-        router.table = mock_table
+        router.table = mock_put
         res = router.clear_node(dict(uaid=dummy_uaid,
                                      connected_at="1234",
                                      node_id="asdf",
@@ -569,7 +568,7 @@ class RouterTestCase(unittest.TestCase):
                 "HTTPStatusCode": 200
             },
         }
-        router.table = Mock(return_value=mm)
+        router.table = mm
         router.drop_user = Mock()
         try:
             router.register_user(dict(uaid=uaid))
@@ -590,7 +589,7 @@ class RouterTestCase(unittest.TestCase):
                 "HTTPStatusCode": 400
             },
         }
-        router.table = Mock(return_value=mm)
+        router.table = mm
         router.drop_user = Mock()
         with pytest.raises(ItemNotFound):
             router.get_uaid(uaid)
@@ -602,7 +601,7 @@ class RouterTestCase(unittest.TestCase):
         # when not updating data.
         mock_update = Mock()
         mock_update.update_item = Mock(return_value={})
-        router.table = Mock(return_value=mock_update)
+        router.table = mock_update
         result = router.register_user(dict(uaid=dummy_uaid,
                                            node_id="me",
                                            router_type="webpush",
@@ -621,7 +620,7 @@ class RouterTestCase(unittest.TestCase):
 
         mock_update = Mock()
         mock_update.update_item = Mock(side_effect=raise_condition)
-        router.table = Mock(return_value=mock_update)
+        router.table = mock_update
         router_data = dict(uaid=dummy_uaid, node_id="asdf", connected_at=1234,
                            router_type="webpush")
         result = router.register_user(router_data)
@@ -662,7 +661,7 @@ class RouterTestCase(unittest.TestCase):
 
         mock_put = Mock()
         mock_put.put_item = Mock(side_effect=raise_condition)
-        router.table = Mock(return_value=mock_put)
+        router.table = mock_put
         data = dict(uaid=dummy_uaid, node_id="asdf", connected_at=1234)
         result = router.clear_node(data)
         assert result is False

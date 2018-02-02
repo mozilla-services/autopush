@@ -56,7 +56,7 @@ class HealthTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_nonexistent_table(self):
-        self.client.app.db.message.table().delete()
+        self.client.app.db.message.table.delete()
 
         yield self._assert_reply({
             "status": "NOT OK",

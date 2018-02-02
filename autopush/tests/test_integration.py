@@ -1210,7 +1210,7 @@ class TestWebPush(IntegrationBase):
 
         # Remove the channels entry entirely from this month
         yield deferToThread(
-            self.conn.db.message.table().delete_item,
+            self.conn.db.message.table.delete_item,
             Key={'uaid': client.uaid, 'chidmessageid': ' '}
          )
 
