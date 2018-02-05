@@ -1,3 +1,36 @@
+<a name="1.40.0"></a>
+## 1.40.0 (2018-02-03)
+
+
+#### Features
+
+*   add metric tags ([690fcd3e](https://github.com/mozilla-services/autopush/commit/690fcd3e70a2cc29c355c1b135d9a36a66b472b8), closes [#1054](https://github.com/mozilla-services/autopush/issues/1054))
+*   convert `table()` to variable for Message and Router classes ([e26cf3a6](https://github.com/mozilla-services/autopush/commit/e26cf3a61c8020d344727e27704b9057458b474c), closes [#1117](https://github.com/mozilla-services/autopush/issues/1117))
+*   upgrade rust deps to latest ([29518cef](https://github.com/mozilla-services/autopush/commit/29518cef8bf47ca596ba8cb35795bf5cfac2e0be))
+*   add /notif/ HTTP API handler ([f599ee3b](https://github.com/mozilla-services/autopush/commit/f599ee3be32dde4e69d4f5a6df7629b445af1706), closes [#1062](https://github.com/mozilla-services/autopush/issues/1062))
+*   add integration testing for Rust connection node ([c4351cc4](https://github.com/mozilla-services/autopush/commit/c4351cc4f825b6a100b3828084ba5d123d51a3d8), closes [#1060](https://github.com/mozilla-services/autopush/issues/1060))
+*   add error information for debugging connection drops ([ffa78654](https://github.com/mozilla-services/autopush/commit/ffa7865427ec1bd58a9c80bbdf4badf3d5416df3), closes [#1002](https://github.com/mozilla-services/autopush/issues/1002))
+*   add sentry panic reporting ([66554d91](https://github.com/mozilla-services/autopush/commit/66554d91e1255db8c0de6f1eb6bc9df74a49ed9b), closes [#1066](https://github.com/mozilla-services/autopush/issues/1066))
+*   track nack's with metrics ([35770aec](https://github.com/mozilla-services/autopush/commit/35770aec42a504948e8c04057f9c16fdca89294b), closes [#1063](https://github.com/mozilla-services/autopush/issues/1063))
+*   use structured logging and log session info out ([1b10e77b](https://github.com/mozilla-services/autopush/commit/1b10e77b0be69337010f96fc45f45f8949b69e26), closes [#1055](https://github.com/mozilla-services/autopush/issues/1055))
+*   fill in missing metrics for autopush_rs ([eb37fa06](https://github.com/mozilla-services/autopush/commit/eb37fa064274d9193fcb2b2b83f9870bd2ea809e))
+*   convert to use AWS boto3 ([02784722](https://github.com/mozilla-services/autopush/commit/0278472214149bc1b96281cbe019b2b693053d08), closes [#1049](https://github.com/mozilla-services/autopush/issues/1049))
+
+#### Bug Fixes
+
+*   Restore periodicreporter after complex merge dropped it. ([d9233f5c](https://github.com/mozilla-services/autopush/commit/d9233f5ca9ecac98e236df3186ed4d23d8e21d4e), closes [#1119](https://github.com/mozilla-services/autopush/issues/1119))
+*   make boto3 calls thread safe ([04e188d7](https://github.com/mozilla-services/autopush/commit/04e188d7808b766dbb99d72e0770b50887eaade3), closes [#1081](https://github.com/mozilla-services/autopush/issues/1081))
+*   restore missing test file from Rust integration test PR ([24b08b2f](https://github.com/mozilla-services/autopush/commit/24b08b2f89f9f382c39339dddbf027008953634c))
+*   Fix diagnostic cli to handle tuple args ([ae89a217](https://github.com/mozilla-services/autopush/commit/ae89a21726b5525db15b69cf8f3527a3d621ceac), closes [#1096](https://github.com/mozilla-services/autopush/issues/1096))
+*   use the right channel_id value in client_info ([bb3be771](https://github.com/mozilla-services/autopush/commit/bb3be771f24455790c57b40706b37ac66bff775b))
+
+#### Refactor
+
+*   minor cleanup to shutdown ([fa37ed82](https://github.com/mozilla-services/autopush/commit/fa37ed829b3f9d4a7be5e0498d9fd1f12ca2fa3d))
+*   move MAX_EXPIRY out of __init__ ([9c1ca6c2](https://github.com/mozilla-services/autopush/commit/9c1ca6c2f44319e1c64772688b45c034a18fb633))
+
+
+
 <a name="1.39.2"></a>
 ## 1.39.2 (2018-01-22)
 
