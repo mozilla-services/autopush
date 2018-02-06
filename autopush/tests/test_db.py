@@ -99,6 +99,20 @@ class DdbResourceTest(unittest.TestCase):
         if safe:
             os.environ["AWS_LOCAL_DYNAMODB"] = safe
 
+    def test_ddb_env(self):
+        ddb_session_args = dict(
+            endpoint_url=os.getenv("AWS_LOCAL_DYNAMODB"),
+            aws_access_key_id="BogusKey",
+            aws_secret_access_key="BogusKey",
+        )
+        safe = os.getenv("AWS_DEFAULT_REGION")
+        os.environ["AWS_DEFAULT_REGION"] = "us-west-2"
+        boto_resource = DynamoDBResource(**ddb_session_args)
+        assert boto_resource._resource.meta.client.meta.region_name == \
+            'us-west-2'
+        if safe:
+            os.environ["AWS_DEFAULT_REGION"] = safe
+
 
 class DbCheckTestCase(unittest.TestCase):
     def setUp(cls):

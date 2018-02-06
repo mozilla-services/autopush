@@ -479,7 +479,7 @@ class WebPushNotification(object):
             channel_id=uuid.UUID(key_info["channel_id"]),
             data=item.get("data"),
             headers=item.get("headers"),
-            ttl=item["ttl"],
+            ttl=item.get("ttl", 0),
             topic=key_info.get("topic"),
             message_id=key_info["message_id"],
             update_id=item.get("updateid"),
