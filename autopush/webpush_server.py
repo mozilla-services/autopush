@@ -243,11 +243,6 @@ class WebPushServer(object):
         self.rust = AutopushServer(conf, self.incoming)
         self.running = False
 
-    def run(self):
-        self.start()
-        for worker in self.workers:
-            worker.join()
-
     def start(self):
         # type: (int) -> None
         self.running = True
@@ -263,6 +258,8 @@ class WebPushServer(object):
     def stop(self):
         self.running = False
         self.rust.stopService()
+        for worker in self.workers:
+            worker.join()
 
     def _create_thread_worker(self, processor, input_queue):
         # type: (CommandProcessor, AutopushQueue) -> Thread

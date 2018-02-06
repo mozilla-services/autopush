@@ -119,9 +119,7 @@ class TestRustWebPush(unittest.TestCase):
         )
         self.conn = WebPushServer(conn_conf, db, num_threads=2)
         self.conn.start()
-
-    def tearDown(self):
-        self.conn.stop()
+        self.addCleanup(self.conn.stop)
 
     def endpoint_kwargs(self):
         return self._endpoint_defaults

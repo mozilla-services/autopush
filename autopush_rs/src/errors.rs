@@ -31,6 +31,7 @@ use cadence;
 use futures::Future;
 use httparse;
 use serde_json;
+use sentry;
 use tungstenite;
 
 error_chain! {
@@ -40,6 +41,7 @@ error_chain! {
         Json(serde_json::Error);
         Httparse(httparse::Error);
         MetricError(cadence::MetricError);
+        SentryError(sentry::Error);
     }
 
     errors {

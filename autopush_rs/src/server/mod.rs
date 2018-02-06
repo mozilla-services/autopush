@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::env;
 use std::ffi::CStr;
 use std::io;
 use std::net::{SocketAddr, ToSocketAddrs};
@@ -12,7 +13,6 @@ use std::thread;
 use std::time::{Instant, Duration};
 
 use cadence::StatsdClient;
-use futures;
 use futures::sync::oneshot;
 use futures::task;
 use futures::{Stream, Future, Sink, Async, Poll, AsyncSink, StartSend};
@@ -55,11 +55,13 @@ pub struct AutopushServer {
     inner: UnwindGuard<AutopushServerInner>,
 }
 
+// a signaler to shut down a tokio Core and its associated thread
+struct ShutdownHandle(oneshot::Sender<()>, thread::JoinHandle<()>);
+
 struct AutopushServerInner {
     opts: Arc<ServerOptions>,
     // Used when shutting down a server
-    tx: Cell<Option<oneshot::Sender<()>>>,
-    thread: Cell<Option<thread::JoinHandle<()>>>,
+    shutdown_handles: Cell<Option<Vec<ShutdownHandle>>>,
 }
 
 #[repr(C)]
@@ -191,8 +193,7 @@ pub extern "C" fn autopush_server_new(
         Box::new(AutopushServer {
             inner: UnwindGuard::new(AutopushServerInner {
                 opts: Arc::new(opts),
-                tx: Cell::new(None),
-                thread: Cell::new(None),
+                shutdown_handles: Cell::new(None),
             }),
         })
     })
@@ -207,9 +208,8 @@ pub extern "C" fn autopush_server_start(
     unsafe {
         (*srv).inner.catch(err, |srv| {
             let tx = (*queue).tx();
-            let (tx, thread) = Server::start(&srv.opts, tx).expect("failed to start server");
-            srv.tx.set(Some(tx));
-            srv.thread.set(Some(thread));
+            let handles = Server::start(&srv.opts, tx).expect("failed to start server");
+            srv.shutdown_handles.set(Some(handles));
         })
     }
 }
@@ -234,11 +234,16 @@ impl AutopushServerInner {
     /// Blocks execution of the calling thread until the helper thread with the
     /// tokio reactor has exited.
     fn stop(&self) -> Result<()> {
-        drop(self.tx.take());
-        if let Some(thread) = self.thread.take() {
-            thread.join().map_err(ErrorKind::Thread)?;
+        let mut result = Ok(());
+        if let Some(shutdown_handles) = self.shutdown_handles.take() {
+            for ShutdownHandle(tx, thread) in shutdown_handles {
+                let _ = tx.send(());
+                if let Err(err) = thread.join() {
+                    result = Err(From::from(ErrorKind::Thread(err)));
+                }
+            }
         }
-        Ok(())
+        result
     }
 }
 
@@ -252,15 +257,16 @@ impl Server {
     /// Creates a new server handle to send to python.
     ///
     /// This will spawn a new server with the `opts` specified, spinning up a
-    /// separate thread for the tokio reactor. The returned
-    /// `AutopushServerInner` is a handle to the spawned thread and can be used
-    /// to interact with it (e.g. shut it down).
-    fn start(
-        opts: &Arc<ServerOptions>,
-        tx: queue::Sender,
-    ) -> Result<(oneshot::Sender<()>, thread::JoinHandle<()>)> {
-        let (donetx, donerx) = oneshot::channel();
+    /// separate thread for the tokio reactor. The returned ShutdownHandles can
+    /// be used to interact with it (e.g. shut it down).
+    fn start(opts: &Arc<ServerOptions>, tx: queue::Sender) -> Result<Vec<ShutdownHandle>> {
+        let mut shutdown_handles = vec![];
+        if let Some(handle) = Server::start_sentry()? {
+            shutdown_handles.push(handle);
+        }
+
         let (inittx, initrx) = oneshot::channel();
+        let (donetx, donerx) = oneshot::channel();
 
         let opts = opts.clone();
         let thread = thread::spawn(move || {
@@ -294,36 +300,43 @@ impl Server {
                 }));
             }
 
-            drop(core.run(donerx));
+            core.run(donerx).expect("Main Core run error");
         });
 
         match initrx.wait() {
             Ok(Some(e)) => Err(e),
-            Ok(None) => Ok((donetx, thread)),
+            Ok(None) => {
+                shutdown_handles.push(ShutdownHandle(donetx, thread));
+                Ok(shutdown_handles)
+            }
             Err(_) => panic::resume_unwind(thread.join().unwrap_err()),
         }
     }
 
-    fn new(opts: &Arc<ServerOptions>, tx: queue::Sender) -> Result<(Rc<Server>, Core)> {
-        // Setup Sentry logging if a SENTRY_DSN exists
-        let sentry_dsn_option = option_env!("SENTRY_DSN");
-        if let Some(sentry_dsn) = sentry_dsn_option {
-            // Spin up a new thread with a new reactor core for the sentry handler
-            thread::spawn(move || {
-                let creds = sentry_dsn
-                    .parse::<sentry::SentryCredential>()
-                    .expect("Invalid Sentry DSN specified");
-                let mut core = Core::new().expect("Unable to create core");
-                let sentry = sentry::Sentry::from_settings(core.handle(), Default::default(), creds);
-                // Get the prior panic hook
-                let hook = panic::take_hook();
-                sentry.register_panic_handler(Some(move |info: &PanicInfo| -> () {
-                    hook(info);
-                }));
-                core.run(futures::empty::<(), ()>()).expect("Error starting sentry thread");
-            });
-        }
+    /// Setup Sentry logging if a SENTRY_DSN exists
+    fn start_sentry() -> Result<Option<ShutdownHandle>> {
+        let creds = match env::var("SENTRY_DSN") {
+            Ok(dsn) => dsn.parse::<sentry::SentryCredential>()?,
+            Err(_) => return Ok(None),
+        };
 
+        // Spin up a new thread with a new reactor core for the sentry handler
+        let (donetx, donerx) = oneshot::channel();
+        let thread = thread::spawn(move || {
+            let mut core = Core::new().expect("Unable to create core");
+            let sentry = sentry::Sentry::from_settings(core.handle(), Default::default(), creds);
+            // Get the prior panic hook
+            let hook = panic::take_hook();
+            sentry.register_panic_handler(Some(move |info: &PanicInfo| -> () {
+                hook(info);
+            }));
+            core.run(donerx).expect("Sentry Core run error");
+        });
+
+        Ok(Some(ShutdownHandle(donetx, thread)))
+    }
+
+    fn new(opts: &Arc<ServerOptions>, tx: queue::Sender) -> Result<(Rc<Server>, Core)> {
         let core = Core::new()?;
         let srv = Rc::new(Server {
             opts: opts.clone(),
