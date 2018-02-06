@@ -464,7 +464,7 @@ class DynamoDBResource(threading.local):
         if "endpoint_url" in conf and not conf["endpoint_url"]:
             del(conf["endpoint_url"])
         region = conf.get("region_name",
-                          os.getenv("AWS_REGION_NAME", "us-east-1"))
+                          os.getenv("AWS_DEFAULT_REGION", "us-east-1"))
         if "region_name" in conf:
             del(conf["region_name"])
         self.conf = conf
