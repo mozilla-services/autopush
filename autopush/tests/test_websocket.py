@@ -4,6 +4,7 @@ import time
 import uuid
 from hashlib import sha256
 from collections import defaultdict
+from urllib3.exceptions import ConnectTimeoutError
 
 import twisted.internet.base
 from autobahn.twisted.util import sleep
@@ -1062,6 +1063,20 @@ class WebsocketTestCase(unittest.TestCase):
         res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
         self.proto._check_other_nodes((True, res))
         d.errback(ConnectError())
+        return d
+
+    def test_connection_timeout_fail(self):
+        self._connect()
+
+        d = Deferred()
+        self.mock_agent.request.return_value = d
+        node_id = "http://otherhost"
+        uaid = "deadbeef000000000000000000000000"
+        self.proto.ps.uaid = uaid
+        connected = int(time.time())
+        res = dict(node_id=node_id, connected_at=connected, uaid=uaid)
+        self.proto._check_other_nodes((True, res))
+        d.errback(ConnectTimeoutError())
         return d
 
     @inlineCallbacks
