@@ -1,3 +1,13 @@
+<a name="1.40.1"></a>
+## 1.40.1 (2018-02-06)
+
+
+#### Bug Fixes
+
+*   Fix KeyError w/ item["ttl"] and Use environment var AWS_DEFAULT_REGION as region specifier ([1990c56c](https://github.com/mozilla-services/autopush/commit/1990c56c0ce97165643cd9d1459ab74a83028fe1), closes [#1124](https://github.com/mozilla-services/autopush/issues/1124)), closes [#1127](https://github.com/mozilla-services/autopush/issues/1124))
+
+
+
 <a name="1.40.0"></a>
 ## 1.40.0 (2018-02-03)
 
