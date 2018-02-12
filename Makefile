@@ -4,10 +4,6 @@ DEPS =
 HERE = $(shell pwd)
 PTYPE=pypy
 REQS=requirements.txt
-ifneq ($(PTYPE), python)
-    # avoids pycrypto build issues w/ pypy + libgmp-dev or libmpir-dev
-    export with_gmp=no
-endif
 BIN = $(HERE)/$(PTYPE)/bin
 VIRTUALENV = virtualenv
 TESTS = $(APPNAME)/tests

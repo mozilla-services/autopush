@@ -1,31 +1,31 @@
 -e git+https://github.com/mitsuhiko/snaek.git@2b14b8b010a9486af0f298b4ad4c73dc1ceff9d6#egg=snaek
 -e git+https://github.com/habnabit/txstatsd.git@157ef85fbdeafe23865c7c4e176237ffcb3c3f1f#egg=txStatsD-master
 apns==2.0.1
-asn1crypto==0.23.0        # via cryptography
-attrs==17.2.0
-autobahn[twisted]==17.9.3
+asn1crypto==0.24.0        # via cryptography
+attrs==17.4.0
+autobahn[twisted]==17.10.1
 automat==0.6.0            # via twisted
-boto3==1.4.7
+boto3==1.5.23
 boto==2.48.0
-botocore==1.7.25          # via boto3, s3transfer
-certifi==2017.7.27.1      # via requests
-cffi==1.11.2              # via cryptography
+botocore==1.8.37          # via boto3, s3transfer
+certifi==2018.1.18        # via requests
+cffi==1.11.4
 chardet==3.0.4            # via requests
 click==6.7
-configargparse==0.12.0
+configargparse==0.13.0
 constantly==15.1.0        # via twisted
 contextlib2==0.5.5        # via raven
-cryptography==2.0.3
+cryptography==2.1.4
 cyclone==1.1
-datadog==0.16.0
-decorator==4.1.2          # via datadog
+datadog==0.18.0
+decorator==4.2.1          # via datadog
 docutils==0.14            # via botocore
 ecdsa==0.13               # via python-jose
-enum34==1.1.6             # via h2
+enum34==1.1.6             # via cryptography, h2
 future==0.16.0            # via python-jose
-futures==3.1.1            # via s3transfer
+futures==3.2.0            # via s3transfer
 gcm-client==0.1.4
-graphviz==0.8             # via objgraph
+graphviz==0.8.2           # via objgraph
 h2==2.6.2                 # via hyper
 hpack==3.0.0              # via h2
 hyper==0.7.0
@@ -33,28 +33,29 @@ hyperframe==3.2.0         # via h2, hyper
 hyperlink==17.3.1         # via twisted
 idna==2.6                 # via cryptography, requests
 incremental==17.5.0       # via twisted
+ipaddress==1.0.19         # via cryptography
 jmespath==0.9.3           # via boto3, botocore
-marshmallow-polyfield==3.1
-marshmallow==2.13.6
-objgraph==3.1.0
-pyasn1-modules==0.1.4     # via service-identity
-pyasn1==0.3.7
+marshmallow-polyfield==3.2
+marshmallow==2.15.0
+objgraph==3.3.0
+pyasn1-modules==0.2.1     # via service-identity
+pyasn1==0.4.2
 pycparser==2.18           # via cffi
-pycrypto==2.6.1           # via python-jose
-pyfcm==1.4.2
-pyopenssl==17.3.0
+pycryptodome==3.4.11      # via python-jose
+pyfcm==1.4.3
+pyopenssl==17.5.0
 python-dateutil==2.6.1    # via botocore
-python-jose==1.4.0
-raven==6.2.1
+python-jose==2.0.2
+raven==6.5.0
 requests-toolbelt==0.8.0  # via pyfcm
 requests==2.18.4
-s3transfer==0.1.11        # via boto3
+s3transfer==0.1.12        # via boto3
 service-identity==17.0.0
-simplejson==3.11.1
+simplejson==3.13.2
 six==1.11.0               # via autobahn, automat, cryptography, pyopenssl, python-dateutil, python-jose, txaio
 twisted==17.9.0
 txaio==2.8.2              # via autobahn
-typing==3.6.2
+typing==3.6.4
 ua-parser==0.7.3
 urllib3==1.22             # via requests
 wsaccel==0.6.2 ; platform_python_implementation == "CPython"
