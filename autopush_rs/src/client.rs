@@ -712,7 +712,7 @@ where
 
     pub fn shutdown(&mut self) {
         // If we made it past hello, do more cleanup
-        let webpush = match self.webpush.take() {
+        let mut webpush = match self.webpush.take() {
             Some(webpush) => webpush,
             None => return
         };
@@ -730,10 +730,24 @@ where
             .send()
             .ok();
 
+        // If there's any notifications in the queue, move them to our unacked direct notifs
+        webpush.rx.close();
+        // wait() is ok as the queue is closed at this point.
+        let rx_iter = webpush.rx.wait();
+        for msg in rx_iter {
+            match msg {
+                Ok(ServerNotification::CheckStorage) => continue,
+                Ok(ServerNotification::Notification(notif)) => {
+                    webpush.unacked_direct_notifs.push(notif);
+                }
+                Err(_) => continue,
+            }
+        }
+
         // If there's direct unack'd messages, they need to be saved out without blocking
         // here
         self.srv.disconnet_client(&webpush.uaid);
-        let mut stats = webpush.stats.clone();
+        let mut stats = webpush.stats;
         let unacked_direct_notifs = webpush.unacked_direct_notifs.len();
         if unacked_direct_notifs > 0 {
             stats.direct_storage += unacked_direct_notifs as i32;
