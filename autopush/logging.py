@@ -142,8 +142,10 @@ class PushLogger(object):
         extra = dict()
         tb = f.getTracebackObject()
         if not tb:
-            # include the current stack for at least some context
-            stack = list(iter_stack_frames())[4:]  # approx.
+            # include the current stack for at least some
+            # context. sentry's expecting that "Frames should be
+            # sorted from oldest to newest."
+            stack = reversed(list(iter_stack_frames())[5:])  # approx.
             extra = dict(no_failure_tb=True)
         extra.update(
             log_format=event.get('log_format'),
