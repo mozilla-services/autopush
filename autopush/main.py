@@ -1,5 +1,6 @@
 """autopush/autoendpoint daemon scripts"""
 import os
+import time
 from argparse import Namespace  # noqa
 
 from twisted.application.internet import (
@@ -148,14 +149,13 @@ class AutopushMultiService(MultiService):
             firehose_delivery_stream=ns.firehose_stream_name
         )
         try:
-            cls.argparse = cls.from_argparse(ns, resource=resource)
-            app = cls.argparse
+            app = cls.from_argparse(ns, resource=resource)
         except InvalidConfig as e:
             log.critical(str(e))
             return 1
 
         app.setup()
-        app.run()
+        return app.run()
 
 
 class EndpointApplication(AutopushMultiService):
@@ -345,9 +345,17 @@ class RustConnectionApplication(AutopushMultiService):
 
     def run(self):
         try:
-            self.push_server.run()
+            self.push_server.start()
+            while True:
+                try:
+                    # handle a graceful shutdown on SIGINT w/ a busy
+                    # loop. we can't Thread.join because SIGINT won't
+                    # interrupt it
+                    time.sleep(6000)
+                except KeyboardInterrupt:
+                    return 1
         finally:
-            self.stopService()
+            self.push_server.stop()
 
     @inlineCallbacks
     def stopService(self):
@@ -380,31 +388,3 @@ class RustConnectionApplication(AutopushMultiService):
             aws_ddb_endpoint=ns.aws_ddb_endpoint,
             resource=resource
         )
-
-    @classmethod
-    def main(cls, args=None, use_files=True, resource=None):
-        # type: (Sequence[str], bool, DynamoDBResource) -> Any
-        """Entry point to autopush's main command line scripts.
-
-        aka autopush/autoendpoint.
-
-        """
-        ns = cls.parse_args(cls.config_files if use_files else [], args)
-        if not ns.no_aws:
-            logging.HOSTNAME = utils.get_ec2_instance_id()
-        PushLogger.setup_logging(
-            cls.logger_name,
-            log_level=ns.log_level or ("debug" if ns.debug else "info"),
-            log_format="text" if ns.human_logs else "json",
-            log_output=ns.log_output,
-            sentry_dsn=bool(os.environ.get("SENTRY_DSN")),
-            firehose_delivery_stream=ns.firehose_stream_name
-        )
-        try:
-            app = cls.from_argparse(ns, resource=resource)
-        except InvalidConfig as e:
-            log.critical(str(e))
-            return 1
-
-        app.setup()
-        app.run()
