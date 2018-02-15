@@ -2,6 +2,7 @@
 use std::io;
 use std::time::Duration;
 
+use hostname::get_hostname;
 use futures::future::{Either, Future, IntoFuture};
 use slog;
 use slog_async;
@@ -14,10 +15,12 @@ use tokio_core::reactor::{Handle, Timeout};
 use errors::*;
 
 mod autojson;
+mod aws;
 mod rc;
 mod send_all;
 mod user_agent;
 
+use self::aws::get_ec2_instance_id;
 pub use self::send_all::MySendAll;
 pub use self::rc::RcObject;
 pub use self::user_agent::parse_user_agent;
@@ -46,20 +49,20 @@ where
     }))
 }
 
-
 // Hold a reference to the log guards for scoped logging which requires these to stay alive
 // for the implicit logger to be passed into logging calls
 pub struct LogGuards {
     _scope_guard: slog_scope::GlobalLoggerGuard,
 }
 
-pub fn init_logging(json: bool, hostname: &'static str) -> LogGuards {
-    let decorator = slog_term::TermDecorator::new().build();
+pub fn init_logging(json: bool) -> LogGuards {
+    let instance_id_or_hostname =
+        get_ec2_instance_id().unwrap_or_else(|_| get_hostname().expect("Couldn't get_hostname"));
     if json {
         let drain = autojson::AutoJson::new(io::stdout())
             .add_default_keys()
             .add_key_value(o!(
-                "Hostname" => hostname,
+                "Hostname" => instance_id_or_hostname,
                 "Type" => "autopush_rs:log",
                 "EnvVersion" => "2.0",
                 "Logger" => format!("AutopushRust-{}", env!("CARGO_PKG_VERSION")),
@@ -74,9 +77,18 @@ pub fn init_logging(json: bool, hostname: &'static str) -> LogGuards {
             _scope_guard: _scope_guard,
         }
     } else {
+        let decorator = slog_term::TermDecorator::new().build();
         let drain = slog_term::FullFormat::new(decorator).build().fuse();
         let drain = slog_async::Async::new(drain).build().fuse();
-        let logger = slog::Logger::root(drain, slog_o!("Hostname" => hostname, "Type" => "autopush_rs:log", "EnvVersion" => "2.0", "Logger" => format!("AutopushRust-{}", env!("CARGO_PKG_VERSION"))));
+        let logger = slog::Logger::root(
+            drain,
+            slog_o!(
+                "Hostname" => instance_id_or_hostname,
+                "Type" => "autopush_rs:log",
+                "EnvVersion" => "2.0",
+                "Logger" => format!("AutopushRust-{}", env!("CARGO_PKG_VERSION"))
+            ),
+        );
         let _scope_guard = slog_scope::set_global_logger(logger);
         slog_stdlog::init().ok();
         LogGuards {

@@ -1,5 +1,10 @@
 """Metrics interface and implementations"""
-from typing import TYPE_CHECKING, Sequence, Any  # noqa
+from typing import (  # noqa
+    TYPE_CHECKING,
+    Any,
+    Optional,
+    Sequence
+)
 
 from twisted.internet import reactor
 from txstatsd.client import StatsDClientProtocol, TwistedStatsDClient
@@ -8,7 +13,7 @@ from txstatsd.metrics.metrics import Metrics
 import datadog
 from datadog import ThreadStats
 
-from autopush.utils import get_ec2_instance_id
+from autopush import logging
 
 if TYPE_CHECKING:  # pragma: nocover
     from autopush.config import AutopushConfig  # noqa
@@ -119,7 +124,7 @@ def from_config(conf):
     """Create an IMetrics from the given config"""
     if conf.datadog_api_key:
         return DatadogMetrics(
-            hostname=get_ec2_instance_id() if conf.ami_id else
+            hostname=logging.instance_id_or_hostname if conf.ami_id else
             conf.hostname,
             api_key=conf.datadog_api_key,
             app_key=conf.datadog_app_key,

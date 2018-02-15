@@ -291,7 +291,7 @@ class AutopushConfig(object):
         # Not a fan of double negatives, but this makes more
         # understandable args
         if not ns.no_aws:
-            ami_id = get_amid()
+            ami_id = get_amid() or "Unknown"
 
         return cls(
             crypto_key=ns.crypto_key,

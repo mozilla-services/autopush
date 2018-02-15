@@ -65,10 +65,12 @@ extern crate cadence;
 extern crate chrono;
 #[macro_use]
 extern crate futures;
+extern crate hostname;
 extern crate httparse;
 extern crate hyper;
 extern crate libc;
 extern crate openssl;
+extern crate reqwest;
 extern crate sentry;
 extern crate serde;
 #[macro_use]

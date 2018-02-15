@@ -45,7 +45,7 @@ class TestUserAgentParser(unittest.TestCase):
 
         request_mock.side_effect = requests.HTTPError
         result = get_amid()
-        assert result == "Unknown"
+        assert result is None
 
     @patch("requests.get")
     def test_get_ec2_instance_id_unknown(self, request_mock):
@@ -54,7 +54,7 @@ class TestUserAgentParser(unittest.TestCase):
 
         request_mock.side_effect = requests.HTTPError
         result = get_ec2_instance_id()
-        assert result == "Unknown"
+        assert result is None
 
     @patch("requests.get")
     def test_get_ec2_instance_id(self, request_mock):

@@ -95,6 +95,7 @@ MAX_EXPIRY = 2592000  # pragma: nocover
 
 # Typing
 T = TypeVar('T')  # noqa
+TableFunc = Callable[[str, int, int, ServiceResource], Table]
 
 key_hash = ""
 TRACK_DB_CALLS = False
@@ -143,10 +144,11 @@ def make_rotating_tablename(prefix, delta=0, date=None):
 def create_rotating_message_table(
         prefix="message",     # type: str
         delta=0,              # type: int
-        date=None,            # type: Optional[datetime.date]]
+        date=None,            # type: Optional[datetime.date]
         read_throughput=5,    # type: int
         write_throughput=5,   # type: int
-        boto_resource=None):  # type: DynamoDBResource
+        boto_resource=None    # type: DynamoDBResource
+        ):
     # type: (...) -> Table  # noqa
     """Create a new message table for webpush style message storage"""
     tablename = make_rotating_tablename(prefix, delta, date)
@@ -205,7 +207,8 @@ def get_rotating_message_tablename(
         date=None,                   # type: Optional[datetime.date]
         message_read_throughput=5,   # type: int
         message_write_throughput=5,  # type: int
-        boto_resource=None):         # type: DynamoDBResource
+        boto_resource=None           # type: DynamoDBResource
+        ):
     # type: (...) -> str  # noqa
     """Gets the message table for the current month."""
     tablename = make_rotating_tablename(prefix, delta, date)
@@ -306,7 +309,7 @@ def _drop_table(tablename, boto_resource):
 
 
 def _make_table(
-        table_func,        # type: Callable[[str, int, int, ServiceResource]]
+        table_func,        # type: TableFunc
         tablename,         # type: str
         read_throughput,   # type: int
         write_throughput,  # type: int
@@ -555,7 +558,7 @@ class Message(object):
 
     @track_provisioned
     def all_channels(self, uaid):
-        # type: (str, str) -> Tuple[bool, Set[str]]
+        # type: (str) -> Tuple[bool, Set[str]]
         """Retrieve a list of all channels for a given uaid"""
 
         # Note: This only returns the chids associated with the UAID.
@@ -752,7 +755,7 @@ class Router(object):
         return self.table.table_status
 
     def get_uaid(self, uaid):
-        # type: (str) -> Item
+        # type: (str) -> Dict[str, Any]
         """Get the database record for the UAID
 
         :raises:
