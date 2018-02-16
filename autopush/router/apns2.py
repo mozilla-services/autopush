@@ -157,7 +157,7 @@ class APNSClient(object):
                         log_exception=False
                     )
                 break
-            except HTTP20Error:
+            except (HTTP20Error, IOError):
                 connection.close()
                 attempt += 1
                 if attempt < self._max_retry:
