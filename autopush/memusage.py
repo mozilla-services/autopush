@@ -26,8 +26,8 @@ lib = ffi.dlopen(None)
 
 
 def memusage(do_dump_rpy_heap=True, do_objgraph=True):
-    """Returning a str of memory usage stats"""
     # type: (Optional[bool], Optional[bool]) -> str
+    """Returning a str of memory usage stats"""
     def trap_err(func, *args, **kwargs):
         try:
             return func(*args, **kwargs)

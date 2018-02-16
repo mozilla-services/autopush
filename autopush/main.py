@@ -28,8 +28,6 @@ from autopush.http import (
     MemUsageHTTPFactory,
     agent_from_config
 )
-import autopush.utils as utils
-import autopush.logging as logging
 from autopush.config import AutopushConfig
 from autopush.db import DatabaseManager, DynamoDBResource  # noqa
 from autopush.exceptions import InvalidConfig
@@ -138,15 +136,14 @@ class AutopushMultiService(MultiService):
 
         """
         ns = cls.parse_args(cls.config_files if use_files else [], args)
-        if not ns.no_aws:
-            logging.HOSTNAME = utils.get_ec2_instance_id()
         PushLogger.setup_logging(
             cls.logger_name,
             log_level=ns.log_level or ("debug" if ns.debug else "info"),
             log_format="text" if ns.human_logs else "json",
             log_output=ns.log_output,
             sentry_dsn=bool(os.environ.get("SENTRY_DSN")),
-            firehose_delivery_stream=ns.firehose_stream_name
+            firehose_delivery_stream=ns.firehose_stream_name,
+            no_aws=ns.no_aws
         )
         try:
             app = cls.from_argparse(ns, resource=resource)

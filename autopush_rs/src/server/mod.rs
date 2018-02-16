@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::env;
 use std::ffi::CStr;
 use std::io;
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::SocketAddr;
 use std::panic;
 use std::panic::PanicInfo;
 use std::path::PathBuf;
@@ -67,11 +67,8 @@ struct AutopushServerInner {
 #[repr(C)]
 pub struct AutopushServerOptions {
     pub debug: i32,
-    pub router_ip: *const c_char,
-    pub host_ip: *const c_char,
     pub router_port: u16,
     pub port: u16,
-    pub url: *const c_char,
     pub ssl_key: *const c_char,
     pub ssl_cert: *const c_char,
     pub ssl_dh_param: *const c_char,
@@ -97,11 +94,8 @@ pub struct Server {
 
 pub struct ServerOptions {
     pub debug: bool,
-    pub host_ip: String,
-    pub router_ip: String,
     pub router_port: u16,
     pub port: u16,
-    pub url: String,
     pub ssl_key: Option<PathBuf>,
     pub ssl_cert: Option<PathBuf>,
     pub ssl_dh_param: Option<PathBuf>,
@@ -113,11 +107,6 @@ pub struct ServerOptions {
     pub statsd_host: Option<String>,
     pub statsd_port: u16,
     pub logger: util::LogGuards,
-}
-
-/// Resolve a hostname into a SocketAddr with a specific port
-fn resolve_with_port(host: &str, port: u16) -> Result<SocketAddr> {
-    (host, port).to_socket_addrs()?.next().ok_or(Error::from("invalid host/port"))
 }
 
 #[no_mangle]
@@ -155,24 +144,13 @@ pub extern "C" fn autopush_server_new(
     rt::catch(err, || unsafe {
         let opts = &*opts;
 
-        let hostname = to_s(opts.host_ip)
-            .expect("hostname must be specified")
-            .as_ref();
-
-        let logger = util::init_logging(opts.json_logging != 0, hostname);
+        let logger = util::init_logging(opts.json_logging != 0);
         let opts = ServerOptions {
             debug: opts.debug != 0,
-            host_ip: to_s(opts.host_ip)
-                .expect("hostname must be specified")
-                .to_string(),
-            router_ip: to_s(opts.router_ip)
-                .expect("router hostname must be specified")
-                .to_string(),
             port: opts.port,
             router_port: opts.router_port,
             statsd_host: to_s(opts.statsd_host).map(|s| s.to_string()),
             statsd_port: opts.statsd_port,
-            url: to_s(opts.url).expect("url must be specified").to_string(),
             ssl_key: to_s(opts.ssl_key).map(PathBuf::from),
             ssl_cert: to_s(opts.ssl_cert).map(PathBuf::from),
             ssl_dh_param: to_s(opts.ssl_dh_param).map(PathBuf::from),
@@ -281,8 +259,7 @@ impl Server {
             // Internal HTTP server setup
             {
                 let handle = core.handle();
-                let addr = resolve_with_port(&srv.opts.router_ip, srv.opts.router_port)
-                    .expect("Invalid router_ip/port");
+                let addr = SocketAddr::from(([0, 0, 0, 0], srv.opts.router_port));
                 let push_listener = TcpListener::bind(&addr, &handle).unwrap();
                 let http = Http::<hyper::Chunk>::new();
                 let push_srv = push_listener.incoming().for_each(move |(socket, _)| {
@@ -347,8 +324,7 @@ impl Server {
             tls_acceptor: tls::configure(opts),
             metrics: metrics_from_opts(opts)?,
         });
-        let addr = resolve_with_port(&srv.opts.host_ip, srv.opts.port)
-            .expect("Invalid host_ip/port");
+        let addr = SocketAddr::from(([0, 0, 0, 0], srv.opts.port));
         let ws_listener = TcpListener::bind(&addr, &srv.handle)?;
 
         let handle = core.handle();

@@ -25,7 +25,7 @@ from twisted.logger import (
 )
 from zope.interface import implementer
 
-HOSTNAME = socket.getfqdn()
+from autopush.utils import get_ec2_instance_id
 
 # A complete set of keys we don't include in Fields from a log event
 IGNORED_KEYS = frozenset([
@@ -58,6 +58,9 @@ IGNORED_KEYS = frozenset([
 # whether the global LogBeginner.beginLoggingTo has been called: it
 # should only be called once
 began_logging = False
+
+# an ec2 instance id or falling back to the hostname
+instance_id_or_hostname = None
 
 
 def begin_or_register(observer, redirectStandardIO=False, **kwargs):
@@ -179,7 +182,7 @@ class PushLogger(object):
             return reply
 
         msg = {
-            "Hostname": HOSTNAME,
+            "Hostname": instance_id_or_hostname,
             "Timestamp": ts * 1000 * 1000 * 1000,
             "Type": "twisted:log",
             "Severity": event.get("severity") or severity,
@@ -222,7 +225,13 @@ class PushLogger(object):
     @classmethod
     def setup_logging(cls, logger_name, log_level="info", log_format="json",
                       log_output="stdout", sentry_dsn=None,
-                      firehose_delivery_stream=None):
+                      firehose_delivery_stream=None,
+                      no_aws=False):
+        global instance_id_or_hostname
+        if not instance_id_or_hostname:
+            instance_id = None if no_aws else get_ec2_instance_id()
+            instance_id_or_hostname = instance_id or socket.getfqdn()
+
         pl = cls(logger_name, log_level=log_level, log_format=log_format,
                  log_output=log_output, sentry_dsn=sentry_dsn,
                  firehose_delivery_stream=firehose_delivery_stream)

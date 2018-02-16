@@ -135,7 +135,7 @@ def base64url_decode(string):
 
 
 def get_amid():
-    # type: () -> str
+    # type: () -> Optional[str]
     """Fetch the AMI instance ID
 
     """
@@ -145,11 +145,11 @@ def get_amid():
             timeout=1)
         return resp.content
     except (requests.HTTPError, requests.ConnectionError):
-        return "Unknown"
+        return None
 
 
 def get_ec2_instance_id():
-    # type: () -> str
+    # type: () -> Optional[str]
     """Fetch the EC2 instance-id
 
     """
@@ -159,7 +159,7 @@ def get_ec2_instance_id():
             timeout=1)
         return resp.content
     except (requests.HTTPError, requests.ConnectionError):
-        return "Unknown"
+        return None
 
 
 def decipher_public_key(key_data):

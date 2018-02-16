@@ -8,11 +8,12 @@ crate-type = ["cdylib"]
 
 [dependencies]
 bytes = "0.4.6"
-cadence = { git = "https://github.com/tshlabs/cadence", rev = "1a3c90f73c88cab0"}
+cadence = "0.13.1"
 chrono = "0.4.0"
 env_logger = { version = "0.5.3", default-features = false }
 error-chain = "0.11.0"
 futures = "0.1.18"
+hostname = "0.1.4"
 httparse = "1.2.4"
 hyper = "0.11.15"
 libc = "0.2.36"
@@ -21,6 +22,7 @@ libc = "0.2.36"
 # log: Use this for release builds (leave in for commits)
 log = { version = "0.4.1", features = ["max_level_trace", "release_max_level_warn"] }
 openssl = "0.10.2"
+reqwest = "0.8.4"
 sentry = "0.2.0"
 serde = "1.0.27"
 serde_derive = "1.0.27"

@@ -232,7 +232,7 @@ class StoreMessagesResponse(OutputCommand):
 ###############################################################################
 class WebPushServer(object):
     def __init__(self, conf, db, num_threads=10):
-        # type: (AutopushConfig, DatabaseManager, int) -> WebPushServer
+        # type: (AutopushConfig, DatabaseManager, int) -> None
         self.conf = conf
         self.db = db
         self.db.setup_tables()
@@ -244,7 +244,7 @@ class WebPushServer(object):
         self.running = False
 
     def start(self):
-        # type: (int) -> None
+        # type: () -> None
         self.running = True
         for _ in range(self.num_threads):
             self.workers.append(
@@ -291,7 +291,7 @@ class WebPushServer(object):
 
 class CommandProcessor(object):
     def __init__(self, conf, db):
-        # type: (AutopushConfig, DatabaseManager) -> CommandProcessor
+        # type: (AutopushConfig, DatabaseManager) -> None
         self.conf = conf
         self.db = db
         self.hello_processor = HelloCommand(conf, db)

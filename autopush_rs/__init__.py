@@ -27,14 +27,11 @@ class AutopushServer(object):
         cfg.close_handshake_timeout = conf.close_handshake_timeout
         cfg.max_connections = conf.max_connections
         cfg.open_handshake_timeout = 5
-        cfg.host_ip = ffi_from_buffer(conf.hostname)
-        cfg.router_ip = ffi_from_buffer(conf.router_hostname)
-        cfg.router_port = conf.router_port
         cfg.port = conf.port
+        cfg.router_port = conf.router_port
         cfg.ssl_cert = ffi_from_buffer(conf.ssl.cert)
         cfg.ssl_dh_param = ffi_from_buffer(conf.ssl.dh_param)
         cfg.ssl_key = ffi_from_buffer(conf.ssl.key)
-        cfg.url = ffi_from_buffer(conf.ws_url)
         cfg.json_logging = True
         cfg.statsd_host = ffi_from_buffer(conf.statsd_host)
         cfg.statsd_port = conf.statsd_port
