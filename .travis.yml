@@ -2,11 +2,14 @@ language: python
 cache:
   directories:
     - $HOME/.cargo
-    - cargo
     - autopush_rs/target
     - $HOME/.cache/pip
 sudo: required
 dist: trusty
+
+env:
+  global:
+    - WITH_RUST=release
 
 matrix:
   include:
@@ -19,10 +22,6 @@ matrix:
       env: TOXENV=py36-mypy WITH_RUST=false
   allow_failures:
     - env: TOXENV=py36-mypy WITH_RUST=false
-
-before_install:
-# https://github.com/travis-ci/travis-ci/issues/7940
-- sudo rm -f /etc/boto.cfg
 
 install:
 - ${DDB:+make ddb}
