@@ -5,6 +5,7 @@ import time
 import json
 import decimal
 import requests
+import socket
 import ssl
 
 import pytest
@@ -161,6 +162,25 @@ class APNSRouterTestCase(unittest.TestCase):
 
         assert ex.value.response_body == ('APNS returned an error '
                                           'processing request')
+        assert ex.value.status_code == 502
+        self.flushLoggedErrors()
+
+    @inlineCallbacks
+    def test_connection_fail_error(self):
+
+        def raiser(*args, **kwargs):
+            error = socket.error()
+            error.errno = socket.errno.EPIPE
+            raise error
+
+        self.router.apns['firefox'].connections[1].request = Mock(
+            side_effect=raiser)
+
+        with pytest.raises(RouterException) as ex:
+            yield self.router.route_notification(self.notif, self.router_data)
+
+        assert ex.value.response_body == "APNS returned an error processing " \
+                                         "request"
         assert ex.value.status_code == 502
         self.flushLoggedErrors()
 

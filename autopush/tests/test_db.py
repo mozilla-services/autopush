@@ -349,13 +349,16 @@ class MessageTestCase(unittest.TestCase):
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
 
-        message.store_message(make_webpush_notification(self.uaid, chid))
-        message.store_message(make_webpush_notification(self.uaid, chid))
-        message.store_message(make_webpush_notification(self.uaid, chid))
+        # Ensure that sort keys are fetched from DB in order.
+        notifs = [make_webpush_notification(self.uaid, chid) for x in range(3)]
+        keys = [notif.sort_key for notif in notifs]
+        for msg in notifs:
+            message.store_message(msg)
 
         _, all_messages = message.fetch_timestamp_messages(
             uuid.UUID(self.uaid), " ")
-        assert len(all_messages) == 3
+        assert len(all_messages) == len(notifs)
+        assert keys == [msg.sort_key for msg in all_messages]
 
     def test_message_storage_overwrite(self):
         """Test that store_message can overwrite existing messages which

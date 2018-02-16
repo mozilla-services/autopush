@@ -238,7 +238,10 @@ class BaseWebHandler(BaseHandler):
         running.
 
         """
+        from twisted.internet.error import ConnectionDone
         fmt = fail.value.message or 'Exception'
+        if isinstance(fail.value, ConnectionDone):
+            return
         self.log.failure(format=fmt, failure=fail,
                          status_code=500, errno=999,
                          client_info=self._client_info)

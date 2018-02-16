@@ -1,5 +1,5 @@
 """APNS Router"""
-import ssl
+import socket
 import uuid
 from typing import Any  # noqa
 
@@ -157,22 +157,11 @@ class APNSRouter(object):
                                        self._base_tags,
                                        application=rel_channel,
                                        reason="connection_error"))
-        except HTTP20Error:
+        except (HTTP20Error, socket.error):
             self.metrics.increment("notification.bridge.connection.error",
                                    tags=make_tags(self._base_tags,
                                                   application=rel_channel,
                                                   reason="http2_error"))
-        except ssl.SSLError as e:
-            # can only str match this (for autopush#1048)
-            if not (e.errno == ssl.SSL_ERROR_SSL and
-                    str(e).startswith("[SSL: BAD_WRITE_RETRY]")):
-                raise  # pragma: nocover
-            self.metrics.increment(
-                "notification.bridge.connection.error",
-                tags=make_tags(self._base_tags,
-                               application=rel_channel,
-                               reason="bad_write_retry_error")
-            )
         if not success:
             raise RouterException(
                 "Server error",

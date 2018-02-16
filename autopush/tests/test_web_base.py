@@ -193,6 +193,15 @@ class TestBase(unittest.TestCase):
         self.base._response_err(fail)
         self.status_mock.assert_called_with(500, reason=None)
 
+    def test_connection_err(self):
+        from twisted.internet.error import ConnectionDone
+        try:
+            raise ConnectionDone("Connection was closed cleanly.")
+        except Exception:
+            fail = Failure()
+        self.base._response_err(fail)
+        assert not self.status_mock.called
+
     def test_overload_err(self):
         try:
             raise ClientError(

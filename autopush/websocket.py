@@ -52,6 +52,7 @@ from boto.dynamodb2.exceptions import (
     ItemNotFound
 )
 from botocore.exceptions import ClientError
+from botocore.vendored.requests.packages import urllib3
 from twisted.internet import reactor
 from twisted.internet.defer import (
     Deferred,
@@ -60,8 +61,8 @@ from twisted.internet.defer import (
 )
 from twisted.internet.error import (
     ConnectError,
-    ConnectionClosed
-)
+    ConnectionClosed,
+    DNSLookupError)
 from twisted.internet.interfaces import IProducer
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
@@ -375,7 +376,12 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         fail.trap(CancelledError)
 
     def trap_connection_err(self, fail):
-        fail.trap(ConnectError, ConnectionClosed, ResponseFailed)
+        fail.trap(ConnectError, ConnectionClosed, ResponseFailed,
+                  DNSLookupError)
+
+    def trap_boto3_err(self, fail):
+        # trap boto3 ConnectTimeoutError in retry
+        fail.trap(urllib3.exceptions.ConnectTimeoutError)
 
     def force_retry(self, func, *args, **kwargs):
         # type: (Callable[..., Any], *Any, **Any) -> Deferred
@@ -629,6 +635,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             url.encode("utf8"),
         ).addCallback(IgnoreBody.ignore)
         d.addErrback(self.trap_connection_err)
+        d.addErrback(self.trap_boto3_err)
         d.addErrback(self.log_failure, extra="Failed to notify node")
 
     def returnError(self, messageType, reason, statusCode, close=True,
@@ -837,6 +844,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                 url = "%s/notif/%s/%s" % (node_id, self.ps.uaid, last_connect)
                 d = self.factory.agent.request("DELETE", url.encode("utf8"))
                 d.addErrback(self.trap_connection_err)
+                d.addErrback(self.trap_boto3_err)
                 d.addErrback(self.log_failure,
                              extra="Failed to delete old node")
 
