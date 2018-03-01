@@ -1,7 +1,6 @@
 import sys
 import uuid
 
-from boto.exception import BotoServerError
 from botocore.exceptions import ClientError
 from mock import Mock, patch
 from twisted.internet.defer import Deferred
@@ -202,7 +201,7 @@ class TestBase(unittest.TestCase):
         self.base._response_err(fail)
         assert not self.status_mock.called
 
-    def test_overload_err(self):
+    def test_boto_err_overload(self):
         try:
             raise ClientError(
                 {'Error': {
@@ -211,10 +210,10 @@ class TestBase(unittest.TestCase):
             )
         except ClientError:
             fail = Failure()
-        self.base._overload_err(fail)
+        self.base._boto_err(fail)
         self.status_mock.assert_called_with(503, reason=None)
 
-    def test_client_err(self):
+    def test_boto_err_random(self):
         try:
             raise ClientError(
                 {'Error': {
@@ -222,14 +221,6 @@ class TestBase(unittest.TestCase):
                 'mock_update_item'
             )
         except ClientError:
-            fail = Failure()
-        self.base._overload_err(fail)
-        self.status_mock.assert_called_with(500, reason=None)
-
-    def test_boto_err(self):
-        try:
-            raise BotoServerError(503, "derp")
-        except BotoServerError:
             fail = Failure()
         self.base._boto_err(fail)
         self.status_mock.assert_called_with(503, reason=None)

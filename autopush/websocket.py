@@ -673,9 +673,6 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                                   self.error_finish_overload, message_type)
             d.addErrback(self.trap_cancel)
         else:
-            if (failure.value.response["Error"]["Code"] !=
-                    "ProvisionedThroughputExceededException"):
-                return failure  # pragma nocover
             send = {"messageType": "error", "reason": "overloaded",
                     "status": 503}
             self.sendJSON(send)
