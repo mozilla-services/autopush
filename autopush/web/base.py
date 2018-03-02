@@ -2,7 +2,6 @@ import json
 import time
 from functools import wraps
 
-from boto.exception import BotoServerError
 from botocore.exceptions import ClientError
 from marshmallow.schema import UnmarshalResult  # noqa
 from typing import (  # noqa
@@ -92,7 +91,8 @@ class ThreadedValidate(object):
             d.addBoth(self._track_validation_timing, request_handler,
                       start_time)
             d.addCallback(self._call_func, func, request_handler)
-            d.addErrback(request_handler._overload_err)
+            # Errbacks for _validate_request: handler functions should
+            # explicitly manage their own Errbacks
             d.addErrback(request_handler._boto_err)
             d.addErrback(request_handler._validation_err)
             d.addErrback(request_handler._response_err)
@@ -248,8 +248,8 @@ class BaseWebHandler(BaseHandler):
         self._write_response(500, 999, message="An unexpected server error"
                                                " occurred.")
 
-    def _overload_err(self, fail):
-        """errBack for throughput provisioned exceptions"""
+    def _boto_err(self, fail):
+        """errBack for boto exceptions (ClientError)"""
         fail.trap(ClientError)
         if (fail.value.response['Error']['Code'] ==
                 "ProvisionedThroughputExceededException"):
@@ -259,18 +259,9 @@ class BaseWebHandler(BaseHandler):
                                  message="Please slow message send rate")
             return
         self.log.debug(format="Unhandled Client Error: {}".format(
-            json.dumps(fail.value.response)), status_code=500,
+            json.dumps(fail.value.response)), status_code=503, errno=202,
             client_info=self._client_info)
-        self._write_response(500, 999, message="Unexpected Error")
-
-    def _boto_err(self, fail):
-        """errBack for random boto exceptions"""
-        fail.trap(BotoServerError)
-        self.log.debug(format="BOTO Error: %s" % str(fail.value),
-                       status_code=503, errno=202,
-                       client_info=self._client_info)
-        self._write_response(503, errno=202,
-                             message="Communication error, please retry")
+        self._write_response(503, 202, message="Unexpected Error")
 
     def _router_response(self, response, router_type, vapid):
         for name, val in response.headers.items():
@@ -342,7 +333,6 @@ class BaseWebHandler(BaseHandler):
     def _db_error_handling(self, d):
         """Tack on the common error handling for a dynamodb request and
         uncaught exceptions"""
-        d.addErrback(self._overload_err)
         d.addErrback(self._boto_err)
         d.addErrback(self._response_err)
         return d

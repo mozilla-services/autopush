@@ -1104,6 +1104,31 @@ class WebsocketTestCase(unittest.TestCase):
         assert msg["messageType"] == "error"
         assert msg["reason"] == "overloaded"
 
+    @inlineCallbacks
+    def test_register_ise(self):
+        self._connect()
+        chid = str(uuid.uuid4())
+        self.proto.ps.uaid = uuid.uuid4().hex
+        msg_mock = Mock(spec=db.Message)
+        msg_mock.register_channel = register = Mock()
+        self.proto.ps.db.message_table = Mock(return_value=msg_mock)
+
+        def raise_condition(*args, **kwargs):
+            raise ClientError(
+                {'Error': {'Code': 'InternalServerError'}},
+                'mock_update_item'
+            )
+
+        register.side_effect = raise_condition
+
+        yield self.proto.process_register(dict(channelID=chid))
+        assert msg_mock.register_channel.called
+        assert self.send_mock.called
+        args, _ = self.send_mock.call_args
+        msg = json.loads(args[0])
+        assert msg["messageType"] == "error"
+        assert msg["reason"] == "overloaded"
+
     def test_check_kill_self(self):
         self._connect()
         node_id = "http://localhost"
