@@ -1,7 +1,6 @@
 import re
 import time
 
-from boto.dynamodb2.exceptions import ItemNotFound
 from cryptography.fernet import InvalidToken
 from cryptography.exceptions import InvalidSignature
 from marshmallow import (
@@ -32,6 +31,7 @@ from autopush.db import hasher
 from autopush.exceptions import (
     InvalidRequest,
     InvalidTokenException,
+    ItemNotFound,
     VapidAuthException,
 )
 from autopush.types import JSONDict  # noqa

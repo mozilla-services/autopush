@@ -39,6 +39,7 @@ from autopush.db import (
     has_connected_this_month,
     Message,
 )
+from autopush.exceptions import ItemNotFound
 from autopush.logging import begin_or_register
 from autopush.main import ConnectionApplication, EndpointApplication
 from autopush.utils import base64url_encode, normalize_id
@@ -454,7 +455,6 @@ class Test_Data(IntegrationBase):
 
     @inlineCallbacks
     def test_webpush_data_delivery_to_connected_client_uaid_fail(self):
-        from boto.dynamodb2.exceptions import ItemNotFound
         client = yield self.quick_register()
         self.conn.db.router.get_uaid = Mock(side_effect=ItemNotFound)
         assert client.channels

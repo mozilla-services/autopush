@@ -4,9 +4,6 @@ import uuid
 from hashlib import sha256
 
 import ecdsa
-from boto.dynamodb2.exceptions import (
-    ItemNotFound,
-)
 from cryptography.fernet import InvalidToken
 from cryptography.exceptions import InvalidSignature
 from jose import jws
@@ -17,7 +14,11 @@ from twisted.internet.defer import inlineCallbacks
 from twisted.trial import unittest
 
 from autopush.metrics import SinkMetrics
-from autopush.exceptions import InvalidRequest, InvalidTokenException
+from autopush.exceptions import (
+    InvalidRequest,
+    InvalidTokenException,
+    ItemNotFound
+)
 from autopush.tests.support import test_db
 import autopush.utils as utils
 

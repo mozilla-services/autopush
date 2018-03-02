@@ -9,7 +9,6 @@ from attr import (
     attrs,
     attrib,
 )
-from boto.dynamodb2.exceptions import ItemNotFound
 from botocore.exceptions import ClientError
 from typing import (  # noqa
     Dict,
@@ -29,6 +28,7 @@ from autopush.db import (  # noqa
 )
 
 from autopush.config import AutopushConfig  # noqa
+from autopush.exceptions import ItemNotFound
 from autopush.metrics import IMetrics  # noqa
 from autopush.web.webpush import MAX_TTL
 from autopush.types import JSONDict  # noqa

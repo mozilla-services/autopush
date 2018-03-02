@@ -9,6 +9,7 @@ import socket
 import ssl
 
 import pytest
+from botocore.exceptions import ClientError
 from mock import Mock, PropertyMock, patch
 from twisted.trial import unittest
 from twisted.internet.error import ConnectionRefusedError
@@ -24,7 +25,7 @@ from autopush.config import AutopushConfig
 from autopush.db import (
     Message
 )
-from autopush.exceptions import RouterException
+from autopush.exceptions import ItemNotFound, RouterException
 from autopush.metrics import SinkMetrics
 from autopush.router import (
     APNSRouter,
@@ -1116,10 +1117,12 @@ class WebPushRouterTestCase(unittest.TestCase):
         assert resp == expected
 
     def test_route_to_busy_node_save_throws_db_error(self):
-        from boto.dynamodb2.exceptions import JSONResponseError
 
         def throw():
-            raise JSONResponseError(500, "Whoops")
+            raise ClientError(
+                {'Error': {'Code': 'InternalServerError'}},
+                'mock_store_message'
+            )
 
         self.agent_mock.request.return_value = response_mock = Mock()
         response_mock.code = 202
@@ -1139,10 +1142,12 @@ class WebPushRouterTestCase(unittest.TestCase):
         return d
 
     def test_route_lookup_uaid_fails(self):
-        from boto.dynamodb2.exceptions import JSONResponseError
 
         def throw():
-            raise JSONResponseError(500, "Whoops")
+            raise ClientError(
+                {'Error': {'Code': 'InternalServerError'}},
+                'mock_get_uaid'
+            )
 
         self.message_mock.store_message.return_value = True
         self.db.message_table = Mock(return_value=self.message_mock)
@@ -1161,7 +1166,6 @@ class WebPushRouterTestCase(unittest.TestCase):
         return d
 
     def test_route_lookup_uaid_not_found(self):
-        from boto.dynamodb2.exceptions import ItemNotFound
 
         def throw():
             raise ItemNotFound()
@@ -1198,7 +1202,6 @@ class WebPushRouterTestCase(unittest.TestCase):
         return d
 
     def test_route_and_clear_failure(self):
-        from boto.dynamodb2.exceptions import JSONResponseError
         self.agent_mock.request = Mock(side_effect=ConnectionRefusedError)
         self.message_mock.store_message.return_value = True
         self.message_mock.all_channels.return_value = (True, [dummy_chid])
@@ -1208,7 +1211,10 @@ class WebPushRouterTestCase(unittest.TestCase):
         self.router_mock.get_uaid.return_value = router_data
 
         def throw():
-            raise JSONResponseError(500, "Whoops")
+            raise ClientError(
+                {'Error': {'Code': 'InternalServerError'}},
+                'mock_clear_node'
+            )
 
         self.router_mock.clear_node.side_effect = MockAssist([throw])
         self.router.message_id = uuid.uuid4().hex

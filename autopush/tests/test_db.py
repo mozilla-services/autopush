@@ -4,9 +4,6 @@ import uuid
 from datetime import datetime, timedelta
 
 from autopush.websocket import ms_time
-from boto.dynamodb2.exceptions import (
-    ItemNotFound,
-)
 from botocore.exceptions import ClientError
 from mock import Mock, patch
 import pytest
@@ -27,7 +24,7 @@ from autopush.db import (
     DatabaseManager,
     DynamoDBResource
     )
-from autopush.exceptions import AutopushException
+from autopush.exceptions import AutopushException, ItemNotFound
 from autopush.metrics import SinkMetrics
 from autopush.utils import WebPushNotification
 

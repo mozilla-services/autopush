@@ -46,12 +46,8 @@ from attr import (
     Factory,
     Attribute)
 
-from boto.dynamodb2.exceptions import (
-    ItemNotFound,
-)
 import boto3
 import botocore
-from boto.dynamodb2.table import Table  # noqa
 from boto3.resources.base import ServiceResource  # noqa
 from boto3.dynamodb.conditions import Key
 from boto3.exceptions import Boto3Error
@@ -77,9 +73,8 @@ from twisted.internet.threads import deferToThread
 
 import autopush.metrics
 from autopush import constants
-from autopush.exceptions import AutopushException
+from autopush.exceptions import AutopushException, ItemNotFound
 from autopush.metrics import IMetrics  # noqa
-from autopush.types import ItemLike  # noqa
 from autopush.utils import (
     generate_hash,
     normalize_id,
@@ -95,7 +90,7 @@ MAX_EXPIRY = 2592000  # pragma: nocover
 
 # Typing
 T = TypeVar('T')  # noqa
-TableFunc = Callable[[str, int, int, ServiceResource], Table]
+TableFunc = Callable[[str, int, int, ServiceResource], Any]
 
 key_hash = ""
 TRACK_DB_CALLS = False
@@ -149,7 +144,7 @@ def create_rotating_message_table(
         write_throughput=5,   # type: int
         boto_resource=None    # type: DynamoDBResource
         ):
-    # type: (...) -> Table  # noqa
+    # type: (...) -> Any  # noqa
     """Create a new message table for webpush style message storage"""
     tablename = make_rotating_tablename(prefix, delta, date)
 
@@ -227,7 +222,7 @@ def get_rotating_message_tablename(
 def create_router_table(tablename="router", read_throughput=5,
                         write_throughput=5,
                         boto_resource=None):
-    # type: (str, int, int, DynamoDBResource) -> Table
+    # type: (str, int, int, DynamoDBResource) -> Any
     """Create a new router table
 
     The last_connect index is a value used to determine the last month a user
@@ -332,7 +327,7 @@ def _expiry(ttl):
 
 def get_router_table(tablename="router", read_throughput=5,
                      write_throughput=5, boto_resource=None):
-    # type: (str, int, int, DynamoDBResource) -> Table
+    # type: (str, int, int, DynamoDBResource) -> Any
     """Get the main router table object
 
     Creates the table if it doesn't already exist, otherwise returns the
@@ -401,7 +396,7 @@ def track_provisioned(func):
 
 
 def has_connected_this_month(item):
-    # type: (ItemLike) -> bool
+    # type: (Dict[str, Any]) -> bool
     """Whether or not a router item has connected this month"""
     last_connect = item.get("last_connect")
     if not last_connect:
@@ -790,7 +785,7 @@ class Router(object):
 
     @track_provisioned
     def register_user(self, data):
-        # type: (ItemLike) -> Tuple[bool, Dict[str, Any]]
+        # type: (Dict[str, Any]) -> Tuple[bool, Dict[str, Any]]
         """Register this user
 
         If a record exists with a newer ``connected_at``, then the user will

@@ -3,7 +3,6 @@ import os
 import signal
 import subprocess
 
-import boto
 import psutil
 from twisted.internet import reactor
 
@@ -19,7 +18,7 @@ boto_resource = None
 
 
 def setUp():
-    for name in ('boto', 'boto3', 'botocore'):
+    for name in ('boto3', 'botocore'):
         logging.getLogger(name).setLevel(logging.CRITICAL)
     global ddb_process, boto_resource
     cmd = " ".join([
@@ -53,11 +52,6 @@ def tearDown():
     for p in [proc] + child_procs:
         os.kill(p.pid, signal.SIGTERM)
     ddb_process.wait()
-
-    # Clear out the boto config that was loaded so the rest of the tests run
-    # fine
-    for section in boto.config.sections():      # pragma: nocover
-        boto.config.remove_section(section)
 
 
 _multiprocess_shared_ = True

@@ -1,7 +1,7 @@
 """Health Check HTTP Handler"""
 
 import cyclone.web
-from boto.dynamodb2.exceptions import InternalServerError
+from botocore.exceptions import ClientError
 from twisted.internet.defer import DeferredList
 from twisted.internet.threads import deferToThread
 
@@ -61,7 +61,9 @@ class HealthHandler(BaseWebHandler):
         cause = self._health_checks[name] = {"status": "NOT OK"}
         if failure.check(MissingTableException):
             cause["error"] = failure.value.message
-        elif failure.check(InternalServerError):  # pragma nocover
+        elif (failure.check(ClientError) and
+              failure.value.response["Error"]["Code"] ==
+              "InternalServerError"):  # pragma nocover
             cause["error"] = "Server error"
         else:
             cause["error"] = "Internal error"     # pragma nocover

@@ -64,3 +64,7 @@ class LogCheckError(Exception):
 
 class InvalidConfig(Exception):
     """Error in initialization of AutopushConfig"""
+
+
+class ItemNotFound(Exception):
+    """Signals missing DynamoDB Item data"""

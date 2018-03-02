@@ -10,8 +10,7 @@ import time
 from StringIO import StringIO
 from typing import Any  # noqa
 
-from boto.dynamodb2.exceptions import ItemNotFound
-from boto.exception import JSONResponseError
+from botocore.exceptions import ClientError
 from twisted.internet.threads import deferToThread
 from twisted.web.client import FileBodyProducer
 from twisted.internet.defer import (
@@ -27,7 +26,7 @@ from twisted.internet.error import (
 from twisted.logger import Logger
 from twisted.web._newclient import ResponseFailed
 
-from autopush.exceptions import RouterException
+from autopush.exceptions import ItemNotFound, RouterException
 from autopush.metrics import make_tags
 from autopush.protocol import IgnoreBody
 from autopush.router.interface import RouterResponse
@@ -101,7 +100,7 @@ class WebPushRouter(object):
         #   - Error (db error): Done, return 503
         try:
             yield self._save_notification(uaid_data, notification)
-        except JSONResponseError:
+        except ClientError:
             raise RouterException("Error saving to database",
                                   status_code=503,
                                   response_body="Retry Request",
@@ -118,7 +117,7 @@ class WebPushRouter(object):
         #   - Error (no client) : Done, return 404
         try:
             uaid_data = yield deferToThread(router.get_uaid, uaid)
-        except JSONResponseError:
+        except ClientError:
             returnValue(self.stored_response(notification))
         except ItemNotFound:
             self.metrics.increment("updates.client.deleted")
@@ -240,4 +239,4 @@ class WebPushRouter(object):
     #############################################################
     def _eat_db_err(self, fail):
         """errBack for ignoring provisioned throughput errors"""
-        fail.trap(JSONResponseError)
+        fail.trap(ClientError)
