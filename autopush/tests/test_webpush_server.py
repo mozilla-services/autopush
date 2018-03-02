@@ -6,7 +6,6 @@ from uuid import uuid4, UUID
 
 import attr
 import factory
-from boto.dynamodb2.exceptions import ItemNotFound
 from mock import Mock
 from twisted.logger import globalLogPublisher
 import pytest
@@ -19,6 +18,7 @@ from autopush.db import (
 )
 from autopush.metrics import SinkMetrics
 from autopush.config import AutopushConfig
+from autopush.exceptions import ItemNotFound
 from autopush.logging import begin_or_register
 from autopush.tests.support import TestingLogObserver
 from autopush.utils import WebPushNotification, ns_time

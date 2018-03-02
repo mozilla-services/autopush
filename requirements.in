@@ -1,7 +1,6 @@
 apns
 attrs
 autobahn[twisted]
-boto
 boto3
 cffi
 click

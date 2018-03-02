@@ -10,7 +10,6 @@ from typing import (  # noqa
 )
 
 import simplejson as json
-from boto.dynamodb2.exceptions import ItemNotFound
 from cryptography.hazmat.primitives import constant_time
 from marshmallow import (
     Schema,
@@ -25,7 +24,7 @@ from twisted.internet.defer import Deferred  # noqa
 from twisted.internet.threads import deferToThread
 
 from autopush.db import generate_last_connect, hasher
-from autopush.exceptions import InvalidRequest, RouterException
+from autopush.exceptions import InvalidRequest, ItemNotFound, RouterException
 from autopush.types import JSONDict  # noqa
 from autopush.utils import generate_hash, ms_time
 from autopush.web.base import (

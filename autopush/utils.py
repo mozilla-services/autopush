@@ -26,7 +26,6 @@ from jose import jwt
 
 from autopush.exceptions import (InvalidTokenException, VapidAuthException)
 from autopush.jwt import repad, VerifyJWT
-from autopush.types import ItemLike  # noqa
 from autopush.web.base import AUTH_SCHEMES
 
 
@@ -469,7 +468,7 @@ class WebPushNotification(object):
 
     @classmethod
     def from_message_table(cls, uaid, item):
-        # type: (uuid.UUID, ItemLike) -> WebPushNotification
+        # type: (uuid.UUID, Dict[str, Any]) -> WebPushNotification
         """Create a WebPushNotification from a message table item"""
         key_info = cls.parse_sort_key(item["chidmessageid"])
         if key_info["api_ver"] in ["01", "02"]:

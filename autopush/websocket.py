@@ -48,9 +48,6 @@ from autobahn.twisted.websocket import (
     WebSocketServerProtocol
 )
 from autobahn.websocket.protocol import ConnectionRequest  # noqa
-from boto.dynamodb2.exceptions import (
-    ItemNotFound
-)
 from botocore.exceptions import ClientError
 from botocore.vendored.requests.packages import urllib3
 from twisted.internet import reactor
@@ -91,7 +88,7 @@ from autopush.db import (
     generate_last_connect,
 )
 from autopush.db import DatabaseManager, Message  # noqa
-from autopush.exceptions import MessageOverloadException
+from autopush.exceptions import MessageOverloadException, ItemNotFound
 from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
 from autopush.metrics import IMetrics, make_tags  # noqa
