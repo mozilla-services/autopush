@@ -115,7 +115,7 @@ def glibc_malloc_info(stream):
             stream.writelines(fp.readlines())
 
 
-def jemalloc_stats(stream):
+def jemalloc_stats(stream):  # pragma: nocover
     """Write jemalloc's malloc_stats_print()"""
     try:
         malloc_stats_print = lib.malloc_stats_print
@@ -127,7 +127,7 @@ def jemalloc_stats(stream):
 
 
 @ffi.callback("void (*write_cb) (void *, const char *)")
-def _jemalloc_write_cb(handle, msg):
+def _jemalloc_write_cb(handle, msg):  # pragma: nocover
     """Callback for jemalloc's malloc_stats_print
 
     Writes to a Python stream passed via the cbopaque pointer

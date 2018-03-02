@@ -15,7 +15,7 @@ from twisted.internet.ssl import DefaultOpenSSLContextFactory
 
 try:
     SSL_PROTO = ssl.PROTOCOL_TLS
-except AttributeError:
+except AttributeError:  # pragma: nocover
     SSL_PROTO = ssl.PROTOCOL_SSLv23
 
 

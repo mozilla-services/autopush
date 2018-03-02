@@ -27,11 +27,8 @@ from twisted.logger import globalLogPublisher
 import autopush.db as db
 import autopush.tests
 from autopush.config import AutopushConfig
-from autopush.db import (
-    DatabaseManager,
-)
 from autopush.logging import begin_or_register
-from autopush.main import EndpointApplication
+from autopush.main import EndpointApplication, RustConnectionApplication
 from autopush.utils import base64url_encode
 from autopush.metrics import SinkMetrics
 from autopush.tests.support import TestingLogObserver
@@ -39,7 +36,6 @@ from autopush.tests.test_integration import (
     Client,
     _get_vapid,
 )
-from autopush.webpush_server import WebPushServer
 
 log = logging.getLogger(__name__)
 
@@ -113,13 +109,13 @@ class TestRustWebPush(unittest.TestCase):
         self.addCleanup(ep.stopService)
 
         # Websocket server
-        db = DatabaseManager.from_config(
+        self.conn = conn = RustConnectionApplication(
             conn_conf,
             resource=autopush.tests.boto_resource
         )
-        self.conn = WebPushServer(conn_conf, db, num_threads=2)
-        self.conn.start()
-        self.addCleanup(self.conn.stop)
+        conn.setup(rotate_tables=False, num_threads=2)
+        conn.startService()
+        self.addCleanup(conn.stopService)
 
     def endpoint_kwargs(self):
         return self._endpoint_defaults
