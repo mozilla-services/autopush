@@ -89,12 +89,14 @@ class DdbResourceTest(unittest.TestCase):
     @patch("boto3.resource")
     def test_ddb_no_endpoint(self, mresource):
         safe = os.getenv("AWS_LOCAL_DYNAMODB")
-        os.unsetenv("AWS_LOCAL_DYANMODB")
-        del(os.environ["AWS_LOCAL_DYNAMODB"])
-        DynamoDBResource(region_name="us-east-1")
-        assert mresource.call_args[0] == ('dynamodb',)
-        if safe:
-            os.environ["AWS_LOCAL_DYNAMODB"] = safe
+        try:
+            os.unsetenv("AWS_LOCAL_DYANMODB")
+            del(os.environ["AWS_LOCAL_DYNAMODB"])
+            DynamoDBResource(region_name="us-east-1")
+            assert mresource.call_args[0] == ('dynamodb',)
+        finally:
+            if safe:  # pragma: nocover
+                os.environ["AWS_LOCAL_DYNAMODB"] = safe
 
     def test_ddb_env(self):
         ddb_session_args = dict(
@@ -103,12 +105,14 @@ class DdbResourceTest(unittest.TestCase):
             aws_secret_access_key="BogusKey",
         )
         safe = os.getenv("AWS_DEFAULT_REGION")
-        os.environ["AWS_DEFAULT_REGION"] = "us-west-2"
-        boto_resource = DynamoDBResource(**ddb_session_args)
-        assert boto_resource._resource.meta.client.meta.region_name == \
-            'us-west-2'
-        if safe:
-            os.environ["AWS_DEFAULT_REGION"] = safe
+        try:
+            os.environ["AWS_DEFAULT_REGION"] = "us-west-2"
+            boto_resource = DynamoDBResource(**ddb_session_args)
+            assert boto_resource._resource.meta.client.meta.region_name == \
+                'us-west-2'
+        finally:
+            if safe:  # pragma: nocover
+                os.environ["AWS_DEFAULT_REGION"] = safe
 
 
 class DbCheckTestCase(unittest.TestCase):

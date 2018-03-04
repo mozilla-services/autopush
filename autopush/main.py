@@ -323,26 +323,21 @@ class RustConnectionApplication(AutopushMultiService):
     logger_name = "AutopushRust"
     push_server = None
 
-    def __init__(self, conf, resource=None):
-        # type: (AutopushConfig, DynamoDBResource) -> None
-        super(RustConnectionApplication, self).__init__(
-            conf,
-            resource=resource
-        )
-
-    def setup(self, rotate_tables=True):
+    def setup(self, rotate_tables=True, num_threads=10):
         super(RustConnectionApplication, self).setup(rotate_tables)
 
         self.db.setup(self.conf.preflight_uaid)
 
-        if self.conf.memusage_port:
-            self.add_memusage()
+        # No add_memusage: requires twisted
+        self.push_server = WebPushServer(
+            self.conf,
+            self.db,
+            num_threads=num_threads
+        )
 
-        self.push_server = WebPushServer(self.conf, self.db, num_threads=10)
-
-    def run(self):
+    def run(self):  # pragma: nocover
         try:
-            self.push_server.start()
+            self.startService()
             while True:
                 try:
                     # handle a graceful shutdown on SIGINT w/ a busy
@@ -352,14 +347,16 @@ class RustConnectionApplication(AutopushMultiService):
                 except KeyboardInterrupt:
                     return 1
         finally:
-            self.push_server.stop()
+            self.stopService()
 
-    @inlineCallbacks
+    def startService(self):
+        self.push_server.start()
+
     def stopService(self):
-        yield super(RustConnectionApplication, self).stopService()
+        self.push_server.stop()
 
     @classmethod
-    def from_argparse(cls, ns, resource=None):
+    def from_argparse(cls, ns, resource=None):  # pragma: nocover
         # type: (Namespace, DynamoDBResource) -> AutopushMultiService
         return super(RustConnectionApplication, cls)._from_argparse(
             ns,
