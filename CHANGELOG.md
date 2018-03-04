@@ -1,3 +1,24 @@
+<a name="1.41.0"></a>
+## 1.41.0 (2018-03-03)
+
+
+#### Bug Fixes
+
+*   have webpush router handle ClientErrors ([36ad90f8](https://github.com/mozilla-services/autopush/commit/36ad90f80dc4f4ce68afd818be374fc9a3c36a70), closes [#1138](https://github.com/mozilla-services/autopush/issues/1138))
+*   handle InternalServerErrors (ClientError subclass) ([62cbc40a](https://github.com/mozilla-services/autopush/commit/62cbc40a7c1fdc4d666ebcc390d482d2722297ed))
+*   add handler for https://sentry.prod.mozaws.net/operations/autopush-prod/issues/2277621/ ([ca5f7274](https://github.com/mozilla-services/autopush/commit/ca5f7274b69560e55bf34f2472605e1f9af0ae45))
+*   Silence remaining nuisance alarms ([3163e2ed](https://github.com/mozilla-services/autopush/commit/3163e2edcdc793fb80f2ea3043ed4f0c620f11dd))
+*   bind autopush_rs to all interfaces to match python ([b53a0058](https://github.com/mozilla-services/autopush/commit/b53a00585863076f30eaeb85edb17a3531a52cc7), closes [#1113](https://github.com/mozilla-services/autopush/issues/1113))
+*   reverse our filled in stack trace order ([73338ac7](https://github.com/mozilla-services/autopush/commit/73338ac7e326970134d912cd60bafa8eab4e2b94), closes [#1134](https://github.com/mozilla-services/autopush/issues/1134))
+*   make autopush_rs's ctrl-c work gracefully ([624de2dc](https://github.com/mozilla-services/autopush/commit/624de2dceb8e8f22916981f1273b86d1079ef1f9), closes [#1090](https://github.com/mozilla-services/autopush/issues/1090))
+
+#### Features
+
+*   drain pending notifications from the client rx queue ([09a985a9](https://github.com/mozilla-services/autopush/commit/09a985a9f14a24e25cf74d671c5d78524d53a0cc), closes [#1133](https://github.com/mozilla-services/autopush/issues/1133))
+*   update python dependencies to the latest versions ([edf99233](https://github.com/mozilla-services/autopush/commit/edf99233efee94e76577bd59822f038b137c1bba), closes [#1104](https://github.com/mozilla-services/autopush/issues/1104))
+
+
+
 <a name="1.40.1"></a>
 ## 1.40.1 (2018-02-06)
 
