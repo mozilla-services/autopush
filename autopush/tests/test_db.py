@@ -524,6 +524,18 @@ class RouterTestCase(unittest.TestCase):
                                         router_type="webpush"))
         assert res == (False, {})
 
+    def test_register_user_expired(self):
+        from time import time
+
+        router = Router(self.table_conf, SinkMetrics(), resource=self.resource)
+        expired = self._create_minimal_record()
+        uaid = expired["uaid"]
+        expired["expiry"] = int(time()) - 100
+        self.router.register_user(expired)
+        with pytest.raises(ItemNotFound) as ex:
+            router.get_uaid(uaid)
+        assert ex.value.message == "uaid expired"
+
     def test_clear_node_provision_failed(self):
         router = Router(self.table_conf, SinkMetrics(),
                         resource=self.resource)
