@@ -322,7 +322,7 @@ def _make_table(
 
 
 def _expiry(ttl):
-    return int(time.time() + ttl)
+    return int(time.time()) + ttl
 
 
 def get_router_table(tablename="router", read_throughput=5,
@@ -776,6 +776,9 @@ class Router(object):
                 # Incomplete record, drop it.
                 self.drop_user(uaid)
                 raise ItemNotFound("uaid not found")
+            if item.get("expiry") < _expiry(0):
+                self.drop_user(uaid)
+                raise ItemNotFound("uaid expired")
             return item
         except Boto3Error:  # pragma: nocover
             # We trap JSONResponseError because Moto returns text instead of
@@ -805,6 +808,8 @@ class Router(object):
             # AWS.
             raise AutopushException("data is missing router_type "
                                     "or connected_at")
+        if "expiry" not in data:
+            data["expiry"] = _expiry(MAX_EXPIRY)
         # Generate our update expression
         expr = "SET " + ", ".join(["%s=:%s" % (x, x) for x in data.keys()])
         expr_values = {":%s" % k: v for k, v in data.items()}

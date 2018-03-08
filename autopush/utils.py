@@ -486,7 +486,6 @@ class WebPushNotification(object):
             sortkey_timestamp=key_info.get("sortkey_timestamp"),
             source="Stored"
         )
-
         # Ensure we generate the sort-key properly for legacy messges
         if key_info["api_ver"] == "00":
             notif.legacy = True

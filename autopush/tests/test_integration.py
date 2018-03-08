@@ -1022,7 +1022,7 @@ class TestWebPush(IntegrationBase):
         for x in range(0, 12):
             yield client.send_notification(data=data, ttl=1)
 
-        yield client.send_notification(data=data2)
+        yield client.send_notification(data=data2, ttl=200)
         time.sleep(1.5)
         yield client.connect()
         yield client.hello()
