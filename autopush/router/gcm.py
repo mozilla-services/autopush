@@ -26,7 +26,7 @@ class GCMRouter(object):
         self.metrics = metrics
         self.min_ttl = router_conf.get("ttl", 60)
         self.dryRun = router_conf.get("dryrun", False)
-        self.collapseKey = router_conf.get("collapseKey", "simplepush")
+        self.collapseKey = router_conf.get("collapseKey")
         self.gcm = {}
         self.senderIDs = {}
         # Flatten the SenderID list from human readable and init gcmclient
