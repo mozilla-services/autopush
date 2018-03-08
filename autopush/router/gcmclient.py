@@ -87,11 +87,12 @@ class JSONMessage(object):
         self.registration_ids = registration_ids
         self.payload = {
             'registration_ids': self.registration_ids,
-            'collapse_key': collapse_key,
             'time_to_live': int(time_to_live),
             'delay_while_idle': False,
             'dry_run': bool(dry_run),
         }
+        if collapse_key:
+            self.payload["collapse_key"] = collapse_key
         if data:
             self.payload['data'] = data
 
