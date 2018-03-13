@@ -42,6 +42,7 @@ use server::dispatch::{Dispatch, RequestType};
 use server::metrics::metrics_from_opts;
 use server::webpush_io::WebpushIo;
 use util::{self, RcObject, timeout};
+use util::megaphone::{ClientServices, Service, ServiceClientInit, ServiceChangeTracker};
 
 mod dispatch;
 mod metrics;
@@ -84,6 +85,7 @@ pub struct AutopushServerOptions {
 
 pub struct Server {
     uaids: RefCell<HashMap<Uuid, RegisteredClient>>,
+    broadcaster: ServiceChangeTracker,
     open_connections: Cell<u32>,
     tls_acceptor: Option<SslAcceptor>,
     pub tx: queue::Sender,
@@ -317,6 +319,7 @@ impl Server {
         let core = Core::new()?;
         let srv = Rc::new(Server {
             opts: opts.clone(),
+            broadcaster: ServiceChangeTracker::new(Vec::new()),
             uaids: RefCell::new(HashMap::new()),
             open_connections: Cell::new(0),
             handle: core.handle(),
@@ -478,6 +481,26 @@ impl Server {
         let mut uaids = self.uaids.borrow_mut();
         uaids.remove(uaid).expect("uaid not registered");
     }
+
+    /// Generate a new service client list for a newly connected client
+    pub fn broadcast_init(&self, services: &[Service]) -> ServiceClientInit {
+        debug!("Initialized broadcast services");
+        self.broadcaster.service_delta(services)
+    }
+
+    /// Calculate whether there's new service versions to go out
+    pub fn broadcast_delta(&self, client_services: &mut ClientServices) -> Option<Vec<Service>> {
+        self.broadcaster.change_count_delta(client_services)
+    }
+
+    /// Add services to be tracked by a client
+    pub fn client_service_add_service(
+        &self,
+        client_services: &mut ClientServices,
+        services: &[Service],
+    ) -> Option<Vec<Service>> {
+        self.broadcaster.client_service_add_service(client_services, services)
+    }
 }
 
 impl Drop for Server {
@@ -546,10 +569,28 @@ impl Future for PingManager {
         let mut socket = self.socket.borrow_mut();
         loop {
             if socket.ping {
+                // Don't check if we already have a delta to broadcast
+                if socket.broadcast_delta.is_none() {
+                    // Determine if we can do a broadcast check, we need a connected webpush client
+                    if let CloseState::Exchange(ref mut client) = self.client {
+                        if let Some(delta) = client.broadcast_delta() {
+                            socket.broadcast_delta = Some(delta);
+                        }
+                    }
+                }
+
                 if socket.send_ping()?.is_ready() {
-                    let at = Instant::now() + self.srv.opts.auto_ping_timeout;
-                    self.timeout.reset(at);
-                    self.waiting = WaitingFor::Pong;
+                    // If we just sent a broadcast, reset the ping interval and clear the delta
+                    if socket.broadcast_delta.is_some() {
+                        let at = Instant::now() + self.srv.opts.auto_ping_interval;
+                        self.timeout.reset(at);
+                        socket.broadcast_delta = None;
+                        self.waiting = WaitingFor::SendPing
+                    } else {
+                        let at = Instant::now() + self.srv.opts.auto_ping_timeout;
+                        self.timeout.reset(at);
+                        self.waiting = WaitingFor::Pong
+                    }
                 } else {
                     break;
                 }
@@ -641,6 +682,7 @@ struct WebpushSocket<T> {
     pong_received: bool,
     ping: bool,
     pong_timeout: bool,
+    broadcast_delta: Option<Vec<Service>>,
 }
 
 impl<T> WebpushSocket<T> {
@@ -650,6 +692,7 @@ impl<T> WebpushSocket<T> {
             pong_received: false,
             ping: false,
             pong_timeout: false,
+            broadcast_delta: None,
         }
     }
 
@@ -659,8 +702,20 @@ impl<T> WebpushSocket<T> {
         Error: From<T::SinkError>,
     {
         if self.ping {
-            debug!("sending a ping");
-            match self.inner.start_send(Message::Ping(Vec::new()))? {
+            let msg = if let Some(broadcasts) = self.broadcast_delta.clone() {
+                debug!("sending a broadcast delta");
+                let server_msg = ServerMessage::Broadcast {
+                    broadcasts: Service::into_hashmap(broadcasts)
+                };
+                let s = serde_json::to_string(&server_msg).chain_err(
+                    || "failed to serialize",
+                )?;
+                Message::Text(s)
+            } else {
+                debug!("sending a ping");
+                Message::Ping(Vec::new())
+            };
+            match self.inner.start_send(msg)? {
                 AsyncSink::Ready => {
                     debug!("ping sent");
                     self.ping = false;

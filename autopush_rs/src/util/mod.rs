@@ -16,7 +16,7 @@ use errors::*;
 
 mod autojson;
 mod aws;
-mod megaphone;
+pub mod megaphone;
 mod rc;
 mod send_all;
 mod user_agent;

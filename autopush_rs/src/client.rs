@@ -5,6 +5,7 @@
 //! of connected clients. Note that it's expected there'll be a lot of connected
 //! clients, so this may appears relatively heavily optimized!
 
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use cadence::prelude::*;
@@ -23,6 +24,7 @@ use errors::*;
 use protocol::{ClientAck, ClientMessage, ServerMessage, ServerNotification, Notification};
 use server::Server;
 use util::parse_user_agent;
+use util::megaphone::{ClientServices, Service, ServiceClientInit};
 
 pub struct RegisteredClient {
     pub uaid: Uuid,
@@ -68,6 +70,7 @@ pub struct WebPushClient {
     uaid: Uuid,
     rx: mpsc::UnboundedReceiver<ServerNotification>,
     flags: ClientFlags,
+    broadcast_services: ClientServices,
     message_month: String,
     unacked_direct_notifs: Vec<Notification>,
     unacked_stored_notifs: Vec<Notification>,
@@ -120,7 +123,7 @@ impl ClientFlags {
 
 pub enum ClientState {
     WaitingForHello(Timeout),
-    WaitingForProcessHello(MyFuture<call::HelloResponse>),
+    WaitingForProcessHello(MyFuture<call::HelloResponse>, Vec<Service>),
     WaitingForRegister(Uuid, MyFuture<call::RegisterResponse>),
     WaitingForUnRegister(Uuid, MyFuture<call::UnRegisterResponse>),
     WaitingForCheckStorage(MyFuture<call::CheckStorageResponse>),
@@ -185,6 +188,14 @@ where
 
     pub fn shutdown(&mut self) {
         self.data.shutdown();
+    }
+
+    pub fn broadcast_delta(&mut self) -> Option<Vec<Service>> {
+        if let Some(ref mut webpush) = self.data.webpush {
+            self.data.srv.broadcast_delta(&mut webpush.broadcast_services)
+        } else {
+            None
+        }
     }
 
     fn transition(&mut self) -> Poll<ClientState, Error> {
@@ -271,20 +282,25 @@ where
             }
             ClientState::WaitingForHello(ref mut timeout) => {
                 debug!("State: WaitingForHello");
-                let uaid = match try_ready!(self.data.input_with_timeout(timeout)) {
+                let (uaid, services) = match try_ready!(self.data.input_with_timeout(timeout)) {
                     ClientMessage::Hello {
                         uaid,
                         use_webpush: Some(true),
+                        broadcasts,
                         ..
-                    } => uaid.and_then(|uaid| Uuid::parse_str(uaid.as_str()).ok()),
+                    } => (
+                        uaid.and_then(|uaid| Uuid::parse_str(uaid.as_str()).ok()),
+                        Service::from_hashmap(broadcasts.unwrap_or(HashMap::new()))
+                    ),
                     _ => return Err("Invalid message, must be hello".into()),
                 };
                 let connected_at = time::precise_time_ns() / 1000;
                 ClientState::WaitingForProcessHello(
                     self.data.srv.hello(&connected_at, uaid.as_ref()),
+                    services,
                 )
             }
-            ClientState::WaitingForProcessHello(ref mut response) => {
+            ClientState::WaitingForProcessHello(ref mut response, ref services) => {
                 debug!("State: WaitingForProcessHello");
                 match try_ready!(response.poll()) {
                     call::HelloResponse {
@@ -302,6 +318,7 @@ where
                             rotate_message_table,
                             check_storage,
                             connected_at,
+                            services,
                         )
                     }
                     call::HelloResponse { uaid: None, .. } => {
@@ -422,6 +439,23 @@ where
                     return Ok(next_state.into());
                 }
                 match try_ready!(self.data.input_or_notif()) {
+                    Either::A(ClientMessage::BroadcastSubscribe { broadcasts }) => {
+                        let webpush = self.data.webpush.as_mut().unwrap();
+                        let service_delta = self.data.srv.client_service_add_service(
+                            &mut webpush.broadcast_services,
+                            &Service::from_hashmap(broadcasts),
+                        );
+                        if let Some(delta) = service_delta {
+                            ClientState::FinishSend(
+                                Some(ServerMessage::Broadcast {
+                                    broadcasts: Service::into_hashmap(delta)
+                                }),
+                                Some(Box::new(ClientState::WaitingForAcks)),
+                            )
+                        } else {
+                            ClientState::WaitingForAcks
+                        }
+                    }
                     Either::A(ClientMessage::Register { channel_id, key }) => {
                         self.data.process_register(channel_id, key)
                     }
@@ -470,6 +504,23 @@ where
                     return Ok(ClientState::CheckStorage.into());
                 }
                 match try_ready!(self.data.input_or_notif()) {
+                    Either::A(ClientMessage::BroadcastSubscribe { broadcasts }) => {
+                        let webpush = self.data.webpush.as_mut().unwrap();
+                        let service_delta = self.data.srv.client_service_add_service(
+                            &mut webpush.broadcast_services,
+                            &Service::from_hashmap(broadcasts),
+                        );
+                        if let Some(delta) = service_delta {
+                            ClientState::FinishSend(
+                                Some(ServerMessage::Broadcast {
+                                    broadcasts: Service::into_hashmap(delta)
+                                }),
+                                Some(Box::new(ClientState::Await)),
+                            )
+                        } else {
+                            ClientState::Await
+                        }
+                    }
                     Either::A(ClientMessage::Register { channel_id, key }) => {
                         self.data.process_register(channel_id, key)
                     }
@@ -479,7 +530,7 @@ where
                     Either::A(ClientMessage::Nack { .. }) => {
                         self.data.srv.metrics.incr("ua.command.nack").ok();
                         self.data.webpush.as_mut().unwrap().stats.nacks += 1;
-                        ClientState::WaitingForAcks
+                        ClientState::Await
                     }
                     Either::B(ServerNotification::Notification(notif)) => {
                         let webpush = self.data.webpush.as_mut().unwrap();
@@ -570,6 +621,7 @@ where
         rotate_message_table: bool,
         check_storage: bool,
         connected_at: u64,
+        services: &Vec<Service>,
     ) -> ClientState {
         let (tx, rx) = mpsc::unbounded();
         let mut flags = ClientFlags::new();
@@ -577,8 +629,10 @@ where
         flags.reset_uaid = reset_uaid;
         flags.rotate_message_table = rotate_message_table;
 
+        let ServiceClientInit(client_services, broadcasts) = self.srv.broadcast_init(services);
         self.webpush = Some(WebPushClient {
             uaid,
+            broadcast_services: client_services,
             flags,
             rx,
             message_month,
@@ -608,6 +662,7 @@ where
             uaid: uaid.hyphenated().to_string(),
             status: 200,
             use_webpush: Some(true),
+            broadcasts: Service::into_hashmap(broadcasts),
         };
         ClientState::FinishSend(Some(response), Some(Box::new(ClientState::Await)))
     }
