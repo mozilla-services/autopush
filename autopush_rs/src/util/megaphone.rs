@@ -60,10 +60,33 @@ struct ServiceRevision {
 
 // A provided Service/Version used for `ChangeList` initialization, client comparisons, and
 // outgoing deltas
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub struct Service {
     service_id: String,
     version: String,
+}
+
+// Handy From impls for common hashmap to/from conversions
+impl From<(String, String)> for Service {
+    fn from(val: (String, String)) -> Service {
+        Service { service_id: val.0, version: val.1 }
+    }
+}
+
+impl From<Service> for (String, String) {
+    fn from(svc: Service) -> (String, String) {
+        (svc.service_id, svc.version)
+    }
+}
+
+impl Service {
+    pub fn from_hashmap(val: HashMap<String, String>) -> Vec<Service> {
+        val.into_iter().map(|v| v.into()).collect()
+    }
+
+    pub fn into_hashmap(service_vec: Vec<Service>) -> HashMap<String, String> {
+        service_vec.into_iter().map(|v| v.into()).collect()
+    }
 }
 
 // ServiceChangeTracker tracks the services, their change_count, and the service lookup registry
@@ -155,6 +178,9 @@ impl ServiceChangeTracker {
             if svc.change_count <= client_set.change_count {
                 break;
             }
+            if !client_set.service_list.contains(&svc.service) {
+                continue;
+            }
             if let Some(ver) = self.service_versions.get(&svc.service) {
                 if let Some(svc_id) = self.service_registry.lookup_id(svc.service) {
                     svc_delta.push(Service {
@@ -174,7 +200,7 @@ impl ServiceChangeTracker {
 
     /// Returns a delta for `services` that are out of date with the latest version and a new
     /// `ClientSet``.
-    pub fn service_delta(&self, services: Vec<Service>) -> ServiceClientInit {
+    pub fn service_delta(&self, services: &[Service]) -> ServiceClientInit {
         let mut svc_list = Vec::new();
         let mut svc_delta = Vec::new();
         for svc in services.iter() {
@@ -198,6 +224,31 @@ impl ServiceChangeTracker {
             svc_delta,
         )
     }
+
+    /// Update a `ClientServices` to account for a new service.
+    ///
+    /// Returns services that have changed.
+    pub fn client_service_add_service(&self, client_service: &mut ClientServices, services: &[Service]) -> Option<Vec<Service>> {
+        let mut svc_delta = self.change_count_delta(client_service).unwrap_or(Vec::new());
+        for svc in services.iter() {
+            if let Some(svc_key) = self.service_registry.lookup_key(svc.service_id.clone()) {
+                if let Some(ver) = self.service_versions.get(&svc_key) {
+                    if *ver != svc.version {
+                        svc_delta.push(Service {
+                            service_id: svc.service_id.clone(),
+                            version: (*ver).clone(),
+                        });
+                    }
+                }
+                client_service.service_list.push(svc_key)
+            }
+        }
+        if svc_delta.is_empty() {
+            None
+        } else {
+            Some(svc_delta)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -216,7 +267,7 @@ mod tests {
         let services = make_service_base();
         let client_services = services.clone();
         let mut svc_chg_tracker = ServiceChangeTracker::new(services);
-        let ServiceClientInit(mut client_svc, delta) = svc_chg_tracker.service_delta(client_services);
+        let ServiceClientInit(mut client_svc, delta) = svc_chg_tracker.service_delta(&client_services);
         assert_eq!(delta.len(), 0);
         assert_eq!(client_svc.change_count, 0);
         assert_eq!(client_svc.service_list.len(), 2);
@@ -228,16 +279,28 @@ mod tests {
         assert!(delta.is_some());
         let delta = delta.unwrap();
         assert_eq!(delta.len(), 1);
+    }
+
+    #[test]
+    fn test_service_change_handles_new_services() {
+        let services = make_service_base();
+        let client_services = services.clone();
+        let mut svc_chg_tracker = ServiceChangeTracker::new(services);
+        let ServiceClientInit(mut client_svc, _) = svc_chg_tracker.service_delta(&client_services);
 
         svc_chg_tracker.add_service(
             Service { service_id: String::from("svcc"), version: String::from("revmega") }
         );
         let delta = svc_chg_tracker.change_count_delta(&mut client_svc);
-        assert!(delta.is_some());
-        let delta = delta.unwrap();
+        assert!(delta.is_none());
+
+        let delta = svc_chg_tracker.client_service_add_service(
+            &mut client_svc,
+            &vec![Service { service_id: String::from("svcc"), version: String::from("revision_alpha") } ],
+        ).unwrap();
         assert_eq!(delta.len(), 1);
         assert_eq!(delta[0].version, String::from("revmega"));
-        assert_eq!(client_svc.change_count, 2);
-        assert_eq!(svc_chg_tracker.service_list.len(), 2);
+        assert_eq!(client_svc.change_count, 1);
+        assert_eq!(svc_chg_tracker.service_list.len(), 1);
     }
 }

@@ -17,7 +17,7 @@ pub enum ServerNotification {
 }
 
 #[derive(Deserialize)]
-#[serde(tag = "messageType", rename_all = "lowercase")]
+#[serde(tag = "messageType", rename_all = "snake_case")]
 pub enum ClientMessage {
     Hello {
         uaid: Option<String>,
@@ -25,6 +25,8 @@ pub enum ClientMessage {
         channel_ids: Option<Vec<Uuid>>,
         #[serde(skip_serializing_if = "Option::is_none")]
         use_webpush: Option<bool>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        broadcasts: Option<HashMap<String, String>>,
     },
 
     Register {
@@ -37,6 +39,10 @@ pub enum ClientMessage {
         #[serde(rename = "channelID")]
         channel_id: Uuid,
         code: Option<i32>,
+    },
+
+    BroadcastSubscribe {
+        broadcasts: HashMap<String, String>,
     },
 
     Ack { updates: Vec<ClientAck> },
@@ -56,13 +62,14 @@ pub struct ClientAck {
 }
 
 #[derive(Serialize)]
-#[serde(tag = "messageType", rename_all = "lowercase")]
+#[serde(tag = "messageType", rename_all = "snake_case")]
 pub enum ServerMessage {
     Hello {
         uaid: String,
         status: u32,
         #[serde(skip_serializing_if = "Option::is_none")]
         use_webpush: Option<bool>,
+        broadcasts: HashMap<String, String>,
     },
 
     Register {
@@ -77,6 +84,10 @@ pub enum ServerMessage {
         #[serde(rename = "channelID")]
         channel_id: Uuid,
         status: u32,
+    },
+
+    Broadcast {
+        broadcasts: HashMap<String, String>,
     },
 
     Notification(Notification),
