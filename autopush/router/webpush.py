@@ -25,6 +25,7 @@ from twisted.internet.error import (
 )
 from twisted.logger import Logger
 from twisted.web._newclient import ResponseFailed
+from twisted.web.http import PotentialDataLoss
 
 from autopush.exceptions import ItemNotFound, RouterException
 from autopush.metrics import make_tags
@@ -83,7 +84,7 @@ class WebPushRouter(object):
                 result = yield self._send_notification(uaid, node_id,
                                                        notification)
             except (ConnectError, ConnectionClosed, ResponseFailed,
-                    CancelledError) as exc:
+                    CancelledError, PotentialDataLoss) as exc:
                 self.metrics.increment("updates.client.host_gone")
                 yield deferToThread(router.clear_node,
                                     uaid_data).addErrback(self._eat_db_err)
