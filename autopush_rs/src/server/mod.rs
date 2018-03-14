@@ -20,6 +20,7 @@ use hyper;
 use hyper::server::Http;
 use libc::c_char;
 use openssl::ssl::SslAcceptor;
+use reqwest;
 use sentry;
 use serde_json;
 use time;
@@ -42,7 +43,7 @@ use server::dispatch::{Dispatch, RequestType};
 use server::metrics::metrics_from_opts;
 use server::webpush_io::WebpushIo;
 use util::{self, RcObject, timeout};
-use util::megaphone::{ClientServices, Service, ServiceClientInit, ServiceChangeTracker};
+use util::megaphone::{ClientServices, MegaphoneAPIResponse, Service, ServiceClientInit, ServiceChangeTracker};
 
 mod dispatch;
 mod metrics;
@@ -81,11 +82,13 @@ pub struct AutopushServerOptions {
     pub json_logging: i32,
     pub statsd_host: *const c_char,
     pub statsd_port: u16,
+    pub megaphone_api_url: *const c_char,
+    pub megaphone_poll_interval: u32,
 }
 
 pub struct Server {
     uaids: RefCell<HashMap<Uuid, RegisteredClient>>,
-    broadcaster: ServiceChangeTracker,
+    broadcaster: RefCell<ServiceChangeTracker>,
     open_connections: Cell<u32>,
     tls_acceptor: Option<SslAcceptor>,
     pub tx: queue::Sender,
@@ -109,6 +112,8 @@ pub struct ServerOptions {
     pub statsd_host: Option<String>,
     pub statsd_port: u16,
     pub logger: util::LogGuards,
+    pub megaphone_api_url: Option<String>,
+    pub megaphone_poll_interval: Duration,
 }
 
 #[no_mangle]
@@ -168,6 +173,8 @@ pub extern "C" fn autopush_server_new(
             },
             open_handshake_timeout: ito_dur(opts.open_handshake_timeout),
             logger: logger,
+            megaphone_api_url: to_s(opts.megaphone_api_url).map(|s| s.to_string()),
+            megaphone_poll_interval: ito_dur(opts.megaphone_poll_interval).expect("poll interval cannot be 0"),
         };
 
         Box::new(AutopushServer {
@@ -317,9 +324,15 @@ impl Server {
 
     fn new(opts: &Arc<ServerOptions>, tx: queue::Sender) -> Result<(Rc<Server>, Core)> {
         let core = Core::new()?;
+        let broadcaster = if let Some(ref megaphone_url) = opts.megaphone_api_url {
+            ServiceChangeTracker::with_api_services(megaphone_url)
+                .expect("Unable to initialize megaphone with provided URL".into())
+        } else {
+            ServiceChangeTracker::new(Vec::new())
+        };
         let srv = Rc::new(Server {
             opts: opts.clone(),
-            broadcaster: ServiceChangeTracker::new(Vec::new()),
+            broadcaster: RefCell::new(broadcaster),
             uaids: RefCell::new(HashMap::new()),
             open_connections: Cell::new(0),
             handle: core.handle(),
@@ -422,6 +435,16 @@ impl Server {
                 Ok(())
             });
 
+        if let Some(ref megaphone_url) = opts.megaphone_api_url {
+            let fut = MegaphoneUpdater::new(
+                megaphone_url, opts.megaphone_poll_interval, &srv2,
+            )
+                .expect("Unable to start megaphone updater".into());
+            core.handle().spawn(fut.then(|res| {
+                debug!("megaphone result: {:?}", res.map(drop));
+                Ok(())
+            }));
+        }
         core.handle().spawn(ws_srv.then(|res| {
             debug!("srv res: {:?}", res.map(drop));
             Ok(())
@@ -485,12 +508,16 @@ impl Server {
     /// Generate a new service client list for a newly connected client
     pub fn broadcast_init(&self, services: &[Service]) -> ServiceClientInit {
         debug!("Initialized broadcast services");
-        self.broadcaster.service_delta(services)
+        self.broadcaster
+            .borrow()
+            .service_delta(services)
     }
 
     /// Calculate whether there's new service versions to go out
     pub fn broadcast_delta(&self, client_services: &mut ClientServices) -> Option<Vec<Service>> {
-        self.broadcaster.change_count_delta(client_services)
+        self.broadcaster
+            .borrow()
+            .change_count_delta(client_services)
     }
 
     /// Add services to be tracked by a client
@@ -499,7 +526,9 @@ impl Server {
         client_services: &mut ClientServices,
         services: &[Service],
     ) -> Option<Vec<Service>> {
-        self.broadcaster.client_service_add_service(client_services, services)
+        self.broadcaster
+            .borrow()
+            .client_service_add_service(client_services, services)
     }
 }
 
@@ -507,6 +536,77 @@ impl Drop for Server {
     fn drop(&mut self) {
         // we're done sending messages, close out the queue
         drop(self.tx.send(None));
+    }
+}
+
+enum MegaphoneState {
+    Waiting,
+    Requesting(MyFuture<MegaphoneAPIResponse>),
+}
+
+struct MegaphoneUpdater {
+    srv: Rc<Server>,
+    api_url: String,
+    state: MegaphoneState,
+    timeout: Timeout,
+    poll_interval: Duration,
+    client: reqwest::unstable::async::Client,
+}
+
+impl MegaphoneUpdater {
+    fn new(uri: &str, poll_interval: Duration, srv: &Rc<Server>) -> io::Result<MegaphoneUpdater> {
+        let client = reqwest::unstable::async::Client::builder()
+            .timeout(Duration::from_secs(1))
+            .build(&srv.handle)
+            .expect("Unable to build reqwest client".into());
+        Ok(MegaphoneUpdater {
+            srv: srv.clone(),
+            api_url: uri.to_string(),
+            state: MegaphoneState::Waiting,
+            timeout: Timeout::new(Duration::from_secs(30), &srv.handle)?,
+            poll_interval,
+            client,
+        })
+    }
+}
+
+impl Future for MegaphoneUpdater {
+    type Item = ();
+    type Error = Error;
+
+    fn poll(&mut self) -> Poll<(), Error> {
+        loop {
+            let new_state = match self.state {
+                MegaphoneState::Waiting => {
+                    try_ready!(self.timeout.poll());
+                    let fut = self.client.get(&self.api_url).send()
+                        .and_then(|response| response.error_for_status())
+                        .and_then(|mut response| response.json())
+                        .map_err(|_| "Unable to query/decode the API query".into());
+                    MegaphoneState::Requesting(Box::new(fut))
+                }
+                MegaphoneState::Requesting(ref mut response) => {
+                    let at = Instant::now() + self.poll_interval;
+                    match response.poll() {
+                        Ok(Async::Ready(MegaphoneAPIResponse { broadcasts })) => {
+                            debug!("Fetched broadcasts: {:?}", broadcasts);
+                            let mut broadcaster = self.srv.broadcaster.borrow_mut();
+                            for srv in Service::from_hashmap(broadcasts) {
+                                broadcaster.add_service(srv);
+                            }
+                        }
+                        Ok(Async::NotReady) => return Ok(Async::NotReady),
+                        Err(_) => {
+                            // TODO: Flag sentry that we can't poll megaphone API
+                            debug!("Failed to get response, queue again");
+                        }
+                    };
+                    self.timeout.reset(at);
+                    MegaphoneState::Waiting
+                }
+            };
+            self.state = new_state;
+        }
     }
 }
 

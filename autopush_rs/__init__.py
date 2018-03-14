@@ -35,6 +35,8 @@ class AutopushServer(object):
         cfg.json_logging = True
         cfg.statsd_host = ffi_from_buffer(conf.statsd_host)
         cfg.statsd_port = conf.statsd_port
+        cfg.megaphone_api_url = ffi_from_buffer(conf.megaphone_api_url)
+        cfg.megaphone_poll_interval = conf.megaphone_poll_interval
 
         ptr = _call(lib.autopush_server_new, cfg)
         self.ffi = ffi.gc(ptr, lib.autopush_server_free)

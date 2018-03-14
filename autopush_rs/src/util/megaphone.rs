@@ -1,5 +1,8 @@
-use std::collections::HashMap;
 use errors::Result;
+use std::collections::HashMap;
+use std::time::Duration;
+
+use reqwest;
 
 // A Service entry Key in a ServiceRegistry
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
@@ -98,6 +101,11 @@ pub struct ServiceChangeTracker {
     change_count: u32,
 }
 
+#[derive(Deserialize)]
+pub struct MegaphoneAPIResponse {
+    pub broadcasts: HashMap<String, String>,
+}
+
 impl ServiceChangeTracker {
     /// Creates a new `ServiceChangeTracker` initialized with the provided `services`.
     pub fn new(services: Vec<Service>) -> ServiceChangeTracker {
@@ -114,11 +122,27 @@ impl ServiceChangeTracker {
         svc_change_tracker
     }
 
+    /// Creates a new `ServiceChangeTracker` initialized from a Megaphone API server version set
+    /// as provided as the fetch URL.
+    ///
+    /// This method uses a synchronous HTTP call.
+    pub fn with_api_services(url: &str) -> reqwest::Result<ServiceChangeTracker> {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(1))
+            .build()?;
+        let MegaphoneAPIResponse { broadcasts } = client.get(url)
+            .send()?
+            .error_for_status()?
+            .json()?;
+        let services = Service::from_hashmap(broadcasts);
+        Ok(ServiceChangeTracker::new(services))
+    }
+
     /// Add a new service to the ServiceChangeTracker, triggering a change_count increase.
     /// Note: If the service already exists, it will be updated instead.
-    pub fn add_service(&mut self, service: Service) {
-        if let Ok(_) = self.update_service(service.clone()) {
-            return;
+    pub fn add_service(&mut self, service: Service) -> u32 {
+        if let Ok(change_count) = self.update_service(service.clone()) {
+            return change_count;
         }
         self.change_count += 1;
         let key = self.service_registry.add_service(service.service_id);
@@ -127,6 +151,7 @@ impl ServiceChangeTracker {
             change_count: self.change_count,
             service: key,
         });
+        self.change_count
     }
 
     /// Update a `service` to a new revision, triggering a change_count increase.
