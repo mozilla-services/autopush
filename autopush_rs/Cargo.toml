@@ -18,17 +18,17 @@ httparse = "1.2.4"
 hyper = "0.11.15"
 libc = "0.2.36"
 # log: Use this version for debug builds
-#log = "0.3"
+# log = "0.4.1"
 # log: Use this for release builds (leave in for commits)
 log = { version = "0.4.1", features = ["max_level_trace", "release_max_level_warn"] }
 openssl = "0.10.2"
-reqwest = "0.8.4"
+reqwest = { version = "0.8.4", features = ["unstable"] }
 sentry = "0.2.0"
 serde = "1.0.27"
 serde_derive = "1.0.27"
 serde_json = "1.0.9"
 # slog: Use this first version for debug builds
-#slog = { version = "2.0.12" , features = ["max_level_trace", "release_max_level_debug"] }
+# slog = { version = "2.1.1" , features = ["max_level_trace", "release_max_level_debug"] }
 # slog: Use this for release builds (leave in for commits)
 slog = "2.1.1"
 slog-async = "2.2.0"
