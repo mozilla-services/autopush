@@ -671,8 +671,17 @@ class UnregisterCommand(ProcessorCommand):
 
         message = Message(command.message_month,
                           boto_resource=self.db.resource)
-        # TODO: JSONResponseError not handled (no force_retry)
-        message.unregister_channel(command.uaid.hex, command.channel_id)
+        try:
+            message.unregister_channel(command.uaid.hex, command.channel_id)
+        except ClientError as ex:  # pragma: nocover
+            # Since this operates in a separate thread than the tests,
+            # we can't mock out the unregister_channel call inside
+            # test_webpush_server, thus the # nocover.
+            log.error("Unregister failed",
+                      channel_id=command.channel_id,
+                      uaid_hash=hasher(command.uaid.hex),
+                      exeption=ex)
+            return UnregisterErrorResponse(error_msg="Unregister failed")
 
         # TODO: Clear out any existing tracked messages for this channel
 
