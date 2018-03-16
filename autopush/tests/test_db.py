@@ -37,7 +37,7 @@ dummy_chid = str(uuid.UUID("deadbeef00000000decafbad00000000"))
 test_router = None
 
 
-def setUp():
+def setup_module():
     global test_router
     config = DDBTableConfig("router_test")
     test_router = Router(config, SinkMetrics(),
