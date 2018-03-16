@@ -104,7 +104,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         self.ws = websocket.create_connection(self.url)
         return self.ws.connected
 
-    def hello(self, uaid=None):
+    def hello(self, uaid=None, services=None):
         if self.channels:
             chans = self.channels.keys()
         else:
@@ -114,6 +114,8 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                           channelIDs=chans)
         if uaid or self.uaid:
             hello_dict["uaid"] = uaid or self.uaid
+        if services:
+            hello_dict["broadcasts"] = services
         msg = json.dumps(hello_dict)
         log.debug("Send: %s", msg)
         self.ws.send(msg)
@@ -126,6 +128,12 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
             self.channels = {}
         self.uaid = result["uaid"]
         return result
+
+    def broadcast_subscribe(self, services):
+        msg = json.dumps(dict(messageType="broadcast_subscribe",
+                              broadcasts=services))
+        log.debug("Send: %s", msg)
+        self.ws.send(msg)
 
     def register(self, chid=None, key=None):
         chid = chid or str(uuid.uuid4())
@@ -240,6 +248,20 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
             log.debug("Recv: %s", d)
             return json.loads(d)
         except Exception:
+            return None
+        finally:
+            self.ws.settimeout(orig_timeout)
+
+    def get_broadcast(self, timeout=1):
+        orig_timeout = self.ws.gettimeout()
+        self.ws.settimeout(timeout)
+        try:
+            d = self.ws.recv()
+            log.debug("Recv: %s", d)
+            result = json.loads(d)
+            assert result.get("messageType") == "broadcast"
+            return result
+        except Exception:  # pragma: nocover
             return None
         finally:
             self.ws.settimeout(orig_timeout)

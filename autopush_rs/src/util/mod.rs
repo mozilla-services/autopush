@@ -57,9 +57,12 @@ pub struct LogGuards {
 }
 
 pub fn init_logging(json: bool) -> LogGuards {
-    let instance_id_or_hostname =
-        get_ec2_instance_id().unwrap_or_else(|_| get_hostname().expect("Couldn't get_hostname"));
-    if json {
+    let instance_id_or_hostname = if json {
+        get_ec2_instance_id().unwrap_or_else(|_| get_hostname().expect("Couldn't get_hostname"))
+    } else {
+        get_hostname().expect("Couldn't get_hostname")
+    };
+    let logger = if json {
         let drain = autojson::AutoJson::new(io::stdout())
             .add_default_keys()
             .add_key_value(o!(
@@ -71,17 +74,12 @@ pub fn init_logging(json: bool) -> LogGuards {
             .build()
             .fuse();
         let drain = slog_async::Async::new(drain).build().fuse();
-        let logger = slog::Logger::root(drain, o!());
-        let _scope_guard = slog_scope::set_global_logger(logger);
-        slog_stdlog::init().ok();
-        LogGuards {
-            _scope_guard: _scope_guard,
-        }
+        slog::Logger::root(drain, o!())
     } else {
         let decorator = slog_term::TermDecorator::new().build();
         let drain = slog_term::FullFormat::new(decorator).build().fuse();
         let drain = slog_async::Async::new(drain).build().fuse();
-        let logger = slog::Logger::root(
+        slog::Logger::root(
             drain,
             slog_o!(
                 "Hostname" => instance_id_or_hostname,
@@ -89,11 +87,16 @@ pub fn init_logging(json: bool) -> LogGuards {
                 "EnvVersion" => "2.0",
                 "Logger" => format!("AutopushRust-{}", env!("CARGO_PKG_VERSION"))
             ),
-        );
-        let _scope_guard = slog_scope::set_global_logger(logger);
-        slog_stdlog::init().ok();
-        LogGuards {
-            _scope_guard: _scope_guard,
-        }
+        )
+    };
+    let _scope_guard = slog_scope::set_global_logger(logger);
+    slog_stdlog::init().ok();
+    LogGuards {
+        _scope_guard: _scope_guard,
     }
+}
+
+pub fn reset_logging() {
+    let logger = slog::Logger::root(slog::Discard, o!());
+    slog_scope::set_global_logger(logger).cancel_reset();
 }

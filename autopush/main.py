@@ -332,7 +332,7 @@ class RustConnectionApplication(AutopushMultiService):
         self.push_server = WebPushServer(
             self.conf,
             self.db,
-            num_threads=num_threads
+            num_threads=num_threads,
         )
 
     def run(self):  # pragma: nocover
@@ -381,5 +381,6 @@ class RustConnectionApplication(AutopushMultiService):
             close_handshake_timeout=ns.close_handshake_timeout,
             aws_ddb_endpoint=ns.aws_ddb_endpoint,
             megaphone_api_url=ns.megaphone_api_url,
+            megaphone_poll_interval=ns.megaphone_poll_interval,
             resource=resource
         )
