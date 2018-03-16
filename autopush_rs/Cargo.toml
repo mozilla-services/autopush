@@ -22,7 +22,7 @@ libc = "0.2.36"
 # log: Use this for release builds (leave in for commits)
 log = { version = "0.4.1", features = ["max_level_trace", "release_max_level_warn"] }
 openssl = "0.10.2"
-reqwest = { version = "0.8.4", features = ["unstable"] }
+reqwest = { version = "0.8.5", features = ["unstable"] }
 sentry = "0.2.0"
 serde = "1.0.27"
 serde_derive = "1.0.27"

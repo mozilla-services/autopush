@@ -102,6 +102,7 @@ class AutopushConfig(object):
         convert=_init_crypto_key, default=None)  # type: List[str]
 
     bear_hash_key = attrib(default=Factory(list))  # type: List[str]
+    human_logs = attrib(default=True)  # type: bool
 
     hostname = attrib(default=None)  # type: Optional[str]
     port = attrib(default=None)  # type: Optional[int]

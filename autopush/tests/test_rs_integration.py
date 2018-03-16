@@ -7,16 +7,22 @@ Differences from original integration test:
    last message as production currently uses.
 
 """
+import json
 import logging
 import os
+import re
+import socket
 import time
 import uuid
 from contextlib import contextmanager
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from httplib import HTTPResponse  # noqa
 from mock import Mock, call
+from threading import Thread, Event
 from unittest.case import SkipTest
 
 import ecdsa
+import requests
 import twisted.internet.base
 from cryptography.fernet import Fernet
 from typing import Optional  # noqa
@@ -45,10 +51,36 @@ ROUTER_TABLE = os.environ.get("ROUTER_TABLE", "router_int_test")
 MESSAGE_TABLE = os.environ.get("MESSAGE_TABLE", "message_int_test")
 
 
+def get_free_port():
+    s = socket.socket(socket.AF_INET, type=socket.SOCK_STREAM)
+    s.bind(('localhost', 0))
+    address, port = s.getsockname()
+    s.close()
+    return port
+
+
 def setup_module():
     logging.getLogger('boto').setLevel(logging.CRITICAL)
     if "SKIP_INTEGRATION" in os.environ:  # pragma: nocover
         raise SkipTest("Skipping integration tests")
+
+
+class MockMegaphoneRequestHandler(BaseHTTPRequestHandler):
+    API_PATTERN = re.compile(r'/v1/broadcasts')
+    services = {}
+    polled = Event()
+
+    def do_GET(self):
+        if re.search(self.API_PATTERN, self.path):
+            self.send_response(requests.codes.ok)
+            self.send_header('Content-Type', 'application/json; charset=utf-8')
+            self.end_headers()
+            response_content = json.dumps(
+                {"broadcasts": self.services}
+            )
+            self.wfile.write(response_content.encode('utf-8'))
+            self.polled.set()
+            return
 
 
 class TestRustWebPush(unittest.TestCase):
@@ -96,6 +128,7 @@ class TestRustWebPush(unittest.TestCase):
             auto_ping_timeout=10.0,
             close_handshake_timeout=5,
             max_connections=5000,
+            human_logs=False,
             **self.conn_kwargs()
         )
 
@@ -111,7 +144,7 @@ class TestRustWebPush(unittest.TestCase):
         # Websocket server
         self.conn = conn = RustConnectionApplication(
             conn_conf,
-            resource=autopush.tests.boto_resource
+            resource=autopush.tests.boto_resource,
         )
         conn.setup(rotate_tables=False, num_threads=2)
         conn.startService()
@@ -707,5 +740,171 @@ class TestRustWebPush(unittest.TestCase):
         yield client.send_notification(
             vapid=vapid,
             status=401)
+
+        yield self.shut_down(client)
+
+
+class TestRustWebPushBroadcast(unittest.TestCase):
+    connection_port = 9050
+    endpoint_port = 9060
+    router_port = 9070
+
+    _endpoint_defaults = dict(
+        hostname='localhost',
+        port=endpoint_port,
+        endpoint_port=endpoint_port,
+        endpoint_scheme='http',
+        router_port=router_port,
+        statsd_host=None,
+        router_table=dict(tablename=ROUTER_TABLE),
+        message_table=dict(tablename=MESSAGE_TABLE),
+        use_cryptography=True,
+    )
+
+    _conn_defaults = dict(
+        hostname='localhost',
+        port=connection_port,
+        endpoint_port=endpoint_port,
+        router_port=router_port,
+        endpoint_scheme='http',
+        statsd_host=None,
+        router_table=dict(tablename=ROUTER_TABLE),
+        message_table=dict(tablename=MESSAGE_TABLE),
+        use_cryptography=True,
+        human_logs=False,
+    )
+
+    def setUp(self):
+        # Megaphone API mock
+        mock_server_port = get_free_port()
+        MockMegaphoneRequestHandler.services = {}
+        MockMegaphoneRequestHandler.polled.clear()
+        mock_server = HTTPServer(('localhost', mock_server_port),
+                                 MockMegaphoneRequestHandler)
+        mock_server_thread = Thread(target=mock_server.serve_forever)
+        mock_server_thread.setDaemon(True)
+        mock_server_thread.start()
+        self.mock_server_thread = mock_server_thread
+        self.mock_megaphone = MockMegaphoneRequestHandler
+
+        self.logs = TestingLogObserver()
+        begin_or_register(self.logs)
+        self.addCleanup(globalLogPublisher.removeObserver, self.logs)
+
+        megaphone_api_url = 'http://localhost:{port}/v1/broadcasts'.format(
+            port=mock_server.server_port)
+
+        crypto_key = Fernet.generate_key()
+        ep_conf = AutopushConfig(
+            crypto_key=crypto_key,
+            **self.endpoint_kwargs()
+        )
+        conn_conf = AutopushConfig(
+            crypto_key=crypto_key,
+            auto_ping_interval=0.5,
+            auto_ping_timeout=10.0,
+            close_handshake_timeout=5,
+            max_connections=5000,
+            megaphone_api_url=megaphone_api_url,
+            megaphone_poll_interval=1,
+            **self.conn_kwargs()
+        )
+
+        # Endpoint HTTP router
+        self.ep = ep = EndpointApplication(
+            ep_conf,
+            resource=autopush.tests.boto_resource
+        )
+        ep.setup(rotate_tables=False)
+        ep.startService()
+        self.addCleanup(ep.stopService)
+
+        # Websocket server
+        self.conn = conn = RustConnectionApplication(
+            conn_conf,
+            resource=autopush.tests.boto_resource
+        )
+        conn.setup(rotate_tables=False, num_threads=2)
+        conn.startService()
+        self.addCleanup(conn.stopService)
+
+    def endpoint_kwargs(self):
+        return self._endpoint_defaults
+
+    def conn_kwargs(self):
+        return self._conn_defaults
+
+    @inlineCallbacks
+    def shut_down(self, client=None):
+        if client:
+            yield client.disconnect()
+
+    @property
+    def _ws_url(self):
+        return "ws://localhost:{}/".format(self.connection_port)
+
+    @inlineCallbacks
+    def test_broadcast_update_on_connect(self):
+        self.mock_megaphone.services = {"kinto:123": "ver1"}
+        self.mock_megaphone.polled.clear()
+        self.mock_megaphone.polled.wait()
+
+        old_ver = {"kinto:123": "ver0"}
+        client = Client(self._ws_url)
+        yield client.connect()
+        result = yield client.hello(services=old_ver)
+        assert result != {}
+        assert result["use_webpush"] is True
+        assert result["broadcasts"]["kinto:123"] == "ver1"
+
+        self.mock_megaphone.services = {"kinto:123": "ver2"}
+        self.mock_megaphone.polled.clear()
+        self.mock_megaphone.polled.wait()
+
+        result = yield client.get_broadcast(2)
+        assert result["broadcasts"]["kinto:123"] == "ver2"
+
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_broadcast_subscribe(self):
+        self.mock_megaphone.services = {"kinto:123": "ver1"}
+        self.mock_megaphone.polled.clear()
+        self.mock_megaphone.polled.wait()
+
+        old_ver = {"kinto:123": "ver0"}
+        client = Client(self._ws_url)
+        yield client.connect()
+        result = yield client.hello()
+        assert result != {}
+        assert result["use_webpush"] is True
+        assert result["broadcasts"] == {}
+
+        client.broadcast_subscribe(old_ver)
+        result = yield client.get_broadcast()
+        assert result["broadcasts"]["kinto:123"] == "ver1"
+
+        self.mock_megaphone.services = {"kinto:123": "ver2"}
+        self.mock_megaphone.polled.clear()
+        self.mock_megaphone.polled.wait()
+
+        result = yield client.get_broadcast(2)
+        assert result["broadcasts"]["kinto:123"] == "ver2"
+
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_broadcast_no_changes(self):
+        self.mock_megaphone.services = {"kinto:123": "ver1"}
+        self.mock_megaphone.polled.clear()
+        self.mock_megaphone.polled.wait()
+
+        old_ver = {"kinto:123": "ver1"}
+        client = Client(self._ws_url)
+        yield client.connect()
+        result = yield client.hello(services=old_ver)
+        assert result != {}
+        assert result["use_webpush"] is True
+        assert result["broadcasts"] == {}
 
         yield self.shut_down(client)

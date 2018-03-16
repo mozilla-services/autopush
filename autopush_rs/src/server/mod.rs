@@ -214,7 +214,8 @@ pub extern "C" fn autopush_server_stop(srv: *mut AutopushServer, err: &mut Autop
 pub extern "C" fn autopush_server_free(srv: *mut AutopushServer) {
     rt::abort_on_panic(|| unsafe {
         Box::from_raw(srv);
-    })
+    });
+    util::reset_logging();
 }
 
 impl AutopushServerInner {
@@ -563,7 +564,7 @@ impl MegaphoneUpdater {
             srv: srv.clone(),
             api_url: uri.to_string(),
             state: MegaphoneState::Waiting,
-            timeout: Timeout::new(Duration::from_secs(30), &srv.handle)?,
+            timeout: Timeout::new(poll_interval, &srv.handle)?,
             poll_interval,
             client,
         })
@@ -579,6 +580,7 @@ impl Future for MegaphoneUpdater {
             let new_state = match self.state {
                 MegaphoneState::Waiting => {
                     try_ready!(self.timeout.poll());
+                    debug!("Sending megaphone API request");
                     let fut = self.client.get(&self.api_url).send()
                         .and_then(|response| response.error_for_status())
                         .and_then(|mut response| response.json())

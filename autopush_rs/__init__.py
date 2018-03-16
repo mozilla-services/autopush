@@ -32,7 +32,7 @@ class AutopushServer(object):
         cfg.ssl_cert = ffi_from_buffer(conf.ssl.cert)
         cfg.ssl_dh_param = ffi_from_buffer(conf.ssl.dh_param)
         cfg.ssl_key = ffi_from_buffer(conf.ssl.key)
-        cfg.json_logging = True
+        cfg.json_logging = conf.human_logs
         cfg.statsd_host = ffi_from_buffer(conf.statsd_host)
         cfg.statsd_port = conf.statsd_port
         cfg.megaphone_api_url = ffi_from_buffer(conf.megaphone_api_url)
