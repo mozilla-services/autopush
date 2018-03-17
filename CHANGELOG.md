@@ -1,3 +1,28 @@
+<a name="1.42.0"></a>
+## 1.42.0 (2018-03-17)
+
+
+#### Features
+
+*   add megaphone integration tests ([b2132f6e](https://github.com/mozilla-services/autopush/commit/b2132f6e03db192456bcfa0ad6eb2e5a511a6afc), closes [#1129](https://github.com/mozilla-services/autopush/issues/1129))
+*   add megaphone API query and repeating service updating ([cb21dc90](https://github.com/mozilla-services/autopush/commit/cb21dc90f9f49133f441d299c5305509bbbcda37))
+*   add megaphone broadcast handling, ping check, server tracking ([1fe4eebd](https://github.com/mozilla-services/autopush/commit/1fe4eebdcd5a7d4ed6134f46ea2c470ec2c01326))
+*   add megaphone service change tracker ([ec13155b](https://github.com/mozilla-services/autopush/commit/ec13155b3f1f24b2b06e93837c534f552b3c2648))
+
+#### Refactor
+
+*   rearrange/hack back to 100% coverage ([80e79b0e](https://github.com/mozilla-services/autopush/commit/80e79b0e93c719bf0dafd979fb4e978d879ff868), closes [#1143](https://github.com/mozilla-services/autopush/issues/1143))
+
+#### Bug Fixes
+
+*   add missing setup_module() function to test_db ([32668884](https://github.com/mozilla-services/autopush/commit/32668884c834320d77ac03b3b05ae0acb54459ac), closes [#1157](https://github.com/mozilla-services/autopush/issues/1157))
+*   Add ClientError handler to UnregisterCommand ([9b99c285](https://github.com/mozilla-services/autopush/commit/9b99c2851ac5237373ec8615a570c9d04c867df9))
+*   Handle PotentialDataLoss error ([7f60f827](https://github.com/mozilla-services/autopush/commit/7f60f8278641a6bfea53c30fdb17dbc4f44e7777), closes [#1151](https://github.com/mozilla-services/autopush/issues/1151))
+*   remove GCM collapse key ([65f10032](https://github.com/mozilla-services/autopush/commit/65f100320d6da4bd0765a0d5a540ffc773c8d9f8), closes [#1149](https://github.com/mozilla-services/autopush/issues/1149))
+*   fix _expiry() function to use seconds ([cfcad77a](https://github.com/mozilla-services/autopush/commit/cfcad77acf5e73178cfd2a3f289ab2d59781401e), closes [#1073](https://github.com/mozilla-services/autopush/issues/1073))
+
+
+
 <a name="1.41.0"></a>
 ## 1.41.0 (2018-03-03)
 
