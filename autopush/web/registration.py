@@ -293,13 +293,19 @@ class BaseRegistrationHandler(BaseWebHandler):
 
     def _register_user(self, uaid, router_type, router_data):
         # type: (uuid.UUID, str, JSONDict) -> None
-        """Save a new user record"""
+        """Save a new user record
+
+        We set the expiry to 0 here because mobile users never check back,
+        so the record may be incorrectly expired. (Expiry records older than
+        5 years are not automatically deleted.)
+        """
         self.db.router.register_user(dict(
             uaid=uaid.hex,
             router_type=router_type,
             router_data=router_data,
             connected_at=ms_time(),
             last_connect=generate_last_connect(),
+            expiry=0
         ))
 
     def _write_endpoint(self, endpoint, uaid, chid, router_type, router_data,
