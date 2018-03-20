@@ -281,17 +281,9 @@ def create_router_table(tablename="router", read_throughput=5,
     )
     table.meta.client.get_waiter('table_exists').wait(
         TableName=tablename)
-    try:
-        table.meta.client.update_time_to_live(
-            TableName=tablename,
-            TimeToLiveSpecification={
-                'Enabled': True,
-                'AttributeName': 'expiry'
-            }
-        )
-    except ClientError as ex:  # pragma nocover
-        if ex.response["Error"]["Code"] != "UnknownOperationException":
-            raise
+    # Mobile devices (particularly older ones) do not have expiry and
+    # do not check in regularly. We don't know when they expire other than
+    # the bridge server failing the UID from their side.
     return table
 
 
@@ -776,9 +768,8 @@ class Router(object):
                 # Incomplete record, drop it.
                 self.drop_user(uaid)
                 raise ItemNotFound("uaid not found")
-            if item.get("expiry") < _expiry(0):
-                self.drop_user(uaid)
-                raise ItemNotFound("uaid expired")
+            # Mobile users do not check in after initial registration.
+            # DO NOT EXPIRE THEM.
             return item
         except Boto3Error:  # pragma: nocover
             # We trap JSONResponseError because Moto returns text instead of

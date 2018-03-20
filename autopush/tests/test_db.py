@@ -437,6 +437,19 @@ class RouterTestCase(unittest.TestCase):
         results = self.router.drop_old_users(months_ago=0)
         assert list(results) == [25, 25, 3]
 
+    def test_old_mobile_user(self):
+        # Old mobile users (ones that use a bridge) don't regularly check
+        # in, or update their expiry record. It's important that we don't
+        # drop them because reconnecting requires a re-installation.
+        old_mobile = self._create_minimal_record()
+        old_mobile["expiry"] = None
+        m_user = old_mobile['uaid']
+        self.router.register_user(old_mobile)
+        # verify that fetching a user without a expiry still works.
+        # old mobile users don't have, and may never get, and expiry
+        user = self.router.get_uaid(m_user)
+        assert user["uaid"] == m_user
+
     def test_custom_tablename(self):
         db_name = "router_%s" % uuid.uuid4()
         assert not table_exists(db_name, boto_resource=self.resource)
@@ -523,18 +536,6 @@ class RouterTestCase(unittest.TestCase):
                                         connected_at=1234,
                                         router_type="webpush"))
         assert res == (False, {})
-
-    def test_register_user_expired(self):
-        from time import time
-
-        router = Router(self.table_conf, SinkMetrics(), resource=self.resource)
-        expired = self._create_minimal_record()
-        uaid = expired["uaid"]
-        expired["expiry"] = int(time()) - 100
-        self.router.register_user(expired)
-        with pytest.raises(ItemNotFound) as ex:
-            router.get_uaid(uaid)
-        assert ex.value.message == "uaid expired"
 
     def test_clear_node_provision_failed(self):
         router = Router(self.table_conf, SinkMetrics(),
