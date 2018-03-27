@@ -231,6 +231,9 @@ def parse_connection(config_files, args):
     parser.add_argument('--megaphone_api_url',
                         help="The megaphone API URL to query for updates",
                         default=None, type=str, env_var="MEGAPHONE_API_URL")
+    parser.add_argument('--megaphone_api_token',
+                        help="The megaphone API token",
+                        default=None, type=str, env_var="MEGAPHONE_API_TOKEN")
     parser.add_argument('--megaphone_poll_interval',
                         help="The megaphone API polling interval",
                         default=30, type=int,

@@ -122,6 +122,7 @@ class AutopushConfig(object):
     statsd_host = attrib(default="localhost")  # type: str
     statsd_port = attrib(default=8125)  # type: int
     megaphone_api_url = attrib(default=None)  # type: Optional[str]
+    megaphone_api_token = attrib(default=None)  # type: Optional[str]
     megaphone_poll_interval = attrib(default=30)  # type: int
 
     datadog_api_key = attrib(default=None)  # type: Optional[str]

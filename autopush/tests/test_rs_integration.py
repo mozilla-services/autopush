@@ -69,9 +69,11 @@ class MockMegaphoneRequestHandler(BaseHTTPRequestHandler):
     API_PATTERN = re.compile(r'/v1/broadcasts')
     services = {}
     polled = Event()
+    token = "Bearer {}".format(uuid.uuid4().hex)
 
     def do_GET(self):
         if re.search(self.API_PATTERN, self.path):
+            assert self.headers.getheader("Authorization") == self.token
             self.send_response(requests.codes.ok)
             self.send_header('Content-Type', 'application/json; charset=utf-8')
             self.end_headers()
@@ -806,6 +808,7 @@ class TestRustWebPushBroadcast(unittest.TestCase):
             close_handshake_timeout=5,
             max_connections=5000,
             megaphone_api_url=megaphone_api_url,
+            megaphone_api_token=MockMegaphoneRequestHandler.token,
             megaphone_poll_interval=1,
             **self.conn_kwargs()
         )
