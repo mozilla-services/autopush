@@ -36,6 +36,7 @@ class AutopushServer(object):
         cfg.statsd_host = ffi_from_buffer(conf.statsd_host)
         cfg.statsd_port = conf.statsd_port
         cfg.megaphone_api_url = ffi_from_buffer(conf.megaphone_api_url)
+        cfg.megaphone_api_token = ffi_from_buffer(conf.megaphone_api_token)
         cfg.megaphone_poll_interval = conf.megaphone_poll_interval
 
         ptr = _call(lib.autopush_server_new, cfg)

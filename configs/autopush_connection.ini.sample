@@ -43,3 +43,15 @@ router_port = 8081
 ; The client handshake timeout, in seconds. Clients that fail to send a
 ; handshake before the timeout will be disconnected. Set to 0 to disable.
 hello_timeout = 0
+
+; Autopush-rs only settings
+;
+; Megaphone API URL
+#megaphone_api_url = https://megaphone.services.mozilla.com/v1/broadcasts
+
+; Megaphone API Token
+#megaphone_api_token = Bearer some_token
+
+; Megaphone polling interval, determines how frequently the connection node
+; will poll megaphone for service id's
+#megaphone_poll_interval = 30

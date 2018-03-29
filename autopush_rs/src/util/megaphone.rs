@@ -126,11 +126,12 @@ impl ServiceChangeTracker {
     /// as provided as the fetch URL.
     ///
     /// This method uses a synchronous HTTP call.
-    pub fn with_api_services(url: &str) -> reqwest::Result<ServiceChangeTracker> {
+    pub fn with_api_services(url: &str, token: &str) -> reqwest::Result<ServiceChangeTracker> {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(1))
             .build()?;
         let MegaphoneAPIResponse { broadcasts } = client.get(url)
+            .header(reqwest::header::Authorization(token.to_string()))
             .send()?
             .error_for_status()?
             .json()?;

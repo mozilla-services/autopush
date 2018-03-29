@@ -381,6 +381,7 @@ class RustConnectionApplication(AutopushMultiService):
             close_handshake_timeout=ns.close_handshake_timeout,
             aws_ddb_endpoint=ns.aws_ddb_endpoint,
             megaphone_api_url=ns.megaphone_api_url,
+            megaphone_api_token=ns.megaphone_api_token,
             megaphone_poll_interval=ns.megaphone_poll_interval,
             resource=resource
         )

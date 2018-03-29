@@ -17,6 +17,7 @@ use futures::sync::oneshot;
 use futures::task;
 use futures::{Stream, Future, Sink, Async, Poll, AsyncSink, StartSend};
 use hyper;
+use hyper::header;
 use hyper::server::Http;
 use libc::c_char;
 use openssl::ssl::SslAcceptor;
@@ -83,6 +84,7 @@ pub struct AutopushServerOptions {
     pub statsd_host: *const c_char,
     pub statsd_port: u16,
     pub megaphone_api_url: *const c_char,
+    pub megaphone_api_token: *const c_char,
     pub megaphone_poll_interval: u32,
 }
 
@@ -113,6 +115,7 @@ pub struct ServerOptions {
     pub statsd_port: u16,
     pub logger: util::LogGuards,
     pub megaphone_api_url: Option<String>,
+    pub megaphone_api_token: Option<String>,
     pub megaphone_poll_interval: Duration,
 }
 
@@ -174,6 +177,7 @@ pub extern "C" fn autopush_server_new(
             open_handshake_timeout: ito_dur(opts.open_handshake_timeout),
             logger: logger,
             megaphone_api_url: to_s(opts.megaphone_api_url).map(|s| s.to_string()),
+            megaphone_api_token: to_s(opts.megaphone_api_token).map(|s| s.to_string()),
             megaphone_poll_interval: ito_dur(opts.megaphone_poll_interval).expect("poll interval cannot be 0"),
         };
 
@@ -326,7 +330,10 @@ impl Server {
     fn new(opts: &Arc<ServerOptions>, tx: queue::Sender) -> Result<(Rc<Server>, Core)> {
         let core = Core::new()?;
         let broadcaster = if let Some(ref megaphone_url) = opts.megaphone_api_url {
-            ServiceChangeTracker::with_api_services(megaphone_url)
+            let megaphone_token = opts.megaphone_api_token.as_ref().expect(
+                "Megaphone API requires a Megaphone API Token to be set"
+            );
+            ServiceChangeTracker::with_api_services(megaphone_url, megaphone_token)
                 .expect("Unable to initialize megaphone with provided URL".into())
         } else {
             ServiceChangeTracker::new(Vec::new())
@@ -437,8 +444,11 @@ impl Server {
             });
 
         if let Some(ref megaphone_url) = opts.megaphone_api_url {
+            let megaphone_token = opts.megaphone_api_token.as_ref().expect(
+                "Megaphone API requires a Megaphone API Token to be set"
+            );
             let fut = MegaphoneUpdater::new(
-                megaphone_url, opts.megaphone_poll_interval, &srv2,
+                megaphone_url, megaphone_token, opts.megaphone_poll_interval, &srv2,
             )
                 .expect("Unable to start megaphone updater".into());
             core.handle().spawn(fut.then(|res| {
@@ -548,6 +558,7 @@ enum MegaphoneState {
 struct MegaphoneUpdater {
     srv: Rc<Server>,
     api_url: String,
+    api_token: String,
     state: MegaphoneState,
     timeout: Timeout,
     poll_interval: Duration,
@@ -555,7 +566,7 @@ struct MegaphoneUpdater {
 }
 
 impl MegaphoneUpdater {
-    fn new(uri: &str, poll_interval: Duration, srv: &Rc<Server>) -> io::Result<MegaphoneUpdater> {
+    fn new(uri: &str, token: &str, poll_interval: Duration, srv: &Rc<Server>) -> io::Result<MegaphoneUpdater> {
         let client = reqwest::unstable::async::Client::builder()
             .timeout(Duration::from_secs(1))
             .build(&srv.handle)
@@ -563,6 +574,7 @@ impl MegaphoneUpdater {
         Ok(MegaphoneUpdater {
             srv: srv.clone(),
             api_url: uri.to_string(),
+            api_token: token.to_string(),
             state: MegaphoneState::Waiting,
             timeout: Timeout::new(poll_interval, &srv.handle)?,
             poll_interval,
@@ -581,7 +593,9 @@ impl Future for MegaphoneUpdater {
                 MegaphoneState::Waiting => {
                     try_ready!(self.timeout.poll());
                     debug!("Sending megaphone API request");
-                    let fut = self.client.get(&self.api_url).send()
+                    let fut = self.client.get(&self.api_url)
+                        .header(header::Authorization(self.api_token.clone()))
+                        .send()
                         .and_then(|response| response.error_for_status())
                         .and_then(|mut response| response.json())
                         .map_err(|_| "Unable to query/decode the API query".into());
