@@ -1,3 +1,17 @@
+<a name="1.43.0"></a>
+## 1.43.0 (2018-03-31)
+
+
+#### Bug Fixes
+
+*   Remove expiry checks for routing to prevent dropped mobile UAID ([8a6cd619](https://github.com/mozilla-services/autopush/commit/8a6cd619e4e0968ca15d720329a14bd868f10eef), closes [#1161](https://github.com/mozilla-services/autopush/issues/1161))
+
+#### Features
+
+*   add megaphone api token auth ([1e74f963](https://github.com/mozilla-services/autopush/commit/1e74f9638c6963e4a9bcac178fcd929a05ffd61a), closes [#1164](https://github.com/mozilla-services/autopush/issues/1164))
+
+
+
 <a name="1.42.0"></a>
 ## 1.42.0 (2018-03-17)
 
