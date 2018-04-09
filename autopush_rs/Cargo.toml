@@ -8,40 +8,40 @@ crate-type = ["cdylib"]
 
 [dependencies]
 bytes = "0.4.6"
-cadence = "0.13.1"
-chrono = "0.4.0"
-env_logger = { version = "0.5.3", default-features = false }
+cadence = "0.13.2"
+chrono = "0.4.1"
+env_logger = { version = "0.5.6", default-features = false }
 error-chain = "0.11.0"
-futures = "0.1.18"
+futures = "0.1.21"
 hostname = "0.1.4"
 httparse = "1.2.4"
-hyper = "0.11.15"
-libc = "0.2.36"
+hyper = "0.11.25"
+libc = "0.2.40"
 # log: Use this version for debug builds
 # log = "0.4.1"
 # log: Use this for release builds (leave in for commits)
 log = { version = "0.4.1", features = ["max_level_trace", "release_max_level_warn"] }
-openssl = "0.10.2"
+openssl = "0.10.5"
 reqwest = { version = "0.8.5", features = ["unstable"] }
 sentry = "0.2.0"
-serde = "1.0.27"
-serde_derive = "1.0.27"
-serde_json = "1.0.9"
+serde = "1.0.37"
+serde_derive = "1.0.37"
+serde_json = "1.0.13"
 # slog: Use this first version for debug builds
 # slog = { version = "2.1.1" , features = ["max_level_trace", "release_max_level_debug"] }
 # slog: Use this for release builds (leave in for commits)
-slog = "2.1.1"
+slog = "2.2.3"
 slog-async = "2.2.0"
 slog-term = "2.3.0"
 slog-json = "2.2.0"
 slog-scope = "4.0.1"
 slog-stdlog = "3.0.2"
 time = "0.1.39"
-tokio-core = "0.1.12"
-tokio-io = "0.1.4"
+tokio-core = "0.1.16"
+tokio-io = "0.1.6"
 tokio-openssl = "0.2.0"
 tokio-service = "0.1.0"
 tokio-tungstenite = { version = "0.5.1", default-features = false }
 tungstenite = { version = "0.5.3", default-features = false }
-uuid = { version = "0.5.1", features = ["serde", "v4"] }
+uuid = { version = "0.6.2", features = ["serde", "v4"] }
 woothee = "0.7.3"
