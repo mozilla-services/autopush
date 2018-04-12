@@ -39,6 +39,7 @@ pub struct Dispatch {
 pub enum RequestType {
     Websocket,
     Status,
+    LogCheck,
 }
 
 impl Dispatch {
@@ -75,6 +76,7 @@ impl Future for Dispatch {
                 } else {
                     match req.path {
                         Some(ref path) if path.starts_with("/status") => RequestType::Status,
+                        Some(ref path) if path.starts_with("/v1/err/crit") => RequestType::LogCheck,
                         _ => {
                             debug!("unknown http request {:?}", req);
                             return Err("unknown http request".into());
