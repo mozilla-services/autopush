@@ -786,6 +786,7 @@ class TestRustWebPushBroadcast(unittest.TestCase):
         mock_server_thread = Thread(target=mock_server.serve_forever)
         mock_server_thread.setDaemon(True)
         mock_server_thread.start()
+        self.addCleanup(mock_server.shutdown)
         self.mock_server_thread = mock_server_thread
         self.mock_megaphone = MockMegaphoneRequestHandler
 
