@@ -58,3 +58,8 @@ class LogCheckTestCase(unittest.TestCase):
         assert payload.get('error') == "Test Failure"
 
         self.flushLoggedErrors()
+
+    @inlineCallbacks
+    def test_invalid(self):
+        resp = yield self.client.get('/v1/err/bogus')
+        assert resp.get_status() == 404

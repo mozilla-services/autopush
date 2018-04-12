@@ -38,7 +38,7 @@ class LogCheckHandler(BaseWebHandler):
                            client_info=self._client_info)
             self._write_response(418, 999, message="ERROR:Success",
                                  error="Test Error")
-        if 'crit' in err_type:
+        elif 'crit' in err_type:
             try:
                 raise LogCheckError("LogCheck")
             except LogCheckError:
@@ -47,3 +47,5 @@ class LogCheckHandler(BaseWebHandler):
                                  client_info=self._client_info)
                 self._write_response(418, 999, message="FAILURE:Success",
                                      error="Test Failure")
+        else:
+            self._write_response(404, 0)
