@@ -1,3 +1,18 @@
+<a name="1.44.0"></a>
+## 1.44.0 (2018-04-13)
+
+
+#### Bug Fixes
+
+*   wrong toggling of autopush_rs's json_logging ([0382531c](https://github.com/mozilla-services/autopush/commit/0382531c676377f878aa5e2555e0d3a054553f06), closes [#1173](https://github.com/mozilla-services/autopush/issues/1173))
+
+#### Features
+
+*   update dependencies ([01f433b8](https://github.com/mozilla-services/autopush/commit/01f433b835a3faa2425ff667b215ba5c9a0ce263), closes [#1170](https://github.com/mozilla-services/autopush/issues/1170))
+*   refactor client to remove duplicate logic ([47820841](https://github.com/mozilla-services/autopush/commit/4782084111e3ad638c804e05d3f92cd74d718128), closes [#1165](https://github.com/mozilla-services/autopush/issues/1165))
+
+
+
 <a name="1.43.0"></a>
 ## 1.43.0 (2018-03-31)
 
