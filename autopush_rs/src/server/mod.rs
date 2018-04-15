@@ -16,9 +16,8 @@ use cadence::StatsdClient;
 use futures::sync::oneshot;
 use futures::task;
 use futures::{Stream, Future, Sink, Async, Poll, AsyncSink, StartSend};
-use hyper;
-use hyper::header;
 use hyper::server::Http;
+use hyper::{self, header, StatusCode};
 use libc::c_char;
 use openssl::ssl::SslAcceptor;
 use reqwest;
@@ -405,6 +404,7 @@ impl Server {
                 let client = request.and_then(move |(socket, request)| -> MyFuture<_> {
                     match request {
                         RequestType::Status => write_status(socket),
+                        RequestType::LogCheck => write_log_check(socket),
                         RequestType::Websocket => {
                             // Perform the websocket handshake on each
                             // connection, but don't let it take too long.
@@ -927,21 +927,56 @@ where
 }
 
 fn write_status(socket: WebpushIo) -> MyFuture<()> {
-    let data = json!({
-        "status": "OK",
-        "version": env!("CARGO_PKG_VERSION"),
-    }).to_string();
-    let data = format!("\
-        HTTP/1.1 200 Ok\r\n\
-        Server: webpush\r\n\
-        Date: {date}\r\n\
-        Content-Length: {len}\r\n\
-        \r\n\
-        {data}\
-    ",
+    write_json(
+        socket,
+        StatusCode::Ok,
+        json!({
+            "status": "OK",
+            "version": env!("CARGO_PKG_VERSION"),
+    }),
+    )
+}
+
+fn write_log_check(socket: WebpushIo) -> MyFuture<()> {
+    let status = StatusCode::ImATeapot;
+    let code: u16 = status.into();
+
+    error!("Test Critical Message";
+           "status_code" => code,
+           "errno" => 0,
+    );
+    thread::spawn(|| {
+        panic!("LogCheck");
+    });
+
+    write_json(
+        socket,
+        StatusCode::ImATeapot,
+        json!({
+            "code": code,
+            "errno": 999,
+            "error": "Test Failure",
+            "mesage": "FAILURE:Success",
+    }),
+    )
+}
+
+fn write_json(socket: WebpushIo, status: StatusCode, body: serde_json::Value) -> MyFuture<()> {
+    let body = body.to_string();
+    let data = format!(
+        "\
+         HTTP/1.1 {status}\r\n\
+         Server: webpush\r\n\
+         Date: {date}\r\n\
+         Content-Length: {len}\r\n\
+         Content-Type: application/json\r\n\
+         \r\n\
+         {body}\
+         ",
+        status = status,
         date = time::at(time::get_time()).rfc822(),
-        len = data.len(),
-        data = data,
+        len = body.len(),
+        body = body,
     );
     Box::new(
         tokio_io::io::write_all(socket, data.into_bytes())
