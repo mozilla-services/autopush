@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
+use std::default::Default;
 use std::env;
 use std::ffi::CStr;
 use std::io;
@@ -22,6 +23,8 @@ use hyper::server::Http;
 use libc::c_char;
 use openssl::ssl::SslAcceptor;
 use reqwest;
+use rusoto_core::{Region};
+use rusoto_dynamodb::{DynamoDbClient};
 use sentry;
 use serde_json;
 use time;
@@ -91,6 +94,7 @@ pub struct AutopushServerOptions {
 pub struct Server {
     uaids: RefCell<HashMap<Uuid, RegisteredClient>>,
     broadcaster: RefCell<ServiceChangeTracker>,
+    pub ddb_client: DynamoDbClient,
     open_connections: Cell<u32>,
     tls_acceptor: Option<SslAcceptor>,
     pub tx: queue::Sender,
@@ -338,9 +342,17 @@ impl Server {
         } else {
             ServiceChangeTracker::new(Vec::new())
         };
+        let region = env::var("AWS_LOCAL_DYNAMODB").map(|endpoint| {
+            Region::Custom {
+                endpoint,
+                name: "env_var".to_string(),
+            }
+        }).unwrap_or(Region::default());
+        let ddb_client = DynamoDbClient::simple(region);
         let srv = Rc::new(Server {
             opts: opts.clone(),
             broadcaster: RefCell::new(broadcaster),
+            ddb_client: ddb_client,
             uaids: RefCell::new(HashMap::new()),
             open_connections: Cell::new(0),
             handle: core.handle(),
@@ -470,12 +482,15 @@ impl Server {
     /// namely its channel to send notifications back.
     pub fn connect_client(&self, client: RegisteredClient) {
         debug!("Connecting a client!");
-        assert!(
-            self.uaids
-                .borrow_mut()
-                .insert(client.uaid, client)
-                .is_none()
-        );
+        if let Some(client) = self.uaids.borrow_mut().insert(client.uaid, client) {
+            // Drop existing connection
+            let result = client
+                .tx
+                .unbounded_send(ServerNotification::Disconnect);
+            if result.is_ok() {
+                debug!("Told client to disconnect as a new one wants to connect");
+            }
+        }
     }
 
     /// A notification has come for the uaid
@@ -510,10 +525,13 @@ impl Server {
     }
 
     /// The client specified by `uaid` has disconnected.
-    pub fn disconnet_client(&self, uaid: &Uuid) {
+    pub fn disconnet_client(&self, uaid: &Uuid, uid: &Uuid) {
         debug!("Disconnecting client!");
         let mut uaids = self.uaids.borrow_mut();
-        uaids.remove(uaid).expect("uaid not registered");
+        let client_exists = uaids.get(uaid).map(|client| client.uid == *uid).unwrap_or(false);
+        if client_exists {
+            uaids.remove(uaid).expect("Couldn't remove client?");
+        }
     }
 
     /// Generate a new service client list for a newly connected client

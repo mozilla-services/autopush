@@ -144,13 +144,6 @@ class CheckStorage(InputCommand):
 
 
 @attrs(slots=True)
-class IncStoragePosition(InputCommand):
-    uaid = attrib(convert=uaid_from_str)  # type: UUID
-    message_month = attrib()  # type: str
-    timestamp = attrib()  # type: int
-
-
-@attrs(slots=True)
 class DeleteMessage(InputCommand):
     message_month = attrib()  # type: str
     message = attrib(convert=dict_to_webpush_message)  # type: WebPushMessage
@@ -200,11 +193,6 @@ class CheckStorageResponse(OutputCommand):
         default=attr.Factory(list)
     )  # type: List[WebPushMessage]
     timestamp = attrib(default=None)  # type: Optional[int]
-
-
-@attrs(slots=True)
-class IncStoragePositionResponse(OutputCommand):
-    success = attrib(default=True)  # type: bool
 
 
 @attrs(slots=True)
@@ -296,7 +284,6 @@ class CommandProcessor(object):
         self.db = db
         self.hello_processor = HelloCommand(conf, db)
         self.check_storage_processor = CheckStorageCommand(conf, db)
-        self.inc_storage_processor = IncrementStorageCommand(conf, db)
         self.delete_message_processor = DeleteMessageCommand(conf, db)
         self.drop_user_processor = DropUserCommand(conf, db)
         self.migrate_user_proocessor = MigrateUserCommand(conf, db)
@@ -306,7 +293,6 @@ class CommandProcessor(object):
         self.deserialize = dict(
             hello=Hello,
             check_storage=CheckStorage,
-            inc_storage_position=IncStoragePosition,
             delete_message=DeleteMessage,
             drop_user=DropUser,
             migrate_user=MigrateUser,
@@ -317,7 +303,6 @@ class CommandProcessor(object):
         self.command_dict = dict(
             hello=self.hello_processor,
             check_storage=self.check_storage_processor,
-            inc_storage_position=self.inc_storage_processor,
             delete_message=self.delete_message_processor,
             drop_user=self.drop_user_processor,
             migrate_user=self.migrate_user_proocessor,
@@ -511,15 +496,6 @@ class CheckStorageCommand(ProcessorCommand):
         if not timestamp:
             timestamp = command.timestamp
         return timestamp, messages, False
-
-
-class IncrementStorageCommand(ProcessorCommand):
-    def process(self, command):
-        # type: (IncStoragePosition) -> IncStoragePositionResponse
-        message = Message(command.message_month,
-                          boto_resource=self.db.resource)
-        message.update_last_message_read(command.uaid, command.timestamp)
-        return IncStoragePositionResponse()
 
 
 class DeleteMessageCommand(ProcessorCommand):

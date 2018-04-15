@@ -13,6 +13,7 @@ chrono = "0.4.1"
 env_logger = { version = "0.5.6", default-features = false }
 error-chain = "0.11.0"
 futures = "0.1.21"
+futures-backoff = "0.1"
 hostname = "0.1.4"
 httparse = "1.2.4"
 hyper = "0.11.25"
@@ -21,14 +22,17 @@ libc = "0.2.40"
 # log = "0.4.1"
 # log: Use this for release builds (leave in for commits)
 log = { version = "0.4.1", features = ["max_level_trace", "release_max_level_warn"] }
+matches = "0.1.6"
 openssl = "0.10.5"
 reqwest = { version = "0.8.5", features = ["unstable"] }
+rusoto_core = "0.32.0"
+rusoto_dynamodb = "0.32.0"
 sentry = "0.2.0"
 serde = "1.0.37"
 serde_derive = "1.0.37"
 serde_json = "1.0.13"
 # slog: Use this first version for debug builds
-# slog = { version = "2.1.1" , features = ["max_level_trace", "release_max_level_debug"] }
+# slog = { version = "2.2.3" , features = ["max_level_trace", "release_max_level_debug"] }
 # slog: Use this for release builds (leave in for commits)
 slog = "2.2.3"
 slog-async = "2.2.0"

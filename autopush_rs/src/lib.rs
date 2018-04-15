@@ -65,12 +65,17 @@ extern crate cadence;
 extern crate chrono;
 #[macro_use]
 extern crate futures;
+extern crate futures_backoff;
 extern crate hostname;
 extern crate httparse;
 extern crate hyper;
 extern crate libc;
+#[macro_use]
+extern crate matches;
 extern crate openssl;
 extern crate reqwest;
+extern crate rusoto_core;
+extern crate rusoto_dynamodb;
 extern crate sentry;
 extern crate serde;
 #[macro_use]
@@ -98,11 +103,13 @@ extern crate woothee;
 #[macro_use]
 extern crate error_chain;
 
+#[macro_use]
+mod util;
+
 mod client;
 mod errors;
 mod http;
 mod protocol;
-mod util;
 
 #[macro_use]
 pub mod rt;
