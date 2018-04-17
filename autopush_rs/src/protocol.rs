@@ -14,6 +14,7 @@ use uuid::Uuid;
 pub enum ServerNotification {
     CheckStorage,
     Notification(Notification),
+    Disconnect,
 }
 
 #[derive(Deserialize)]

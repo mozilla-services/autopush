@@ -149,12 +149,6 @@ enum Call {
         message_month: String,
     },
 
-    IncStoragePosition {
-        uaid: String,
-        message_month: String,
-        timestamp: u64,
-    },
-
     DropUser { uaid: String },
 
     MigrateUser { uaid: String, message_month: String },
@@ -215,11 +209,6 @@ pub struct CheckStorageResponse {
 
 #[derive(Deserialize)]
 pub struct DeleteMessageResponse {
-    pub success: bool,
-}
-
-#[derive(Deserialize)]
-pub struct IncStorageResponse {
     pub success: bool,
 }
 
@@ -299,21 +288,6 @@ impl Server {
             uaid: uaid,
             message_month: message_month,
             include_topic: include_topic,
-            timestamp: timestamp,
-        });
-        self.send_to_python(call);
-        return fut;
-    }
-
-    pub fn increment_storage(
-        &self,
-        uaid: String,
-        message_month: String,
-        timestamp: u64,
-    ) -> MyFuture<IncStorageResponse> {
-        let (call, fut) = PythonCall::new(&Call::IncStoragePosition {
-            uaid: uaid,
-            message_month: message_month,
             timestamp: timestamp,
         });
         self.send_to_python(call);

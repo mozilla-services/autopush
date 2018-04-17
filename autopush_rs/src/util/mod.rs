@@ -17,6 +17,8 @@ use errors::*;
 mod autojson;
 mod aws;
 pub mod megaphone;
+#[macro_use]
+pub mod ddb_helpers;
 mod rc;
 mod send_all;
 mod user_agent;

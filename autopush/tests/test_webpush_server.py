@@ -29,7 +29,6 @@ from autopush.webpush_server import (
     DropUser,
     Hello,
     HelloResponse,
-    IncStoragePosition,
     MigrateUser,
     Register,
     StoreMessages,
@@ -337,40 +336,6 @@ class TestCheckStorageProcessor(BaseSetup):
         check.include_topic = result.include_topic
         result = p.process(check)
         assert len(result.messages) == 5
-
-
-class TestIncrementStorageProcessor(BaseSetup):
-    def _makeFUT(self):
-        from autopush.webpush_server import IncrementStorageCommand
-        return IncrementStorageCommand(self.conf, self.db)
-
-    def test_inc_storage(self):
-        from autopush.webpush_server import CheckStorageCommand
-        inc_command = self._makeFUT()
-        check_command = CheckStorageCommand(self.conf, self.db)
-        check = CheckStorageFactory(message_month=self.db.current_msg_month)
-        uaid = check.uaid
-
-        # First store/register some messages
-        self._store_messages(check.uaid, num=15)
-
-        # Pull 10 out
-        check_result = check_command.process(check)
-        assert len(check_result.messages) == 10
-
-        # We should now have an updated timestamp returned, increment it
-        inc = IncStoragePosition(uaid=uaid.hex,
-                                 message_month=self.db.current_msg_month,
-                                 timestamp=check_result.timestamp)
-        inc_command.process(inc)
-
-        # Create a new check command, and verify we resume from 10 in
-        check = CheckStorageFactory(
-            uaid=uaid.hex,
-            message_month=self.db.current_msg_month
-        )
-        check_result = check_command.process(check)
-        assert len(check_result.messages) == 5
 
 
 class TestDeleteMessageProcessor(BaseSetup):

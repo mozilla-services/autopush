@@ -14,6 +14,9 @@ use futures::future::Either;
 use futures::sync::mpsc;
 use futures::sync::oneshot::Receiver;
 use futures::{Stream, Sink, Future, Poll, Async};
+use futures_backoff::retry_if;
+use rusoto_dynamodb::{AttributeValue, DynamoDb};
+use rusoto_dynamodb::{UpdateItemInput, UpdateItemOutput, UpdateItemError};
 use tokio_core::reactor::Timeout;
 use time;
 use uuid::Uuid;
@@ -26,8 +29,11 @@ use server::Server;
 use util::parse_user_agent;
 use util::megaphone::{ClientServices, Service, ServiceClientInit};
 
+const MAX_EXPIRY: u64 = 2592000;
+
 pub struct RegisteredClient {
     pub uaid: Uuid,
+    pub uid: Uuid,
     pub tx: mpsc::UnboundedSender<ServerNotification>,
 }
 
@@ -68,6 +74,7 @@ pub struct ClientData<T> {
 // Represent the state for a valid WebPush client that is authenticated
 pub struct WebPushClient {
     uaid: Uuid,
+    uid: Uuid,
     rx: mpsc::UnboundedReceiver<ServerNotification>,
     flags: ClientFlags,
     broadcast_services: ClientServices,
@@ -128,7 +135,7 @@ pub enum ClientState {
     WaitingForUnRegister(Uuid, MyFuture<call::UnRegisterResponse>),
     WaitingForCheckStorage(MyFuture<call::CheckStorageResponse>),
     WaitingForDelete(MyFuture<call::DeleteMessageResponse>),
-    WaitingForIncrementStorage(MyFuture<call::IncStorageResponse>),
+    WaitingForIncrementStorage(MyFuture<UpdateItemOutput>),
     WaitingForDropUser(MyFuture<call::DropUserResponse>),
     WaitingForMigrateUser(MyFuture<call::MigrateUserResponse>),
     FinishSend(Option<ServerMessage>, Option<Box<ClientState>>),
@@ -271,13 +278,7 @@ where
             }
             ClientState::IncrementStorage => {
                 debug!("State: IncrementStorage");
-                let webpush = self.data.webpush.as_ref().unwrap();
-                debug!("About to increment storage with: {:?}", webpush.unacked_stored_highest);
-                ClientState::WaitingForIncrementStorage(self.data.srv.increment_storage(
-                    webpush.uaid.simple().to_string(),
-                    webpush.message_month.clone(),
-                    webpush.unacked_stored_highest.unwrap(),
-                ))
+                self.data.process_increment_storage()
             }
             ClientState::WaitingForHello(ref mut timeout) => {
                 debug!("State: WaitingForHello");
@@ -494,6 +495,10 @@ where
                         webpush.flags.check = true;
                         ClientState::Await
                     }
+                    Either::B(ServerNotification::Disconnect) => {
+                        debug!("Got told to disconnect, connecting client has our uaid");
+                        ClientState::ShutdownCleanup(Some("Repeat UAID disconnect".into()))
+                    }
                     _ => return Err("Invalid message".into()),
                 }
             }
@@ -575,8 +580,10 @@ where
         flags.rotate_message_table = rotate_message_table;
 
         let ServiceClientInit(client_services, broadcasts) = self.srv.broadcast_init(services);
+        let uid = Uuid::new_v4();
         self.webpush = Some(WebPushClient {
             uaid,
+            uid: uid.clone(),
             broadcast_services: client_services,
             flags,
             rx,
@@ -601,7 +608,7 @@ where
             },
         });
         self.srv.connect_client(
-            RegisteredClient { uaid: uaid, tx: tx },
+            RegisteredClient { uaid: uaid, uid: uid, tx: tx },
         );
         let response = ServerMessage::Hello {
             uaid: uaid.hyphenated().to_string(),
@@ -640,6 +647,42 @@ where
             code.unwrap_or(200),
         );
         ClientState::WaitingForUnRegister(channel_id, fut)
+    }
+
+    fn process_increment_storage(&mut self) -> ClientState {
+        // Let the variable copies begin, so that nothing is left dangling in the future
+        // we then assemble because Lifetimes.
+        let webpush = self.webpush.as_ref().unwrap();
+        let timestamp = webpush.unacked_stored_highest.unwrap().to_string();
+        let uaid = webpush.uaid.simple().to_string();
+        let month_name = webpush.message_month.clone();
+        let srv = self.srv.clone();
+        let ddb_call = retry_if(move || {
+            let expiry = (time::get_time().sec as u64) + MAX_EXPIRY;
+            let mut attr_values = HashMap::new();
+            attr_values.insert(":timestamp".to_string(), AttributeValue {
+                n: Some(timestamp.clone()),
+                ..Default::default()
+            });
+            attr_values.insert(":expiry".to_string(), AttributeValue {
+                n: Some(expiry.to_string()),
+                ..Default::default()
+            });
+            srv.ddb_client.update_item(&UpdateItemInput {
+                key: ddb_item! {
+                            uaid: s => uaid.clone(),
+                            chidmessageid: s => " ".to_string()
+                        },
+                update_expression: Some("SET current_timestamp=:timestamp, expiry=:expiry".to_string()),
+                expression_attribute_values: Some(attr_values),
+                table_name: month_name.clone(),
+                ..Default::default()
+            })
+        }, |err: &UpdateItemError| {
+            matches!(err, &UpdateItemError::ProvisionedThroughputExceeded(_))
+        })
+            .map_err(|_| "Error incrementing storage".into());
+        ClientState::WaitingForIncrementStorage(Box::new(ddb_call))
     }
 
     fn process_acks(&mut self, updates: Vec<ClientAck>) -> ClientState {
@@ -740,13 +783,14 @@ where
                 Ok(ServerNotification::Notification(notif)) => {
                     webpush.unacked_direct_notifs.push(notif);
                 }
+                Ok(ServerNotification::Disconnect) => continue,
                 Err(_) => continue,
             }
         }
 
         // If there's direct unack'd messages, they need to be saved out without blocking
         // here
-        self.srv.disconnet_client(&webpush.uaid);
+        self.srv.disconnet_client(&webpush.uaid, &webpush.uid);
         let mut stats = webpush.stats;
         let unacked_direct_notifs = webpush.unacked_direct_notifs.len();
         if unacked_direct_notifs > 0 {
