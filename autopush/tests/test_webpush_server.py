@@ -431,6 +431,20 @@ class TestMigrateUserProcessor(BaseSetup):
         assert item is not None
         assert len(channels) == 3
 
+    def test_no_migrate(self):
+        self.conf.allow_table_rotation = False
+        self.conf.message_table.tablename = "message_int_test"
+        self.db = db = DatabaseManager.from_config(
+            self.conf,
+            resource=autopush.tests.boto_resource
+        )
+        assert self.db.allow_table_rotation is False
+        db.setup_tables()
+        tablename = autopush.tests.boto_resource.get_latest_message_tablename(
+            prefix="message_int_test"
+        )
+        assert db.message.tablename == tablename
+
 
 class TestRegisterProcessor(BaseSetup):
 

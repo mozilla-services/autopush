@@ -13,11 +13,12 @@ import os
 import re
 import socket
 import time
+import datetime
 import uuid
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from httplib import HTTPResponse  # noqa
-from mock import Mock, call
+from mock import Mock, call, patch
 from threading import Thread, Event
 from unittest.case import SkipTest
 
@@ -114,6 +115,18 @@ class TestRustWebPush(unittest.TestCase):
         use_cryptography=True,
     )
 
+    def start_ep(self, ep_conf):
+        self._ep_conf = ep_conf
+
+        # Endpoint HTTP router
+        self.ep = ep = EndpointApplication(
+            ep_conf,
+            resource=autopush.tests.boto_resource
+        )
+        ep.setup(rotate_tables=False)
+        ep.startService()
+        self.addCleanup(ep.stopService)
+
     def setUp(self):
         self.logs = TestingLogObserver()
         begin_or_register(self.logs)
@@ -133,16 +146,7 @@ class TestRustWebPush(unittest.TestCase):
             human_logs=False,
             **self.conn_kwargs()
         )
-
-        # Endpoint HTTP router
-        self.ep = ep = EndpointApplication(
-            ep_conf,
-            resource=autopush.tests.boto_resource
-        )
-        ep.setup(rotate_tables=False)
-        ep.startService()
-        self.addCleanup(ep.stopService)
-
+        self.start_ep(ep_conf)
         # Websocket server
         self.conn = conn = RustConnectionApplication(
             conn_conf,
@@ -181,6 +185,36 @@ class TestRustWebPush(unittest.TestCase):
     @property
     def _ws_url(self):
         return "ws://localhost:{}/".format(self.connection_port)
+
+    @inlineCallbacks
+    def test_no_rotation(self):
+        # override autopush settings
+        safe = self._ep_conf.allow_table_rotation
+        self._ep_conf.allow_table_rotation = False
+        yield self.ep.stopService()
+        try:
+            self.start_ep(self._ep_conf)
+            data = str(uuid.uuid4())
+            client = yield self.quick_register()
+            result = yield client.send_notification(data=data)
+            assert result["headers"]["encryption"] == client._crypto_key
+            assert result["data"] == base64url_encode(data)
+            assert result["messageType"] == "notification"
+
+            assert len(self.ep.db.message_tables) == 1
+            table_name = self.ep.db.message_tables[0]
+            target_day = datetime.date(2016, 2, 29)
+            with patch.object(datetime, 'date',
+                              Mock(wraps=datetime.date)) as patched:
+                patched.today.return_value = target_day
+                yield self.ep.db.update_rotating_tables()
+                assert len(self.ep.db.message_tables) == 1
+                assert table_name == self.ep.db.message_tables[0]
+        finally:
+            yield self.ep.stopService()
+            self._ep_conf.allow_table_rotation = safe
+            self.start_ep(self._ep_conf)
+        yield self.shut_down(client)
 
     @inlineCallbacks
     def test_hello_only_has_three_calls(self):

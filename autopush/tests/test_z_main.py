@@ -178,6 +178,42 @@ class ConfigAsyncTestCase(trialtest.TestCase):
         d.addBoth(lambda x: e.callback(True))
         return e
 
+    def test_no_rotation(self):
+        today = datetime.date.today()
+        next_month = today.month + 1
+        next_year = today.year
+        if next_month > 12:  # pragma: nocover
+            next_month = 1
+            next_year += 1
+        tomorrow = datetime.datetime(year=next_year,
+                                     month=next_month,
+                                     day=1)
+        conf = AutopushConfig(
+            hostname="example.com",
+            resolve_hostname=True,
+            allow_table_rotation=False
+        )
+        resource = autopush.tests.boto_resource
+        db = DatabaseManager.from_config(
+            conf,
+            resource=resource)
+        db._tomorrow = Mock(return_value=tomorrow)
+        db.create_initial_message_tables()
+        assert len(db.message_tables) == 1
+        assert db.message_tables[0] == resource.get_latest_message_tablename(
+            prefix=conf.message_table.tablename
+        )
+
+        def check_tables(result):
+            assert len(db.message_tables) == 1
+            assert db.message_tables[0] ==  \
+                resource.get_latest_message_tablename(
+                    prefix=conf.message_table.tablename
+                )
+        dd = db.update_rotating_tables()
+        dd.addCallback(check_tables)
+        return dd
+
 
 class ConnectionMainTestCase(unittest.TestCase):
     def setUp(self):
@@ -271,6 +307,7 @@ class EndpointMainTestCase(unittest.TestCase):
         sts_max_age = 1234
         _no_sslcontext_cache = False
         aws_ddb_endpoint = None
+        no_table_rotation = False
 
     def setUp(self):
         patchers = [
