@@ -4,8 +4,9 @@
 //! this'll house all the various state machine transitions and state management
 //! of connected clients. Note that it's expected there'll be a lot of connected
 //! clients, so this may appears relatively heavily optimized!
-
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::mem;
 use std::rc::Rc;
 
 use cadence::prelude::*;
@@ -13,10 +14,11 @@ use futures::AsyncSink;
 use futures::future::Either;
 use futures::sync::mpsc;
 use futures::sync::oneshot::Receiver;
-use futures::{Stream, Sink, Future, Poll, Async};
+use futures::{Async, Future, Poll, Sink, Stream};
 use futures_backoff::retry_if;
 use rusoto_dynamodb::{AttributeValue, DynamoDb};
-use rusoto_dynamodb::{UpdateItemInput, UpdateItemOutput, UpdateItemError};
+use rusoto_dynamodb::{UpdateItemError, UpdateItemInput, UpdateItemOutput};
+use state_machine_future::RentToOwn;
 use tokio_core::reactor::Timeout;
 use time;
 use uuid::Uuid;
@@ -24,127 +26,30 @@ use woothee::parser::Parser;
 
 use call;
 use errors::*;
-use protocol::{ClientAck, ClientMessage, ServerMessage, ServerNotification, Notification};
+use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
 use server::Server;
 use util::parse_user_agent;
 use util::megaphone::{ClientServices, Service, ServiceClientInit};
 
 const MAX_EXPIRY: u64 = 2592000;
 
+// Created and handed to the AutopushServer
 pub struct RegisteredClient {
     pub uaid: Uuid,
     pub uid: Uuid,
     pub tx: mpsc::UnboundedSender<ServerNotification>,
 }
 
-// Websocket session statistics
-#[derive(Clone)]
-struct SessionStatistics {
-    // User data
-    uaid: String,
-    uaid_reset: bool,
-    existing_uaid: bool,
-    connection_type: String,
-    host: String,
-
-    // Usage data
-    direct_acked: i32,
-    direct_storage: i32,
-    stored_retrieved: i32,
-    stored_acked: i32,
-    nacks: i32,
-    unregisters: i32,
-    registers: i32,
-}
-
-// Represents a websocket client connection that may or may not be authenticated
-pub struct Client<T> {
-    data: ClientData<T>,
-    state: ClientState,
-}
-
-pub struct ClientData<T> {
-    webpush: Option<WebPushClient>,
+pub struct Client<T>
+where
+    T: Stream<Item = ClientMessage, Error = Error>
+        + Sink<SinkItem = ServerMessage, SinkError = Error>
+        + 'static,
+{
+    state_machine: UnAuthClientStateFuture<T>,
     srv: Rc<Server>,
-    ws: T,
-    user_agent: String,
-    host: String,
-}
-
-// Represent the state for a valid WebPush client that is authenticated
-pub struct WebPushClient {
-    uaid: Uuid,
-    uid: Uuid,
-    rx: mpsc::UnboundedReceiver<ServerNotification>,
-    flags: ClientFlags,
-    broadcast_services: ClientServices,
-    message_month: String,
-    unacked_direct_notifs: Vec<Notification>,
-    unacked_stored_notifs: Vec<Notification>,
-    // Highest version from stored, retained for use with increment
-    // when all the unacked storeds are ack'd
-    unacked_stored_highest: Option<u64>,
-    connected_at: u64,
-    stats: SessionStatistics,
-}
-
-impl WebPushClient {
-    fn unacked_messages(&self) -> bool {
-        self.unacked_stored_notifs.len() > 0 || self.unacked_direct_notifs.len() > 0
-    }
-}
-
-pub struct ClientFlags {
-    include_topic: bool,
-    increment_storage: bool,
-    check: bool,
-    reset_uaid: bool,
-    rotate_message_table: bool,
-}
-
-impl ClientFlags {
-    fn new() -> ClientFlags {
-        ClientFlags {
-            include_topic: true,
-            increment_storage: false,
-            check: false,
-            reset_uaid: false,
-            rotate_message_table: false,
-        }
-    }
-
-    pub fn none(&self) -> bool {
-        // Indicate if none of the flags are true.
-        match *self {
-            ClientFlags {
-                include_topic: false,
-                increment_storage: false,
-                check: false,
-                reset_uaid: false,
-                rotate_message_table: false,
-            } => true,
-            _ => false,
-        }
-    }
-}
-
-pub enum ClientState {
-    WaitingForHello(Timeout),
-    WaitingForProcessHello(MyFuture<call::HelloResponse>, Vec<Service>),
-    WaitingForRegister(Uuid, MyFuture<call::RegisterResponse>),
-    WaitingForUnRegister(Uuid, MyFuture<call::UnRegisterResponse>),
-    WaitingForCheckStorage(MyFuture<call::CheckStorageResponse>),
-    WaitingForDelete(MyFuture<call::DeleteMessageResponse>),
-    WaitingForIncrementStorage(MyFuture<UpdateItemOutput>),
-    WaitingForDropUser(MyFuture<call::DropUserResponse>),
-    WaitingForMigrateUser(MyFuture<call::MigrateUserResponse>),
-    FinishSend(Option<ServerMessage>, Option<Box<ClientState>>),
-    SendMessages(Option<Vec<Notification>>),
-    CheckStorage,
-    IncrementStorage,
-    Await,
-    Done,
-    ShutdownCleanup(Option<Error>),
+    broadcast_services: Rc<RefCell<ClientServices>>,
+    tx: mpsc::UnboundedSender<ServerNotification>,
 }
 
 impl<T> Client<T>
@@ -166,6 +71,7 @@ where
     pub fn new(ws: T, srv: &Rc<Server>, mut uarx: Receiver<String>, host: String) -> Client<T> {
         let srv = srv.clone();
         let timeout = Timeout::new(srv.opts.open_handshake_timeout.unwrap(), &srv.handle).unwrap();
+        let (tx, rx) = mpsc::unbounded();
 
         // Pull out the user-agent, which we should have by now
         let uastr = match uarx.poll() {
@@ -180,657 +86,35 @@ where
             }
         };
 
-        Client {
-            state: ClientState::WaitingForHello(timeout),
-            data: ClientData {
-                webpush: None,
+        let broadcast_services = Rc::new(RefCell::new(Default::default()));
+        let sm = UnAuthClientState::start(
+            UnAuthClientData {
                 srv: srv.clone(),
-                ws: ws,
+                ws,
                 user_agent: uastr,
                 host,
+                broadcast_services: broadcast_services.clone(),
             },
-        }
-    }
+            timeout,
+            tx.clone(),
+            rx,
+        );
 
-    pub fn shutdown(&mut self) {
-        self.data.shutdown();
+        Client {
+            state_machine: sm,
+            srv: srv.clone(),
+            broadcast_services,
+            tx,
+        }
     }
 
     pub fn broadcast_delta(&mut self) -> Option<Vec<Service>> {
-        if let Some(ref mut webpush) = self.data.webpush {
-            self.data.srv.broadcast_delta(&mut webpush.broadcast_services)
-        } else {
-            None
-        }
-    }
-
-    fn transition(&mut self) -> Poll<ClientState, Error> {
-        let host = self.data.host.clone();
-        let next_state = match self.state {
-            ClientState::FinishSend(None, None) => {
-                return Err("Bad state, should not have nothing to do".into())
-            }
-            ClientState::FinishSend(None, ref mut next_state) => {
-                debug!("State: FinishSend w/next_state");
-                try_ready!(self.data.ws.poll_complete());
-                *next_state.take().unwrap()
-            }
-            ClientState::FinishSend(ref mut msg, ref mut next_state) => {
-                debug!("State: FinishSend w/msg & next_state");
-                let item = msg.take().unwrap();
-                if let ServerMessage::Notification(ref notif) = item {
-                    debug!("Sending message: {:?}", notif);
-                }
-                let ret = self.data.ws.start_send(item).chain_err(|| "unable to send")?;
-                match ret {
-                    AsyncSink::Ready => {
-                        ClientState::FinishSend(None, Some(next_state.take().unwrap()))
-                    }
-                    AsyncSink::NotReady(returned) => {
-                        *msg = Some(returned);
-                        return Ok(Async::NotReady);
-                    }
-                }
-            }
-            ClientState::SendMessages(ref mut more_messages) => {
-                debug!("State: SendMessages");
-                if more_messages.is_some() {
-                    let mut messages = more_messages.take().unwrap();
-                    if messages.len() > 0 {
-                        let message = messages.remove(0);
-                        if message.topic.is_some() {
-                            self.data.srv.metrics.incr("ua.notification.topic")?;
-                        }
-                        let mlen = message.data.as_ref().map_or(0, |d| d.len() as i64);
-                        // XXX: not emitted for direct notifications (nor was it in websocket.py)
-                        self.data.srv.metrics
-                            .count_with_tags("ua.message_data", mlen)
-                            .with_tag("source", "Stored")
-                            .send()?;
-                        ClientState::FinishSend(
-                            Some(ServerMessage::Notification(message)),
-                            Some(Box::new(ClientState::SendMessages(if messages.len() > 0 {
-                                Some(messages)
-                            } else {
-                                None
-                            }))),
-                        )
-                    } else {
-                        ClientState::SendMessages(if messages.len() > 0 {
-                            Some(messages)
-                        } else {
-                            None
-                        })
-                    }
-                } else {
-                    ClientState::Await
-                }
-            }
-            ClientState::CheckStorage => {
-                debug!("State: CheckStorage");
-                let webpush = self.data.webpush.as_ref().unwrap();
-                ClientState::WaitingForCheckStorage(self.data.srv.check_storage(
-                    webpush.uaid.simple().to_string(),
-                    webpush.message_month.clone(),
-                    webpush.flags.include_topic,
-                    webpush.unacked_stored_highest,
-                ))
-            }
-            ClientState::IncrementStorage => {
-                debug!("State: IncrementStorage");
-                self.data.process_increment_storage()
-            }
-            ClientState::WaitingForHello(ref mut timeout) => {
-                debug!("State: WaitingForHello");
-                let (uaid, services) = match try_ready!(self.data.input_with_timeout(timeout)) {
-                    ClientMessage::Hello {
-                        uaid,
-                        use_webpush: Some(true),
-                        broadcasts,
-                        ..
-                    } => (
-                        uaid.and_then(|uaid| Uuid::parse_str(uaid.as_str()).ok()),
-                        Service::from_hashmap(broadcasts.unwrap_or(HashMap::new()))
-                    ),
-                    _ => return Err("Invalid message, must be hello".into()),
-                };
-                let connected_at = time::precise_time_ns() / 1000;
-                ClientState::WaitingForProcessHello(
-                    self.data.srv.hello(&connected_at, uaid.as_ref()),
-                    services,
-                )
-            }
-            ClientState::WaitingForProcessHello(ref mut response, ref services) => {
-                debug!("State: WaitingForProcessHello");
-                match try_ready!(response.poll()) {
-                    call::HelloResponse {
-                        uaid: Some(uaid),
-                        message_month,
-                        check_storage,
-                        reset_uaid,
-                        rotate_message_table,
-                        connected_at,
-                    } => {
-                        self.data.process_hello(
-                            uaid,
-                            message_month,
-                            reset_uaid,
-                            rotate_message_table,
-                            check_storage,
-                            connected_at,
-                            services,
-                        )
-                    }
-                    call::HelloResponse { uaid: None, .. } => {
-                        return Err("Already connected elsewhere".into())
-                    }
-                }
-            }
-            ClientState::WaitingForCheckStorage(ref mut response) => {
-                debug!("State: WaitingForCheckStorage");
-                let (include_topic, mut messages, timestamp) = match try_ready!(response.poll()) {
-                    call::CheckStorageResponse {
-                        include_topic,
-                        messages,
-                        timestamp,
-                    } => (include_topic, messages, timestamp),
-                };
-                debug!("Got checkstorage response");
-                let webpush = self.data.webpush.as_mut().unwrap();
-                webpush.flags.include_topic = include_topic;
-                debug!("Setting unacked stored highest to {:?}", timestamp);
-                webpush.unacked_stored_highest = timestamp;
-                if messages.len() > 0 {
-                    // Filter out TTL expired messages
-                    let now = time::get_time().sec as u32;
-                    messages.retain(|ref msg| now < msg.ttl + msg.timestamp);
-                    webpush.flags.increment_storage = !include_topic && timestamp.is_some();
-                    // If there's still messages send them out
-                    if messages.len() > 0 {
-                        webpush.unacked_stored_notifs.extend(
-                            messages.iter().cloned(),
-                        );
-                        let message = ServerMessage::Notification(messages.remove(0));
-                        ClientState::FinishSend(
-                            Some(message),
-                            Some(Box::new(ClientState::SendMessages(Some(messages)))),
-                        )
-                    } else {
-                        // No messages remaining
-                        ClientState::FinishSend(
-                            None,
-                            Some(Box::new(ClientState::Await))
-                        )
-                    }
-                } else {
-                    webpush.flags.check = false;
-                    ClientState::Await
-                }
-            }
-            ClientState::WaitingForIncrementStorage(ref mut response) => {
-                debug!("State: WaitingForIncrementStorage");
-                try_ready!(response.poll());
-                self.data.webpush.as_mut().unwrap().flags.increment_storage = false;
-                ClientState::Await
-            }
-            ClientState::WaitingForMigrateUser(ref mut response) => {
-                debug!("State: WaitingForMigrateUser");
-                let message_month = match try_ready!(response.poll()) {
-                    call::MigrateUserResponse { message_month } => message_month,
-                };
-                let webpush = self.data.webpush.as_mut().unwrap();
-                webpush.message_month = message_month;
-                webpush.flags.rotate_message_table = false;
-                ClientState::Await
-            }
-            ClientState::WaitingForRegister(channel_id, ref mut response) => {
-                debug!("State: WaitingForRegister");
-                let msg = match try_ready!(response.poll()) {
-                    call::RegisterResponse::Success { endpoint } => {
-                        self.data.webpush.as_mut().unwrap().stats.registers += 1;
-                        ServerMessage::Register {
-                            channel_id: channel_id,
-                            status: 200,
-                            push_endpoint: endpoint,
-                        }
-                    }
-                    call::RegisterResponse::Error { error_msg, status, .. } => {
-                        debug!("Got unregister fail, error: {}", error_msg);
-                        ServerMessage::Register {
-                            channel_id: channel_id,
-                            status: status,
-                            push_endpoint: "".into(),
-                        }
-                    }
-                };
-                let next_state = if self.data.unacked_messages() {
-                    ClientState::Await
-                } else {
-                    ClientState::Await
-                };
-                ClientState::FinishSend(Some(msg), Some(Box::new(next_state)))
-            }
-            ClientState::WaitingForUnRegister(channel_id, ref mut response) => {
-                debug!("State: WaitingForUnRegister");
-                let msg = match try_ready!(response.poll()) {
-                    call::UnRegisterResponse::Success { success } => {
-                        debug!("Got the unregister response");
-                        self.data.webpush.as_mut().unwrap().stats.unregisters += 1;
-                        ServerMessage::Unregister {
-                            channel_id: channel_id,
-                            status: if success { 200 } else { 500 },
-                        }
-                    }
-                    call::UnRegisterResponse::Error { error_msg, status, .. } => {
-                        debug!("Got unregister fail, error: {}", error_msg);
-                        ServerMessage::Unregister { channel_id, status }
-                    }
-                };
-                let next_state = if self.data.unacked_messages() {
-                    ClientState::Await
-                } else {
-                    ClientState::Await
-                };
-                ClientState::FinishSend(Some(msg), Some(Box::new(next_state)))
-            }
-            ClientState::WaitingForDelete(ref mut response) => {
-                debug!("State: WaitingForDelete");
-                try_ready!(response.poll());
-                ClientState::Await
-            }
-            ClientState::WaitingForDropUser(ref mut response) => {
-                debug!("State: WaitingForDropUser");
-                try_ready!(response.poll());
-                ClientState::Done
-            }
-            ClientState::Await => {
-                debug!("State: Await");
-                if let Some(next_state) = self.data.determine_acked_state() {
-                    return Ok(next_state.into());
-                }
-                match try_ready!(self.data.input_or_notif()) {
-                    Either::A(ClientMessage::BroadcastSubscribe { broadcasts }) => {
-                        let webpush = self.data.webpush.as_mut().unwrap();
-                        let service_delta = self.data.srv.client_service_add_service(
-                            &mut webpush.broadcast_services,
-                            &Service::from_hashmap(broadcasts),
-                        );
-                        if let Some(delta) = service_delta {
-                            ClientState::FinishSend(
-                                Some(ServerMessage::Broadcast {
-                                    broadcasts: Service::into_hashmap(delta)
-                                }),
-                                Some(Box::new(ClientState::Await)),
-                            )
-                        } else {
-                            ClientState::Await
-                        }
-                    }
-                    Either::A(ClientMessage::Register { channel_id, key }) => {
-                        self.data.process_register(channel_id, key)
-                    }
-                    Either::A(ClientMessage::Unregister { channel_id, code }) => {
-                        self.data.process_unregister(channel_id, code)
-                    }
-                    Either::A(ClientMessage::Nack { .. }) => {
-                        self.data.srv.metrics.incr("ua.command.nack").ok();
-                        self.data.webpush.as_mut().unwrap().stats.nacks += 1;
-                        ClientState::Await
-                    }
-                    Either::A(ClientMessage::Ack { updates }) => self.data.process_acks(updates),
-                    Either::B(ServerNotification::Notification(notif)) => {
-                        let webpush = self.data.webpush.as_mut().unwrap();
-                        if notif.ttl != 0 {
-                            webpush.unacked_direct_notifs.push(notif.clone());
-                        }
-                        debug!("Got a notification to send, sending!");
-                        ClientState::FinishSend(
-                            Some(ServerMessage::Notification(notif)),
-                            Some(Box::new(ClientState::Await)),
-                        )
-                    }
-                    Either::B(ServerNotification::CheckStorage) => {
-                        let webpush = self.data.webpush.as_mut().unwrap();
-                        webpush.flags.include_topic = true;
-                        webpush.flags.check = true;
-                        ClientState::Await
-                    }
-                    Either::B(ServerNotification::Disconnect) => {
-                        debug!("Got told to disconnect, connecting client has our uaid");
-                        ClientState::ShutdownCleanup(Some("Repeat UAID disconnect".into()))
-                    }
-                    _ => return Err("Invalid message".into()),
-                }
-            }
-            ClientState::ShutdownCleanup(ref mut err) => {
-                debug!("State: ShutdownCleanup");
-                if let Some(err_obj) = err.take() {
-                    let mut error = err_obj.to_string();
-                    for err in err_obj.iter().skip(1) {
-                        error.push_str("\n");
-                        error.push_str(&err.to_string());
-                    }
-                    debug!("Error for shutdown of {}: {}", host, error);
-                };
-                self.data.shutdown();
-                ClientState::Done
-            }
-            ClientState::Done => {
-                // We don't expect this to actually run, as this state will exit
-                // the transition. Included for exhaustive matching.
-                debug!("State: Done");
-                ClientState::Done
-            }
-        };
-        Ok(next_state.into())
-    }
-}
-
-impl<T> ClientData<T>
-where
-    T: Stream<Item = ClientMessage, Error = Error>
-        + Sink<SinkItem = ServerMessage, SinkError = Error>
-        + 'static,
-{
-    fn input_with_timeout(&mut self, timeout: &mut Timeout) -> Poll<ClientMessage, Error> {
-        let item = match timeout.poll()? {
-            Async::Ready(_) => return Err("Client timed out".into()),
-            Async::NotReady => {
-                match self.ws.poll()? {
-                    Async::Ready(None) => return Err("Client dropped".into()),
-                    Async::Ready(Some(msg)) => Async::Ready(msg),
-                    Async::NotReady => Async::NotReady,
-                }
-            }
-        };
-        Ok(item)
-    }
-
-    fn input_or_notif(&mut self) -> Poll<Either<ClientMessage, ServerNotification>, Error> {
-        let webpush = self.webpush.as_mut().unwrap();
-        let item = match webpush.rx.poll() {
-            Ok(Async::Ready(Some(notif))) => Either::B(notif),
-            Ok(Async::Ready(None)) => return Err("Sending side dropped".into()),
-            Ok(Async::NotReady) => {
-                match self.ws.poll()? {
-                    Async::Ready(None) => return Err("Client dropped".into()),
-                    Async::Ready(Some(msg)) => Either::A(msg),
-                    Async::NotReady => return Ok(Async::NotReady),
-                }
-            }
-            Err(_) => return Err("Unexpected error".into()),
-        };
-        Ok(Async::Ready(item))
-    }
-
-    fn process_hello(
-        &mut self,
-        uaid: Uuid,
-        message_month: String,
-        reset_uaid: bool,
-        rotate_message_table: bool,
-        check_storage: bool,
-        connected_at: u64,
-        services: &Vec<Service>,
-    ) -> ClientState {
-        let (tx, rx) = mpsc::unbounded();
-        let mut flags = ClientFlags::new();
-        flags.check = check_storage;
-        flags.reset_uaid = reset_uaid;
-        flags.rotate_message_table = rotate_message_table;
-
-        let ServiceClientInit(client_services, broadcasts) = self.srv.broadcast_init(services);
-        let uid = Uuid::new_v4();
-        self.webpush = Some(WebPushClient {
-            uaid,
-            uid: uid.clone(),
-            broadcast_services: client_services,
-            flags,
-            rx,
-            message_month,
-            unacked_direct_notifs: Vec::new(),
-            unacked_stored_notifs: Vec::new(),
-            unacked_stored_highest: None,
-            connected_at,
-            stats: SessionStatistics {
-                uaid: uaid.hyphenated().to_string(),
-                uaid_reset: reset_uaid,
-                existing_uaid: check_storage,
-                connection_type: String::from("webpush"),
-                host: self.host.clone(),
-                direct_acked: 0,
-                direct_storage: 0,
-                stored_retrieved: 0,
-                stored_acked: 0,
-                nacks: 0,
-                registers: 0,
-                unregisters: 0,
-            },
-        });
-        self.srv.connect_client(
-            RegisteredClient { uaid: uaid, uid: uid, tx: tx },
-        );
-        let response = ServerMessage::Hello {
-            uaid: uaid.hyphenated().to_string(),
-            status: 200,
-            use_webpush: Some(true),
-            broadcasts: Service::into_hashmap(broadcasts),
-        };
-        ClientState::FinishSend(Some(response), Some(Box::new(ClientState::Await)))
-    }
-
-    fn process_register(&mut self, channel_id: Uuid, key: Option<String>) -> ClientState {
-        debug!("Got a register command"; "channel_id" => channel_id.hyphenated().to_string());
-        let webpush = self.webpush.as_ref().unwrap();
-        let uaid = webpush.uaid.clone();
-        let message_month = webpush.message_month.clone();
-        let channel_id_str = channel_id.hyphenated().to_string();
-        let fut = self.srv.register(
-            uaid.simple().to_string(),
-            message_month,
-            channel_id_str,
-            key,
-        );
-        ClientState::WaitingForRegister(channel_id, fut)
-    }
-
-    fn process_unregister(&mut self, channel_id: Uuid, code: Option<i32>) -> ClientState {
-        debug!("Got a unregister command");
-        let webpush = self.webpush.as_ref().unwrap();
-        let uaid = webpush.uaid.clone();
-        let message_month = webpush.message_month.clone();
-        let channel_id_str = channel_id.hyphenated().to_string();
-        let fut = self.srv.unregister(
-            uaid.simple().to_string(),
-            message_month,
-            channel_id_str,
-            code.unwrap_or(200),
-        );
-        ClientState::WaitingForUnRegister(channel_id, fut)
-    }
-
-    fn process_increment_storage(&mut self) -> ClientState {
-        // Let the variable copies begin, so that nothing is left dangling in the future
-        // we then assemble because Lifetimes.
-        let webpush = self.webpush.as_ref().unwrap();
-        let timestamp = webpush.unacked_stored_highest.unwrap().to_string();
-        let uaid = webpush.uaid.simple().to_string();
-        let month_name = webpush.message_month.clone();
-        let srv = self.srv.clone();
-        let ddb_call = retry_if(move || {
-            let expiry = (time::get_time().sec as u64) + MAX_EXPIRY;
-            let mut attr_values = HashMap::new();
-            attr_values.insert(":timestamp".to_string(), AttributeValue {
-                n: Some(timestamp.clone()),
-                ..Default::default()
-            });
-            attr_values.insert(":expiry".to_string(), AttributeValue {
-                n: Some(expiry.to_string()),
-                ..Default::default()
-            });
-            srv.ddb_client.update_item(&UpdateItemInput {
-                key: ddb_item! {
-                            uaid: s => uaid.clone(),
-                            chidmessageid: s => " ".to_string()
-                        },
-                update_expression: Some("SET current_timestamp=:timestamp, expiry=:expiry".to_string()),
-                expression_attribute_values: Some(attr_values),
-                table_name: month_name.clone(),
-                ..Default::default()
-            })
-        }, |err: &UpdateItemError| {
-            matches!(err, &UpdateItemError::ProvisionedThroughputExceeded(_))
-        })
-            .map_err(|_| "Error incrementing storage".into());
-        ClientState::WaitingForIncrementStorage(Box::new(ddb_call))
-    }
-
-    fn process_acks(&mut self, updates: Vec<ClientAck>) -> ClientState {
-        self.srv.metrics.incr("ua.command.ack").ok();
-        let webpush = self.webpush.as_mut().unwrap();
-        let mut fut: Option<MyFuture<call::DeleteMessageResponse>> = None;
-        for notif in updates.iter() {
-            if let Some(pos) = webpush.unacked_direct_notifs.iter().position(|v| {
-                v.channel_id == notif.channel_id && v.version == notif.version
-            })
-            {
-                webpush.stats.direct_acked += 1;
-                webpush.unacked_direct_notifs.remove(pos);
-                continue;
-            };
-            if let Some(pos) = webpush.unacked_stored_notifs.iter().position(|v| {
-                v.channel_id == notif.channel_id && v.version == notif.version
-            })
-            {
-                webpush.stats.stored_acked += 1;
-                let message_month = webpush.message_month.clone();
-                let n = webpush.unacked_stored_notifs.remove(pos);
-                // Topic/legacy messages have no sortkey_timestamp
-                if n.sortkey_timestamp.is_none() {
-                    if fut.is_none() {
-                        fut = Some(self.srv.delete_message(message_month, n))
-                    } else {
-                        let my_fut = self.srv.delete_message(message_month, n);
-                        fut = Some(Box::new(fut.take().unwrap().and_then(move |_| my_fut)));
-                    }
-                }
-                continue;
-            };
-        }
-        if let Some(my_fut) = fut {
-            ClientState::WaitingForDelete(my_fut)
-        } else {
-            ClientState::Await
-        }
-    }
-
-    // Called from Await to determine any needed state changes
-    fn determine_acked_state(&mut self) -> Option<ClientState> {
-        let webpush = self.webpush.as_ref().unwrap();
-        let all_acked = !self.unacked_messages();
-        if all_acked && webpush.flags.check && webpush.flags.increment_storage {
-            Some(ClientState::IncrementStorage)
-        } else if all_acked && webpush.flags.check {
-            Some(ClientState::CheckStorage)
-        } else if all_acked && webpush.flags.rotate_message_table {
-            Some(ClientState::WaitingForMigrateUser(self.srv.migrate_user(
-                webpush.uaid.simple().to_string(),
-                webpush.message_month.clone(),
-            )))
-        } else if all_acked && webpush.flags.reset_uaid {
-            Some(ClientState::WaitingForDropUser(
-                self.srv.drop_user(webpush.uaid.simple().to_string()),
-            ))
-        } else if all_acked && webpush.flags.none() {
-            // Explicit call-out that this condition results in no state change.
-            None
-        } else {
-            None
-        }
-    }
-
-    fn unacked_messages(&self) -> bool {
-        self.webpush.as_ref().unwrap().unacked_messages()
+        let mut broadcast_services = self.broadcast_services.borrow_mut();
+        self.srv.broadcast_delta(&mut broadcast_services)
     }
 
     pub fn shutdown(&mut self) {
-        // If we made it past hello, do more cleanup
-        let mut webpush = match self.webpush.take() {
-            Some(webpush) => webpush,
-            None => return
-        };
-
-        let now = time::precise_time_ns() / 1000;
-        let elapsed = now - webpush.connected_at;
-
-        let parser = Parser::new();
-        let (ua_result, metrics_os, metrics_browser) = parse_user_agent(&parser, &self.user_agent);
-        self.srv.metrics
-            .time_with_tags("ua.connection.lifespan", elapsed)
-            .with_tag("ua_os_family", metrics_os)
-            .with_tag("ua_browser_family", metrics_browser)
-            .with_tag("host", &webpush.stats.host)
-            .send()
-            .ok();
-
-        // If there's any notifications in the queue, move them to our unacked direct notifs
-        webpush.rx.close();
-        // wait() is ok as the queue is closed at this point.
-        let rx_iter = webpush.rx.wait();
-        for msg in rx_iter {
-            match msg {
-                Ok(ServerNotification::CheckStorage) => continue,
-                Ok(ServerNotification::Notification(notif)) => {
-                    webpush.unacked_direct_notifs.push(notif);
-                }
-                Ok(ServerNotification::Disconnect) => continue,
-                Err(_) => continue,
-            }
-        }
-
-        // If there's direct unack'd messages, they need to be saved out without blocking
-        // here
-        self.srv.disconnet_client(&webpush.uaid, &webpush.uid);
-        let mut stats = webpush.stats;
-        let unacked_direct_notifs = webpush.unacked_direct_notifs.len();
-        if unacked_direct_notifs > 0 {
-            stats.direct_storage += unacked_direct_notifs as i32;
-            self.srv.handle.spawn(
-                self.srv
-                    .store_messages(
-                        webpush.uaid.simple().to_string(),
-                        webpush.message_month,
-                        webpush.unacked_direct_notifs,
-                    )
-                    .then(|_| {
-                        debug!("Finished saving unacked direct notifications");
-                        Ok(())
-                    }),
-            )
-        }
-
-        // Log out the final stats message
-        info!("Session";
-              "uaid_hash" => &stats.uaid,
-              "uaid_reset" => stats.uaid_reset,
-              "existing_uaid" => stats.existing_uaid,
-              "connection_type" => &stats.connection_type,
-              "host" => &stats.host,
-              "ua_name" => ua_result.name,
-              "ua_os_family" => ua_result.os,
-              "ua_os_ver" => ua_result.os_version,
-              "ua_browser_family" => ua_result.vendor,
-              "ua_browser_ver" => ua_result.version,
-              "ua_category" => ua_result.category,
-              "connection_time" => elapsed,
-              "direct_acked" => stats.direct_acked,
-              "direct_storage" => stats.direct_storage,
-              "stored_retrieved" => stats.stored_retrieved,
-              "stored_acked" => stats.stored_acked,
-              "nacks" => stats.nacks,
-              "registers" => stats.registers,
-              "unregisters" => stats.unregisters,
-        );
+        let _result = self.tx.unbounded_send(ServerNotification::Disconnect);
     }
 }
 
@@ -844,15 +128,920 @@ where
     type Error = Error;
 
     fn poll(&mut self) -> Poll<(), Error> {
-        loop {
-            if let ClientState::Done = self.state {
-                return Ok(().into());
-            }
-            match self.transition() {
-                Ok(Async::NotReady) => return Ok(Async::NotReady),
-                Ok(Async::Ready(next_state)) => self.state = next_state,
-                Err(e) => self.state = ClientState::ShutdownCleanup(Some(e)),
-            };
+        self.state_machine.poll()
+    }
+}
+
+// Websocket session statistics
+#[derive(Clone, Default)]
+struct SessionStatistics {
+    // User data
+    uaid: String,
+    uaid_reset: bool,
+    existing_uaid: bool,
+    connection_type: String,
+    host: String,
+
+    // Usage data
+    direct_acked: i32,
+    direct_storage: i32,
+    stored_retrieved: i32,
+    stored_acked: i32,
+    nacks: i32,
+    unregisters: i32,
+    registers: i32,
+}
+
+// Represent the state for a valid WebPush client that is authenticated
+pub struct WebPushClient {
+    uaid: Uuid,
+    uid: Uuid,
+    rx: mpsc::UnboundedReceiver<ServerNotification>,
+    flags: ClientFlags,
+    message_month: String,
+    unacked_direct_notifs: Vec<Notification>,
+    unacked_stored_notifs: Vec<Notification>,
+    // Highest version from stored, retained for use with increment
+    // when all the unacked storeds are ack'd
+    unacked_stored_highest: Option<u64>,
+    connected_at: u64,
+    stats: SessionStatistics,
+}
+
+impl Default for WebPushClient {
+    fn default() -> WebPushClient {
+        let (_, rx) = mpsc::unbounded();
+        WebPushClient {
+            uaid: Default::default(),
+            uid: Default::default(),
+            rx,
+            flags: Default::default(),
+            message_month: Default::default(),
+            unacked_direct_notifs: Default::default(),
+            unacked_stored_notifs: Default::default(),
+            unacked_stored_highest: Default::default(),
+            connected_at: Default::default(),
+            stats: Default::default(),
         }
+    }
+}
+
+impl WebPushClient {
+    fn unacked_messages(&self) -> bool {
+        self.unacked_stored_notifs.len() > 0 || self.unacked_direct_notifs.len() > 0
+    }
+}
+
+#[derive(Default)]
+pub struct ClientFlags {
+    include_topic: bool,
+    increment_storage: bool,
+    check: bool,
+    reset_uaid: bool,
+    rotate_message_table: bool,
+}
+
+impl ClientFlags {
+    fn new() -> ClientFlags {
+        ClientFlags {
+            include_topic: true,
+            increment_storage: false,
+            check: false,
+            reset_uaid: false,
+            rotate_message_table: false,
+        }
+    }
+}
+
+pub struct UnAuthClientData<T> {
+    srv: Rc<Server>,
+    ws: T,
+    user_agent: String,
+    host: String,
+    broadcast_services: Rc<RefCell<ClientServices>>,
+}
+
+impl<T> UnAuthClientData<T>
+where
+    T: Stream<Item = ClientMessage, Error = Error>
+        + Sink<SinkItem = ServerMessage, SinkError = Error>
+        + 'static,
+{
+    fn input_with_timeout(&mut self, timeout: &mut Timeout) -> Poll<ClientMessage, Error> {
+        let item = match timeout.poll()? {
+            Async::Ready(_) => return Err("Client timed out".into()),
+            Async::NotReady => match self.ws.poll()? {
+                Async::Ready(None) => return Err("Client dropped".into()),
+                Async::Ready(Some(msg)) => Async::Ready(msg),
+                Async::NotReady => Async::NotReady,
+            },
+        };
+        Ok(item)
+    }
+}
+
+pub struct AuthClientData<T> {
+    srv: Rc<Server>,
+    ws: T,
+    webpush: Rc<RefCell<WebPushClient>>,
+    broadcast_services: Rc<RefCell<ClientServices>>,
+}
+
+impl<T> AuthClientData<T>
+where
+    T: Stream<Item = ClientMessage, Error = Error>
+        + Sink<SinkItem = ServerMessage, SinkError = Error>
+        + 'static,
+{
+    fn input_or_notif(&mut self) -> Poll<Either<ClientMessage, ServerNotification>, Error> {
+        let mut webpush = self.webpush.borrow_mut();
+        let item = match webpush.rx.poll() {
+            Ok(Async::Ready(Some(notif))) => Either::B(notif),
+            Ok(Async::Ready(None)) => return Err("Sending side dropped".into()),
+            Ok(Async::NotReady) => match self.ws.poll()? {
+                Async::Ready(None) => return Err("Client dropped".into()),
+                Async::Ready(Some(msg)) => Either::A(msg),
+                Async::NotReady => return Ok(Async::NotReady),
+            },
+            Err(_) => return Err("Unexpected error".into()),
+        };
+        Ok(Async::Ready(item))
+    }
+}
+
+#[derive(StateMachineFuture)]
+pub enum UnAuthClientState<T>
+where
+    T: Stream<Item = ClientMessage, Error = Error>
+        + Sink<SinkItem = ServerMessage, SinkError = Error>
+        + 'static,
+{
+    #[state_machine_future(start, transitions(AwaitProcessHello))]
+    AwaitHello {
+        data: UnAuthClientData<T>,
+        timeout: Timeout,
+        tx: mpsc::UnboundedSender<ServerNotification>,
+        rx: mpsc::UnboundedReceiver<ServerNotification>,
+    },
+
+    #[state_machine_future(transitions(AwaitSessionComplete))]
+    AwaitProcessHello {
+        response: MyFuture<call::HelloResponse>,
+        data: UnAuthClientData<T>,
+        interested_broadcasts: Vec<Service>,
+        tx: mpsc::UnboundedSender<ServerNotification>,
+        rx: mpsc::UnboundedReceiver<ServerNotification>,
+    },
+
+    #[state_machine_future(transitions(UnAuthDone))]
+    AwaitSessionComplete {
+        auth_state_machine: AuthClientStateFuture<T>,
+        srv: Rc<Server>,
+        user_agent: String,
+        webpush: Rc<RefCell<WebPushClient>>,
+    },
+
+    #[state_machine_future(ready)]
+    UnAuthDone(()),
+
+    #[state_machine_future(error)]
+    UnAuthClientStateError(Error),
+}
+
+impl<T> PollUnAuthClientState<T> for UnAuthClientState<T>
+where
+    T: Stream<Item = ClientMessage, Error = Error>
+        + Sink<SinkItem = ServerMessage, SinkError = Error>
+        + 'static,
+{
+    fn poll_await_hello<'a>(
+        hello: &'a mut RentToOwn<'a, AwaitHello<T>>,
+    ) -> Poll<AfterAwaitHello<T>, Error> {
+        debug!("State: AwaitHello");
+        let (uaid, services) = {
+            let AwaitHello {
+                ref mut data,
+                ref mut timeout,
+                ..
+            } = **hello;
+            match try_ready!(data.input_with_timeout(timeout)) {
+                ClientMessage::Hello {
+                    uaid,
+                    use_webpush: Some(true),
+                    broadcasts,
+                    ..
+                } => (
+                    uaid.and_then(|uaid| Uuid::parse_str(uaid.as_str()).ok()),
+                    Service::from_hashmap(broadcasts.unwrap_or(HashMap::new())),
+                ),
+                _ => return Err("Invalid message, must be hello".into()),
+            }
+        };
+
+        let AwaitHello { data, tx, rx, .. } = hello.take();
+        let connected_at = time::precise_time_ns() / 1000;
+        transition!(AwaitProcessHello {
+            response: data.srv.hello(&connected_at, uaid.as_ref()),
+            data,
+            interested_broadcasts: services,
+            tx,
+            rx,
+        })
+    }
+
+    fn poll_await_process_hello<'a>(
+        process_hello: &'a mut RentToOwn<'a, AwaitProcessHello<T>>,
+    ) -> Poll<AfterAwaitProcessHello<T>, Error> {
+        debug!("State: AwaitProcessHello");
+        let (uaid, message_month, check_storage, reset_uaid, rotate_message_table, connected_at) = {
+            match try_ready!(process_hello.response.poll()) {
+                call::HelloResponse {
+                    uaid: Some(uaid),
+                    message_month,
+                    check_storage,
+                    reset_uaid,
+                    rotate_message_table,
+                    connected_at,
+                } => (
+                    uaid,
+                    message_month,
+                    check_storage,
+                    reset_uaid,
+                    rotate_message_table,
+                    connected_at,
+                ),
+                call::HelloResponse { uaid: None, .. } => {
+                    return Err("Already connected elsewhere".into())
+                }
+            }
+        };
+
+        let AwaitProcessHello {
+            data,
+            interested_broadcasts,
+            tx,
+            rx,
+            ..
+        } = process_hello.take();
+        let UnAuthClientData {
+            srv,
+            ws,
+            user_agent,
+            host,
+            broadcast_services,
+        } = data;
+
+        // Setup the objects and such needed for a WebPushClient
+        let mut flags = ClientFlags::new();
+        flags.check = check_storage;
+        flags.reset_uaid = reset_uaid;
+        flags.rotate_message_table = rotate_message_table;
+        let ServiceClientInit(client_services, broadcasts) =
+            srv.broadcast_init(&interested_broadcasts);
+        broadcast_services.replace(client_services);
+        let uid = Uuid::new_v4();
+        let webpush = Rc::new(RefCell::new(WebPushClient {
+            uaid,
+            uid: uid.clone(),
+            flags,
+            rx,
+            message_month,
+            connected_at,
+            stats: SessionStatistics {
+                uaid: uaid.hyphenated().to_string(),
+                uaid_reset: reset_uaid,
+                existing_uaid: check_storage,
+                connection_type: String::from("webpush"),
+                host: host.clone(),
+                ..Default::default()
+            },
+            ..Default::default()
+        }));
+        srv.connect_client(RegisteredClient { uaid, uid, tx });
+
+        let response = ServerMessage::Hello {
+            uaid: uaid.hyphenated().to_string(),
+            status: 200,
+            use_webpush: Some(true),
+            broadcasts: Service::into_hashmap(broadcasts),
+        };
+        let auth_state_machine = AuthClientState::start(
+            vec![response],
+            false,
+            AuthClientData {
+                srv: srv.clone(),
+                ws,
+                webpush: webpush.clone(),
+                broadcast_services: broadcast_services.clone(),
+            },
+        );
+        transition!(AwaitSessionComplete {
+            auth_state_machine,
+            srv,
+            user_agent,
+            webpush,
+        })
+    }
+
+    fn poll_await_session_complete<'a>(
+        session_complete: &'a mut RentToOwn<'a, AwaitSessionComplete<T>>,
+    ) -> Poll<AfterAwaitSessionComplete, Error> {
+        // xxx: handle error cases with maybe a log message?
+        let _error = {
+            match session_complete.auth_state_machine.poll() {
+                Ok(Async::Ready(_)) => None,
+                Ok(Async::NotReady) => return Ok(Async::NotReady),
+                Err(e) => Some(e),
+            }
+        };
+
+        let AwaitSessionComplete {
+            srv,
+            user_agent,
+            webpush,
+            ..
+        } = session_complete.take();
+        let mut webpush = webpush.borrow_mut();
+        // If there's any notifications in the queue, move them to our unacked direct notifs
+        webpush.rx.close();
+        loop {
+            match webpush.rx.poll() {
+                Ok(Async::Ready(Some(msg))) => match msg {
+                    ServerNotification::CheckStorage => continue,
+                    ServerNotification::Notification(notif) => {
+                        webpush.unacked_direct_notifs.push(notif)
+                    }
+                    ServerNotification::Disconnect => continue,
+                },
+                Ok(Async::Ready(None)) => break,
+                Ok(Async::NotReady) => break,
+                Err(_) => break,
+            }
+        }
+        let now = time::precise_time_ns() / 1000;
+        let elapsed = now - webpush.connected_at;
+        let parser = Parser::new();
+        let (ua_result, metrics_os, metrics_browser) = parse_user_agent(&parser, &user_agent);
+        srv.metrics
+            .time_with_tags("ua.connection.lifespan", elapsed)
+            .with_tag("ua_os_family", metrics_os)
+            .with_tag("ua_browser_family", metrics_browser)
+            .with_tag("host", &webpush.stats.host)
+            .send()
+            .ok();
+
+        // If there's direct unack'd messages, they need to be saved out without blocking
+        // here
+        srv.disconnet_client(&webpush.uaid, &webpush.uid);
+        let mut stats = webpush.stats.clone();
+        let unacked_direct_notifs = webpush.unacked_direct_notifs.len();
+        if unacked_direct_notifs > 0 {
+            stats.direct_storage += unacked_direct_notifs as i32;
+            let notifs = mem::replace(&mut webpush.unacked_direct_notifs, Vec::new());
+            srv.handle.spawn(srv.store_messages(
+                webpush.uaid.simple().to_string(),
+                webpush.message_month.clone(),
+                notifs,
+            ).then(|_| {
+                debug!("Finished saving unacked direct notifications");
+                Ok(())
+            }))
+        }
+
+        // Log out the final stats message
+        info!("Session";
+        "uaid_hash" => &stats.uaid,
+        "uaid_reset" => stats.uaid_reset,
+        "existing_uaid" => stats.existing_uaid,
+        "connection_type" => &stats.connection_type,
+        "host" => &stats.host,
+        "ua_name" => ua_result.name,
+        "ua_os_family" => ua_result.os,
+        "ua_os_ver" => ua_result.os_version,
+        "ua_browser_family" => ua_result.vendor,
+        "ua_browser_ver" => ua_result.version,
+        "ua_category" => ua_result.category,
+        "connection_time" => elapsed,
+        "direct_acked" => stats.direct_acked,
+        "direct_storage" => stats.direct_storage,
+        "stored_retrieved" => stats.stored_retrieved,
+        "stored_acked" => stats.stored_acked,
+        "nacks" => stats.nacks,
+        "registers" => stats.registers,
+        "unregisters" => stats.unregisters,
+        );
+        transition!(UnAuthDone(()))
+    }
+}
+
+#[derive(StateMachineFuture)]
+pub enum AuthClientState<T>
+where
+    T: Stream<Item = ClientMessage, Error = Error>
+        + Sink<SinkItem = ServerMessage, SinkError = Error>
+        + 'static,
+{
+    #[state_machine_future(start, transitions(DetermineAck, SendThenWait))]
+    SendThenWait {
+        remaining_data: Vec<ServerMessage>,
+        poll_complete: bool,
+        data: AuthClientData<T>,
+    },
+
+    #[state_machine_future(transitions(IncrementStorage, CheckStorage, AwaitDropUser,
+                                       AwaitMigrateUser, AwaitInput))]
+    DetermineAck { data: AuthClientData<T> },
+
+    #[state_machine_future(transitions(DetermineAck, SendThenWait, AwaitInput, AwaitRegister,
+                                       AwaitUnregister, AwaitDelete))]
+    AwaitInput { data: AuthClientData<T> },
+
+    #[state_machine_future(transitions(AwaitIncrementStorage))]
+    IncrementStorage { data: AuthClientData<T> },
+
+    #[state_machine_future(transitions(DetermineAck))]
+    AwaitIncrementStorage {
+        ddb_response: MyFuture<UpdateItemOutput>,
+        data: AuthClientData<T>,
+    },
+
+    #[state_machine_future(transitions(AwaitCheckStorage))]
+    CheckStorage { data: AuthClientData<T> },
+
+    #[state_machine_future(transitions(SendThenWait, DetermineAck))]
+    AwaitCheckStorage {
+        response: MyFuture<call::CheckStorageResponse>,
+        data: AuthClientData<T>,
+    },
+
+    #[state_machine_future(transitions(DetermineAck))]
+    AwaitMigrateUser {
+        response: MyFuture<call::MigrateUserResponse>,
+        data: AuthClientData<T>,
+    },
+
+    #[state_machine_future(transitions(AuthDone))]
+    AwaitDropUser {
+        response: MyFuture<call::DropUserResponse>,
+        data: AuthClientData<T>,
+    },
+
+    #[state_machine_future(transitions(SendThenWait))]
+    AwaitRegister {
+        channel_id: Uuid,
+        response: MyFuture<call::RegisterResponse>,
+        data: AuthClientData<T>,
+    },
+
+    #[state_machine_future(transitions(SendThenWait))]
+    AwaitUnregister {
+        channel_id: Uuid,
+        response: MyFuture<call::UnRegisterResponse>,
+        data: AuthClientData<T>,
+    },
+
+    #[state_machine_future(transitions(DetermineAck))]
+    AwaitDelete {
+        response: MyFuture<call::DeleteMessageResponse>,
+        data: AuthClientData<T>,
+    },
+
+    #[state_machine_future(ready)]
+    AuthDone(()),
+
+    #[state_machine_future(error)]
+    AuthClientStateError(Error),
+}
+
+impl<T> PollAuthClientState<T> for AuthClientState<T>
+where
+    T: Stream<Item = ClientMessage, Error = Error>
+        + Sink<SinkItem = ServerMessage, SinkError = Error>
+        + 'static,
+{
+    fn poll_send_then_wait<'a>(
+        send: &'a mut RentToOwn<'a, SendThenWait<T>>,
+    ) -> Poll<AfterSendThenWait<T>, Error> {
+        let start_send = {
+            let SendThenWait {
+                ref mut remaining_data,
+                poll_complete,
+                ref mut data,
+                ..
+            } = **send;
+            if poll_complete {
+                try_ready!(data.ws.poll_complete());
+                false
+            } else if remaining_data.len() > 0 {
+                let item = remaining_data.remove(0);
+                let ret = data.ws.start_send(item).chain_err(|| "unable to send")?;
+                match ret {
+                    AsyncSink::Ready => true,
+                    AsyncSink::NotReady(returned) => {
+                        remaining_data.insert(0, returned);
+                        return Ok(Async::NotReady);
+                    }
+                }
+            } else {
+                false
+            }
+        };
+
+        let SendThenWait { data, remaining_data, .. } = send.take();
+        if start_send {
+            transition!(SendThenWait {
+                remaining_data,
+                poll_complete: true,
+                data,
+            });
+        } else if remaining_data.len() > 0 {
+            transition!(SendThenWait {
+                remaining_data,
+                poll_complete: false,
+                data,
+            });
+        }
+        transition!(DetermineAck { data })
+    }
+
+    fn poll_determine_ack<'a>(
+        detack: &'a mut RentToOwn<'a, DetermineAck<T>>,
+    ) -> Poll<AfterDetermineAck<T>, Error> {
+        let DetermineAck { data } = detack.take();
+        let webpush_rc = data.webpush.clone();
+        let webpush = webpush_rc.borrow();
+        let all_acked = !webpush.unacked_messages();
+        if all_acked && webpush.flags.check && webpush.flags.increment_storage {
+            transition!(IncrementStorage { data });
+        } else if all_acked && webpush.flags.check {
+            transition!(CheckStorage { data });
+        } else if all_acked && webpush.flags.rotate_message_table {
+            let response = data.srv.migrate_user(
+                webpush.uaid.simple().to_string(),
+                webpush.message_month.clone(),
+            );
+            transition!(AwaitMigrateUser { response, data });
+        } else if all_acked && webpush.flags.reset_uaid {
+            let response = data.srv.drop_user(webpush.uaid.simple().to_string());
+            transition!(AwaitDropUser { response, data });
+        }
+        transition!(AwaitInput { data })
+    }
+
+    fn poll_await_input<'a>(
+        await: &'a mut RentToOwn<'a, AwaitInput<T>>,
+    ) -> Poll<AfterAwaitInput<T>, Error> {
+        let input = try_ready!(await.data.input_or_notif());
+        let AwaitInput { data } = await.take();
+        let webpush_rc = data.webpush.clone();
+        let mut webpush = webpush_rc.borrow_mut();
+        match input {
+            Either::A(ClientMessage::BroadcastSubscribe { broadcasts }) => {
+                let service_delta = {
+                    let mut broadcast_services = data.broadcast_services.borrow_mut();
+                    data.srv.client_service_add_service(
+                        &mut broadcast_services,
+                        &Service::from_hashmap(broadcasts),
+                    )
+                };
+                if let Some(delta) = service_delta {
+                    transition!(SendThenWait {
+                        remaining_data: vec![ServerMessage::Broadcast {
+                            broadcasts: Service::into_hashmap(delta),
+                        }],
+                        poll_complete: false,
+                        data,
+                    });
+                } else {
+                    transition!(AwaitInput { data });
+                }
+            }
+            Either::A(ClientMessage::Register { channel_id, key }) => {
+                debug!("Got a register command";
+                "channel_id" => channel_id.hyphenated().to_string());
+                let uaid = webpush.uaid.clone();
+                let message_month = webpush.message_month.clone();
+                let channel_id_str = channel_id.hyphenated().to_string();
+                let fut = data.srv.register(
+                    uaid.simple().to_string(),
+                    message_month,
+                    channel_id_str,
+                    key,
+                );
+                transition!(AwaitRegister {
+                    channel_id,
+                    response: fut,
+                    data,
+                });
+            }
+            Either::A(ClientMessage::Unregister { channel_id, code }) => {
+                debug!("Got a unregister command");
+                let uaid = webpush.uaid.clone();
+                let message_month = webpush.message_month.clone();
+                let channel_id_str = channel_id.hyphenated().to_string();
+                let fut = data.srv.unregister(
+                    uaid.simple().to_string(),
+                    message_month,
+                    channel_id_str,
+                    code.unwrap_or(200),
+                );
+                transition!(AwaitUnregister {
+                    channel_id,
+                    response: fut,
+                    data,
+                });
+            }
+            Either::A(ClientMessage::Nack { .. }) => {
+                data.srv.metrics.incr("ua.command.nack").ok();
+                webpush.stats.nacks += 1;
+                transition!(AwaitInput { data });
+            }
+            Either::A(ClientMessage::Ack { updates }) => {
+                data.srv.metrics.incr("ua.command.ack").ok();
+                let mut fut: Option<MyFuture<call::DeleteMessageResponse>> = None;
+                for notif in updates.iter() {
+                    if let Some(pos) = webpush.unacked_direct_notifs.iter().position(|v| {
+                        v.channel_id == notif.channel_id && v.version == notif.version
+                    }) {
+                        webpush.stats.direct_acked += 1;
+                        webpush.unacked_direct_notifs.remove(pos);
+                        continue;
+                    };
+                    if let Some(pos) = webpush.unacked_stored_notifs.iter().position(|v| {
+                        v.channel_id == notif.channel_id && v.version == notif.version
+                    }) {
+                        webpush.stats.stored_acked += 1;
+                        let message_month = webpush.message_month.clone();
+                        let n = webpush.unacked_stored_notifs.remove(pos);
+                        // Topic/legacy messages have no sortkey_timestamp
+                        if n.sortkey_timestamp.is_none() {
+                            fut = if let Some(call) = fut {
+                                let my_fut = data.srv.delete_message(message_month, n);
+                                Some(Box::new(call.and_then(move |_| my_fut)))
+                            } else {
+                                Some(data.srv.delete_message(message_month, n))
+                            }
+                        }
+                        continue;
+                    };
+                }
+                if let Some(my_fut) = fut {
+                    transition!(AwaitDelete {
+                        response: my_fut,
+                        data,
+                    });
+                } else {
+                    transition!(DetermineAck { data });
+                }
+            }
+            Either::B(ServerNotification::Notification(notif)) => {
+                if notif.ttl != 0 {
+                    webpush.unacked_direct_notifs.push(notif.clone());
+                }
+                debug!("Got a notification to send, sending!");
+                transition!(SendThenWait {
+                    remaining_data: vec![ServerMessage::Notification(notif)],
+                    poll_complete: false,
+                    data,
+                });
+            }
+            Either::B(ServerNotification::CheckStorage) => {
+                webpush.flags.include_topic = true;
+                webpush.flags.check = true;
+                transition!(DetermineAck { data });
+            }
+            Either::B(ServerNotification::Disconnect) => {
+                debug!("Got told to disconnect, connecting client has our uaid");
+                return Err("Repeat UAID disconnect".into());
+            }
+            _ => return Err("Invalid message".into()),
+        }
+    }
+
+    fn poll_increment_storage<'a>(
+        increment_storage: &'a mut RentToOwn<'a, IncrementStorage<T>>,
+    ) -> Poll<AfterIncrementStorage<T>, Error> {
+        debug!("State: IncrementStorage");
+        let webpush_rc = increment_storage.data.webpush.clone();
+        let webpush = webpush_rc.borrow();
+        let timestamp = webpush
+            .unacked_stored_highest
+            .ok_or("unacked_stored_highest unset")?
+            .to_string();
+        let uaid = webpush.uaid.simple().to_string();
+        let month_name = webpush.message_month.clone();
+        let srv = increment_storage.data.srv.clone();
+        let ddb_response = retry_if(
+            move || {
+                let expiry = (time::get_time().sec as u64) + MAX_EXPIRY;
+                let mut attr_values = HashMap::new();
+                attr_values.insert(
+                    ":timestamp".to_string(),
+                    AttributeValue {
+                        n: Some(timestamp.clone()),
+                        ..Default::default()
+                    },
+                );
+                attr_values.insert(
+                    ":expiry".to_string(),
+                    AttributeValue {
+                        n: Some(expiry.to_string()),
+                        ..Default::default()
+                    },
+                );
+                srv.ddb_client.update_item(&UpdateItemInput {
+                    key: ddb_item! {
+                        uaid: s => uaid.clone(),
+                        chidmessageid: s => " ".to_string()
+                    },
+                    update_expression: Some(
+                        "SET current_timestamp=:timestamp, expiry=:expiry".to_string(),
+                    ),
+                    expression_attribute_values: Some(attr_values),
+                    table_name: month_name.clone(),
+                    ..Default::default()
+                })
+            },
+            |err: &UpdateItemError| {
+                matches!(err, &UpdateItemError::ProvisionedThroughputExceeded(_))
+            },
+        ).map_err(|_| "Error incrementing storage".into());
+
+        transition!(AwaitIncrementStorage {
+            ddb_response: Box::new(ddb_response),
+            data: increment_storage.take().data,
+        })
+    }
+
+    fn poll_await_increment_storage<'a>(
+        await_increment_storage: &'a mut RentToOwn<'a, AwaitIncrementStorage<T>>,
+    ) -> Poll<AfterAwaitIncrementStorage<T>, Error> {
+        debug!("State: AwaitIncrementStorage");
+        try_ready!(await_increment_storage.ddb_response.poll());
+        let AwaitIncrementStorage { data, .. } = await_increment_storage.take();
+        let webpush = data.webpush.clone();
+        webpush.borrow_mut().flags.increment_storage = false;
+        transition!(DetermineAck { data })
+    }
+
+    fn poll_check_storage<'a>(
+        check_storage: &'a mut RentToOwn<'a, CheckStorage<T>>,
+    ) -> Poll<AfterCheckStorage<T>, Error> {
+        debug!("State: CheckStorage");
+        let CheckStorage { data } = check_storage.take();
+        let response = {
+            let webpush = data.webpush.borrow();
+            data.srv.check_storage(
+                webpush.uaid.simple().to_string(),
+                webpush.message_month.clone(),
+                webpush.flags.include_topic,
+                webpush.unacked_stored_highest,
+            )
+        };
+        transition!(AwaitCheckStorage { response, data })
+    }
+
+    fn poll_await_check_storage<'a>(
+        await_check_storage: &'a mut RentToOwn<'a, AwaitCheckStorage<T>>,
+    ) -> Poll<AfterAwaitCheckStorage<T>, Error> {
+        debug!("State: AwaitCheckStorage");
+        let (include_topic, mut messages, timestamp) =
+            match try_ready!(await_check_storage.response.poll()) {
+                call::CheckStorageResponse {
+                    include_topic,
+                    messages,
+                    timestamp,
+                } => (include_topic, messages, timestamp),
+            };
+        debug!("Got checkstorage response");
+
+        let AwaitCheckStorage { data, .. } = await_check_storage.take();
+        let webpush_rc = data.webpush.clone();
+        let mut webpush = webpush_rc.borrow_mut();
+        webpush.flags.include_topic = include_topic;
+        debug!("Setting unacked stored highest to {:?}", timestamp);
+        webpush.unacked_stored_highest = timestamp;
+        if messages.len() > 0 {
+            // Filter out TTL expired messages
+            let now = time::get_time().sec as u32;
+            messages.retain(|ref msg| now < msg.ttl + msg.timestamp);
+            webpush.flags.increment_storage = !include_topic && timestamp.is_some();
+            // If there's still messages send them out
+            if messages.len() > 0 {
+                webpush
+                    .unacked_stored_notifs
+                    .extend(messages.iter().cloned());
+                transition!(SendThenWait {
+                    remaining_data: messages.into_iter().map(ServerMessage::Notification).collect(),
+                    poll_complete: false,
+                    data,
+                })
+            } else {
+                // No messages remaining
+                transition!(DetermineAck { data })
+            }
+        } else {
+            webpush.flags.check = false;
+            transition!(DetermineAck { data })
+        }
+    }
+
+    fn poll_await_migrate_user<'a>(
+        await_migrate_user: &'a mut RentToOwn<'a, AwaitMigrateUser<T>>,
+    ) -> Poll<AfterAwaitMigrateUser<T>, Error> {
+        debug!("State: AwaitMigrateUser");
+        let message_month = match try_ready!(await_migrate_user.response.poll()) {
+            call::MigrateUserResponse { message_month } => message_month,
+        };
+        let AwaitMigrateUser { data, .. } = await_migrate_user.take();
+        {
+            let mut webpush = data.webpush.borrow_mut();
+            webpush.message_month = message_month;
+            webpush.flags.rotate_message_table = false;
+        }
+        transition!(DetermineAck { data })
+    }
+
+    fn poll_await_drop_user<'a>(
+        await_drop_user: &'a mut RentToOwn<'a, AwaitDropUser<T>>,
+    ) -> Poll<AfterAwaitDropUser, Error> {
+        debug!("State: AwaitDropUser");
+        try_ready!(await_drop_user.response.poll());
+        transition!(AuthDone(()))
+    }
+
+    fn poll_await_register<'a>(
+        await_register: &'a mut RentToOwn<'a, AwaitRegister<T>>,
+    ) -> Poll<AfterAwaitRegister<T>, Error> {
+        debug!("State: AwaitRegister");
+        let msg = match try_ready!(await_register.response.poll()) {
+            call::RegisterResponse::Success { endpoint } => {
+                let mut webpush = await_register.data.webpush.borrow_mut();
+                webpush.stats.registers += 1;
+                ServerMessage::Register {
+                    channel_id: await_register.channel_id,
+                    status: 200,
+                    push_endpoint: endpoint,
+                }
+            }
+            call::RegisterResponse::Error {
+                error_msg, status, ..
+            } => {
+                debug!("Got unregister fail, error: {}", error_msg);
+                ServerMessage::Register {
+                    channel_id: await_register.channel_id,
+                    status: status,
+                    push_endpoint: "".into(),
+                }
+            }
+        };
+
+        transition!(SendThenWait {
+            remaining_data: vec![msg],
+            poll_complete: false,
+            data: await_register.take().data,
+        })
+    }
+
+    fn poll_await_unregister<'a>(
+        await_unregister: &'a mut RentToOwn<'a, AwaitUnregister<T>>,
+    ) -> Poll<AfterAwaitUnregister<T>, Error> {
+        debug!("State: AwaitUnRegister");
+        let msg = match try_ready!(await_unregister.response.poll()) {
+            call::UnRegisterResponse::Success { success } => {
+                debug!("Got the unregister response");
+                let mut webpush = await_unregister.data.webpush.borrow_mut();
+                webpush.stats.unregisters += 1;
+                ServerMessage::Unregister {
+                    channel_id: await_unregister.channel_id,
+                    status: if success { 200 } else { 500 },
+                }
+            }
+            call::UnRegisterResponse::Error {
+                error_msg, status, ..
+            } => {
+                debug!("Got unregister fail, error: {}", error_msg);
+                ServerMessage::Unregister {
+                    channel_id: await_unregister.channel_id,
+                    status,
+                }
+            }
+        };
+
+        transition!(SendThenWait {
+            remaining_data: vec![msg],
+            poll_complete: false,
+            data: await_unregister.take().data,
+        })
+    }
+
+    fn poll_await_delete<'a>(
+        await_delete: &'a mut RentToOwn<'a, AwaitDelete<T>>,
+    ) -> Poll<AfterAwaitDelete<T>, Error> {
+        debug!("State: AwaitDelete");
+        try_ready!(await_delete.response.poll());
+        transition!(DetermineAck {
+            data: await_delete.take().data,
+        })
     }
 }

@@ -5,11 +5,11 @@ use std::time::Duration;
 use reqwest;
 
 // A Service entry Key in a ServiceRegistry
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
 struct ServiceKey(u32);
 
 // A list of services that a client is interested in and the last change seen
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ClientServices {
     service_list: Vec<ServiceKey>,
     change_count: u32,
