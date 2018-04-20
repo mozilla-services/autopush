@@ -52,13 +52,7 @@ where
     }))
 }
 
-// Hold a reference to the log guards for scoped logging which requires these to stay alive
-// for the implicit logger to be passed into logging calls
-pub struct LogGuards {
-    _scope_guard: slog_scope::GlobalLoggerGuard,
-}
-
-pub fn init_logging(json: bool) -> LogGuards {
+pub fn init_logging(json: bool) {
     let instance_id_or_hostname = if json {
         get_ec2_instance_id().unwrap_or_else(|_| get_hostname().expect("Couldn't get_hostname"))
     } else {
@@ -91,11 +85,11 @@ pub fn init_logging(json: bool) -> LogGuards {
             ),
         )
     };
-    let _scope_guard = slog_scope::set_global_logger(logger);
+    // XXX: cancel slog_scope's NoGlobalLoggerSet for now, it's difficult to
+    // prevent it from potentially panicing during tests. reset_logging resets
+    // the global logger during shutdown anyway
+    slog_scope::set_global_logger(logger).cancel_reset();
     slog_stdlog::init().ok();
-    LogGuards {
-        _scope_guard: _scope_guard,
-    }
 }
 
 pub fn reset_logging() {
