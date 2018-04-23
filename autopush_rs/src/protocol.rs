@@ -17,6 +17,12 @@ pub enum ServerNotification {
     Disconnect,
 }
 
+impl Default for ServerNotification {
+    fn default() -> ServerNotification {
+        ServerNotification::Disconnect
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(tag = "messageType", rename_all = "snake_case")]
 pub enum ClientMessage {
@@ -94,7 +100,7 @@ pub enum ServerMessage {
     Notification(Notification),
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Default, Deserialize, Clone, Debug)]
 pub struct Notification {
     pub uaid: Option<String>,
     #[serde(rename = "channelID")]

@@ -729,11 +729,11 @@ impl Future for PingManager {
                     break;
                 }
             }
-            assert!(!socket.ping);
+            debug_assert!(!socket.ping);
             match self.waiting {
                 WaitingFor::SendPing => {
-                    assert!(!socket.pong_timeout);
-                    assert!(!socket.pong_received);
+                    debug_assert!(!socket.pong_timeout);
+                    debug_assert!(!socket.pong_received);
                     match self.timeout.poll()? {
                         Async::Ready(()) => {
                             debug!("scheduling a ping to get sent");
@@ -747,7 +747,7 @@ impl Future for PingManager {
                         // If we received a pong, then switch us back to waiting
                         // to send out a ping
                         debug!("pong received, going back to sending a ping");
-                        assert!(!socket.pong_timeout);
+                        debug_assert!(!socket.pong_timeout);
                         let at = Instant::now() + self.srv.opts.auto_ping_interval;
                         self.timeout.reset(at);
                         self.waiting = WaitingFor::SendPing;
@@ -772,7 +772,7 @@ impl Future for PingManager {
                     }
                 }
                 WaitingFor::Close => {
-                    assert!(!socket.pong_timeout);
+                    debug_assert!(!socket.pong_timeout);
                     if self.timeout.poll()?.is_ready() {
                         if let CloseState::Exchange(ref mut client) = self.client {
                             client.shutdown();

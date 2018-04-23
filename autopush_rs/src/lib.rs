@@ -90,6 +90,8 @@ extern crate slog_json;
 extern crate slog_stdlog;
 #[macro_use]
 extern crate serde_json;
+#[macro_use]
+extern crate state_machine_future;
 extern crate time;
 extern crate tokio_core;
 extern crate tokio_io;
