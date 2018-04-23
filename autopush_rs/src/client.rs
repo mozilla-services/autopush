@@ -408,7 +408,7 @@ where
             message_month,
             connected_at,
             stats: SessionStatistics {
-                uaid: uaid.hyphenated().to_string(),
+                uaid: uaid.simple().to_string(),
                 uaid_reset: reset_uaid,
                 existing_uaid: check_storage,
                 connection_type: String::from("webpush"),
@@ -420,7 +420,7 @@ where
         srv.connect_client(RegisteredClient { uaid, uid, tx });
 
         let response = ServerMessage::Hello {
-            uaid: uaid.hyphenated().to_string(),
+            uaid: uaid.simple().to_string(),
             status: 200,
             use_webpush: Some(true),
             broadcasts: Service::into_hashmap(broadcasts),

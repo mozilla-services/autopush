@@ -122,6 +122,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         result = json.loads(self.ws.recv())
         log.debug("Recv: %s", result)
         assert result["status"] == 200
+        assert "-" not in result["uaid"]
         if self.uaid and self.uaid != result["uaid"]:  # pragma: nocover
             log.debug("Mismatch on re-using uaid. Old: %s, New: %s",
                       self.uaid, result["uaid"])
@@ -1234,7 +1235,7 @@ class TestWebPush(IntegrationBase):
         yield deferToThread(
             self.conn.db.message.table.delete_item,
             Key={'uaid': client.uaid, 'chidmessageid': ' '}
-         )
+        )
 
         # Verify the channel is gone
         exists, chans = yield deferToThread(
