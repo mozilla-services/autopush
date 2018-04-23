@@ -116,7 +116,6 @@ pub struct ServerOptions {
     pub close_handshake_timeout: Option<Duration>,
     pub statsd_host: Option<String>,
     pub statsd_port: u16,
-    pub logger: util::LogGuards,
     pub megaphone_api_url: Option<String>,
     pub megaphone_api_token: Option<String>,
     pub megaphone_poll_interval: Duration,
@@ -157,7 +156,7 @@ pub extern "C" fn autopush_server_new(
     rt::catch(err, || unsafe {
         let opts = &*opts;
 
-        let logger = util::init_logging(opts.json_logging != 0);
+        util::init_logging(opts.json_logging != 0);
         let opts = ServerOptions {
             debug: opts.debug != 0,
             port: opts.port,
@@ -178,7 +177,6 @@ pub extern "C" fn autopush_server_new(
                 Some(opts.max_connections)
             },
             open_handshake_timeout: ito_dur(opts.open_handshake_timeout),
-            logger: logger,
             megaphone_api_url: to_s(opts.megaphone_api_url).map(|s| s.to_string()),
             megaphone_api_token: to_s(opts.megaphone_api_token).map(|s| s.to_string()),
             megaphone_poll_interval: ito_dur(opts.megaphone_poll_interval).expect("poll interval cannot be 0"),
