@@ -1,5 +1,4 @@
 import base64
-import binascii
 import json
 import os
 
@@ -72,8 +71,8 @@ class VerifyJWT(object):
             return payload, sig
 
         encoded = utils.encode_dss_signature(
-            s=int(binascii.hexlify(sig[32:]), 16),
-            r=int(binascii.hexlify(sig[:32]), 16)
+            s=int.from_bytes(sig[32:], byteorder="big"),
+            r=int.from_bytes(sig[:32], byteorder="big"),
         )
         return payload, encoded
 
@@ -138,7 +137,7 @@ class VerifyJWT(object):
             return VerifyJWT.extract_assertion(sig_material)
         except InvalidSignature:
             raise
-        except (ValueError, TypeError, binascii.Error, PyAsn1Error):
+        except (ValueError, TypeError, PyAsn1Error):
             raise InvalidSignature()
         except Exception:  # pragma: no cover
             Logger().failure("Unexpected error processing JWT")
