@@ -20,7 +20,6 @@ use rusoto_dynamodb::{AttributeValue, DynamoDb};
 use rusoto_dynamodb::{UpdateItemError, UpdateItemInput, UpdateItemOutput};
 use state_machine_future::RentToOwn;
 use tokio_core::reactor::Timeout;
-use time;
 use uuid::Uuid;
 use woothee::parser::Parser;
 
@@ -28,7 +27,7 @@ use call;
 use errors::*;
 use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
 use server::Server;
-use util::parse_user_agent;
+use util::{ms_since_epoch, parse_user_agent, sec_since_epoch};
 use util::megaphone::{ClientServices, Service, ServiceClientInit};
 
 const MAX_EXPIRY: u64 = 2592000;
@@ -339,7 +338,7 @@ where
         };
 
         let AwaitHello { data, tx, rx, .. } = hello.take();
-        let connected_at = time::precise_time_ns() / 1000;
+        let connected_at = ms_since_epoch();
         transition!(AwaitProcessHello {
             response: data.srv.hello(&connected_at, uaid.as_ref()),
             data,
@@ -478,8 +477,8 @@ where
                 Err(_) => break,
             }
         }
-        let now = time::precise_time_ns() / 1000;
-        let elapsed = now - webpush.connected_at;
+        let now = ms_since_epoch();
+        let elapsed = (now - webpush.connected_at) / 1_000;
         let parser = Parser::new();
         let (ua_result, metrics_os, metrics_browser) = parse_user_agent(&parser, &user_agent);
         srv.metrics
@@ -833,7 +832,7 @@ where
         let srv = increment_storage.data.srv.clone();
         let ddb_response = retry_if(
             move || {
-                let expiry = (time::get_time().sec as u64) + MAX_EXPIRY;
+                let expiry = sec_since_epoch() + MAX_EXPIRY;
                 let mut attr_values = HashMap::new();
                 attr_values.insert(
                     ":timestamp".to_string(),
@@ -923,7 +922,7 @@ where
         webpush.unacked_stored_highest = timestamp;
         if messages.len() > 0 {
             // Filter out TTL expired messages
-            let now = time::get_time().sec as u32;
+            let now = sec_since_epoch() as u32;
             messages.retain(|ref msg| now < msg.ttl + msg.timestamp);
             webpush.flags.increment_storage = !include_topic && timestamp.is_some();
             // If there's still messages send them out
