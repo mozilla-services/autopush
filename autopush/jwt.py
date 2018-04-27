@@ -72,8 +72,8 @@ class VerifyJWT(object):
             return payload, sig
 
         encoded = utils.encode_dss_signature(
-            s=int(binascii.hexlify(sig[32:]), 16),
-            r=int(binascii.hexlify(sig[:32]), 16)
+            s=int.from_bytes(sig[32:], byteorder="big"),
+            r=int.from_bytes(sig[:32], byteorder="big"),
         )
         return payload, encoded
 
