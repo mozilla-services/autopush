@@ -145,9 +145,28 @@ def create_rotating_message_table(
         boto_resource=None    # type: DynamoDBResource
         ):
     # type: (...) -> Any  # noqa
-    """Create a new message table for webpush style message storage"""
-    tablename = make_rotating_tablename(prefix, delta, date)
+    """Create a new message table for webpush style message storage with a
+        rotating name.
 
+        """
+
+    tablename = make_rotating_tablename(prefix, delta, date)
+    return create_message_table(
+        tablename=tablename,
+        read_throughput=read_throughput,
+        write_throughput=write_throughput,
+        boto_resource=boto_resource
+    )
+
+
+def create_message_table(
+        tablename,  # type: str
+        read_throughput=5,  # type: int
+        write_throughput=5,  # type: int
+        boto_resource=None,  # type: DynamoDBResource
+        ):
+    # type: (...) -> Any  # noqa
+    """Create a new message table for webpush style message storage"""
     try:
         table = boto_resource.Table(tablename)
         if table.table_status == 'ACTIVE':
@@ -466,6 +485,30 @@ class DynamoDBResource(threading.local):
     def __getattr__(self, name):
         return getattr(self._resource, name)
 
+    def get_latest_message_tablenames(self, prefix="message", previous=1):
+        # type: (Optional[str], int) -> [str]  # noqa
+        """Fetches the name of the last message table"""
+        client = self._resource.meta.client
+        paginator = client.get_paginator("list_tables")
+        tables = []
+        for table in paginator.paginate().search(
+                "TableNames[?contains(@,'{}')==`true`]|sort(@)[-1]".format(
+                    prefix)):
+            if table and table.encode().startswith(prefix):
+                tables.append(table)
+        if not len(tables) or tables[0] is None:
+            return [prefix]
+        tables.sort()
+        return tables[0-previous:]
+
+    def get_latest_message_tablename(self, prefix="message"):
+        # type: (Optional[str]) -> str  # noqa
+        """Fetches the name of the last message table"""
+        return self.get_latest_message_tablenames(
+                prefix=prefix,
+                previous=1
+            )[0]
+
 
 class DynamoDBTable(threading.local):
     def __init__(self, ddb_resource, *args, **kwargs):
@@ -478,20 +521,19 @@ class DynamoDBTable(threading.local):
 
 class Message(object):
     """Create a Message table abstraction on top of a DynamoDB Table object"""
-    def __init__(self, tablename, metrics=None, boto_resource=None,
+    def __init__(self, tablename, boto_resource=None,
                  max_ttl=MAX_EXPIRY):
-        # type: (str, IMetrics, DynamoDBResource, int) -> None
+        # type: (str, DynamoDBResource, int) -> None
         """Create a new Message object
 
         :param tablename: name of the table.
-        :param metrics: unused
         :param boto_resource: DynamoDBResource for thread
 
         """
-        self.tablename = tablename
         self._max_ttl = max_ttl
         self.resource = boto_resource
         self.table = DynamoDBTable(self.resource, tablename)
+        self.tablename = tablename
 
     def table_status(self):
         return self.table.table_status
@@ -998,16 +1040,27 @@ class DatabaseManager(object):
     current_msg_month = attrib(init=False)          # type: Optional[str]
     current_month = attrib(init=False)              # type: Optional[int]
     _message = attrib(default=None)                 # type: Optional[Message]
+    allow_table_rotation = attrib(default=True)     # type: Optional[bool]
     # for testing:
 
     def __attrs_post_init__(self):
         """Initialize sane defaults"""
-        today = datetime.date.today()
-        self.current_month = today.month
-        self.current_msg_month = make_rotating_tablename(
-            self._message_conf.tablename,
-            date=today
-        )
+        if self.allow_table_rotation:
+            today = datetime.date.today()
+            self.current_month = today.month
+            self.current_msg_month = make_rotating_tablename(
+                self._message_conf.tablename,
+                date=today
+            )
+        else:
+            # fetch out the last message table as the "current_msg_month"
+            # Message may still init to this table if it recv's None, but
+            # this makes the value explicit.
+            resource = self.resource
+            self.current_msg_month = resource.get_latest_message_tablename(
+                prefix=self._message_conf.tablename
+            )
+
         if not self.resource:
             self.resource = DynamoDBResource()
 
@@ -1027,6 +1080,7 @@ class DatabaseManager(object):
             message_conf=conf.message_table,
             metrics=metrics,
             resource=resource,
+            allow_table_rotation=conf.allow_table_rotation,
             **kwargs
         )
 
@@ -1053,7 +1107,6 @@ class DatabaseManager(object):
         #   just in case some nodes do switch sooner.
         self.create_initial_message_tables()
         self._message = Message(self.current_msg_month,
-                                self.metrics,
                                 boto_resource=self.resource)
 
     @property
@@ -1065,7 +1118,7 @@ class DatabaseManager(object):
         return self._message
 
     def message_table(self, tablename):
-        return Message(tablename, self.metrics, boto_resource=self.resource)
+        return Message(tablename, boto_resource=self.resource)
 
     def _tomorrow(self):
         # type: () -> datetime.date
@@ -1078,6 +1131,24 @@ class DatabaseManager(object):
         an entry for tomorrow, if tomorrow is a new month.
 
         """
+        if not self.allow_table_rotation:
+            tablenames = self.resource.get_latest_message_tablenames(
+                prefix=self._message_conf.tablename,
+                previous=3
+            )
+            # Create the most recent table if it's not there.
+            tablename = tablenames[-1]
+            if not table_exists(tablename,
+                                boto_resource=self.resource):
+                create_message_table(
+                    tablename=tablename,
+                    read_throughput=self._message_conf.read_throughput,
+                    write_throughput=self._message_conf.write_throughput,
+                    boto_resource=self.resource
+                )
+            self.message_tables.extend(tablenames)
+            return
+
         mconf = self._message_conf
         today = datetime.date.today()
         last_month = get_rotating_message_tablename(
@@ -1116,6 +1187,8 @@ class DatabaseManager(object):
         table objects on the settings object.
 
         """
+        if not self.allow_table_rotation:
+            returnValue(False)
         mconf = self._message_conf
         today = datetime.date.today()
         tomorrow = self._tomorrow()

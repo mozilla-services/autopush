@@ -84,6 +84,44 @@ class DatabaseManagerTest(unittest.TestCase):
         assert dm.resource is not None
         assert isinstance(dm.resource, DynamoDBResource)
 
+    def test_init_with_no_rotate(self):
+        fake_conf = Mock()
+        fake_conf.allow_table_rotation = False
+        fake_conf.message_table = Mock()
+        fake_conf.message_table.tablename = "message_int_test"
+        fake_conf.message_table.read_throughput = 5
+        fake_conf.message_table.write_throughput = 5
+        dm = DatabaseManager.from_config(
+            fake_conf,
+            resource=autopush.tests.boto_resource)
+        dm.create_initial_message_tables()
+        assert dm.current_msg_month == \
+            autopush.tests.boto_resource.get_latest_message_tablename(
+                prefix=fake_conf.message_table.tablename
+            )
+
+    def test_init_with_no_rotate_create_table(self):
+        fake_conf = Mock()
+        fake_conf.allow_table_rotation = False
+        fake_conf.message_table = Mock()
+        fake_conf.message_table.tablename = "message_bogus"
+        fake_conf.message_table.read_throughput = 5
+        fake_conf.message_table.write_throughput = 5
+        dm = DatabaseManager.from_config(
+            fake_conf,
+            resource=autopush.tests.boto_resource)
+        try:
+            dm.create_initial_message_tables()
+            latest = autopush.tests.boto_resource.get_latest_message_tablename(
+                    prefix=fake_conf.message_table.tablename
+                )
+            assert dm.current_msg_month == latest
+            assert dm.message_tables == [fake_conf.message_table.tablename]
+        finally:
+            # clean up the bogus table.
+            dm.resource._resource.meta.client.delete_table(
+                TableName=fake_conf.message_table.tablename)
+
 
 class DdbResourceTest(unittest.TestCase):
     @patch("boto3.resource")
@@ -127,7 +165,6 @@ class DbCheckTestCase(unittest.TestCase):
                         resource=self.resource)
         message = Message(get_rotating_message_tablename(
             boto_resource=self.resource),
-            SinkMetrics(),
             boto_resource=self.resource)
 
         def raise_exc(*args, **kwargs):  # pragma: no cover
@@ -140,9 +177,9 @@ class DbCheckTestCase(unittest.TestCase):
             preflight_check(message, router, self.resource)
 
     def test_preflight_check(self):
+        global test_router
         message = Message(get_rotating_message_tablename(
             boto_resource=self.resource),
-            SinkMetrics(),
             boto_resource=self.resource)
 
         pf_uaid = "deadbeef00000000deadbeef01010101"
@@ -154,10 +191,11 @@ class DbCheckTestCase(unittest.TestCase):
             self.router.get_uaid(pf_uaid)
 
     def test_preflight_check_wait(self):
-        message = Message(get_rotating_message_tablename(
-            boto_resource=self.resource),
-            SinkMetrics(),
-            boto_resource=self.resource)
+        global test_router
+        message = Message(
+            get_rotating_message_tablename(boto_resource=self.resource),
+            boto_resource=self.resource
+        )
 
         values = ["PENDING", "ACTIVE"]
         message.table_status = Mock(side_effect=values)
@@ -205,16 +243,25 @@ class DbCheckTestCase(unittest.TestCase):
 class MessageTestCase(unittest.TestCase):
     def setUp(self):
         self.resource = autopush.tests.boto_resource
-        table = get_rotating_message_tablename(boto_resource=self.resource)
+        table = get_rotating_message_tablename(
+            prefix="message_int_test",
+            boto_resource=self.resource)
         self.real_table = table
         self.uaid = str(uuid.uuid4())
+
+    def test_non_rotating_tables(self):
+        message_tablename = "message_int_test"
+        table_name = self.resource.get_latest_message_tablename(
+            prefix=message_tablename)
+        message = Message(table_name,
+                          boto_resource=self.resource)
+        assert message.tablename == table_name
 
     def test_register(self):
         chid = str(uuid.uuid4())
 
         m = get_rotating_message_tablename(boto_resource=self.resource)
-        message = Message(m, metrics=SinkMetrics(),
-                          boto_resource=self.resource)
+        message = Message(m, boto_resource=self.resource)
         message.register_channel(self.uaid, chid)
         lm = self.resource.Table(m)
         # Verify it's in the db
@@ -236,8 +283,7 @@ class MessageTestCase(unittest.TestCase):
     def test_unregister(self):
         chid = str(uuid.uuid4())
         m = get_rotating_message_tablename(boto_resource=self.resource)
-        message = Message(m, metrics=SinkMetrics(),
-                          boto_resource=self.resource)
+        message = Message(m, boto_resource=self.resource)
         message.register_channel(self.uaid, chid)
 
         # Verify its in the db
@@ -294,7 +340,7 @@ class MessageTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
         chid2 = str(uuid.uuid4())
         m = get_rotating_message_tablename(boto_resource=self.resource)
-        message = Message(m, SinkMetrics(), boto_resource=self.resource)
+        message = Message(m, boto_resource=self.resource)
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
 
@@ -310,7 +356,7 @@ class MessageTestCase(unittest.TestCase):
     def test_all_channels_fail(self):
 
         m = get_rotating_message_tablename(boto_resource=self.resource)
-        message = Message(m, SinkMetrics(), boto_resource=self.resource)
+        message = Message(m, boto_resource=self.resource)
 
         mtable = Mock()
         mtable.get_item.return_value = {
@@ -326,7 +372,7 @@ class MessageTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
         chid2 = str(uuid.uuid4())
         m = get_rotating_message_tablename(boto_resource=self.resource)
-        message = Message(m, SinkMetrics(), boto_resource=self.resource)
+        message = Message(m, boto_resource=self.resource)
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
 
@@ -338,7 +384,7 @@ class MessageTestCase(unittest.TestCase):
 
     def test_all_channels_no_uaid(self):
         m = get_rotating_message_tablename(boto_resource=self.resource)
-        message = Message(m, SinkMetrics(), boto_resource=self.resource)
+        message = Message(m, boto_resource=self.resource)
         exists, chans = message.all_channels(dummy_uaid)
         assert chans == set([])
 
@@ -346,7 +392,7 @@ class MessageTestCase(unittest.TestCase):
         chid = str(uuid.uuid4())
         chid2 = str(uuid.uuid4())
         m = get_rotating_message_tablename(boto_resource=self.resource)
-        message = Message(m, SinkMetrics(), boto_resource=self.resource)
+        message = Message(m, boto_resource=self.resource)
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
 
@@ -371,7 +417,7 @@ class MessageTestCase(unittest.TestCase):
         notif3 = make_webpush_notification(self.uaid, chid2)
         notif2.message_id = notif1.message_id
         m = get_rotating_message_tablename(boto_resource=self.resource)
-        message = Message(m, SinkMetrics(), boto_resource=self.resource)
+        message = Message(m, boto_resource=self.resource)
         message.register_channel(self.uaid, chid)
         message.register_channel(self.uaid, chid2)
 
@@ -387,7 +433,7 @@ class MessageTestCase(unittest.TestCase):
         notif = make_webpush_notification(dummy_uaid, dummy_chid)
         notif.message_id = notif.update_id = dummy_uaid
         m = get_rotating_message_tablename(boto_resource=self.resource)
-        message = Message(m, SinkMetrics(), boto_resource=self.resource)
+        message = Message(m, boto_resource=self.resource)
 
         def raise_condition(*args, **kwargs):
             raise ClientError({}, 'delete_item')

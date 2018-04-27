@@ -105,6 +105,10 @@ def add_shared_args(parser):
                         help="AWS DynamoDB endpoint override",
                         type=str, default=None,
                         env_var="AWS_LOCAL_DYNAMODB")
+    parser.add_argument('--no_table_rotation',
+                        help="Disallow monthly message table rotation",
+                        action="store_true", default=False,
+                        env_var="NO_TABLE_ROTATION")
     # No ENV because this is for humans
     _add_external_router_args(parser)
     _obsolete_args(parser)

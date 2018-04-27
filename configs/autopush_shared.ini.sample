@@ -132,3 +132,6 @@ endpoint_port = 8082
 ; e.g {"firefox":{"cert":"certs/main.cert","key":"certs/main.key","topic":"com.mozilla.org.Firefox","max_retry":2},"beta":{"cert":"certs/beta.cert","key":"certs/beta.key","topic":"com.mozilla.org.FirefoxBeta"}}
 #apns_creds =
 
+; With TTL implemented, message table rotation is no longer required.
+; This flag determines if table rotation should be allowed to continue:
+#no_table_rotation

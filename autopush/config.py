@@ -183,6 +183,8 @@ class AutopushConfig(object):
     # DynamoDB endpoint override
     aws_ddb_endpoint = attrib(default=None)  # type: str
 
+    allow_table_rotation = attrib(default=True)  # type: bool
+
     def __attrs_post_init__(self):
         """Initialize the Settings object"""
         # Setup hosts/ports/urls
@@ -297,6 +299,8 @@ class AutopushConfig(object):
         if not ns.no_aws:
             ami_id = get_amid() or "Unknown"
 
+        allow_table_rotation = not ns.no_table_rotation
+
         return cls(
             crypto_key=ns.crypto_key,
             datadog_api_key=ns.datadog_api_key,
@@ -330,6 +334,7 @@ class AutopushConfig(object):
                 dh_param=ns.ssl_dh_param
             ),
             sts_max_age=ns.sts_max_age,
+            allow_table_rotation=allow_table_rotation,
             **kwargs
         )
 
