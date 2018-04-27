@@ -1,5 +1,4 @@
 import base64
-import binascii
 import json
 import os
 
@@ -138,7 +137,7 @@ class VerifyJWT(object):
             return VerifyJWT.extract_assertion(sig_material)
         except InvalidSignature:
             raise
-        except (ValueError, TypeError, binascii.Error, PyAsn1Error):
+        except (ValueError, TypeError, PyAsn1Error):
             raise InvalidSignature()
         except Exception:  # pragma: no cover
             Logger().failure("Unexpected error processing JWT")
