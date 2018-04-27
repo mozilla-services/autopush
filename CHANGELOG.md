@@ -1,3 +1,22 @@
+<a name="1.45.0"></a>
+## 1.45.0 (2018-04-27)
+
+
+#### Bug Fixes
+
+*   return simple uaid to hello ([ae2f3b4a](https://github.com/mozilla-services/autopush/commit/ae2f3b4a01368717fa69eee7019e8b6f72da38f5), closes [#1185](https://github.com/mozilla-services/autopush/issues/1185))
+*   disable the logger guard for now ([27af6965](https://github.com/mozilla-services/autopush/commit/27af6965bd0f71c47600f4ccc1c127d63f132ed7), closes [#1184](https://github.com/mozilla-services/autopush/issues/1184))
+
+#### Features
+
+*   add flag to stop table rotation ([ea052116](https://github.com/mozilla-services/autopush/commit/ea05211644baa55119a842d0805357f01074248c), closes [#1172](https://github.com/mozilla-services/autopush/issues/1172))
+*   use chrono epoch times instead of monotonic time ([7c6f8b90](https://github.com/mozilla-services/autopush/commit/7c6f8b9082cfc9d0446b6c927d4477d3d8a8161b), closes [#1180](https://github.com/mozilla-services/autopush/issues/1180))
+*   refactor client state machine ([86496370](https://github.com/mozilla-services/autopush/commit/86496370b79d4756d0538c61b511b47e9d848ceb), closes [#1181](https://github.com/mozilla-services/autopush/issues/1181))
+*   fix asserts on client dis/connect and convert inc call to rust ([a4819599](https://github.com/mozilla-services/autopush/commit/a481959961332c77f4a5218d74351c29f0d2bdaf), closes [#1177](https://github.com/mozilla-services/autopush/issues/1177))
+*   add a crit log_check to autopush_rs ([6a15e11f](https://github.com/mozilla-services/autopush/commit/6a15e11f226ca9581f6b268a2b5093e70ccce38c), closes [#1167](https://github.com/mozilla-services/autopush/issues/1167))
+
+
+
 <a name="1.44.0"></a>
 ## 1.44.0 (2018-04-13)
 
