@@ -22,8 +22,6 @@ use hyper::{self, header, StatusCode};
 use libc::c_char;
 use openssl::ssl::SslAcceptor;
 use reqwest;
-use rusoto_core::{Region};
-use rusoto_dynamodb::{DynamoDbClient};
 use sentry;
 use serde_json;
 use time;
@@ -46,6 +44,7 @@ use server::dispatch::{Dispatch, RequestType};
 use server::metrics::metrics_from_opts;
 use server::webpush_io::WebpushIo;
 use util::{self, RcObject, timeout};
+use util::ddb_helpers::DynamoStorage;
 use util::megaphone::{ClientServices, MegaphoneAPIResponse, Service, ServiceClientInit, ServiceChangeTracker};
 
 mod dispatch;
@@ -93,7 +92,7 @@ pub struct AutopushServerOptions {
 pub struct Server {
     uaids: RefCell<HashMap<Uuid, RegisteredClient>>,
     broadcaster: RefCell<ServiceChangeTracker>,
-    pub ddb_client: DynamoDbClient,
+    pub ddb: DynamoStorage,
     open_connections: Cell<u32>,
     tls_acceptor: Option<SslAcceptor>,
     pub tx: queue::Sender,
@@ -339,17 +338,10 @@ impl Server {
         } else {
             ServiceChangeTracker::new(Vec::new())
         };
-        let region = env::var("AWS_LOCAL_DYNAMODB").map(|endpoint| {
-            Region::Custom {
-                endpoint,
-                name: "env_var".to_string(),
-            }
-        }).unwrap_or(Region::default());
-        let ddb_client = DynamoDbClient::simple(region);
         let srv = Rc::new(Server {
             opts: opts.clone(),
             broadcaster: RefCell::new(broadcaster),
-            ddb_client: ddb_client,
+            ddb: DynamoStorage::new(),
             uaids: RefCell::new(HashMap::new()),
             open_connections: Cell::new(0),
             handle: core.handle(),

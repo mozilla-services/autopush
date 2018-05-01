@@ -292,7 +292,6 @@ class CommandProcessor(object):
         self.store_messages_process = StoreMessagesUserCommand(conf, db)
         self.deserialize = dict(
             hello=Hello,
-            check_storage=CheckStorage,
             delete_message=DeleteMessage,
             drop_user=DropUser,
             migrate_user=MigrateUser,
@@ -302,7 +301,6 @@ class CommandProcessor(object):
         )
         self.command_dict = dict(
             hello=self.hello_processor,
-            check_storage=self.check_storage_processor,
             delete_message=self.delete_message_processor,
             drop_user=self.drop_user_processor,
             migrate_user=self.migrate_user_proocessor,

@@ -69,10 +69,13 @@ extern crate futures_backoff;
 extern crate hostname;
 extern crate httparse;
 extern crate hyper;
+#[macro_use]
+extern crate lazy_static;
 extern crate libc;
 #[macro_use]
 extern crate matches;
 extern crate openssl;
+extern crate regex;
 extern crate reqwest;
 extern crate rusoto_core;
 extern crate rusoto_dynamodb;
@@ -80,6 +83,7 @@ extern crate sentry;
 extern crate serde;
 #[macro_use]
 extern crate serde_derive;
+extern crate serde_dynamodb;
 #[macro_use]
 extern crate slog;
 #[macro_use]

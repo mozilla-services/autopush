@@ -17,6 +17,7 @@ futures-backoff = "0.1"
 hostname = "0.1.4"
 httparse = "1.2.4"
 hyper = "0.11.25"
+lazy_static = "1.0.0"
 libc = "0.2.40"
 # log: Use this version for debug builds
 # log = "0.4.1"
@@ -24,12 +25,14 @@ libc = "0.2.40"
 log = { version = "0.4.1", features = ["max_level_trace", "release_max_level_warn"] }
 matches = "0.1.6"
 openssl = "0.10.5"
+regex = "0.2"
 reqwest = { version = "0.8.5", features = ["unstable"] }
 rusoto_core = "0.32.0"
 rusoto_dynamodb = "0.32.0"
 sentry = "0.2.0"
-serde = "1.0.37"
-serde_derive = "1.0.37"
+serde = "1.0.45"
+serde_derive = "1.0.45"
+serde_dynamodb = "0.1.2"
 serde_json = "1.0.13"
 # slog: Use this first version for debug builds
 # slog = { version = "2.2.3" , features = ["max_level_trace", "release_max_level_debug"] }
