@@ -544,7 +544,7 @@ class Message(object):
         """Register a channel for a given uaid"""
         # Generate our update expression
         if ttl is None:
-            ttl = self._max_ttl
+            ttl = self._max_ttl * 2
         expr_values = {
             ":channel_id": set([normalize_id(channel_id)]),
             ":expiry": _expiry(ttl)
@@ -841,8 +841,13 @@ class Router(object):
             # AWS.
             raise AutopushException("data is missing router_type "
                                     "or connected_at")
+        # Mobile users set this value to "0" which means that they are
+        # never dropped from DynamoDB (DDB only drops values that have a
+        # "reasonable" expiration date within 2 years or so of present.)
+        # We double the expiration to match the previous behavior of
+        # idle registrations lasting about 2 rotations.
         if "expiry" not in data:
-            data["expiry"] = _expiry(MAX_EXPIRY)
+            data["expiry"] = _expiry(MAX_EXPIRY * 2)
         # Generate our update expression
         expr = "SET " + ", ".join(["%s=:%s" % (x, x) for x in data.keys()])
         expr_values = {":%s" % k: v for k, v in data.items()}
