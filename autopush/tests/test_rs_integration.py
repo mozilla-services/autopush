@@ -116,8 +116,6 @@ class TestRustWebPush(unittest.TestCase):
     )
 
     def start_ep(self, ep_conf):
-        self._ep_conf = ep_conf
-
         # Endpoint HTTP router
         self.ep = ep = EndpointApplication(
             ep_conf,
@@ -127,17 +125,26 @@ class TestRustWebPush(unittest.TestCase):
         ep.startService()
         self.addCleanup(ep.stopService)
 
+    def start_conn(self, conn_conf):
+        self.conn = conn = RustConnectionApplication(
+            conn_conf,
+            resource=autopush.tests.boto_resource,
+        )
+        conn.setup(rotate_tables=False, num_threads=2)
+        conn.startService()
+        self.addCleanup(conn.stopService)
+
     def setUp(self):
         self.logs = TestingLogObserver()
         begin_or_register(self.logs)
         self.addCleanup(globalLogPublisher.removeObserver, self.logs)
 
         crypto_key = Fernet.generate_key()
-        ep_conf = AutopushConfig(
+        self._ep_conf = AutopushConfig(
             crypto_key=crypto_key,
             **self.endpoint_kwargs()
         )
-        conn_conf = AutopushConfig(
+        self._conn_conf = AutopushConfig(
             crypto_key=crypto_key,
             auto_ping_interval=60.0,
             auto_ping_timeout=10.0,
@@ -146,15 +153,9 @@ class TestRustWebPush(unittest.TestCase):
             human_logs=False,
             **self.conn_kwargs()
         )
-        self.start_ep(ep_conf)
+        self.start_ep(self._ep_conf)
         # Websocket server
-        self.conn = conn = RustConnectionApplication(
-            conn_conf,
-            resource=autopush.tests.boto_resource,
-        )
-        conn.setup(rotate_tables=False, num_threads=2)
-        conn.startService()
-        self.addCleanup(conn.stopService)
+        self.start_conn(self._conn_conf)
 
     def endpoint_kwargs(self):
         return self._endpoint_defaults
@@ -189,11 +190,15 @@ class TestRustWebPush(unittest.TestCase):
     @inlineCallbacks
     def test_no_rotation(self):
         # override autopush settings
-        safe = self._ep_conf.allow_table_rotation
+        ep_safe = self._ep_conf.allow_table_rotation
+        conn_safe = self._conn_conf.allow_table_rotation
         self._ep_conf.allow_table_rotation = False
+        self._conn_conf.allow_table_rotation = False
         yield self.ep.stopService()
+        yield self.conn.stopService()
         try:
             self.start_ep(self._ep_conf)
+            self.start_conn(self._conn_conf)
             data = str(uuid.uuid4())
             client = yield self.quick_register()
             result = yield client.send_notification(data=data)
@@ -212,8 +217,11 @@ class TestRustWebPush(unittest.TestCase):
                 assert table_name == self.ep.db.message_tables[0]
         finally:
             yield self.ep.stopService()
-            self._ep_conf.allow_table_rotation = safe
+            yield self.conn.stopService()
+            self._ep_conf.allow_table_rotation = ep_safe
+            self._conn_conf.allow_table_rotation = conn_safe
             self.start_ep(self._ep_conf)
+            self.start_conn(self._conn_conf)
         yield self.shut_down(client)
 
     @inlineCallbacks
