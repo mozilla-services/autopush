@@ -512,6 +512,27 @@ class RouterTestCase(unittest.TestCase):
         table = create_rotating_message_table(boto_resource=mock_resource)
         assert table == mock_table
 
+    def test_double_registration_expiration(self):
+        from time import time
+
+        router = Router(self.table_conf,  SinkMetrics(),
+                        resource=self.resource)
+        mm = Mock()
+        mm.update_item = Mock(return_value={})
+        router.table = mm
+        expected_value = int(time() + autopush.db.MAX_EXPIRY * 2)
+        result = router.register_user(
+            dict(
+                router_type="test",
+                connected_at=123,
+                uaid=str(uuid.uuid4())
+            )
+        )
+
+        assert result[0] is True
+        values = mm.update_item.call_args_list[0][1]
+        assert values['ExpressionAttributeValues'][':expiry'] >= expected_value
+
     def test_provisioning(self):
         db_name = "router_%s" % uuid.uuid4()
 
@@ -528,7 +549,6 @@ class RouterTestCase(unittest.TestCase):
     def test_uaid_provision_failed(self):
         router = Router(self.table_conf,  SinkMetrics(),
                         resource=self.resource)
-        router.table = Mock()
 
         def raise_condition(*args, **kwargs):
             raise ClientError(
