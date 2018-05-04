@@ -9,6 +9,8 @@ use futures::future;
 use futures_backoff::retry_if;
 use regex::RegexSet;
 use rusoto_core::Region;
+use rusoto_core::reactor::RequestDispatcher;
+use rusoto_credential::StaticProvider;
 use rusoto_dynamodb::{AttributeValue, DynamoDb, DynamoDbClient, QueryError, QueryInput,
                       UpdateItemError, UpdateItemInput, UpdateItemOutput};
 use serde_dynamodb;
@@ -292,20 +294,24 @@ pub struct FetchMessageResponse {
 }
 
 pub struct DynamoStorage {
-    ddb: Rc<DynamoDbClient>,
+    ddb: Rc<Box<DynamoDb>>,
 }
 
 impl DynamoStorage {
     pub fn new() -> DynamoStorage {
-        let region = env::var("AWS_LOCAL_DYNAMODB")
-            .map(|endpoint| Region::Custom {
-                endpoint,
-                name: "env_var".to_string(),
-            })
-            .unwrap_or(Region::default());
-        DynamoStorage {
-            ddb: Rc::new(DynamoDbClient::simple(region)),
-        }
+        let ddb: Box<DynamoDb> = if let Ok(endpoint) = env::var("AWS_LOCAL_DYNAMODB") {
+            Box::new(DynamoDbClient::new(
+                RequestDispatcher::default(),
+                StaticProvider::new_minimal("BogusKey".to_string(), "BogusKey".to_string()),
+                Region::Custom {
+                    name: "us-east-1".to_string(),
+                    endpoint,
+                },
+            ))
+        } else {
+            Box::new(DynamoDbClient::simple(Region::default()))
+        };
+        DynamoStorage { ddb: Rc::new(ddb) }
     }
 
     pub fn increment_storage(
@@ -357,7 +363,7 @@ impl DynamoStorage {
     }
 
     pub fn fetch_messages(
-        ddb: Rc<DynamoDbClient>,
+        ddb: Rc<Box<DynamoDb>>,
         table_name: &str,
         uaid: &Uuid,
         limit: u32,
@@ -439,7 +445,7 @@ impl DynamoStorage {
     }
 
     pub fn fetch_timestamp_messages(
-        ddb: Rc<DynamoDbClient>,
+        ddb: Rc<Box<DynamoDb>>,
         table_name: &str,
         uaid: &Uuid,
         timestamp: Option<u64>,

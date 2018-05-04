@@ -78,6 +78,7 @@ extern crate openssl;
 extern crate regex;
 extern crate reqwest;
 extern crate rusoto_core;
+extern crate rusoto_credential;
 extern crate rusoto_dynamodb;
 extern crate sentry;
 extern crate serde;

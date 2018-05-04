@@ -28,8 +28,6 @@ install:
 - pip install tox ${CODECOV:+codecov}
 - if [ ${WITH_RUST:-true} != "false" ]; then curl https://sh.rustup.rs | sh -s -- -y || travis_terminate 1; fi
 - export PATH=$PATH:$HOME/.cargo/bin
-- export AWS_SHARED_CREDENTIALS_FILE=./automock/boto.cfg
-- export BOTO_CONFIG=./automock/boto.cfg
 script:
 - tox -- ${CODECOV:+--with-coverage --cover-xml --cover-package=autopush}
 after_success:
