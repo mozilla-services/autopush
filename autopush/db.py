@@ -760,19 +760,18 @@ class Message(object):
 
 class Router(object):
     """Create a Router table abstraction on top of a DynamoDB Table object"""
-    def __init__(self, conf, metrics, max_ttl=MAX_EXPIRY, resource=None):
-        # type: (DDBTableConfig, IMetrics, int, DynamoDBResource) -> None
+    def __init__(self, conf, metrics, resource=None):
+        # type: (DDBTableConfig, IMetrics, DynamoDBResource) -> None
         """Create a new Router object
 
-        :param table: :class:`Table` object.
+        :param conf: configuration data.
         :param metrics: Metrics object that implements the
                         :class:`autopush.metrics.IMetrics` interface.
-        :param max_ttl: Default maximum time to live.
+        :param resource: Boto3 resource handle
 
         """
         self.conf = conf
         self.metrics = metrics
-        self._max_ttl = max_ttl
         self._cached_table = None
         self._resource = resource or DynamoDBResource(**asdict(self.conf))
         self.table = get_router_table(
@@ -841,8 +840,6 @@ class Router(object):
             # AWS.
             raise AutopushException("data is missing router_type "
                                     "or connected_at")
-        if "expiry" not in data:
-            data["expiry"] = _expiry(MAX_EXPIRY)
         # Generate our update expression
         expr = "SET " + ", ".join(["%s=:%s" % (x, x) for x in data.keys()])
         expr_values = {":%s" % k: v for k, v in data.items()}
@@ -976,11 +973,9 @@ class Router(object):
 
         """
         db_key = {"uaid": hasher(uaid)}
-        expr = ("SET current_month=:curmonth, last_connect=:last_connect, "
-                "expiry=:expiry")
+        expr = ("SET current_month=:curmonth, last_connect=:last_connect")
         expr_values = {":curmonth": month,
                        ":last_connect": generate_last_connect(),
-                       ":expiry": _expiry(self._max_ttl),
                        }
         self.table.update_item(
             Key=db_key,
