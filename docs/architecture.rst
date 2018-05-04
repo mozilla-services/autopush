@@ -129,32 +129,51 @@ a lookup is done against these ``chids``.
 
 .. _table-rotation:
 
-Message Table Rotation
-----------------------
+Message Table Rotation (legacy)
+-------------------------------
 
-To avoid costly table scans, autopush uses a rotating message and router table.
-Clients that haven't connected in 30-60 days will have their router and message
-table entries dropped and need to re-register.
+As of version 1.45.0, message table rotation can be disabled. This is because
+DynamoDB now provides automatic entry expiration. This is controlled in our
+data by the "expiry" field. (***Note***, field expiration is only available in
+full DynamoDB, and is not replicated with the mock DynamoDB API provided for
+development.) The following feature is disabled with the `no_table_rotation`
+flag set in the `autopush_shared.ini` configuration file.
 
-Tables are post-fixed with the year/month they are meant for, ie:
+If table rotation is disabled, the last message table used will become
+'frozen' and will be used for all future messages. While this may not be
+aesthetically pleasing, it's more efficient than copying data to a new,
+generic table. If it's preferred, service can be shut down, previous tables
+dropped, the current table renamed, and service brought up again.
 
-    messages-2015-02
+..
 
-Tables must be created and have their read/write units properly allocated by a
-separate process in advance of the month switch-over as autopush nodes will
-assume the tables already exist. Scripts are provided that can be run weekly to
-ensure all necessary tables are present, and tables old enough are dropped.
+  *Message Table Rotation information*
 
-.. seealso::
+  To avoid costly table scans, autopush uses a rotating message and router
+  table.
+  Clients that haven't connected in 30-60 days will have their router and
+  message table entries dropped and need to re-register.
+
+  Tables are post-fixed with the year/month they are meant for, i.e. ::
+
+     messages_2015_02
+
+  Tables must be created and have their read/write units properly allocated
+  by a separate process in advance of the month switch-over as autopush
+  nodes will assume the tables already exist. Scripts are provided that can be
+  run weekly to ensure all necessary tables are present, and tables old
+  enough are dropped.
+
+  .. seealso::
 
     Table maintenance script: https://github.com/mozilla-services/autopush/blob/master/maintenance.py
 
-Within a few days of the new month, the load on the prior months table will fall
-as clients transition to the new table. The read/write units on the prior
-month may then be lowered.
+  Within a few days of the new month, the load on the prior months table will
+  fall as clients transition to the new table. The read/write units on the
+  prior month may then be lowered.
 
-Message Table Interaction Rules
--------------------------------
+Rotating Message Table Interaction Rules (legacy)
+-------------------------------------------------
 
 Due to the complexity of having notifications spread across two tables, several
 rules are used to avoid losing messages during the month transition.
@@ -162,11 +181,12 @@ rules are used to avoid losing messages during the month transition.
 The logic for connection nodes is more complex, since only the connection node
 knows when the client connects, and how many messages it has read through.
 
-The router table uses the ``curmonth`` field to indicate the last month the
-client has read notifications through. This is independent of the last_connect
-since it is possible for a client to connect, fail to read its notifications,
-then reconnect. This field is updated for a new month when the client connects
-**after** it has ack'd all the notifications out of the last month.
+When table rotation is allowed, the router table uses the ``curmonth`` field
+to indicate the last month the client has read notifications through. This is
+independent of the last_connect since it is possible for a client to
+connect, fail to read its notifications, then reconnect. This field is
+updated for a new month when the client connects **after** it has ack'd all
+the notifications out of the last month.
 
 To avoid issues with time synchronization, the node the client is connected to
 acts as the source of truth for when the month has flipped over. Clients are
