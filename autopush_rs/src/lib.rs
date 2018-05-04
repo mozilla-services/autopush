@@ -85,15 +85,15 @@ extern crate serde;
 extern crate serde_derive;
 extern crate serde_dynamodb;
 #[macro_use]
-extern crate slog;
+extern crate serde_json;
 #[macro_use]
-extern crate slog_scope;
-extern crate slog_term;
+extern crate slog;
 extern crate slog_async;
 extern crate slog_json;
-extern crate slog_stdlog;
 #[macro_use]
-extern crate serde_json;
+extern crate slog_scope;
+extern crate slog_stdlog;
+extern crate slog_term;
 #[macro_use]
 extern crate state_machine_future;
 extern crate time;

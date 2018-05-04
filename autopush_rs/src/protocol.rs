@@ -52,13 +52,14 @@ pub enum ClientMessage {
         broadcasts: HashMap<String, String>,
     },
 
-    Ack { updates: Vec<ClientAck> },
+    Ack {
+        updates: Vec<ClientAck>,
+    },
 
     Nack {
         code: Option<i32>,
         version: String,
     },
-
 }
 
 #[derive(Deserialize)]
@@ -118,7 +119,6 @@ pub struct Notification {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub headers: Option<HashMap<String, String>>,
 }
-
 
 fn default_ttl() -> u32 {
     0

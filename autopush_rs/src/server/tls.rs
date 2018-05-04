@@ -11,14 +11,14 @@ use std::path::Path;
 use std::rc::Rc;
 
 use futures::future;
-use futures::{Poll, Future};
+use futures::{Future, Poll};
 use openssl::dh::Dh;
 use openssl::pkey::PKey;
 use openssl::ssl::{SslAcceptor, SslMethod, SslMode};
 use openssl::x509::X509;
 use tokio_core::net::TcpStream;
 use tokio_io::{AsyncRead, AsyncWrite};
-use tokio_openssl::{SslStream, SslAcceptorExt};
+use tokio_openssl::{SslAcceptorExt, SslStream};
 
 use server::{Server, ServerOptions};
 use errors::*;
@@ -33,20 +33,27 @@ pub fn configure(opts: &ServerOptions) -> Option<SslAcceptor> {
         Some(ref key) => read(key),
         None => return None,
     };
-    let key = PKey::private_key_from_pem(&key)
-        .expect("failed to create private key");
+    let key = PKey::private_key_from_pem(&key).expect("failed to create private key");
     let cert = read(opts.ssl_cert.as_ref().expect("ssl_cert not configured"));
     let cert = X509::from_pem(&cert).expect("failed to create certificate");
 
     let mut builder = SslAcceptor::mozilla_intermediate(SslMethod::tls())
         .expect("failed to create ssl acceptor builder");
-    builder.set_private_key(&key).expect("failed to set private key");
-    builder.set_certificate(&cert).expect("failed to set certificate");
-    builder.check_private_key().expect("private key check failed");
+    builder
+        .set_private_key(&key)
+        .expect("failed to set private key");
+    builder
+        .set_certificate(&cert)
+        .expect("failed to set certificate");
+    builder
+        .check_private_key()
+        .expect("private key check failed");
 
     if let Some(dh_param) = opts.ssl_dh_param.as_ref() {
         let dh_param = Dh::params_from_pem(&read(dh_param)).expect("failed to create dh");
-        builder.set_tmp_dh(&dh_param).expect("failed to set dh_param");
+        builder
+            .set_tmp_dh(&dh_param)
+            .expect("failed to set dh_param");
     }
 
     // Should help reduce peak memory consumption for idle connections
@@ -70,15 +77,14 @@ pub fn configure(opts: &ServerOptions) -> Option<SslAcceptor> {
 /// listener. If the server is configured without TLS then this will immediately
 /// return with a plaintext socket, or otherwise it will perform an asynchronous
 /// TLS handshake and only resolve once that's completed.
-pub fn accept(srv: &Rc<Server>, socket: TcpStream)
-    -> MyFuture<MaybeTlsStream<TcpStream>>
-{
+pub fn accept(srv: &Rc<Server>, socket: TcpStream) -> MyFuture<MaybeTlsStream<TcpStream>> {
     match srv.tls_acceptor {
-        Some(ref acceptor) => {
-            Box::new(acceptor.accept_async(socket)
+        Some(ref acceptor) => Box::new(
+            acceptor
+                .accept_async(socket)
                 .map(MaybeTlsStream::Tls)
-                .chain_err(|| "failed to accept TLS socket"))
-        }
+                .chain_err(|| "failed to accept TLS socket"),
+        ),
         None => Box::new(future::ok(MaybeTlsStream::Plain(socket))),
     }
 }

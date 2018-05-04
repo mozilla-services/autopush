@@ -25,7 +25,7 @@ use serde_json;
 use uuid::Uuid;
 
 use errors::*;
-use rt::{self, UnwindGuard, AutopushError};
+use rt::{self, AutopushError, UnwindGuard};
 use protocol;
 use server::Server;
 
@@ -114,7 +114,6 @@ impl<F: FnOnce(&str) + Send> FnBox for F {
     }
 }
 
-
 #[derive(Serialize)]
 #[serde(tag = "command", rename_all = "snake_case")]
 enum Call {
@@ -142,15 +141,19 @@ enum Call {
         message_month: String,
     },
 
-    DropUser { uaid: String },
+    DropUser {
+        uaid: String,
+    },
 
-    MigrateUser { uaid: String, message_month: String },
+    MigrateUser {
+        uaid: String,
+        message_month: String,
+    },
 
     StoreMessages {
         message_month: String,
         messages: Vec<protocol::Notification>,
     },
-
 }
 
 #[derive(Deserialize)]
@@ -172,7 +175,9 @@ pub struct HelloResponse {
 #[derive(Deserialize)]
 #[serde(untagged)]
 pub enum RegisterResponse {
-    Success { endpoint: String },
+    Success {
+        endpoint: String,
+    },
 
     Error {
         error_msg: String,
@@ -184,7 +189,9 @@ pub enum RegisterResponse {
 #[derive(Deserialize)]
 #[serde(untagged)]
 pub enum UnRegisterResponse {
-    Success { success: bool },
+    Success {
+        success: bool,
+    },
 
     Error {
         error_msg: String,
@@ -212,7 +219,6 @@ pub struct MigrateUserResponse {
 pub struct StoreMessagesResponse {
     pub success: bool,
 }
-
 
 impl Server {
     pub fn hello(&self, connected_at: &u64, uaid: Option<&Uuid>) -> MyFuture<HelloResponse> {
@@ -326,7 +332,9 @@ impl PythonCall {
         let (tx, rx) = oneshot::channel();
         let call = PythonCall {
             input: serde_json::to_string(input).unwrap(),
-            output: Box::new(|json: &str| { drop(tx.send(json_or_error(json))); }),
+            output: Box::new(|json: &str| {
+                drop(tx.send(json_or_error(json)));
+            }),
         };
         let rx = Box::new(rx.then(|res| match res {
             Ok(Ok(s)) => Ok(serde_json::from_str(&s)?),

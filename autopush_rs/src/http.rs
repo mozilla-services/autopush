@@ -11,7 +11,7 @@ use std::str;
 use std::rc::Rc;
 
 use futures::future::ok;
-use futures::{Stream, Future};
+use futures::{Future, Stream};
 use hyper::{Method, StatusCode};
 use hyper;
 use serde_json;
@@ -55,32 +55,24 @@ impl Service for Push {
                     if let Ok(msg) = serde_json::from_str(&s) {
                         match srv.notify_client(uaid, msg) {
                             Ok(_) => Ok(hyper::Response::new().with_status(StatusCode::Ok)),
-                            _ => {
-                                Ok(
-                                    hyper::Response::new()
-                                        .with_status(StatusCode::BadGateway)
-                                        .with_body("Client not available."),
-                                )
-                            }
+                            _ => Ok(hyper::Response::new()
+                                .with_status(StatusCode::BadGateway)
+                                .with_body("Client not available.")),
                         }
                     } else {
-                        Ok(
-                            hyper::Response::new()
-                                .with_status(hyper::StatusCode::BadRequest)
-                                .with_body("Unable to decode body payload"),
-                        )
+                        Ok(hyper::Response::new()
+                            .with_status(hyper::StatusCode::BadRequest)
+                            .with_body("Unable to decode body payload"))
                     }
-                }))
+                }));
             }
-            (&Method::Put, "notif", uaid) => {
-                match srv.check_client_storage(uaid) {
-                    Ok(_) => response.set_status(StatusCode::Ok),
-                    _ => {
-                        response.set_status(StatusCode::BadGateway);
-                        response.set_body("Client not available.");
-                    }
+            (&Method::Put, "notif", uaid) => match srv.check_client_storage(uaid) {
+                Ok(_) => response.set_status(StatusCode::Ok),
+                _ => {
+                    response.set_status(StatusCode::BadGateway);
+                    response.set_body("Client not available.");
                 }
-            }
+            },
             (_, "push", _) => response.set_status(StatusCode::MethodNotAllowed),
             (_, "notif", _) => response.set_status(StatusCode::MethodNotAllowed),
             _ => response.set_status(StatusCode::NotFound),

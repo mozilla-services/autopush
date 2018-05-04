@@ -23,10 +23,10 @@ use serde_json;
 use serde::ser::SerializeMap;
 use slog;
 use slog::{FnValue, PushFnValue};
-use slog::{OwnedKVList, KV, SendSyncRefUnwindSafeKV};
+use slog::{OwnedKVList, SendSyncRefUnwindSafeKV, KV};
 use slog::Record;
 use std;
-use std::{io, result, fmt};
+use std::{fmt, io, result};
 use std::io::Cursor;
 
 use std::cell::RefCell;
@@ -51,11 +51,10 @@ struct SerdeSerializer<S: serde::Serializer> {
 impl<S: serde::Serializer> SerdeSerializer<S> {
     /// Start serializing map of values
     fn start(ser: S, len: Option<usize>) -> result::Result<Self, slog::Error> {
-        let ser_map = try!(ser.serialize_map(len)
-            .map_err(|_| {
-                io::Error::new(io::ErrorKind::Other,
-                               "serde serialization error")
-            }));
+        let ser_map = try!(
+            ser.serialize_map(len)
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "serde serialization error"))
+        );
         Ok(SerdeSerializer { ser_map: ser_map })
     }
 
@@ -74,7 +73,8 @@ macro_rules! impl_m(
 );
 
 impl<S> slog::Serializer for SerdeSerializer<S>
-    where S: serde::Serializer
+where
+    S: serde::Serializer,
 {
     fn emit_bool(&mut self, key: &str, val: bool) -> slog::Result {
         impl_m!(self, key, &val)
@@ -131,18 +131,13 @@ impl<S> slog::Serializer for SerdeSerializer<S>
     fn emit_str(&mut self, key: &str, val: &str) -> slog::Result {
         impl_m!(self, key, &val)
     }
-    fn emit_arguments(&mut self,
-                      key: &str,
-                      val: &fmt::Arguments)
-                      -> slog::Result {
+    fn emit_arguments(&mut self, key: &str, val: &fmt::Arguments) -> slog::Result {
         TL_BUF.with(|buf| {
             let mut buf = buf.borrow_mut();
 
             buf.write_fmt(*val).unwrap();
 
-            let res = {
-                || impl_m!(self, key, &*buf)
-            }();
+            let res = { || impl_m!(self, key, &*buf) }();
             buf.clear();
             res
         })
@@ -161,7 +156,8 @@ pub struct AutoJson<W: io::Write> {
 }
 
 impl<W> AutoJson<W>
-    where W: io::Write
+where
+    W: io::Write,
 {
     /// Build custom `Json` `Drain`
     #[cfg_attr(feature = "cargo-clippy", allow(new_ret_no_self))]
@@ -182,13 +178,11 @@ pub struct AutoJsonBuilder<W: io::Write> {
 }
 
 impl<W> AutoJsonBuilder<W>
-    where W: io::Write
+where
+    W: io::Write,
 {
     fn new(io: W) -> Self {
-        AutoJsonBuilder {
-            values: vec![],
-            io,
-        }
+        AutoJsonBuilder { values: vec![], io }
     }
 
     /// Build `Json` `Drain`
@@ -203,7 +197,8 @@ impl<W> AutoJsonBuilder<W>
 
     /// Add custom values to be printed with this formatter
     pub fn add_key_value<T>(mut self, value: slog::OwnedKV<T>) -> Self
-        where T: SendSyncRefUnwindSafeKV + 'static
+    where
+        T: SendSyncRefUnwindSafeKV + 'static,
     {
         self.values.push(value.into());
         self
@@ -234,22 +229,18 @@ impl<W> AutoJsonBuilder<W>
 }
 
 impl<W> slog::Drain for AutoJson<W>
-    where W: io::Write
+where
+    W: io::Write,
 {
     type Ok = ();
     type Err = io::Error;
-    fn log(&self,
-           rinfo: &Record,
-           logger_values: &OwnedKVList)
-           -> io::Result<()> {
-
+    fn log(&self, rinfo: &Record, logger_values: &OwnedKVList) -> io::Result<()> {
         // XXX: UGLY HACK HERE
         // First write out the structure without the Fields nested
         let mut buff = Cursor::new(Vec::new());
         {
             let mut serializer = serde_json::Serializer::new(&mut buff);
-            let mut serializer =
-                SerdeSerializer::start(&mut serializer, None)?;
+            let mut serializer = SerdeSerializer::start(&mut serializer, None)?;
             for kv in &self.values {
                 kv.serialize(rinfo, &mut serializer)?;
             }
@@ -265,8 +256,7 @@ impl<W> slog::Drain for AutoJson<W>
         let mut buff = Cursor::new(Vec::new());
         {
             let mut serializer = serde_json::Serializer::new(&mut buff);
-            let mut serializer =
-                SerdeSerializer::start(&mut serializer, None)?;
+            let mut serializer = SerdeSerializer::start(&mut serializer, None)?;
             let msg = kv!("message" => format!("{}", rinfo.msg()));
             msg.serialize(rinfo, &mut serializer)?;
             rinfo.kv().serialize(rinfo, &mut serializer)?;
