@@ -115,7 +115,7 @@ class WebPushMessage(object):
         )
 
         # If there's no sortkey_timestamp and no topic, its legacy
-        if not notif.sortkey_timestamp and not notif.topic:
+        if notif.sortkey_timestamp is None and not notif.topic:
             notif.legacy = True
 
         return notif

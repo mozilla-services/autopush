@@ -493,7 +493,14 @@ where
         let unacked_direct_notifs = webpush.unacked_direct_notifs.len();
         if unacked_direct_notifs > 0 {
             stats.direct_storage += unacked_direct_notifs as i32;
-            let notifs = mem::replace(&mut webpush.unacked_direct_notifs, Vec::new());
+            let mut notifs = mem::replace(&mut webpush.unacked_direct_notifs, Vec::new());
+            // Ensure we don't store these as legacy by setting a 0 as the sortkey_timestamp
+            // That will ensure the Python side doesn't mark it as legacy during conversion and
+            // still get the correct default us_time when saving.
+            for notif in notifs.iter_mut() {
+                notif.sortkey_timestamp = Some(0);
+            }
+
             srv.handle.spawn(srv.store_messages(
                 webpush.uaid.simple().to_string(),
                 webpush.message_month.clone(),
