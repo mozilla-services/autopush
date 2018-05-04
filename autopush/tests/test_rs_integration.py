@@ -239,10 +239,8 @@ class TestRustWebPush(unittest.TestCase):
         result = yield client.hello()
         assert result != {}
         assert result["use_webpush"] is True
-        yield client.wait_for(lambda: len(db.DB_CALLS) == 4)
-        assert db.DB_CALLS == ['register_user', 'register_user',
-                               'fetch_messages',
-                               'fetch_timestamp_messages']
+        yield client.wait_for(lambda: len(db.DB_CALLS) == 2)
+        assert db.DB_CALLS == ['register_user', 'register_user']
         db.DB_CALLS = []
         db.TRACK_DB_CALLS = False
 

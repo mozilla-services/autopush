@@ -15,9 +15,7 @@ use futures::future::Either;
 use futures::sync::mpsc;
 use futures::sync::oneshot::Receiver;
 use futures::{Async, Future, Poll, Sink, Stream};
-use futures_backoff::retry_if;
-use rusoto_dynamodb::{AttributeValue, DynamoDb};
-use rusoto_dynamodb::{UpdateItemError, UpdateItemInput, UpdateItemOutput};
+use rusoto_dynamodb::UpdateItemOutput;
 use state_machine_future::RentToOwn;
 use tokio_core::reactor::Timeout;
 use uuid::Uuid;
@@ -28,9 +26,8 @@ use errors::*;
 use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
 use server::Server;
 use util::{ms_since_epoch, parse_user_agent, sec_since_epoch};
+use util::ddb_helpers::{CheckStorageResponse};
 use util::megaphone::{ClientServices, Service, ServiceClientInit};
-
-const MAX_EXPIRY: u64 = 2592000;
 
 // Created and handed to the AutopushServer
 pub struct RegisteredClient {
@@ -569,7 +566,7 @@ where
 
     #[state_machine_future(transitions(SendThenWait, DetermineAck))]
     AwaitCheckStorage {
-        response: MyFuture<call::CheckStorageResponse>,
+        response: MyFuture<CheckStorageResponse>,
         data: AuthClientData<T>,
     },
 
@@ -827,47 +824,13 @@ where
             .unacked_stored_highest
             .ok_or("unacked_stored_highest unset")?
             .to_string();
-        let uaid = webpush.uaid.simple().to_string();
-        let month_name = webpush.message_month.clone();
-        let srv = increment_storage.data.srv.clone();
-        let ddb_response = retry_if(
-            move || {
-                let expiry = sec_since_epoch() + MAX_EXPIRY;
-                let mut attr_values = HashMap::new();
-                attr_values.insert(
-                    ":timestamp".to_string(),
-                    AttributeValue {
-                        n: Some(timestamp.clone()),
-                        ..Default::default()
-                    },
-                );
-                attr_values.insert(
-                    ":expiry".to_string(),
-                    AttributeValue {
-                        n: Some(expiry.to_string()),
-                        ..Default::default()
-                    },
-                );
-                srv.ddb_client.update_item(&UpdateItemInput {
-                    key: ddb_item! {
-                        uaid: s => uaid.clone(),
-                        chidmessageid: s => " ".to_string()
-                    },
-                    update_expression: Some(
-                        "SET current_timestamp=:timestamp, expiry=:expiry".to_string(),
-                    ),
-                    expression_attribute_values: Some(attr_values),
-                    table_name: month_name.clone(),
-                    ..Default::default()
-                })
-            },
-            |err: &UpdateItemError| {
-                matches!(err, &UpdateItemError::ProvisionedThroughputExceeded(_))
-            },
-        ).map_err(|_| "Error incrementing storage".into());
-
+        let ddb_response = increment_storage.data.srv.ddb.increment_storage(
+                &webpush.message_month,
+                &webpush.uaid,
+                &timestamp
+        );
         transition!(AwaitIncrementStorage {
-            ddb_response: Box::new(ddb_response),
+            ddb_response,
             data: increment_storage.take().data,
         })
     }
@@ -890,9 +853,9 @@ where
         let CheckStorage { data } = check_storage.take();
         let response = {
             let webpush = data.webpush.borrow();
-            data.srv.check_storage(
-                webpush.uaid.simple().to_string(),
-                webpush.message_month.clone(),
+            data.srv.ddb.check_storage(
+                &webpush.message_month.clone(),
+                &webpush.uaid,
                 webpush.flags.include_topic,
                 webpush.unacked_stored_highest,
             )
@@ -906,7 +869,7 @@ where
         debug!("State: AwaitCheckStorage");
         let (include_topic, mut messages, timestamp) =
             match try_ready!(await_check_storage.response.poll()) {
-                call::CheckStorageResponse {
+                CheckStorageResponse {
                     include_topic,
                     messages,
                     timestamp,

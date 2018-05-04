@@ -137,13 +137,6 @@ enum Call {
         code: i32,
     },
 
-    CheckStorage {
-        uaid: String,
-        message_month: String,
-        include_topic: bool,
-        timestamp: Option<u64>,
-    },
-
     DeleteMessage {
         message: protocol::Notification,
         message_month: String,
@@ -198,13 +191,6 @@ pub enum UnRegisterResponse {
         error: bool,
         status: u32,
     },
-}
-
-#[derive(Deserialize)]
-pub struct CheckStorageResponse {
-    pub include_topic: bool,
-    pub messages: Vec<protocol::Notification>,
-    pub timestamp: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -272,23 +258,6 @@ impl Server {
             message_month: message_month,
             channel_id: channel_id,
             code: code,
-        });
-        self.send_to_python(call);
-        return fut;
-    }
-
-    pub fn check_storage(
-        &self,
-        uaid: String,
-        message_month: String,
-        include_topic: bool,
-        timestamp: Option<u64>,
-    ) -> MyFuture<CheckStorageResponse> {
-        let (call, fut) = PythonCall::new(&Call::CheckStorage {
-            uaid: uaid,
-            message_month: message_month,
-            include_topic: include_topic,
-            timestamp: timestamp,
         });
         self.send_to_python(call);
         return fut;

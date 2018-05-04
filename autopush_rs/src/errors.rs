@@ -24,6 +24,7 @@
 //! online.
 
 use std::any::Any;
+use std::num;
 use std::error;
 use std::io;
 
@@ -33,6 +34,7 @@ use httparse;
 use serde_json;
 use sentry;
 use tungstenite;
+use uuid;
 
 error_chain! {
     foreign_links {
@@ -42,6 +44,8 @@ error_chain! {
         Httparse(httparse::Error);
         MetricError(cadence::MetricError);
         SentryError(sentry::Error);
+        UuidParseError(uuid::ParseError);
+        ParseIntError(num::ParseIntError);
     }
 
     errors {
