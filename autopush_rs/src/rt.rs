@@ -58,11 +58,9 @@ impl AutopushError {
         let any: &Any = unsafe { mem::transmute((self.p1, self.p2)) };
         // Similar to what libstd does, only check for `&'static str` and
         // `String`.
-        any.downcast_ref::<&'static str>().map(|s| &s[..]).or_else(
-            || {
-                any.downcast_ref::<String>().map(|s| &s[..])
-            },
-        )
+        any.downcast_ref::<&'static str>()
+            .map(|s| &s[..])
+            .or_else(|| any.downcast_ref::<String>().map(|s| &s[..]))
     }
 
     fn assert_empty(&self) {
@@ -98,9 +96,7 @@ pub extern "C" fn autopush_error_msg_len(err: *const AutopushError) -> usize {
 /// returns null.
 #[no_mangle]
 pub extern "C" fn autopush_error_msg_ptr(err: *const AutopushError) -> *const u8 {
-    abort_on_panic(|| unsafe {
-        (*err).string().map(|s| s.as_ptr()).unwrap_or(ptr::null())
-    })
+    abort_on_panic(|| unsafe { (*err).string().map(|s| s.as_ptr()).unwrap_or(ptr::null()) })
 }
 
 /// Deallocates the internal `Box<Any>`, freeing any resources it contains.
@@ -108,7 +104,9 @@ pub extern "C" fn autopush_error_msg_ptr(err: *const AutopushError) -> *const u8
 /// The error itself can continue to be reused for future function calls.
 #[no_mangle]
 pub unsafe extern "C" fn autopush_error_cleanup(err: *mut AutopushError) {
-    abort_on_panic(|| { (&mut *err).cleanup(); });
+    abort_on_panic(|| {
+        (&mut *err).cleanup();
+    });
 }
 
 /// Helper structure to provide "unwind safety" to ensure we don't reuse values

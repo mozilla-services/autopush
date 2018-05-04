@@ -26,7 +26,7 @@ use errors::*;
 use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
 use server::Server;
 use util::{ms_since_epoch, parse_user_agent, sec_since_epoch};
-use util::ddb_helpers::{CheckStorageResponse};
+use util::ddb_helpers::CheckStorageResponse;
 use util::megaphone::{ClientServices, Service, ServiceClientInit};
 
 // Created and handed to the AutopushServer
@@ -643,7 +643,11 @@ where
             }
         };
 
-        let SendThenWait { data, remaining_data, .. } = send.take();
+        let SendThenWait {
+            data,
+            remaining_data,
+            ..
+        } = send.take();
         if start_send {
             transition!(SendThenWait {
                 remaining_data,
@@ -702,9 +706,11 @@ where
                 };
                 if let Some(delta) = service_delta {
                     transition!(SendThenWait {
-                        remaining_data: vec![ServerMessage::Broadcast {
-                            broadcasts: Service::into_hashmap(delta),
-                        }],
+                        remaining_data: vec![
+                            ServerMessage::Broadcast {
+                                broadcasts: Service::into_hashmap(delta),
+                            },
+                        ],
                         poll_complete: false,
                         data,
                     });
@@ -825,9 +831,9 @@ where
             .ok_or("unacked_stored_highest unset")?
             .to_string();
         let ddb_response = increment_storage.data.srv.ddb.increment_storage(
-                &webpush.message_month,
-                &webpush.uaid,
-                &timestamp
+            &webpush.message_month,
+            &webpush.uaid,
+            &timestamp,
         );
         transition!(AwaitIncrementStorage {
             ddb_response,
@@ -894,7 +900,10 @@ where
                     .unacked_stored_notifs
                     .extend(messages.iter().cloned());
                 transition!(SendThenWait {
-                    remaining_data: messages.into_iter().map(ServerMessage::Notification).collect(),
+                    remaining_data: messages
+                        .into_iter()
+                        .map(ServerMessage::Notification)
+                        .collect(),
                     poll_complete: false,
                     data,
                 })

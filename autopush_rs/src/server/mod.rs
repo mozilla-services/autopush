@@ -11,12 +11,12 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::thread;
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 use cadence::StatsdClient;
 use futures::sync::oneshot;
 use futures::task;
-use futures::{Stream, Future, Sink, Async, Poll, AsyncSink, StartSend};
+use futures::{Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
 use hyper::server::Http;
 use hyper::{self, header, StatusCode};
 use libc::c_char;
@@ -26,7 +26,7 @@ use sentry;
 use serde_json;
 use time;
 use tokio_core::net::TcpListener;
-use tokio_core::reactor::{Core, Timeout, Handle};
+use tokio_core::reactor::{Core, Handle, Timeout};
 use tokio_io;
 use tokio_tungstenite::{accept_hdr_async, WebSocketStream};
 use tungstenite::handshake::server::Request;
@@ -37,15 +37,16 @@ use client::{Client, RegisteredClient};
 use errors::*;
 use errors::{Error, Result};
 use http;
-use protocol::{ClientMessage, ServerMessage, ServerNotification, Notification};
+use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
 use queue::{self, AutopushQueue};
 use rt::{self, AutopushError, UnwindGuard};
 use server::dispatch::{Dispatch, RequestType};
 use server::metrics::metrics_from_opts;
 use server::webpush_io::WebpushIo;
-use util::{self, RcObject, timeout};
+use util::{self, timeout, RcObject};
 use util::ddb_helpers::DynamoStorage;
-use util::megaphone::{ClientServices, MegaphoneAPIResponse, Service, ServiceClientInit, ServiceChangeTracker};
+use util::megaphone::{ClientServices, MegaphoneAPIResponse, Service, ServiceChangeTracker,
+                      ServiceClientInit};
 
 mod dispatch;
 mod metrics;
@@ -130,7 +131,11 @@ pub extern "C" fn autopush_server_new(
             return None;
         }
         let s = CStr::from_ptr(ptr).to_str().expect("invalid utf-8");
-        if s.is_empty() { None } else { Some(s) }
+        if s.is_empty() {
+            None
+        } else {
+            Some(s)
+        }
     }
 
     unsafe fn ito_dur(seconds: u32) -> Option<Duration> {
@@ -165,9 +170,8 @@ pub extern "C" fn autopush_server_new(
             ssl_key: to_s(opts.ssl_key).map(PathBuf::from),
             ssl_cert: to_s(opts.ssl_cert).map(PathBuf::from),
             ssl_dh_param: to_s(opts.ssl_dh_param).map(PathBuf::from),
-            auto_ping_interval: fto_dur(opts.auto_ping_interval).expect(
-                "ping interval cannot be 0",
-            ),
+            auto_ping_interval: fto_dur(opts.auto_ping_interval)
+                .expect("ping interval cannot be 0"),
             auto_ping_timeout: fto_dur(opts.auto_ping_timeout).expect("ping timeout cannot be 0"),
             close_handshake_timeout: ito_dur(opts.close_handshake_timeout),
             max_connections: if opts.max_connections == 0 {
@@ -178,7 +182,8 @@ pub extern "C" fn autopush_server_new(
             open_handshake_timeout: ito_dur(opts.open_handshake_timeout),
             megaphone_api_url: to_s(opts.megaphone_api_url).map(|s| s.to_string()),
             megaphone_api_token: to_s(opts.megaphone_api_token).map(|s| s.to_string()),
-            megaphone_poll_interval: ito_dur(opts.megaphone_poll_interval).expect("poll interval cannot be 0"),
+            megaphone_poll_interval: ito_dur(opts.megaphone_poll_interval)
+                .expect("poll interval cannot be 0"),
         };
 
         Box::new(AutopushServer {
@@ -278,8 +283,7 @@ impl Server {
                 let http = Http::<hyper::Chunk>::new();
                 let push_srv = push_listener.incoming().for_each(move |(socket, _)| {
                     handle.spawn(
-                        http
-                            .serve_connection(socket, http::Push(srv.clone()))
+                        http.serve_connection(socket, http::Push(srv.clone()))
                             .map(|_| ())
                             .map_err(|e| debug!("Http server connection error: {}", e)),
                     );
@@ -330,9 +334,9 @@ impl Server {
     fn new(opts: &Arc<ServerOptions>, tx: queue::Sender) -> Result<(Rc<Server>, Core)> {
         let core = Core::new()?;
         let broadcaster = if let Some(ref megaphone_url) = opts.megaphone_api_url {
-            let megaphone_token = opts.megaphone_api_token.as_ref().expect(
-                "Megaphone API requires a Megaphone API Token to be set"
-            );
+            let megaphone_token = opts.megaphone_api_token
+                .as_ref()
+                .expect("Megaphone API requires a Megaphone API Token to be set");
             ServiceChangeTracker::with_api_services(megaphone_url, megaphone_token)
                 .expect("Unable to initialize megaphone with provided URL".into())
         } else {
@@ -354,17 +358,15 @@ impl Server {
 
         let handle = core.handle();
         let srv2 = srv.clone();
-        let ws_srv = ws_listener
-            .incoming()
-            .map_err(|e| Error::from(e))
-            .for_each(move |(socket, addr)| {
+        let ws_srv = ws_listener.incoming().map_err(|e| Error::from(e)).for_each(
+            move |(socket, addr)| {
                 // Make sure we're not handling too many clients before we start the
                 // websocket handshake.
                 let max = srv.opts.max_connections.unwrap_or(u32::max_value());
                 if srv.open_connections.get() >= max {
                     info!(
                         "dropping {} as we already have too many open \
-                           connections",
+                         connections",
                         addr
                     );
                     return Ok(());
@@ -410,20 +412,18 @@ impl Server {
                         RequestType::Websocket => {
                             // Perform the websocket handshake on each
                             // connection, but don't let it take too long.
-                            let ws = accept_hdr_async(socket, callback).chain_err(|| "failed to accept client");
+                            let ws = accept_hdr_async(socket, callback)
+                                .chain_err(|| "failed to accept client");
                             let ws = timeout(ws, srv2.opts.open_handshake_timeout, &handle2);
 
                             // Once the handshake is done we'll start the main
                             // communication with the client, managing pings
                             // here and deferring to `Client` to start driving
                             // the internal state machine.
-                            Box::new(
-                                ws.and_then(move |ws| {
-                                    PingManager::new(&srv2, ws, uarx, host).chain_err(
-                                        || "failed to make ping handler",
-                                    )
-                                }).flatten(),
-                            )
+                            Box::new(ws.and_then(move |ws| {
+                                PingManager::new(&srv2, ws, uarx, host)
+                                    .chain_err(|| "failed to make ping handler")
+                            }).flatten())
                         }
                     }
                 });
@@ -443,16 +443,19 @@ impl Server {
                 }));
 
                 Ok(())
-            });
+            },
+        );
 
         if let Some(ref megaphone_url) = opts.megaphone_api_url {
-            let megaphone_token = opts.megaphone_api_token.as_ref().expect(
-                "Megaphone API requires a Megaphone API Token to be set"
-            );
+            let megaphone_token = opts.megaphone_api_token
+                .as_ref()
+                .expect("Megaphone API requires a Megaphone API Token to be set");
             let fut = MegaphoneUpdater::new(
-                megaphone_url, megaphone_token, opts.megaphone_poll_interval, &srv2,
-            )
-                .expect("Unable to start megaphone updater".into());
+                megaphone_url,
+                megaphone_token,
+                opts.megaphone_poll_interval,
+                &srv2,
+            ).expect("Unable to start megaphone updater".into());
             core.handle().spawn(fut.then(|res| {
                 debug!("megaphone result: {:?}", res.map(drop));
                 Ok(())
@@ -474,9 +477,7 @@ impl Server {
         debug!("Connecting a client!");
         if let Some(client) = self.uaids.borrow_mut().insert(client.uaid, client) {
             // Drop existing connection
-            let result = client
-                .tx
-                .unbounded_send(ServerNotification::Disconnect);
+            let result = client.tx.unbounded_send(ServerNotification::Disconnect);
             if result.is_ok() {
                 debug!("Told client to disconnect as a new one wants to connect");
             }
@@ -503,9 +504,7 @@ impl Server {
     pub fn check_client_storage(&self, uaid: Uuid) -> Result<()> {
         let uaids = self.uaids.borrow();
         if let Some(client) = uaids.get(&uaid) {
-            let result = client
-                .tx
-                .unbounded_send(ServerNotification::CheckStorage);
+            let result = client.tx.unbounded_send(ServerNotification::CheckStorage);
             if result.is_ok() {
                 debug!("Told client to check storage");
                 return Ok(());
@@ -518,7 +517,10 @@ impl Server {
     pub fn disconnet_client(&self, uaid: &Uuid, uid: &Uuid) {
         debug!("Disconnecting client!");
         let mut uaids = self.uaids.borrow_mut();
-        let client_exists = uaids.get(uaid).map(|client| client.uid == *uid).unwrap_or(false);
+        let client_exists = uaids
+            .get(uaid)
+            .map(|client| client.uid == *uid)
+            .unwrap_or(false);
         if client_exists {
             uaids.remove(uaid).expect("Couldn't remove client?");
         }
@@ -527,9 +529,7 @@ impl Server {
     /// Generate a new service client list for a newly connected client
     pub fn broadcast_init(&self, services: &[Service]) -> ServiceClientInit {
         debug!("Initialized broadcast services");
-        self.broadcaster
-            .borrow()
-            .service_delta(services)
+        self.broadcaster.borrow().service_delta(services)
     }
 
     /// Calculate whether there's new service versions to go out
@@ -574,7 +574,12 @@ struct MegaphoneUpdater {
 }
 
 impl MegaphoneUpdater {
-    fn new(uri: &str, token: &str, poll_interval: Duration, srv: &Rc<Server>) -> io::Result<MegaphoneUpdater> {
+    fn new(
+        uri: &str,
+        token: &str,
+        poll_interval: Duration,
+        srv: &Rc<Server>,
+    ) -> io::Result<MegaphoneUpdater> {
         let client = reqwest::unstable::async::Client::builder()
             .timeout(Duration::from_secs(1))
             .build(&srv.handle)
@@ -601,7 +606,8 @@ impl Future for MegaphoneUpdater {
                 MegaphoneState::Waiting => {
                     try_ready!(self.timeout.poll());
                     debug!("Sending megaphone API request");
-                    let fut = self.client.get(&self.api_url)
+                    let fut = self.client
+                        .get(&self.api_url)
                         .header(header::Authorization(self.api_token.clone()))
                         .send()
                         .and_then(|response| response.error_for_status())
@@ -658,8 +664,8 @@ impl PingManager {
         srv: &Rc<Server>,
         socket: WebSocketStream<WebpushIo>,
         uarx: oneshot::Receiver<String>,
-        host: String)
-        -> io::Result<PingManager> {
+        host: String,
+    ) -> io::Result<PingManager> {
         // The `socket` is itself a sink and a stream, and we've also got a sink
         // (`tx`) and a stream (`rx`) to send messages. Half of our job will be
         // doing all this proxying: reading messages from `socket` and sending
@@ -775,9 +781,9 @@ impl Future for PingManager {
         }
 
         // Be sure to always flush out any buffered messages/pings
-        socket.poll_complete().chain_err(
-            || "failed routine `poll_complete` call",
-        )?;
+        socket
+            .poll_complete()
+            .chain_err(|| "failed routine `poll_complete` call")?;
         drop(socket);
 
         // At this point looks our state of ping management A-OK, so try to
@@ -829,11 +835,9 @@ impl<T> WebpushSocket<T> {
             let msg = if let Some(broadcasts) = self.broadcast_delta.clone() {
                 debug!("sending a broadcast delta");
                 let server_msg = ServerMessage::Broadcast {
-                    broadcasts: Service::into_hashmap(broadcasts)
+                    broadcasts: Service::into_hashmap(broadcasts),
                 };
-                let s = serde_json::to_string(&server_msg).chain_err(
-                    || "failed to serialize",
-                )?;
+                let s = serde_json::to_string(&server_msg).chain_err(|| "failed to serialize")?;
                 Message::Text(s)
             } else {
                 debug!("sending a ping");
@@ -914,9 +918,7 @@ where
         if self.send_ping()?.is_not_ready() {
             return Ok(AsyncSink::NotReady(msg));
         }
-        let s = serde_json::to_string(&msg).chain_err(
-            || "failed to serialize",
-        )?;
+        let s = serde_json::to_string(&msg).chain_err(|| "failed to serialize")?;
         match self.inner.start_send(Message::Text(s))? {
             AsyncSink::Ready => Ok(AsyncSink::Ready),
             AsyncSink::NotReady(_) => Ok(AsyncSink::NotReady(msg)),

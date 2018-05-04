@@ -72,7 +72,10 @@ pub struct Service {
 // Handy From impls for common hashmap to/from conversions
 impl From<(String, String)> for Service {
     fn from(val: (String, String)) -> Service {
-        Service { service_id: val.0, version: val.1 }
+        Service {
+            service_id: val.0,
+            version: val.1,
+        }
     }
 }
 
@@ -116,7 +119,9 @@ impl ServiceChangeTracker {
             change_count: 0,
         };
         for srv in services {
-            let key = svc_change_tracker.service_registry.add_service(srv.service_id);
+            let key = svc_change_tracker
+                .service_registry
+                .add_service(srv.service_id);
             svc_change_tracker.service_versions.insert(key, srv.version);
         }
         svc_change_tracker
@@ -130,7 +135,8 @@ impl ServiceChangeTracker {
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(1))
             .build()?;
-        let MegaphoneAPIResponse { broadcasts } = client.get(url)
+        let MegaphoneAPIResponse { broadcasts } = client
+            .get(url)
             .header(reqwest::header::Authorization(token.to_string()))
             .send()?
             .error_for_status()?
@@ -173,7 +179,8 @@ impl ServiceChangeTracker {
         }
 
         // Check to see if this service has been updated since initialization
-        let svc_index = self.service_list.iter()
+        let svc_index = self.service_list
+            .iter()
             .enumerate()
             .filter_map(|(i, svc)| if svc.service == key { Some(i) } else { None })
             .nth(0);
@@ -183,12 +190,10 @@ impl ServiceChangeTracker {
             svc.change_count = self.change_count;
             self.service_list.push(svc);
         } else {
-            self.service_list.push(
-                ServiceRevision {
-                    change_count: self.change_count,
-                    service: key,
-                }
-            )
+            self.service_list.push(ServiceRevision {
+                change_count: self.change_count,
+                service: key,
+            })
         }
         Ok(self.change_count)
     }
@@ -254,8 +259,13 @@ impl ServiceChangeTracker {
     /// Update a `ClientServices` to account for a new service.
     ///
     /// Returns services that have changed.
-    pub fn client_service_add_service(&self, client_service: &mut ClientServices, services: &[Service]) -> Option<Vec<Service>> {
-        let mut svc_delta = self.change_count_delta(client_service).unwrap_or(Vec::new());
+    pub fn client_service_add_service(
+        &self,
+        client_service: &mut ClientServices,
+        services: &[Service],
+    ) -> Option<Vec<Service>> {
+        let mut svc_delta = self.change_count_delta(client_service)
+            .unwrap_or(Vec::new());
         for svc in services.iter() {
             if let Some(svc_key) = self.service_registry.lookup_key(svc.service_id.clone()) {
                 if let Some(ver) = self.service_versions.get(&svc_key) {
@@ -283,8 +293,14 @@ mod tests {
 
     fn make_service_base() -> Vec<Service> {
         vec![
-            Service { service_id: String::from("svca"), version: String::from("rev1") },
-            Service { service_id: String::from("svcb"), version: String::from("revalha") },
+            Service {
+                service_id: String::from("svca"),
+                version: String::from("rev1"),
+            },
+            Service {
+                service_id: String::from("svcb"),
+                version: String::from("revalha"),
+            },
         ]
     }
 
@@ -293,14 +309,18 @@ mod tests {
         let services = make_service_base();
         let client_services = services.clone();
         let mut svc_chg_tracker = ServiceChangeTracker::new(services);
-        let ServiceClientInit(mut client_svc, delta) = svc_chg_tracker.service_delta(&client_services);
+        let ServiceClientInit(mut client_svc, delta) =
+            svc_chg_tracker.service_delta(&client_services);
         assert_eq!(delta.len(), 0);
         assert_eq!(client_svc.change_count, 0);
         assert_eq!(client_svc.service_list.len(), 2);
 
-        svc_chg_tracker.update_service(
-            Service { service_id: String::from("svca"), version: String::from("rev2") }
-        ).ok();
+        svc_chg_tracker
+            .update_service(Service {
+                service_id: String::from("svca"),
+                version: String::from("rev2"),
+            })
+            .ok();
         let delta = svc_chg_tracker.change_count_delta(&mut client_svc);
         assert!(delta.is_some());
         let delta = delta.unwrap();
@@ -314,16 +334,24 @@ mod tests {
         let mut svc_chg_tracker = ServiceChangeTracker::new(services);
         let ServiceClientInit(mut client_svc, _) = svc_chg_tracker.service_delta(&client_services);
 
-        svc_chg_tracker.add_service(
-            Service { service_id: String::from("svcc"), version: String::from("revmega") }
-        );
+        svc_chg_tracker.add_service(Service {
+            service_id: String::from("svcc"),
+            version: String::from("revmega"),
+        });
         let delta = svc_chg_tracker.change_count_delta(&mut client_svc);
         assert!(delta.is_none());
 
-        let delta = svc_chg_tracker.client_service_add_service(
-            &mut client_svc,
-            &vec![Service { service_id: String::from("svcc"), version: String::from("revision_alpha") } ],
-        ).unwrap();
+        let delta = svc_chg_tracker
+            .client_service_add_service(
+                &mut client_svc,
+                &vec![
+                    Service {
+                        service_id: String::from("svcc"),
+                        version: String::from("revision_alpha"),
+                    },
+                ],
+            )
+            .unwrap();
         assert_eq!(delta.len(), 1);
         assert_eq!(delta[0].version, String::from("revmega"));
         assert_eq!(client_svc.change_count, 1);

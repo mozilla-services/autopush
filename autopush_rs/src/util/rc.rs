@@ -1,7 +1,7 @@
 use std::rc::Rc;
 use std::cell::{RefCell, RefMut};
 
-use futures::{Stream, Sink, StartSend, Poll};
+use futures::{Poll, Sink, StartSend, Stream};
 
 /// Helper object to turn `Rc<RefCell<T>>` into a `Stream` and `Sink`
 ///

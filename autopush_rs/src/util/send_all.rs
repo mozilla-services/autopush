@@ -1,4 +1,4 @@
-use futures::{Stream, Future, Sink, Poll, Async, AsyncSink};
+use futures::{Async, AsyncSink, Future, Poll, Sink, Stream};
 use futures::stream::Fuse;
 
 // This is a copy of `Future::forward`, except that it doesn't close the sink
@@ -25,24 +25,26 @@ where
     }
 
     fn sink_mut(&mut self) -> &mut U {
-        self.sink.as_mut().take().expect(
-            "Attempted to poll MySendAll after completion",
-        )
+        self.sink
+            .as_mut()
+            .take()
+            .expect("Attempted to poll MySendAll after completion")
     }
 
     fn stream_mut(&mut self) -> &mut Fuse<T> {
-        self.stream.as_mut().take().expect(
-            "Attempted to poll MySendAll after completion",
-        )
+        self.stream
+            .as_mut()
+            .take()
+            .expect("Attempted to poll MySendAll after completion")
     }
 
     fn take_result(&mut self) -> (T, U) {
-        let sink = self.sink.take().expect(
-            "Attempted to poll MySendAll after completion",
-        );
-        let fuse = self.stream.take().expect(
-            "Attempted to poll MySendAll after completion",
-        );
+        let sink = self.sink
+            .take()
+            .expect("Attempted to poll MySendAll after completion");
+        let fuse = self.stream
+            .take()
+            .expect("Attempted to poll MySendAll after completion");
         (fuse.into_inner(), sink)
     }
 
