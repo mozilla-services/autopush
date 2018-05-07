@@ -1120,7 +1120,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             if str(uuid.UUID(chid)) != chid:
                 return self.bad_message("register", "Bad UUID format, use"
                                         "lower case, dashed format")
-        except ValueError:
+        except (ValueError, TypeError):
             return self.bad_message("register", "Invalid UUID specified")
         self.transport.pauseProducing()
 

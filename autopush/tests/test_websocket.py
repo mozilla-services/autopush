@@ -996,6 +996,19 @@ class WebsocketTestCase(unittest.TestCase):
         assert msg["messageType"] == "register"
 
     @inlineCallbacks
+    def test_register_bad_chid_null(self):
+        self._connect()
+        self._send_message(dict(messageType="hello", use_webpush=True,
+                                channelIDs=[]))
+        msg = yield self.get_response()
+        assert "messageType" in msg
+
+        self._send_message(dict(messageType="register", channelID=None))
+        msg = yield self.get_response()
+        assert msg["status"] == 401
+        assert msg["messageType"] == "register"
+
+    @inlineCallbacks
     def test_register_bad_chid_upper(self):
         self._connect()
         self._send_message(dict(messageType="hello", use_webpush=True,
