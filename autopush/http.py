@@ -28,6 +28,7 @@ from autopush.web.health import (
     MemUsageHandler,
     StatusHandler
 )
+from autopush.web.base import NotFoundHandler
 from autopush.web.limitedhttpconnection import LimitedHTTPConnection
 from autopush.web.log_check import LogCheckHandler
 from autopush.web.message import MessageHandler
@@ -146,6 +147,7 @@ class EndpointHTTPFactory(BaseHTTPFactory):
          r"(?P<uaid>[^\/]+)/subscription/(?P<chid>[^\/]+)",
          ChannelRegistrationHandler),
         (r"/v1/err(?:/(?P<err_type>[^\/]+))?", LogCheckHandler),
+        (r".*", NotFoundHandler),
     )
 
     protocol = LimitedHTTPConnection

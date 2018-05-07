@@ -240,6 +240,8 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         # Pull the notification if connected
         if self.ws and self.ws.connected:
             return object.__getattribute__(self, "get_notification")(timeout)
+        else:
+            return resp
 
     def get_notification(self, timeout=1):
         orig_timeout = self.ws.gettimeout()
@@ -454,6 +456,15 @@ class SSLEndpointMixin(object):
 
 
 class Test_Data(IntegrationBase):
+    @inlineCallbacks
+    def test_webpush_bad_url(self):
+        client = yield self.quick_register()
+        yield client.disconnect()
+        endpoint = client.channels.values()[0]
+        endpoint = endpoint.replace("wpush", "push")
+        resp = yield client.send_notification(endpoint=endpoint, status=404)
+        assert resp.getheader("Content-Type") == "application/json"
+
     @inlineCallbacks
     def test_webpush_data_delivery_to_connected_client(self):
         client = yield self.quick_register()
