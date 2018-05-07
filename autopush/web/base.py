@@ -130,6 +130,21 @@ class ThreadedValidate(object):
 threaded_validate = ThreadedValidate.validate
 
 
+class NotFoundHandler(BaseHandler):
+    def get(self, *args, **kwargs):
+        status_code = 404
+        error = "Page not found"
+        self.set_status(status_code, reason=error)
+        error_data = dict(
+            code=status_code,
+            error=error or status_codes.get(status_code, ""),
+        )
+        self.write(json.dumps(error_data))
+        self.set_header("Content-Type", "application/json")
+        self.finish()
+    put = post = delete = get
+
+
 class BaseWebHandler(BaseHandler):
     """Common overrides for Push web API's"""
     cors_methods = ""
