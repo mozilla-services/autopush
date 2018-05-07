@@ -6,6 +6,7 @@ services:
     environment:
       - LOCAL_HOSTNAME=localhost
       - ROUTER_HOSTNAME=autopush
+      - AWS_LOCAL_DYNAMODB=http://dynamodb:8000
       - HUMAN_LOGS=true
       - CRYPTO_KEY=${CRYPTO_KEY}
     ports:
@@ -22,6 +23,7 @@ services:
     environment:
       - HUMAN_LOGS=true
       - CRYPTO_KEY=${CRYPTO_KEY}
+      - AWS_LOCAL_DYNAMODB=http://dynamodb:8000
     ports:
       - "8082:8082"
     links:
@@ -30,5 +32,6 @@ services:
       - ./boto-compose.cfg:/etc/boto.cfg:ro
   dynamodb:
     image: peopleperhour/dynamodb
+    hostname: dynamodb
     expose:
       - "8000"
