@@ -22,7 +22,6 @@ use libc::c_char;
 use serde::de;
 use serde::ser;
 use serde_json;
-use uuid::Uuid;
 
 use errors::*;
 use rt::{self, AutopushError, UnwindGuard};
@@ -117,11 +116,6 @@ impl<F: FnOnce(&str) + Send> FnBox for F {
 #[derive(Serialize)]
 #[serde(tag = "command", rename_all = "snake_case")]
 enum Call {
-    Hello {
-        connected_at: i64,
-        uaid: Option<String>,
-    },
-
     Register {
         uaid: String,
         channel_id: String,
@@ -160,16 +154,6 @@ enum Call {
 struct PythonError {
     pub error: bool,
     pub error_msg: String,
-}
-
-#[derive(Deserialize)]
-pub struct HelloResponse {
-    pub uaid: Option<Uuid>,
-    pub message_month: String,
-    pub check_storage: bool,
-    pub reset_uaid: bool,
-    pub rotate_message_table: bool,
-    pub connected_at: u64,
 }
 
 #[derive(Deserialize)]
@@ -221,20 +205,6 @@ pub struct StoreMessagesResponse {
 }
 
 impl Server {
-    pub fn hello(&self, connected_at: &u64, uaid: Option<&Uuid>) -> MyFuture<HelloResponse> {
-        let ms = *connected_at as i64;
-        let (call, fut) = PythonCall::new(&Call::Hello {
-            connected_at: ms,
-            uaid: if let Some(uuid) = uaid {
-                Some(uuid.simple().to_string())
-            } else {
-                None
-            },
-        });
-        self.send_to_python(call);
-        return fut;
-    }
-
     pub fn register(
         &self,
         uaid: String,

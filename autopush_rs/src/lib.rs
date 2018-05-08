@@ -75,6 +75,7 @@ extern crate libc;
 #[macro_use]
 extern crate matches;
 extern crate openssl;
+extern crate rand;
 extern crate regex;
 extern crate reqwest;
 extern crate rusoto_core;

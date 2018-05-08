@@ -5,8 +5,7 @@ from marshmallow_polyfield import PolyField
 from typing import (  # noqa
     Optional,
     Set,
-    Tuple,
-    Dict
+    Tuple
 )
 
 import simplejson as json

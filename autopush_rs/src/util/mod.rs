@@ -2,7 +2,6 @@
 use std::io;
 use std::time::Duration;
 
-use chrono::Utc;
 use hostname::get_hostname;
 use futures::future::{Either, Future, IntoFuture};
 use slog;
@@ -22,9 +21,11 @@ pub mod megaphone;
 pub mod ddb_helpers;
 mod rc;
 mod send_all;
+mod timing;
 mod user_agent;
 
 use self::aws::get_ec2_instance_id;
+pub use self::timing::{ms_since_epoch, sec_since_epoch, us_since_epoch};
 pub use self::send_all::MySendAll;
 pub use self::rc::RcObject;
 pub use self::user_agent::parse_user_agent;
@@ -91,23 +92,6 @@ pub fn init_logging(json: bool) {
     // the global logger during shutdown anyway
     slog_scope::set_global_logger(logger).cancel_reset();
     slog_stdlog::init().ok();
-}
-
-/// Get the time since the UNIX epoch in seconds
-pub fn sec_since_epoch() -> u64 {
-    Utc::now().timestamp() as u64
-}
-
-/// Get the time since the UNIX epoch in milliseconds
-pub fn ms_since_epoch() -> u64 {
-    Utc::now().timestamp_millis() as u64
-}
-
-/// Get the time since the UNIX epoch in microseconds
-#[allow(dead_code)]
-pub fn us_since_epoch() -> u64 {
-    let now = Utc::now();
-    (now.timestamp() as u64) * 1_000_000 + (now.timestamp_subsec_micros() as u64)
 }
 
 pub fn reset_logging() {

@@ -26,7 +26,7 @@ use errors::*;
 use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
 use server::Server;
 use util::{ms_since_epoch, parse_user_agent, sec_since_epoch};
-use util::ddb_helpers::CheckStorageResponse;
+use util::ddb_helpers::{CheckStorageResponse, HelloResponse};
 use util::megaphone::{ClientServices, Service, ServiceClientInit};
 
 // Created and handed to the AutopushServer
@@ -282,7 +282,7 @@ where
 
     #[state_machine_future(transitions(AwaitSessionComplete))]
     AwaitProcessHello {
-        response: MyFuture<call::HelloResponse>,
+        response: MyFuture<HelloResponse>,
         data: UnAuthClientData<T>,
         interested_broadcasts: Vec<Service>,
         tx: mpsc::UnboundedSender<ServerNotification>,
@@ -337,7 +337,14 @@ where
         let AwaitHello { data, tx, rx, .. } = hello.take();
         let connected_at = ms_since_epoch();
         transition!(AwaitProcessHello {
-            response: data.srv.hello(&connected_at, uaid.as_ref()),
+            response: data.srv.ddb.hello(
+                &connected_at,
+                uaid.as_ref(),
+                &data.srv.opts.router_table_name,
+                &data.srv.opts.router_url,
+                &data.srv.opts.message_table_names,
+                &data.srv.metrics,
+            ),
             data,
             interested_broadcasts: services,
             tx,
@@ -351,7 +358,7 @@ where
         debug!("State: AwaitProcessHello");
         let (uaid, message_month, check_storage, reset_uaid, rotate_message_table, connected_at) = {
             match try_ready!(process_hello.response.poll()) {
-                call::HelloResponse {
+                HelloResponse {
                     uaid: Some(uaid),
                     message_month,
                     check_storage,
@@ -366,7 +373,7 @@ where
                     rotate_message_table,
                     connected_at,
                 ),
-                call::HelloResponse { uaid: None, .. } => {
+                HelloResponse { uaid: None, .. } => {
                     return Err("Already connected elsewhere".into())
                 }
             }

@@ -27,8 +27,6 @@ from autopush.webpush_server import (
     CheckStorage,
     DeleteMessage,
     DropUser,
-    Hello,
-    HelloResponse,
     MigrateUser,
     Register,
     StoreMessages,
@@ -117,14 +115,6 @@ class WebPushMessageFactory(factory.Factory):
     version = factory.LazyAttribute(generate_version)
 
 
-class HelloFactory(factory.Factory):
-    class Meta:
-        model = Hello
-
-    uaid = factory.LazyFunction(lambda: uuid4().hex)
-    connected_at = factory.LazyFunction(lambda: int(time.time() * 1000))
-
-
 class CheckStorageFactory(factory.Factory):
     class Meta:
         model = CheckStorage
@@ -210,63 +200,6 @@ class TestWebPushServer(BaseSetup):
             assert len(ws.workers) == 2
         finally:
             ws.stop()
-
-    def test_hello_process(self):
-        ws = self._makeFUT()
-        ws.start()
-        try:
-            hello = HelloFactory()
-            result = ws.command_processor.process_message(dict(
-                command="hello",
-                uaid=hello.uaid.hex,
-                connected_at=hello.connected_at,
-            ))
-            assert "error" not in result
-            assert hello.uaid.hex != result["uaid"]
-        finally:
-            ws.stop()
-
-
-class TestHelloProcessor(BaseSetup):
-    def _makeFUT(self):
-        from autopush.webpush_server import HelloCommand
-        return HelloCommand(self.conf, self.db)
-
-    def test_nonexisting_uaid(self):
-        p = self._makeFUT()
-        hello = HelloFactory()
-        result = p.process(hello)  # type: HelloResponse
-        assert isinstance(result, HelloResponse)
-        assert hello.uaid != result.uaid
-        assert result.check_storage is False
-        assert result.connected_at == hello.connected_at
-        assert self.metrics.increment.called
-        assert self.metrics.increment.call_args[0][0] == 'ua.command.hello'
-
-    def test_existing_uaid(self):
-        p = self._makeFUT()
-        hello = HelloFactory()
-        success, _ = self.db.router.register_user(UserItemFactory(
-            uaid=hello.uaid.hex))
-        assert success is True
-        result = p.process(hello)  # type: HelloResponse
-        assert isinstance(result, HelloResponse)
-        assert hello.uaid.hex == result.uaid
-        assert result.check_storage is True
-        assert result.connected_at == hello.connected_at
-        assert self.metrics.increment.called
-        assert self.metrics.increment.call_args[0][0] == 'ua.command.hello'
-
-    def test_existing_newer_uaid(self):
-        p = self._makeFUT()
-        hello = HelloFactory()
-        self.db.router.register_user(
-            UserItemFactory(uaid=hello.uaid.hex,
-                            connected_at=hello.connected_at+10)
-        )
-        result = p.process(hello)  # type: HelloResponse
-        assert isinstance(result, HelloResponse)
-        assert result.uaid is None
 
 
 class TestDeleteMessageProcessor(BaseSetup):
