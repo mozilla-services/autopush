@@ -67,7 +67,6 @@ from typing import (  # noqa
     Tuple,
     Union,
 )
-from twisted.internet.defer import Deferred  # noqa
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.internet.threads import deferToThread
 

@@ -19,8 +19,8 @@ def free(obj, free_fn):
 
 
 class AutopushServer(object):
-    def __init__(self, conf, queue):
-        # type: (AutopushConfig, AutopushQueue) -> AutopushServer
+    def __init__(self, conf, message_tables, queue):
+        # type: (AutopushConfig, List[str], AutopushQueue) -> AutopushServer
         cfg = ffi.new('AutopushServerOptions*')
         cfg.auto_ping_interval = conf.auto_ping_interval
         cfg.auto_ping_timeout = conf.auto_ping_timeout
@@ -29,12 +29,17 @@ class AutopushServer(object):
         cfg.open_handshake_timeout = 5
         cfg.port = conf.port
         cfg.router_port = conf.router_port
+        cfg.router_url = ffi_from_buffer(conf.router_url)
         cfg.ssl_cert = ffi_from_buffer(conf.ssl.cert)
         cfg.ssl_dh_param = ffi_from_buffer(conf.ssl.dh_param)
         cfg.ssl_key = ffi_from_buffer(conf.ssl.key)
         cfg.json_logging = not conf.human_logs
         cfg.statsd_host = ffi_from_buffer(conf.statsd_host)
         cfg.statsd_port = conf.statsd_port
+        cfg.router_table_name = ffi_from_buffer(conf.router_table.tablename)
+        # XXX: keepalive
+        self.message_table_names = ','.join(name.encode('utf-8') for name in message_tables)
+        cfg.message_table_names = ffi_from_buffer(self.message_table_names)
         cfg.megaphone_api_url = ffi_from_buffer(conf.megaphone_api_url)
         cfg.megaphone_api_token = ffi_from_buffer(conf.megaphone_api_token)
         cfg.megaphone_poll_interval = conf.megaphone_poll_interval

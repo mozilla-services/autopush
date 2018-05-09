@@ -93,7 +93,6 @@ from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
 from autopush.metrics import IMetrics, make_tags  # noqa
 from autopush.ssl import AutopushSSLContextFactory  # noqa
-from autopush.types import JSONDict  # noqa
 from autopush.utils import (
     parse_user_agent,
     validate_uaid,

@@ -2,7 +2,7 @@
 
 """
 from threading import Thread
-from uuid import UUID, uuid4
+from uuid import UUID
 
 import attr
 from attr import (
@@ -21,20 +21,16 @@ from twisted.logger import Logger
 
 from autopush.db import (  # noqa
     DatabaseManager,
-    has_connected_this_month,
     hasher,
-    generate_last_connect,
     Message,
 )
 
 from autopush.config import AutopushConfig  # noqa
-from autopush.exceptions import ItemNotFound
 from autopush.metrics import IMetrics  # noqa
 from autopush.web.webpush import MAX_TTL
 from autopush.types import JSONDict  # noqa
 from autopush.utils import WebPushNotification
-from autopush.websocket import USER_RECORD_VERSION
-from autopush_rs import AutopushCall, AutopushServer, AutopushQueue  # noqa
+from autopush_rs import AutopushServer, AutopushQueue  # noqa
 
 log = Logger()
 
@@ -130,12 +126,6 @@ class InputCommand(object):
 
 
 @attrs(slots=True)
-class Hello(InputCommand):
-    connected_at = attrib()  # type: int
-    uaid = attrib(default=None, convert=uaid_from_str)  # type: Optional[UUID]
-
-
-@attrs(slots=True)
 class CheckStorage(InputCommand):
     uaid = attrib(convert=uaid_from_str)  # type: UUID
     message_month = attrib()  # type: str
@@ -174,16 +164,6 @@ class StoreMessages(InputCommand):
 @attrs(slots=True)
 class OutputCommand(object):
     pass
-
-
-@attrs(slots=True)
-class HelloResponse(OutputCommand):
-    uaid = attrib()  # type: Optional[str]
-    message_month = attrib()  # type: str
-    check_storage = attrib()  # type: bool
-    reset_uaid = attrib()  # type: bool
-    connected_at = attrib()  # type: int
-    rotate_message_table = attrib(default=False)  # type: bool
 
 
 @attrs(slots=True)
@@ -228,7 +208,7 @@ class WebPushServer(object):
         self.incoming = AutopushQueue()
         self.workers = []  # type: List[Thread]
         self.command_processor = CommandProcessor(conf, self.db)
-        self.rust = AutopushServer(conf, self.incoming)
+        self.rust = AutopushServer(conf, db.message_tables, self.incoming)
         self.running = False
 
     def start(self):
@@ -282,7 +262,6 @@ class CommandProcessor(object):
         # type: (AutopushConfig, DatabaseManager) -> None
         self.conf = conf
         self.db = db
-        self.hello_processor = HelloCommand(conf, db)
         self.check_storage_processor = CheckStorageCommand(conf, db)
         self.delete_message_processor = DeleteMessageCommand(conf, db)
         self.drop_user_processor = DropUserCommand(conf, db)
@@ -291,7 +270,6 @@ class CommandProcessor(object):
         self.unregister_process = UnregisterCommand(conf, db)
         self.store_messages_process = StoreMessagesUserCommand(conf, db)
         self.deserialize = dict(
-            hello=Hello,
             delete_message=DeleteMessage,
             drop_user=DropUser,
             migrate_user=MigrateUser,
@@ -300,7 +278,6 @@ class CommandProcessor(object):
             store_messages=StoreMessages,
         )
         self.command_dict = dict(
-            hello=self.hello_processor,
             delete_message=self.delete_message_processor,
             drop_user=self.drop_user_processor,
             migrate_user=self.migrate_user_proocessor,
@@ -345,110 +322,6 @@ class ProcessorCommand(object):
 
     def process(self, command):
         raise NotImplementedError()
-
-
-class HelloCommand(ProcessorCommand):
-    def process(self, hello):
-        # type: (Hello) -> HelloResponse
-        user_item = None
-        flags = dict(
-            check_storage=False,
-            message_month=self.db.current_msg_month,
-            reset_uaid=False
-        )
-        if hello.uaid:
-            user_item, new_flags = self.lookup_user(hello)
-            if user_item:
-                # Only swap for the new flags if the user exists
-                flags = new_flags
-
-        if not user_item:
-            user_item = self.create_user(hello)
-
-        # Save the UAID as register_user removes it
-        uaid = user_item["uaid"]  # type: str
-        success, _ = self.db.router.register_user(user_item)
-        flags["connected_at"] = hello.connected_at
-        if not success:
-            # User has already connected more recently elsewhere
-            return HelloResponse(uaid=None, **flags)
-
-        self.metrics.increment('ua.command.hello')
-        return HelloResponse(uaid=uaid, **flags)
-
-    def lookup_user(self, hello):
-        # type: (Hello) -> (Optional[JSONDict], JSONDict)
-        flags = dict(
-            message_month=None,
-            check_storage=False,
-            reset_uaid=False,
-            rotate_message_table=False,
-        )
-        uaid = hello.uaid.hex
-        try:
-            record = self.db.router.get_uaid(uaid)
-        except ItemNotFound:
-            return None, flags
-
-        # All records must have a router_type and connected_at, in some odd
-        # cases a record exists for some users without it
-        if "router_type" not in record or "connected_at" not in record:
-            self.drop_user(uaid, record, 104)
-            return None, flags
-
-        # Current month must exist and be a valid prior month
-        if ("current_month" not in record) or record["current_month"] \
-                not in self.db.message_tables:
-            self.drop_user(uaid, record, 105)
-            return None, flags
-
-        # If we got here, its a valid user that needs storage checked
-        flags["check_storage"] = True
-
-        # Determine if message table rotation is needed
-        flags["message_month"] = record["current_month"]
-        if record["current_month"] != self.db.current_msg_month:
-            flags["rotate_message_table"] = True
-
-        # Include and update last_connect if needed, otherwise exclude
-        if has_connected_this_month(record):
-            del record["last_connect"]
-        else:
-            record["last_connect"] = generate_last_connect()
-
-        # Determine if this is missing a record version
-        if ("record_version" not in record or
-                int(record["record_version"]) < USER_RECORD_VERSION):
-            flags["reset_uaid"] = True
-
-        # Update the node_id, connected_at for this node/connected_at
-        record["node_id"] = self.conf.router_url
-        record["connected_at"] = hello.connected_at
-        return record, flags
-
-    def create_user(self, hello):
-        # type: (Hello) -> JSONDict
-        return dict(
-            uaid=uuid4().hex,
-            node_id=self.conf.router_url,
-            connected_at=hello.connected_at,
-            router_type="webpush",
-            last_connect=generate_last_connect(),
-            record_version=USER_RECORD_VERSION,
-            current_month=self.db.current_msg_month,
-        )
-
-    def drop_user(self, uaid, uaid_record, code):
-        # type: (str, dict, int) -> None
-        """Drop a user record"""
-        log.debug(
-            "Dropping User",
-            code=code,
-            uaid_hash=hasher(uaid),
-            uaid_record=repr(uaid_record)
-        )
-        self.metrics.increment('ua.expiration', tags=['code:{}'.format(code)])
-        self.db.router.drop_user(uaid)
 
 
 class CheckStorageCommand(ProcessorCommand):

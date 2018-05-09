@@ -25,6 +25,7 @@ libc = "0.2.40"
 log = { version = "0.4.1", features = ["max_level_trace", "release_max_level_warn"] }
 matches = "0.1.6"
 openssl = "0.10.5"
+rand = "0.4"
 regex = "0.2"
 reqwest = { version = "0.8.5", features = ["unstable"] }
 rusoto_core = "0.32.0"

@@ -17,7 +17,6 @@ import datetime
 import uuid
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from httplib import HTTPResponse  # noqa
 from mock import Mock, call, patch
 from threading import Thread, Event
 from unittest.case import SkipTest
@@ -26,12 +25,10 @@ import ecdsa
 import requests
 import twisted.internet.base
 from cryptography.fernet import Fernet
-from typing import Optional  # noqa
 from twisted.internet.defer import inlineCallbacks, returnValue
 from twisted.trial import unittest
 from twisted.logger import globalLogPublisher
 
-import autopush.db as db
 import autopush.tests
 from autopush.config import AutopushConfig
 from autopush.logging import begin_or_register
@@ -222,28 +219,6 @@ class TestRustWebPush(unittest.TestCase):
             self._conn_conf.allow_table_rotation = conn_safe
             self.start_ep(self._ep_conf)
             self.start_conn(self._conn_conf)
-        yield self.shut_down(client)
-
-    @inlineCallbacks
-    def test_hello_only_has_three_calls(self):
-        db.TRACK_DB_CALLS = True
-        client = Client(self._ws_url)
-        yield client.connect()
-        result = yield client.hello()
-        assert result != {}
-        assert result["use_webpush"] is True
-
-        # Disconnect and reconnect to trigger storage check
-        yield client.disconnect()
-        yield client.connect()
-        result = yield client.hello()
-        assert result != {}
-        assert result["use_webpush"] is True
-        yield client.wait_for(lambda: len(db.DB_CALLS) == 2)
-        assert db.DB_CALLS == ['register_user', 'register_user']
-        db.DB_CALLS = []
-        db.TRACK_DB_CALLS = False
-
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -684,7 +659,6 @@ class TestRustWebPush(unittest.TestCase):
         client = yield self.quick_register()
         yield client.send_notification(data=data, topic="topicname")
         self.conn.db.metrics.increment.assert_has_calls([
-            call('ua.command.hello'),
             call('ua.command.register'),
             # We can't see Rust metric calls
             # call('ua.notification.topic')
