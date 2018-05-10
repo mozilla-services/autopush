@@ -8,7 +8,6 @@ import attr
 import factory
 from mock import Mock
 from twisted.logger import globalLogPublisher
-import pytest
 
 from autopush.db import (
     DatabaseManager,
@@ -26,7 +25,6 @@ from autopush.websocket import USER_RECORD_VERSION
 from autopush.webpush_server import (
     CheckStorage,
     DeleteMessage,
-    DropUser,
     MigrateUser,
     StoreMessages,
     Unregister,
@@ -229,31 +227,6 @@ class TestDeleteMessageProcessor(BaseSetup):
         # Fetch messages again
         results = check_command.process(check)
         assert len(results.messages) == 5
-
-
-class TestDropUserProcessor(BaseSetup):
-    def _makeFUT(self):
-        from autopush.webpush_server import DropUserCommand
-        return DropUserCommand(self.conf, self.db)
-
-    def test_drop_user(self):
-        drop_command = self._makeFUT()
-
-        # Create a user
-        user = UserItemFactory()
-        uaid = user["uaid"]
-        self.db.router.register_user(user)
-
-        # Check that its there
-        item = self.db.router.get_uaid(uaid)
-        assert item is not None
-
-        # Drop it
-        drop_command.process(DropUser(uaid=uaid))
-
-        # Verify its gone
-        with pytest.raises(ItemNotFound):
-            self.db.router.get_uaid(uaid)
 
 
 class TestMigrateUserProcessor(BaseSetup):

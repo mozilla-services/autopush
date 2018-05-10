@@ -855,6 +855,20 @@ impl DynamoStorage {
         Box::new(response)
     }
 
+    pub fn drop_uaid(
+        &self,
+        table_name: &str,
+        uaid: &Uuid,
+    ) -> MyFuture<()> {
+        let ddb = self.ddb.clone();
+        let response = DynamoStorage::drop_user(ddb, uaid, table_name)
+            .and_then(move |_| -> MyFuture<_> {
+                Box::new(future::ok(()))
+            })
+            .chain_err(|| "Unable to drop user record");
+        Box::new(response)
+    }
+
     pub fn check_storage(
         &self,
         table_name: &str,
