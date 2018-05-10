@@ -26,7 +26,7 @@ use errors::*;
 use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
 use server::Server;
 use util::{ms_since_epoch, parse_user_agent, sec_since_epoch};
-use util::ddb_helpers::{CheckStorageResponse, HelloResponse};
+use util::ddb_helpers::{CheckStorageResponse, HelloResponse, RegisterResponse};
 use util::megaphone::{ClientServices, Service, ServiceClientInit};
 
 // Created and handed to the AutopushServer
@@ -599,7 +599,7 @@ where
     #[state_machine_future(transitions(SendThenWait))]
     AwaitRegister {
         channel_id: Uuid,
-        response: MyFuture<call::RegisterResponse>,
+        response: MyFuture<RegisterResponse>,
         data: AuthClientData<T>,
     },
 
@@ -733,17 +733,15 @@ where
                 }
             }
             Either::A(ClientMessage::Register { channel_id, key }) => {
+                data.srv.metrics.incr("ua.command.register").ok();
                 debug!("Got a register command";
                 "channel_id" => channel_id.hyphenated().to_string());
                 let uaid = webpush.uaid.clone();
                 let message_month = webpush.message_month.clone();
-                let channel_id_str = channel_id.hyphenated().to_string();
-                let fut = data.srv.register(
-                    uaid.simple().to_string(),
-                    message_month,
-                    channel_id_str,
-                    key,
-                );
+                let srv = data.srv.clone();
+                let fut = data.srv
+                    .ddb
+                    .register(srv, &uaid, &channel_id, &message_month, key);
                 transition!(AwaitRegister {
                     channel_id,
                     response: fut,
@@ -960,7 +958,7 @@ where
     ) -> Poll<AfterAwaitRegister<T>, Error> {
         debug!("State: AwaitRegister");
         let msg = match try_ready!(await_register.response.poll()) {
-            call::RegisterResponse::Success { endpoint } => {
+            RegisterResponse::Success { endpoint } => {
                 let mut webpush = await_register.data.webpush.borrow_mut();
                 webpush.stats.registers += 1;
                 ServerMessage::Register {
@@ -969,9 +967,7 @@ where
                     push_endpoint: endpoint,
                 }
             }
-            call::RegisterResponse::Error {
-                error_msg, status, ..
-            } => {
+            RegisterResponse::Error { error_msg, status } => {
                 debug!("Got unregister fail, error: {}", error_msg);
                 ServerMessage::Register {
                     channel_id: await_register.channel_id,

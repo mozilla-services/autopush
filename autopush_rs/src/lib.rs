@@ -59,13 +59,15 @@
 //! aren't as relevant to the WebPush implementation.
 //!
 //! Otherwise be sure to check out each module for more documentation!
-
+extern crate base64;
 extern crate bytes;
 extern crate cadence;
 extern crate chrono;
+extern crate fernet;
 #[macro_use]
 extern crate futures;
 extern crate futures_backoff;
+extern crate hex;
 extern crate hostname;
 extern crate httparse;
 extern crate hyper;

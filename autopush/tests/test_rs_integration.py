@@ -17,7 +17,7 @@ import datetime
 import uuid
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from mock import Mock, call, patch
+from mock import Mock, patch
 from threading import Thread, Event
 from unittest.case import SkipTest
 
@@ -34,7 +34,6 @@ from autopush.config import AutopushConfig
 from autopush.logging import begin_or_register
 from autopush.main import EndpointApplication, RustConnectionApplication
 from autopush.utils import base64url_encode
-from autopush.metrics import SinkMetrics
 from autopush.tests.support import TestingLogObserver
 from autopush.tests.test_integration import (
     Client,
@@ -653,19 +652,6 @@ class TestRustWebPush(unittest.TestCase):
         yield self.shut_down(client)
 
     @inlineCallbacks
-    def test_message_with_topic(self):
-        data = str(uuid.uuid4())
-        self.conn.db.metrics = Mock(spec=SinkMetrics)
-        client = yield self.quick_register()
-        yield client.send_notification(data=data, topic="topicname")
-        self.conn.db.metrics.increment.assert_has_calls([
-            call('ua.command.register'),
-            # We can't see Rust metric calls
-            # call('ua.notification.topic')
-        ])
-        yield self.shut_down(client)
-
-    @inlineCallbacks
     def test_empty_message_without_crypto_headers(self):
         client = yield self.quick_register()
         result = yield client.send_notification(use_header=False)
@@ -756,6 +742,18 @@ class TestRustWebPush(unittest.TestCase):
         yield client.send_notification(
             vapid=vapid,
             status=401)
+
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_with_bad_key(self):
+        chid = str(uuid.uuid4())
+        client = Client("ws://localhost:{}/".format(self.connection_port))
+        yield client.connect()
+        yield client.hello()
+        result = yield client.register(chid=chid, key="af1883%&!@#*(",
+                                       status=400)
+        assert result["status"] == 400
 
         yield self.shut_down(client)
 

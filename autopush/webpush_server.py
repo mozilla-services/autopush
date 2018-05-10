@@ -266,14 +266,12 @@ class CommandProcessor(object):
         self.delete_message_processor = DeleteMessageCommand(conf, db)
         self.drop_user_processor = DropUserCommand(conf, db)
         self.migrate_user_proocessor = MigrateUserCommand(conf, db)
-        self.register_process = RegisterCommand(conf, db)
         self.unregister_process = UnregisterCommand(conf, db)
         self.store_messages_process = StoreMessagesUserCommand(conf, db)
         self.deserialize = dict(
             delete_message=DeleteMessage,
             drop_user=DropUser,
             migrate_user=MigrateUser,
-            register=Register,
             unregister=Unregister,
             store_messages=StoreMessages,
         )
@@ -281,7 +279,6 @@ class CommandProcessor(object):
             delete_message=self.delete_message_processor,
             drop_user=self.drop_user_processor,
             migrate_user=self.migrate_user_proocessor,
-            register=self.register_process,
             unregister=self.unregister_process,
             store_messages=self.store_messages_process,
         )  # type: Dict[str, ProcessorCommand]
@@ -432,58 +429,6 @@ def _validate_chid(chid):
     if chid != str(result):
         return False, "Bad UUID format, use lower case, dashed format"
     return True, None
-
-
-@attrs(slots=True)
-class Register(InputCommand):
-    channel_id = attrib()  # type: str
-    uaid = attrib(convert=uaid_from_str)  # type: Optional[UUID]
-    message_month = attrib()  # type: str
-    key = attrib(default=None)  # type: str
-
-
-@attrs(slots=True)
-class RegisterResponse(OutputCommand):
-    endpoint = attrib()  # type: str
-
-
-@attrs(slots=True)
-class RegisterErrorResponse(OutputCommand):
-    error_msg = attrib()  # type: str
-    error = attrib(default=True)  # type: bool
-    status = attrib(default=401)  # type: int
-
-
-class RegisterCommand(ProcessorCommand):
-
-    def process(self, command):
-        # type: (Register) -> Union[RegisterResponse, RegisterErrorResponse]
-        valid, msg = _validate_chid(command.channel_id)
-        if not valid:
-            return RegisterErrorResponse(error_msg=msg)
-
-        endpoint = self.conf.make_endpoint(
-            command.uaid.hex,
-            command.channel_id,
-            command.key
-        )
-        message = self.db.message_table(command.message_month)
-        try:
-            message.register_channel(command.uaid.hex,
-                                     command.channel_id)
-        except ClientError as ex:
-            if (ex.response['Error']['Code'] ==
-                    "ProvisionedThroughputExceededException"):
-                return RegisterErrorResponse(error_msg="overloaded",
-                                             status=503)
-        self.metrics.increment('ua.command.register')
-        log.info(
-            "Register",
-            channel_id=command.channel_id,
-            endpoint=endpoint,
-            uaid_hash=hasher(command.uaid.hex),
-        )
-        return RegisterResponse(endpoint=endpoint)
 
 
 @attrs(slots=True)

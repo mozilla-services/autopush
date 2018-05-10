@@ -2,6 +2,7 @@ language: python
 cache:
   directories:
     - $HOME/.cargo
+    - cargo
     - autopush_rs/target
     - $HOME/.cache/pip
 sudo: required
@@ -29,7 +30,7 @@ install:
 - if [ ${WITH_RUST:-true} != "false" ]; then curl https://sh.rustup.rs | sh -s -- -y || travis_terminate 1; fi
 - export PATH=$PATH:$HOME/.cargo/bin
 script:
-- tox -- ${CODECOV:+--with-coverage --cover-xml --cover-package=autopush}
+- travis_wait tox -- ${CODECOV:+--with-coverage --cover-xml --cover-package=autopush}
 after_success:
 - ${CODECOV:+codecov}
 notifications:

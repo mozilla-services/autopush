@@ -28,7 +28,6 @@ from autopush.webpush_server import (
     DeleteMessage,
     DropUser,
     MigrateUser,
-    Register,
     StoreMessages,
     Unregister,
     WebPushMessage,
@@ -308,66 +307,6 @@ class TestMigrateUserProcessor(BaseSetup):
             prefix="message_int_test"
         )
         assert db.message.tablename == tablename
-
-
-class TestRegisterProcessor(BaseSetup):
-
-    def _makeFUT(self):
-        from autopush.webpush_server import RegisterCommand
-        return RegisterCommand(self.conf, self.db)
-
-    def test_register(self):
-        cmd = self._makeFUT()
-        chid = str(uuid4())
-        result = cmd.process(Register(
-            uaid=uuid4().hex,
-            channel_id=chid,
-            message_month=self.db.current_msg_month)
-        )
-        assert result.endpoint
-        assert self.metrics.increment.called
-        assert self.metrics.increment.call_args[0][0] == 'ua.command.register'
-        assert self.logs.logged(
-            lambda e: (e['log_format'] == "Register" and
-                       e['channel_id'] == chid and
-                       e['endpoint'] == result.endpoint)
-        )
-
-    def _test_invalid(self, chid, msg="use lower case, dashed format",
-                      status=401):
-        cmd = self._makeFUT()
-        result = cmd.process(Register(
-            uaid=uuid4().hex,
-            channel_id=chid,
-            message_month=self.db.current_msg_month)
-        )
-        assert result.error
-        assert msg in result.error_msg
-        assert status == result.status
-
-    def test_register_bad_chid(self):
-        self._test_invalid("oof", "Invalid UUID")
-
-    def test_register_bad_chid_upper(self):
-        self._test_invalid(str(uuid4()).upper())
-
-    def test_register_bad_chid_nodash(self):
-        self._test_invalid(uuid4().hex)
-
-    def test_register_over_provisioning(self):
-        import autopush
-
-        def raise_condition(*args, **kwargs):
-            from botocore.exceptions import ClientError
-            raise ClientError(
-                {'Error': {'Code': 'ProvisionedThroughputExceededException'}},
-                'mock_update_item'
-            )
-
-        mock_table = Mock(spec=autopush.db.Message)
-        mock_table.register_channel = Mock(side_effect=raise_condition)
-        self.db.message_table = Mock(return_value=mock_table)
-        self._test_invalid(str(uuid4()), "overloaded", 503)
 
 
 class TestUnregisterProcessor(BaseSetup):
