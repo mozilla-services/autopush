@@ -45,7 +45,7 @@ pub enum ClientMessage {
     Unregister {
         #[serde(rename = "channelID")]
         channel_id: Uuid,
-        code: Option<i32>,
+        code: Option<u32>,
     },
 
     BroadcastSubscribe {

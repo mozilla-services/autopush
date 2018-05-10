@@ -1,6 +1,6 @@
 /// DynamoDB Client helpers
-use std::env;
 use std::collections::{HashMap, HashSet};
+use std::env;
 use std::rc::Rc;
 use std::result::Result as StdResult;
 use uuid::Uuid;
@@ -23,9 +23,9 @@ use rusoto_dynamodb::{AttributeValue, DeleteItemError, DeleteItemInput, DeleteIt
 use serde::Serializer;
 use serde_dynamodb;
 
+use errors::*;
 use protocol::Notification;
 use server::Server;
-use errors::*;
 use util::timing::{ms_since_epoch, sec_since_epoch};
 
 const MAX_EXPIRY: u64 = 2592000;
@@ -67,37 +67,27 @@ macro_rules! key_schema {
 }
 
 macro_rules! val {
-	(B => $val:expr) => (
-	    {
-	    	let mut attr = AttributeValue::default();
-	    	attr.b = Some($val);
-	    	attr
-	    }
-	);
-	(S => $val:expr) => (
-	    {
-			let mut attr = AttributeValue::default();
-			attr.s = Some($val.to_string());
-			attr
-		}
-	);
-	(SS => $val:expr) => (
-	    {
-			let mut attr = AttributeValue::default();
-			let vals: Vec<String> = $val.iter()
-			    .map(|v| v.to_string())
-			    .collect();
-			attr.ss = Some(vals);
-			attr
-		}
-	);
-	(N => $val:expr) => (
-	    {
-	    	let mut attr = AttributeValue::default();
-	    	attr.n = Some($val.to_string());
-	    	attr
-	    }
-	);
+    (B => $val:expr) => {{
+        let mut attr = AttributeValue::default();
+        attr.b = Some($val);
+        attr
+    }};
+    (S => $val:expr) => {{
+        let mut attr = AttributeValue::default();
+        attr.s = Some($val.to_string());
+        attr
+    }};
+    (SS => $val:expr) => {{
+        let mut attr = AttributeValue::default();
+        let vals: Vec<String> = $val.iter().map(|v| v.to_string()).collect();
+        attr.ss = Some(vals);
+        attr
+    }};
+    (N => $val:expr) => {{
+        let mut attr = AttributeValue::default();
+        attr.n = Some($val.to_string());
+        attr
+    }};
 }
 
 /// Create a **HashMap** from a list of key-value pairs
@@ -302,11 +292,8 @@ struct RangeKey {
 
 fn parse_sort_key(key: &str) -> Result<RangeKey> {
     lazy_static! {
-        static ref RE: RegexSet = RegexSet::new(&[
-            r"^01:\S+:\S+$",
-            r"^02:\d+:\S+$",
-            r"^\S{3,}:\S+$",
-        ]).unwrap();
+        static ref RE: RegexSet =
+            RegexSet::new(&[r"^01:\S+:\S+$", r"^02:\d+:\S+$", r"^\S{3,}:\S+$",]).unwrap();
     }
     if !RE.is_match(key) {
         return Err("Invalid chidmessageid".into()).into();
@@ -678,6 +665,35 @@ impl DynamoStorage {
         Box::new(ddb_response)
     }
 
+    fn unregister_channel_id(
+        ddb: Rc<Box<DynamoDb>>,
+        uaid: &Uuid,
+        channel_id: &Uuid,
+        message_table_name: &str,
+    ) -> MyFuture<UpdateItemOutput> {
+        let chid = channel_id.hyphenated().to_string();
+        let attr_values = hashmap! {
+            ":channel_id".to_string() => val!(SS => vec![chid]),
+        };
+        let update_item = UpdateItemInput {
+            key: ddb_item! {
+                uaid: s => uaid.simple().to_string(),
+                chidmessageid: s => " ".to_string()
+            },
+            update_expression: Some("DELETE chids :channel_id".to_string()),
+            expression_attribute_values: Some(attr_values),
+            table_name: message_table_name.to_string(),
+            ..Default::default()
+        };
+        let ddb_response = retry_if(
+            move || ddb.update_item(&update_item),
+            |err: &UpdateItemError| {
+                matches!(err, &UpdateItemError::ProvisionedThroughputExceeded(_))
+            },
+        ).chain_err(|| "Error unregistering channel");
+        Box::new(ddb_response)
+    }
+
     fn lookup_user(
         ddb: Rc<Box<DynamoDb>>,
         uaid: &Uuid,
@@ -869,6 +885,26 @@ impl DynamoStorage {
         Box::new(response)
     }
 
+    pub fn unregister(
+        &self,
+        uaid: &Uuid,
+        channel_id: &Uuid,
+        message_month: &str,
+        code: u32,
+        metrics: &StatsdClient,
+    ) -> MyFuture<bool> {
+        let ddb = self.ddb.clone();
+        let response = DynamoStorage::unregister_channel_id(ddb, uaid, channel_id, message_month)
+            .and_then(move |_| -> MyFuture<_> { Box::new(future::ok(true)) })
+            .or_else(move |_| -> MyFuture<_> { Box::new(future::ok(false)) });
+        metrics
+            .incr_with_tags("ua.command.unregister")
+            .with_tag("code", &code.to_string())
+            .send()
+            .ok();
+        Box::new(response)
+    }
+
     pub fn check_storage(
         &self,
         table_name: &str,
@@ -932,10 +968,10 @@ impl DynamoStorage {
 
 #[cfg(test)]
 mod tests {
-    use chrono::prelude::*;
-    use uuid::Uuid;
-    use util::us_since_epoch;
     use super::parse_sort_key;
+    use chrono::prelude::*;
+    use util::us_since_epoch;
+    use uuid::Uuid;
 
     #[test]
     fn test_parse_sort_key_ver1() {

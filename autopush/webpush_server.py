@@ -9,19 +9,16 @@ from attr import (
     attrs,
     attrib,
 )
-from botocore.exceptions import ClientError
 from typing import (  # noqa
     Dict,
     List,
     Optional,
-    Tuple,
-    Union
+    Tuple
 )
 from twisted.logger import Logger
 
 from autopush.db import (  # noqa
     DatabaseManager,
-    hasher,
     Message,
 )
 
@@ -255,18 +252,15 @@ class CommandProcessor(object):
         self.check_storage_processor = CheckStorageCommand(conf, db)
         self.delete_message_processor = DeleteMessageCommand(conf, db)
         self.migrate_user_proocessor = MigrateUserCommand(conf, db)
-        self.unregister_process = UnregisterCommand(conf, db)
         self.store_messages_process = StoreMessagesUserCommand(conf, db)
         self.deserialize = dict(
             delete_message=DeleteMessage,
             migrate_user=MigrateUser,
-            unregister=Unregister,
             store_messages=StoreMessages,
         )
         self.command_dict = dict(
             delete_message=self.delete_message_processor,
             migrate_user=self.migrate_user_proocessor,
-            unregister=self.unregister_process,
             store_messages=self.store_messages_process,
         )  # type: Dict[str, ProcessorCommand]
 
@@ -409,60 +403,3 @@ def _validate_chid(chid):
     if chid != str(result):
         return False, "Bad UUID format, use lower case, dashed format"
     return True, None
-
-
-@attrs(slots=True)
-class Unregister(InputCommand):
-    channel_id = attrib()  # type: str
-    uaid = attrib(convert=uaid_from_str)  # type: Optional[UUID]
-    message_month = attrib()  # type: str
-    code = attrib(default=None)  # type: int
-
-
-@attrs(slots=True)
-class UnregisterResponse(OutputCommand):
-    success = attrib(default=True)  # type: bool
-
-
-@attrs(slots=True)
-class UnregisterErrorResponse(OutputCommand):
-    error_msg = attrib()  # type: str
-    error = attrib(default=True)  # type: bool
-    status = attrib(default=401)  # type: int
-
-
-class UnregisterCommand(ProcessorCommand):
-
-    def process(self,
-                command  # type: Unregister
-                ):
-        # type: (...) -> Union[UnregisterResponse, UnregisterErrorResponse]
-        valid, msg = _validate_chid(command.channel_id)
-        if not valid:
-            return UnregisterErrorResponse(error_msg=msg)
-
-        message = Message(command.message_month,
-                          boto_resource=self.db.resource)
-        try:
-            message.unregister_channel(command.uaid.hex, command.channel_id)
-        except ClientError as ex:  # pragma: nocover
-            # Since this operates in a separate thread than the tests,
-            # we can't mock out the unregister_channel call inside
-            # test_webpush_server, thus the # nocover.
-            log.error("Unregister failed",
-                      channel_id=command.channel_id,
-                      uaid_hash=hasher(command.uaid.hex),
-                      exeption=ex)
-            return UnregisterErrorResponse(error_msg="Unregister failed")
-
-        # TODO: Clear out any existing tracked messages for this channel
-
-        self.metrics.increment('ua.command.unregister')
-        # TODO: user/raw_agent?
-        log.info(
-            "Unregister",
-            channel_id=command.channel_id,
-            uaid_hash=hasher(command.uaid.hex),
-            **dict(code=command.code) if command.code else {}
-        )
-        return UnregisterResponse()
