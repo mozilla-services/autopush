@@ -123,20 +123,6 @@ class InputCommand(object):
 
 
 @attrs(slots=True)
-class CheckStorage(InputCommand):
-    uaid = attrib(convert=uaid_from_str)  # type: UUID
-    message_month = attrib()  # type: str
-    include_topic = attrib()  # type: bool
-    timestamp = attrib(default=None)  # type: Optional[int]
-
-
-@attrs(slots=True)
-class DeleteMessage(InputCommand):
-    message_month = attrib()  # type: str
-    message = attrib(convert=dict_to_webpush_message)  # type: WebPushMessage
-
-
-@attrs(slots=True)
 class MigrateUser(InputCommand):
     uaid = attrib(convert=uaid_from_str)  # type: UUID
     message_month = attrib()  # type: str
@@ -156,20 +142,6 @@ class StoreMessages(InputCommand):
 @attrs(slots=True)
 class OutputCommand(object):
     pass
-
-
-@attrs(slots=True)
-class CheckStorageResponse(OutputCommand):
-    include_topic = attrib()  # type: bool
-    messages = attrib(
-        default=attr.Factory(list)
-    )  # type: List[WebPushMessage]
-    timestamp = attrib(default=None)  # type: Optional[int]
-
-
-@attrs(slots=True)
-class DeleteMessageResponse(OutputCommand):
-    success = attrib(default=True)  # type: bool
 
 
 @attrs(slots=True)
@@ -249,17 +221,13 @@ class CommandProcessor(object):
         # type: (AutopushConfig, DatabaseManager) -> None
         self.conf = conf
         self.db = db
-        self.check_storage_processor = CheckStorageCommand(conf, db)
-        self.delete_message_processor = DeleteMessageCommand(conf, db)
         self.migrate_user_proocessor = MigrateUserCommand(conf, db)
         self.store_messages_process = StoreMessagesUserCommand(conf, db)
         self.deserialize = dict(
-            delete_message=DeleteMessage,
             migrate_user=MigrateUser,
             store_messages=StoreMessages,
         )
         self.command_dict = dict(
-            delete_message=self.delete_message_processor,
             migrate_user=self.migrate_user_proocessor,
             store_messages=self.store_messages_process,
         )  # type: Dict[str, ProcessorCommand]
@@ -300,61 +268,6 @@ class ProcessorCommand(object):
 
     def process(self, command):
         raise NotImplementedError()
-
-
-class CheckStorageCommand(ProcessorCommand):
-    def process(self, command):
-        # type: (CheckStorage) -> CheckStorageResponse
-        timestamp, messages, include_topic = self._check_storage(command)
-        return CheckStorageResponse(
-            timestamp=timestamp,
-            messages=messages,
-            include_topic=include_topic,
-        )
-
-    def _check_storage(self, command):
-        timestamp = None
-        messages = []
-        message = Message(command.message_month,
-                          boto_resource=self.db.resource)
-        if command.include_topic:
-            timestamp, messages = message.fetch_messages(
-                uaid=command.uaid, limit=11
-            )
-
-            # If we have topic messages, return them immediately
-            messages = [WebPushMessage.from_WebPushNotification(m)
-                        for m in messages]
-            if messages:
-                return timestamp, messages, True
-
-            # No messages, update the command to include the last timestamp
-            # that was ack'd
-            command.timestamp = timestamp
-
-        if not messages or command.timestamp:
-            timestamp, messages = message.fetch_timestamp_messages(
-                uaid=command.uaid,
-                timestamp=command.timestamp,
-            )
-        messages = [WebPushMessage.from_WebPushNotification(m)
-                    for m in messages]
-
-        # If we're out of messages, timestamp is set to None, so we return
-        # the last timestamp supplied
-        if not timestamp:
-            timestamp = command.timestamp
-        return timestamp, messages, False
-
-
-class DeleteMessageCommand(ProcessorCommand):
-    def process(self, command):
-        # type: (DeleteMessage) -> DeleteMessageResponse
-        notif = command.message.to_WebPushNotification()
-        message = Message(command.message_month,
-                          boto_resource=self.db.resource)
-        message.delete_message(notif)
-        return DeleteMessageResponse()
 
 
 class MigrateUserCommand(ProcessorCommand):

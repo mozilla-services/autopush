@@ -290,62 +290,65 @@ struct RangeKey {
     legacy_version: Option<String>,
 }
 
-fn parse_sort_key(key: &str) -> Result<RangeKey> {
-    lazy_static! {
-        static ref RE: RegexSet =
-            RegexSet::new(&[r"^01:\S+:\S+$", r"^02:\d+:\S+$", r"^\S{3,}:\S+$",]).unwrap();
-    }
-    if !RE.is_match(key) {
-        return Err("Invalid chidmessageid".into()).into();
-    }
-
-    let v: Vec<&str> = key.split(":").collect();
-    match v[0] {
-        "01" => {
-            if v.len() != 3 {
-                return Err("Invalid topic key".into());
-            }
-            let (channel_id, topic) = (v[1], v[2]);
-            let channel_id = Uuid::parse_str(channel_id)?;
-            Ok(RangeKey {
-                channel_id,
-                topic: Some(topic.to_string()),
-                sortkey_timestamp: None,
-                legacy_version: None,
-            })
-        }
-        "02" => {
-            if v.len() != 3 {
-                return Err("Invalid topic key".into());
-            }
-            let (sortkey, channel_id) = (v[1], v[2]);
-            let channel_id = Uuid::parse_str(channel_id)?;
-            Ok(RangeKey {
-                channel_id,
-                topic: None,
-                sortkey_timestamp: Some(sortkey.parse()?),
-                legacy_version: None,
-            })
-        }
-        _ => {
-            if v.len() != 2 {
-                return Err("Invalid topic key".into());
-            }
-            let (channel_id, legacy_version) = (v[0], v[1]);
-            let channel_id = Uuid::parse_str(channel_id)?;
-            Ok(RangeKey {
-                channel_id,
-                topic: None,
-                sortkey_timestamp: None,
-                legacy_version: Some(legacy_version.to_string()),
-            })
-        }
-    }
-}
-
 impl DynamoDbNotification {
+    fn parse_sort_key(key: &str) -> Result<RangeKey> {
+        lazy_static! {
+        static ref RE: RegexSet = RegexSet::new(&[
+            r"^01:\S+:\S+$",
+            r"^02:\d+:\S+$",
+            r"^\S{3,}:\S+$",
+        ]).unwrap();
+    }
+        if !RE.is_match(key) {
+            return Err("Invalid chidmessageid".into()).into();
+        }
+
+        let v: Vec<&str> = key.split(":").collect();
+        match v[0] {
+            "01" => {
+                if v.len() != 3 {
+                    return Err("Invalid topic key".into());
+                }
+                let (channel_id, topic) = (v[1], v[2]);
+                let channel_id = Uuid::parse_str(channel_id)?;
+                Ok(RangeKey {
+                    channel_id,
+                    topic: Some(topic.to_string()),
+                    sortkey_timestamp: None,
+                    legacy_version: None,
+                })
+            }
+            "02" => {
+                if v.len() != 3 {
+                    return Err("Invalid topic key".into());
+                }
+                let (sortkey, channel_id) = (v[1], v[2]);
+                let channel_id = Uuid::parse_str(channel_id)?;
+                Ok(RangeKey {
+                    channel_id,
+                    topic: None,
+                    sortkey_timestamp: Some(sortkey.parse()?),
+                    legacy_version: None,
+                })
+            }
+            _ => {
+                if v.len() != 2 {
+                    return Err("Invalid topic key".into());
+                }
+                let (channel_id, legacy_version) = (v[0], v[1]);
+                let channel_id = Uuid::parse_str(channel_id)?;
+                Ok(RangeKey {
+                    channel_id,
+                    topic: None,
+                    sortkey_timestamp: None,
+                    legacy_version: Some(legacy_version.to_string()),
+                })
+            }
+        }
+    }
+
     fn to_notif(self) -> Result<Notification> {
-        let key = parse_sort_key(&self.chidmessageid)?;
+        let key = DynamoDbNotification::parse_sort_key(&self.chidmessageid)?;
         let version = key.legacy_version
             .or(self.updateid)
             .ok_or("No valid updateid/version found")?;
@@ -902,6 +905,43 @@ impl DynamoStorage {
             .with_tag("code", &code.to_string())
             .send()
             .ok();
+        Box::new(response)
+    }
+
+    /// Delete a given notification from the database
+    ///
+    /// No checks are done to see that this message came from the database or has
+    /// sufficient properties for a delete as that is expected to have been done
+    /// before this is called. In the event information is missing, a future::ok
+    /// is returned.
+    pub fn delete_message(
+        &self,
+        table_name: &str,
+        notif: Notification,
+    ) -> MyFuture<()> {
+        let ddb = self.ddb.clone();
+        let uaid = if let Some(ref uaid) = notif.uaid {
+            uaid.clone()
+        } else {
+            return Box::new(future::ok(()));
+        };
+        let chidmessageid = notif.sort_key();
+        let delete_input = DeleteItemInput {
+            table_name: table_name.to_string(),
+            key: ddb_item! {
+                uaid: s => uaid,
+                chidmessageid: s => chidmessageid
+             },
+            ..Default::default()
+        };
+        let response = retry_if(
+            move || ddb.delete_item(&delete_input),
+            |err: &DeleteItemError| {
+                matches!(err, &DeleteItemError::ProvisionedThroughputExceeded(_))
+            },
+        )
+            .and_then(|_| Box::new(future::ok(())))
+            .chain_err(|| "Error deleting notification");
         Box::new(response)
     }
 

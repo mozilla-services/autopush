@@ -23,8 +23,6 @@ from autopush.tests.support import TestingLogObserver
 from autopush.utils import WebPushNotification, ns_time
 from autopush.websocket import USER_RECORD_VERSION
 from autopush.webpush_server import (
-    CheckStorage,
-    DeleteMessage,
     MigrateUser,
     StoreMessages,
     WebPushMessage,
@@ -111,14 +109,6 @@ class WebPushMessageFactory(factory.Factory):
     version = factory.LazyAttribute(generate_version)
 
 
-class CheckStorageFactory(factory.Factory):
-    class Meta:
-        model = CheckStorage
-
-    uaid = factory.LazyFunction(lambda: uuid4().hex)
-    include_topic = True
-
-
 def webpush_messages(obj):
     return [attr.asdict(WebPushMessageFactory(uaid=obj.uaid))
             for _ in range(obj.message_count)]
@@ -196,36 +186,6 @@ class TestWebPushServer(BaseSetup):
             assert len(ws.workers) == 2
         finally:
             ws.stop()
-
-
-class TestDeleteMessageProcessor(BaseSetup):
-    def _makeFUT(self):
-        from autopush.webpush_server import DeleteMessageCommand
-        return DeleteMessageCommand(self.conf, self.db)
-
-    def test_delete_message(self):
-        from autopush.webpush_server import CheckStorageCommand
-        check_command = CheckStorageCommand(self.conf, self.db)
-        check = CheckStorageFactory(message_month=self.db.current_msg_month)
-        delete_command = self._makeFUT()
-
-        # Store some topic messages
-        self._store_messages(check.uaid, topic=True, num=7)
-
-        # Fetch them
-        results = check_command.process(check)
-        assert len(results.messages) == 7
-
-        # Delete 2 of them
-        for notif in results.messages[:2]:
-            delete_command.process(DeleteMessage(
-                message_month=self.db.current_msg_month,
-                message=notif,
-            ))
-
-        # Fetch messages again
-        results = check_command.process(check)
-        assert len(results.messages) == 5
 
 
 class TestMigrateUserProcessor(BaseSetup):
