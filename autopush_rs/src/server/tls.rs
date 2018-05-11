@@ -20,8 +20,8 @@ use tokio_core::net::TcpStream;
 use tokio_io::{AsyncRead, AsyncWrite};
 use tokio_openssl::{SslAcceptorExt, SslStream};
 
-use server::{Server, ServerOptions};
 use errors::*;
+use server::{Server, ServerOptions};
 
 /// Creates an `SslAcceptor`, if needed, ready to accept TLS connections.
 ///

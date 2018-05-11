@@ -33,8 +33,8 @@ use tokio_core::net::TcpListener;
 use tokio_core::reactor::{Core, Handle, Timeout};
 use tokio_io;
 use tokio_tungstenite::{accept_hdr_async, WebSocketStream};
-use tungstenite::handshake::server::Request;
 use tungstenite::Message;
+use tungstenite::handshake::server::Request;
 use uuid::Uuid;
 
 use client::{Client, RegisteredClient};
@@ -47,10 +47,10 @@ use rt::{self, AutopushError, UnwindGuard};
 use server::dispatch::{Dispatch, RequestType};
 use server::metrics::metrics_from_opts;
 use server::webpush_io::WebpushIo;
-use util::{self, timeout, RcObject};
 use util::ddb_helpers::DynamoStorage;
 use util::megaphone::{ClientServices, MegaphoneAPIResponse, Service, ServiceChangeTracker,
                       ServiceClientInit};
+use util::{self, timeout, RcObject};
 
 mod dispatch;
 mod metrics;
@@ -189,16 +189,20 @@ pub extern "C" fn autopush_server_new(
             router_port: opts.router_port,
             statsd_host: to_s(opts.statsd_host).map(|s| s.to_string()),
             statsd_port: opts.statsd_port,
-            message_table_names: to_s(opts.message_table_names).map(|s| s.to_string())
+            message_table_names: to_s(opts.message_table_names)
+                .map(|s| s.to_string())
                 .expect("message table names must be specified")
                 .split(",")
                 .map(|s| s.trim().to_string())
                 .collect(),
-            router_table_name: to_s(opts.router_table_name).map(|s| s.to_string())
+            router_table_name: to_s(opts.router_table_name)
+                .map(|s| s.to_string())
                 .expect("router table name must be specified"),
-            router_url: to_s(opts.router_url).map(|s| s.to_string())
+            router_url: to_s(opts.router_url)
+                .map(|s| s.to_string())
                 .expect("router url must be specified"),
-            endpoint_url: to_s(opts.endpoint_url).map(|s| s.to_string())
+            endpoint_url: to_s(opts.endpoint_url)
+                .map(|s| s.to_string())
                 .expect("endpoint url must be specified"),
             ssl_key: to_s(opts.ssl_key).map(PathBuf::from),
             ssl_cert: to_s(opts.ssl_cert).map(PathBuf::from),
@@ -518,10 +522,18 @@ impl Server {
             let key_digest = hash::hash(hash::MessageDigest::sha256(), &raw_key)
                 .chain_err(|| "Error creating message digest for key")?;
             base.extend(key_digest.iter());
-            let encrypted = self.opts.fernet.encrypt(&base).trim_matches('=').to_string();
+            let encrypted = self.opts
+                .fernet
+                .encrypt(&base)
+                .trim_matches('=')
+                .to_string();
             Ok(format!("{}v2/{}", root, encrypted))
         } else {
-            let encrypted = self.opts.fernet.encrypt(&base).trim_matches('=').to_string();
+            let encrypted = self.opts
+                .fernet
+                .encrypt(&base)
+                .trim_matches('=')
+                .to_string();
             Ok(format!("{}v1/{}", root, encrypted))
         }
     }

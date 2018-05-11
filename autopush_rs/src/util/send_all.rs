@@ -1,5 +1,5 @@
-use futures::{Async, AsyncSink, Future, Poll, Sink, Stream};
 use futures::stream::Fuse;
+use futures::{Async, AsyncSink, Future, Poll, Sink, Stream};
 
 // This is a copy of `Future::forward`, except that it doesn't close the sink
 // when it's finished.

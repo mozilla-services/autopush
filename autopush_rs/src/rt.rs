@@ -31,11 +31,11 @@
 //! functions throughout this crate and copy those idioms, otherwise there's
 //! documentation on each specific function here.
 
-use std::panic;
-use std::ptr;
-use std::mem;
 use std::any::Any;
 use std::cell::Cell;
+use std::mem;
+use std::panic;
+use std::ptr;
 
 /// Generic error which is used on all function calls from Python into Rust.
 ///

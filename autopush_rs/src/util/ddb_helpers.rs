@@ -293,12 +293,9 @@ struct RangeKey {
 impl DynamoDbNotification {
     fn parse_sort_key(key: &str) -> Result<RangeKey> {
         lazy_static! {
-        static ref RE: RegexSet = RegexSet::new(&[
-            r"^01:\S+:\S+$",
-            r"^02:\d+:\S+$",
-            r"^\S{3,}:\S+$",
-        ]).unwrap();
-    }
+            static ref RE: RegexSet =
+                RegexSet::new(&[r"^01:\S+:\S+$", r"^02:\d+:\S+$", r"^\S{3,}:\S+$",]).unwrap();
+        }
         if !RE.is_match(key) {
             return Err("Invalid chidmessageid".into()).into();
         }
@@ -431,7 +428,7 @@ impl DynamoStorage {
         timestamp: &str,
     ) -> MyFuture<UpdateItemOutput> {
         let ddb = self.ddb.clone();
-        let expiry = sec_since_epoch() + MAX_EXPIRY;
+        let expiry = sec_since_epoch() + 2 * MAX_EXPIRY;
         let attr_values = hashmap! {
             ":timestamp".to_string() => val!(N => timestamp),
             ":expiry".to_string() => val!(N => expiry),
@@ -644,7 +641,7 @@ impl DynamoStorage {
         message_table_name: &str,
     ) -> MyFuture<UpdateItemOutput> {
         let chid = channel_id.hyphenated().to_string();
-        let expiry = sec_since_epoch() + MAX_EXPIRY;
+        let expiry = sec_since_epoch() + 2 * MAX_EXPIRY;
         let attr_values = hashmap! {
             ":channel_id".to_string() => val!(SS => vec![chid]),
             ":expiry".to_string() => val!(N => expiry),
@@ -654,7 +651,7 @@ impl DynamoStorage {
                 uaid: s => uaid.simple().to_string(),
                 chidmessageid: s => " ".to_string()
             },
-            update_expression: Some("ADD chids :channel_id, expiry :expiry".to_string()),
+            update_expression: Some("ADD chids :channel_id SET expiry=:expiry".to_string()),
             expression_attribute_values: Some(attr_values),
             table_name: message_table_name.to_string(),
             ..Default::default()
@@ -874,16 +871,10 @@ impl DynamoStorage {
         Box::new(response)
     }
 
-    pub fn drop_uaid(
-        &self,
-        table_name: &str,
-        uaid: &Uuid,
-    ) -> MyFuture<()> {
+    pub fn drop_uaid(&self, table_name: &str, uaid: &Uuid) -> MyFuture<()> {
         let ddb = self.ddb.clone();
         let response = DynamoStorage::drop_user(ddb, uaid, table_name)
-            .and_then(move |_| -> MyFuture<_> {
-                Box::new(future::ok(()))
-            })
+            .and_then(move |_| -> MyFuture<_> { Box::new(future::ok(())) })
             .chain_err(|| "Unable to drop user record");
         Box::new(response)
     }
@@ -914,11 +905,7 @@ impl DynamoStorage {
     /// sufficient properties for a delete as that is expected to have been done
     /// before this is called. In the event information is missing, a future::ok
     /// is returned.
-    pub fn delete_message(
-        &self,
-        table_name: &str,
-        notif: Notification,
-    ) -> MyFuture<()> {
+    pub fn delete_message(&self, table_name: &str, notif: Notification) -> MyFuture<()> {
         let ddb = self.ddb.clone();
         let uaid = if let Some(ref uaid) = notif.uaid {
             uaid.clone()
@@ -929,9 +916,9 @@ impl DynamoStorage {
         let delete_input = DeleteItemInput {
             table_name: table_name.to_string(),
             key: ddb_item! {
-                uaid: s => uaid,
-                chidmessageid: s => chidmessageid
-             },
+               uaid: s => uaid,
+               chidmessageid: s => chidmessageid
+            },
             ..Default::default()
         };
         let response = retry_if(
@@ -939,8 +926,7 @@ impl DynamoStorage {
             |err: &DeleteItemError| {
                 matches!(err, &DeleteItemError::ProvisionedThroughputExceeded(_))
             },
-        )
-            .and_then(|_| Box::new(future::ok(())))
+        ).and_then(|_| Box::new(future::ok(())))
             .chain_err(|| "Error deleting notification");
         Box::new(response)
     }

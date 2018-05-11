@@ -28,8 +28,8 @@ use tokio_core::net::TcpStream;
 use tokio_io::AsyncRead;
 
 use errors::*;
-use server::webpush_io::WebpushIo;
 use server::tls::MaybeTlsStream;
+use server::webpush_io::WebpushIo;
 
 pub struct Dispatch {
     socket: Option<MaybeTlsStream<TcpStream>>,

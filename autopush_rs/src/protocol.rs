@@ -139,9 +139,14 @@ impl Notification {
         if let Some(ref topic) = self.topic {
             format!("01:{}:{}", chid, topic)
         } else if let Some(sortkey_timestamp) = self.sortkey_timestamp {
-            format!("02:{}:{}",
-                    if sortkey_timestamp == 0 { ms_since_epoch() } else { sortkey_timestamp },
-                    chid
+            format!(
+                "02:{}:{}",
+                if sortkey_timestamp == 0 {
+                    ms_since_epoch()
+                } else {
+                    sortkey_timestamp
+                },
+                chid
             )
         } else {
             // Legacy messages which we should never get anymore

@@ -7,13 +7,13 @@
 //!     PUT /push/UAID      - Deliver notification to a client
 //!     PUT /notify/UAID    - Tell a client to check storage
 
-use std::str;
 use std::rc::Rc;
+use std::str;
 
 use futures::future::ok;
 use futures::{Future, Stream};
-use hyper::{Method, StatusCode};
 use hyper;
+use hyper::{Method, StatusCode};
 use serde_json;
 use tokio_service::Service;
 use uuid::Uuid;

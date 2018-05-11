@@ -24,15 +24,15 @@
 //! online.
 
 use std::any::Any;
-use std::num;
 use std::error;
 use std::io;
+use std::num;
 
 use cadence;
 use futures::Future;
 use httparse;
-use serde_json;
 use sentry;
+use serde_json;
 use tungstenite;
 use uuid;
 
