@@ -38,7 +38,7 @@ pub enum ClientMessage {
 
     Register {
         #[serde(rename = "channelID")]
-        channel_id: Uuid,
+        channel_id: String,
         key: Option<String>,
     },
 
