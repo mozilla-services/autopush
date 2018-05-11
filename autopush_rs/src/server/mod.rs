@@ -13,13 +13,17 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
 
+use base64;
 use cadence::StatsdClient;
+use fernet::{Fernet, MultiFernet};
 use futures::sync::oneshot;
 use futures::task;
 use futures::{Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
+use hex;
 use hyper::server::Http;
 use hyper::{self, header, StatusCode};
 use libc::c_char;
+use openssl::hash;
 use openssl::ssl::SslAcceptor;
 use reqwest;
 use sentry;
@@ -86,6 +90,8 @@ pub struct AutopushServerOptions {
     pub message_table_names: *const c_char,
     pub router_table_name: *const c_char,
     pub router_url: *const c_char,
+    pub endpoint_url: *const c_char,
+    pub crypto_key: *const c_char,
     pub statsd_host: *const c_char,
     pub statsd_port: u16,
     pub megaphone_api_url: *const c_char,
@@ -109,6 +115,7 @@ pub struct ServerOptions {
     pub debug: bool,
     pub router_port: u16,
     pub port: u16,
+    fernet: MultiFernet,
     pub ssl_key: Option<PathBuf>,
     pub ssl_cert: Option<PathBuf>,
     pub ssl_dh_param: Option<PathBuf>,
@@ -120,6 +127,7 @@ pub struct ServerOptions {
     pub message_table_names: Vec<String>,
     pub router_table_name: String,
     pub router_url: String,
+    pub endpoint_url: String,
     pub statsd_host: Option<String>,
     pub statsd_port: u16,
     pub megaphone_api_url: Option<String>,
@@ -167,9 +175,18 @@ pub extern "C" fn autopush_server_new(
         let opts = &*opts;
 
         util::init_logging(opts.json_logging != 0);
+        let fernets: Vec<Fernet> = to_s(opts.crypto_key)
+            .map(|s| s.to_string())
+            .expect("crypto_key must be specified")
+            .split(",")
+            .map(|s| s.trim().to_string())
+            .map(|key| Fernet::new(&key).expect("Invalid key supplied"))
+            .collect();
+        let fernet = MultiFernet::new(fernets);
         let mut opts = ServerOptions {
             debug: opts.debug != 0,
             port: opts.port,
+            fernet,
             router_port: opts.router_port,
             statsd_host: to_s(opts.statsd_host).map(|s| s.to_string()),
             statsd_port: opts.statsd_port,
@@ -182,6 +199,8 @@ pub extern "C" fn autopush_server_new(
                 .expect("router table name must be specified"),
             router_url: to_s(opts.router_url).map(|s| s.to_string())
                 .expect("router url must be specified"),
+            endpoint_url: to_s(opts.endpoint_url).map(|s| s.to_string())
+                .expect("endpoint url must be specified"),
             ssl_key: to_s(opts.ssl_key).map(PathBuf::from),
             ssl_cert: to_s(opts.ssl_cert).map(PathBuf::from),
             ssl_dh_param: to_s(opts.ssl_dh_param).map(PathBuf::from),
@@ -483,6 +502,29 @@ impl Server {
         }));
 
         Ok((srv2, core))
+    }
+
+    /// Create an v1 or v2 WebPush endpoint from the identifiers
+    ///
+    /// Both endpoints use bytes instead of hex to reduce ID length.
+    //  v1 is the uaid + chid
+    //  v2 is the uaid + chid + sha256(key).bytes
+    pub fn make_endpoint(&self, uaid: &Uuid, chid: &Uuid, key: Option<String>) -> Result<String> {
+        let root = format!("{}/wpush/", self.opts.endpoint_url);
+        let mut base = hex::decode(uaid.simple().to_string()).chain_err(|| "Error decoding")?;
+        base.extend(hex::decode(chid.simple().to_string()).chain_err(|| "Error decoding")?);
+        if let Some(k) = key {
+            let raw_key = base64::decode_config(&k, base64::URL_SAFE)
+                .chain_err(|| "Error encrypting payload")?;
+            let key_digest = hash::hash(hash::MessageDigest::sha256(), &raw_key)
+                .chain_err(|| "Error creating message digest for key")?;
+            base.extend(key_digest.iter());
+            let encrypted = self.opts.fernet.encrypt(&base).trim_matches('=').to_string();
+            Ok(format!("{}v2/{}", root, encrypted))
+        } else {
+            let encrypted = self.opts.fernet.encrypt(&base).trim_matches('=').to_string();
+            Ok(format!("{}v1/{}", root, encrypted))
+        }
     }
 
     /// Informs this server that a new `client` has connected

@@ -116,13 +116,6 @@ impl<F: FnOnce(&str) + Send> FnBox for F {
 #[derive(Serialize)]
 #[serde(tag = "command", rename_all = "snake_case")]
 enum Call {
-    Register {
-        uaid: String,
-        channel_id: String,
-        message_month: String,
-        key: Option<String>,
-    },
-
     Unregister {
         uaid: String,
         channel_id: String,
@@ -154,20 +147,6 @@ enum Call {
 struct PythonError {
     pub error: bool,
     pub error_msg: String,
-}
-
-#[derive(Deserialize)]
-#[serde(untagged)]
-pub enum RegisterResponse {
-    Success {
-        endpoint: String,
-    },
-
-    Error {
-        error_msg: String,
-        error: bool,
-        status: u32,
-    },
 }
 
 #[derive(Deserialize)]
@@ -205,23 +184,6 @@ pub struct StoreMessagesResponse {
 }
 
 impl Server {
-    pub fn register(
-        &self,
-        uaid: String,
-        message_month: String,
-        channel_id: String,
-        key: Option<String>,
-    ) -> MyFuture<RegisterResponse> {
-        let (call, fut) = PythonCall::new(&Call::Register {
-            uaid: uaid,
-            message_month: message_month,
-            channel_id: channel_id,
-            key: key,
-        });
-        self.send_to_python(call);
-        return fut;
-    }
-
     pub fn unregister(
         &self,
         uaid: String,

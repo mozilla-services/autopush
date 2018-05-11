@@ -30,6 +30,10 @@ class AutopushServer(object):
         cfg.port = conf.port
         cfg.router_port = conf.router_port
         cfg.router_url = ffi_from_buffer(conf.router_url)
+        cfg.endpoint_url = ffi_from_buffer(conf.endpoint_url)
+        self.crypto_key = ','.join(name.encode('utf-8') for name in
+                                  conf._crypto_key)
+        cfg.crypto_key = ffi_from_buffer(self.crypto_key)
         cfg.ssl_cert = ffi_from_buffer(conf.ssl.cert)
         cfg.ssl_dh_param = ffi_from_buffer(conf.ssl.dh_param)
         cfg.ssl_key = ffi_from_buffer(conf.ssl.key)
@@ -38,7 +42,8 @@ class AutopushServer(object):
         cfg.statsd_port = conf.statsd_port
         cfg.router_table_name = ffi_from_buffer(conf.router_table.tablename)
         # XXX: keepalive
-        self.message_table_names = ','.join(name.encode('utf-8') for name in message_tables)
+        self.message_table_names = ','.join(name.encode('utf-8') for name in
+                                            message_tables)
         cfg.message_table_names = ffi_from_buffer(self.message_table_names)
         cfg.megaphone_api_url = ffi_from_buffer(conf.megaphone_api_url)
         cfg.megaphone_api_token = ffi_from_buffer(conf.megaphone_api_token)

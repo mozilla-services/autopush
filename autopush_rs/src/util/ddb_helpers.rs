@@ -22,11 +22,11 @@ use rusoto_dynamodb::{AttributeValue, DeleteItemError, DeleteItemInput, DeleteIt
                       UpdateItemError, UpdateItemInput, UpdateItemOutput};
 use serde::Serializer;
 use serde_dynamodb;
-use time;
 
 use protocol::Notification;
+use server::Server;
 use errors::*;
-use util::timing::ms_since_epoch;
+use util::timing::{ms_since_epoch, sec_since_epoch};
 
 const MAX_EXPIRY: u64 = 2592000;
 const USER_RECORD_VERSION: u8 = 1;
@@ -66,7 +66,6 @@ macro_rules! key_schema {
     }
 }
 
-#[allow(unused_macros)]
 macro_rules! val {
 	(B => $val:expr) => (
 	    {
@@ -79,6 +78,16 @@ macro_rules! val {
 	    {
 			let mut attr = AttributeValue::default();
 			attr.s = Some($val.to_string());
+			attr
+		}
+	);
+	(SS => $val:expr) => (
+	    {
+			let mut attr = AttributeValue::default();
+			let vals: Vec<String> = $val.iter()
+			    .map(|v| v.to_string())
+			    .collect();
+			attr.ss = Some(vals);
 			attr
 		}
 	);
@@ -258,10 +267,11 @@ pub struct DynamoDbNotification {
     chidmessageid: String,
     // Magic entry stored in the first Message record that indicates the highest
     // non-topic timestamp we've read into
+    #[serde(skip_serializing_if = "Option::is_none")]
     current_timestamp: Option<u64>,
     // Magic entry stored in the first Message record that indicates the valid
     // channel id's
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing)]
     chids: Option<HashSet<String>>,
     // Time in seconds from epoch
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -391,6 +401,12 @@ pub struct CheckStorageResponse {
     pub timestamp: Option<u64>,
 }
 
+pub enum RegisterResponse {
+    Success { endpoint: String },
+
+    Error { error_msg: String, status: u32 },
+}
+
 #[derive(Default)]
 pub struct FetchMessageResponse {
     pub timestamp: Option<u64>,
@@ -425,7 +441,7 @@ impl DynamoStorage {
         timestamp: &str,
     ) -> MyFuture<UpdateItemOutput> {
         let ddb = self.ddb.clone();
-        let expiry = (time::get_time().sec as u64) + MAX_EXPIRY;
+        let expiry = sec_since_epoch() + MAX_EXPIRY;
         let attr_values = hashmap! {
             ":timestamp".to_string() => val!(N => timestamp),
             ":expiry".to_string() => val!(N => expiry),
@@ -631,6 +647,37 @@ impl DynamoStorage {
         Box::new(response)
     }
 
+    fn register_channel_id(
+        ddb: Rc<Box<DynamoDb>>,
+        uaid: &Uuid,
+        channel_id: &Uuid,
+        message_table_name: &str,
+    ) -> MyFuture<UpdateItemOutput> {
+        let chid = channel_id.hyphenated().to_string();
+        let expiry = sec_since_epoch() + MAX_EXPIRY;
+        let attr_values = hashmap! {
+            ":channel_id".to_string() => val!(SS => vec![chid]),
+            ":expiry".to_string() => val!(N => expiry),
+        };
+        let update_item = UpdateItemInput {
+            key: ddb_item! {
+                uaid: s => uaid.simple().to_string(),
+                chidmessageid: s => " ".to_string()
+            },
+            update_expression: Some("ADD chids :channel_id, expiry :expiry".to_string()),
+            expression_attribute_values: Some(attr_values),
+            table_name: message_table_name.to_string(),
+            ..Default::default()
+        };
+        let ddb_response = retry_if(
+            move || ddb.update_item(&update_item),
+            |err: &UpdateItemError| {
+                matches!(err, &UpdateItemError::ProvisionedThroughputExceeded(_))
+            },
+        ).chain_err(|| "Error registering channel");
+        Box::new(ddb_response)
+    }
+
     fn lookup_user(
         ddb: Rc<Box<DynamoDb>>,
         uaid: &Uuid,
@@ -774,6 +821,37 @@ impl DynamoStorage {
             Box::new(ddb_response)
         });
         metrics.incr("ua.command.hello").ok();
+        Box::new(response)
+    }
+
+    pub fn register(
+        &self,
+        srv: Rc<Server>,
+        uaid: &Uuid,
+        channel_id: &Uuid,
+        message_month: &str,
+        key: Option<String>,
+    ) -> MyFuture<RegisterResponse> {
+        let ddb = self.ddb.clone();
+        let endpoint = match srv.make_endpoint(uaid, channel_id, key) {
+            Ok(result) => result,
+            Err(_) => {
+                return Box::new(future::ok(RegisterResponse::Error {
+                    error_msg: "Failed to generate endpoint".to_string(),
+                    status: 400,
+                }))
+            }
+        };
+        let response = DynamoStorage::register_channel_id(ddb, uaid, channel_id, message_month)
+            .and_then(move |_| -> MyFuture<_> {
+                Box::new(future::ok(RegisterResponse::Success { endpoint }))
+            })
+            .or_else(move |_| -> MyFuture<_> {
+                Box::new(future::ok(RegisterResponse::Error {
+                    status: 503,
+                    error_msg: "Failed to register channel".to_string(),
+                }))
+            });
         Box::new(response)
     }
 

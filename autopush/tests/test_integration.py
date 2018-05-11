@@ -136,7 +136,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         log.debug("Send: %s", msg)
         self.ws.send(msg)
 
-    def register(self, chid=None, key=None):
+    def register(self, chid=None, key=None, status=200):
         chid = chid or str(uuid.uuid4())
         msg = json.dumps(dict(messageType="register",
                               channelID=chid,
@@ -146,9 +146,10 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         rcv = self.ws.recv()
         result = json.loads(rcv)
         log.debug("Recv: %s", result)
-        assert result["status"] == 200
+        assert result["status"] == status
         assert result["channelID"] == chid
-        self.channels[chid] = result["pushEndpoint"]
+        if status == 200:
+            self.channels[chid] = result["pushEndpoint"]
         return result
 
     def unregister(self, chid):
