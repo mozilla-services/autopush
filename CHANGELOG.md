@@ -1,3 +1,42 @@
+<a name="1.46.0"></a>
+## 1.46.0 (2018-05-11)
+
+
+#### Features
+
+*   port delete command to Rust ([81545523](https://github.com/mozilla-services/autopush/commit/8154552396aa1fc419be2c721d99d5199e012edc), closes [#1204](https://github.com/mozilla-services/autopush/issues/1204))
+*   port delete command to Rust ([f1879c3a](https://github.com/mozilla-services/autopush/commit/f1879c3aed1c50cf07594c76e3a3b65dda339a95), closes [#1204](https://github.com/mozilla-services/autopush/issues/1204))
+*   switch from snaek to milksnake ([f7734f9b](https://github.com/mozilla-services/autopush/commit/f7734f9b20d34332dfa869bb88bf55d23d32252a), closes [#1045](https://github.com/mozilla-services/autopush/issues/1045))
+*   port unregister command to Rust ([c52abc09](https://github.com/mozilla-services/autopush/commit/c52abc09199652da28b1c97c145e3675dd268568), closes [#1205](https://github.com/mozilla-services/autopush/issues/1205))
+*   port drop user command to Rust ([a9cd4ae4](https://github.com/mozilla-services/autopush/commit/a9cd4ae40b4b83c9c75c0e71feacd0b918007244), closes [#1207](https://github.com/mozilla-services/autopush/issues/1207))
+*   port register command to Rust ([4ff17433](https://github.com/mozilla-services/autopush/commit/4ff17433ee98f6875ea59075ff28a22afa558cc2), closes [#1190](https://github.com/mozilla-services/autopush/issues/1190))
+*   port hello command to Rust ([1b48a473](https://github.com/mozilla-services/autopush/commit/1b48a4736ff11c69eac9a08b8a7c452b7a65bb36), closes [#1188](https://github.com/mozilla-services/autopush/issues/1188))
+*   hardcode autopush_rs's AWS creds in local dynamodb mode ([6865dede](https://github.com/mozilla-services/autopush/commit/6865dede42b886073a927d7c88c74328b7399670), closes [#1201](https://github.com/mozilla-services/autopush/issues/1201))
+*   port check storage command into Rust ([a9f6fc26](https://github.com/mozilla-services/autopush/commit/a9f6fc2681f5574cdd4840cebe208277c6887a83), closes [#1189](https://github.com/mozilla-services/autopush/issues/1189))
+
+#### Doc
+
+*   update to reflect message table rotation is optional ([9d5cc642](https://github.com/mozilla-services/autopush/commit/9d5cc64282651d424261849819fd5839c4f4fd3f), closes [#1194](https://github.com/mozilla-services/autopush/issues/1194))
+
+#### Refactor
+
+*   some cleanup for #1202 ([bd0f37f0](https://github.com/mozilla-services/autopush/commit/bd0f37f0206cd2d4f414be95a8e671607582906f))
+
+#### Chore
+
+*   rustfmt all the rust ([517285b1](https://github.com/mozilla-services/autopush/commit/517285b190e0c4623ba89d532b4253fcecd4728e))
+
+#### Bug Fixes
+
+*   reject unhyphenated channelIDs from register ([2579197e](https://github.com/mozilla-services/autopush/commit/2579197e9d3307c6bfecac7683a6c0ce4dc9d882), closes [#1225](https://github.com/mozilla-services/autopush/issues/1225))
+*   endpoint now returns a JSON-based 404 for all 404's ([03029770](https://github.com/mozilla-services/autopush/commit/030297702e8ec279d02bc6a9a9c31b75c1d22645), closes [#756](https://github.com/mozilla-services/autopush/issues/756))
+*   properly catch a null value passed to register ([ae97e153](https://github.com/mozilla-services/autopush/commit/ae97e153c53925d8a029693245fe4540c998ba30), closes [#1183](https://github.com/mozilla-services/autopush/issues/1183))
+*   don't save legacy messages from the Rust node ([a218b5bf](https://github.com/mozilla-services/autopush/commit/a218b5bf8715f97e820dc30571993ec7203b9f9c), closes [#1198](https://github.com/mozilla-services/autopush/issues/1198))
+*   Remove unused "expiry" from Router table ([72307f16](https://github.com/mozilla-services/autopush/commit/72307f1635771560d648bc0f662381c9c9fbc870), closes [#1211](https://github.com/mozilla-services/autopush/issues/1211))
+*   sync endpoint and connection settings during integration testing ([53be7e63](https://github.com/mozilla-services/autopush/commit/53be7e630b786ea5878a7c5ae12f9eba8ba44e90), closes [#1196](https://github.com/mozilla-services/autopush/issues/1196))
+
+
+
 <a name="1.45.0"></a>
 ## 1.45.0 (2018-04-27)
 
