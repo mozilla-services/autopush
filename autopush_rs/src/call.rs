@@ -128,10 +128,6 @@ enum Call {
         message_month: String,
     },
 
-    DropUser {
-        uaid: String,
-    },
-
     MigrateUser {
         uaid: String,
         message_month: String,
@@ -165,11 +161,6 @@ pub enum UnRegisterResponse {
 
 #[derive(Deserialize)]
 pub struct DeleteMessageResponse {
-    pub success: bool,
-}
-
-#[derive(Deserialize)]
-pub struct DropUserResponse {
     pub success: bool,
 }
 
@@ -210,12 +201,6 @@ impl Server {
             message: notif,
             message_month: message_month,
         });
-        self.send_to_python(call);
-        return fut;
-    }
-
-    pub fn drop_user(&self, uaid: String) -> MyFuture<DropUserResponse> {
-        let (call, fut) = PythonCall::new(&Call::DropUser { uaid });
         self.send_to_python(call);
         return fut;
     }

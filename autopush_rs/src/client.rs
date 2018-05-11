@@ -592,7 +592,7 @@ where
 
     #[state_machine_future(transitions(AuthDone))]
     AwaitDropUser {
-        response: MyFuture<call::DropUserResponse>,
+        response: MyFuture<()>,
         data: AuthClientData<T>,
     },
 
@@ -696,7 +696,8 @@ where
             );
             transition!(AwaitMigrateUser { response, data });
         } else if all_acked && webpush.flags.reset_uaid {
-            let response = data.srv.drop_user(webpush.uaid.simple().to_string());
+
+            let response = data.srv.ddb.drop_uaid(&data.srv.opts.router_table_name, &webpush.uaid);
             transition!(AwaitDropUser { response, data });
         }
         transition!(AwaitInput { data })

@@ -140,11 +140,6 @@ class DeleteMessage(InputCommand):
 
 
 @attrs(slots=True)
-class DropUser(InputCommand):
-    uaid = attrib(convert=uaid_from_str)  # type: UUID
-
-
-@attrs(slots=True)
 class MigrateUser(InputCommand):
     uaid = attrib(convert=uaid_from_str)  # type: UUID
     message_month = attrib()  # type: str
@@ -177,11 +172,6 @@ class CheckStorageResponse(OutputCommand):
 
 @attrs(slots=True)
 class DeleteMessageResponse(OutputCommand):
-    success = attrib(default=True)  # type: bool
-
-
-@attrs(slots=True)
-class DropUserResponse(OutputCommand):
     success = attrib(default=True)  # type: bool
 
 
@@ -264,20 +254,17 @@ class CommandProcessor(object):
         self.db = db
         self.check_storage_processor = CheckStorageCommand(conf, db)
         self.delete_message_processor = DeleteMessageCommand(conf, db)
-        self.drop_user_processor = DropUserCommand(conf, db)
         self.migrate_user_proocessor = MigrateUserCommand(conf, db)
         self.unregister_process = UnregisterCommand(conf, db)
         self.store_messages_process = StoreMessagesUserCommand(conf, db)
         self.deserialize = dict(
             delete_message=DeleteMessage,
-            drop_user=DropUser,
             migrate_user=MigrateUser,
             unregister=Unregister,
             store_messages=StoreMessages,
         )
         self.command_dict = dict(
             delete_message=self.delete_message_processor,
-            drop_user=self.drop_user_processor,
             migrate_user=self.migrate_user_proocessor,
             unregister=self.unregister_process,
             store_messages=self.store_messages_process,
@@ -374,13 +361,6 @@ class DeleteMessageCommand(ProcessorCommand):
                           boto_resource=self.db.resource)
         message.delete_message(notif)
         return DeleteMessageResponse()
-
-
-class DropUserCommand(ProcessorCommand):
-    def process(self, command):
-        # type: (DropUser) -> DropUserResponse
-        self.db.router.drop_user(command.uaid.hex)
-        return DropUserResponse()
 
 
 class MigrateUserCommand(ProcessorCommand):
