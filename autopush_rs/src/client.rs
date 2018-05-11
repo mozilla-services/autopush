@@ -612,7 +612,7 @@ where
 
     #[state_machine_future(transitions(DetermineAck))]
     AwaitDelete {
-        response: MyFuture<call::DeleteMessageResponse>,
+        response: MyFuture<()>,
         data: AuthClientData<T>,
     },
 
@@ -782,7 +782,7 @@ where
             }
             Either::A(ClientMessage::Ack { updates }) => {
                 data.srv.metrics.incr("ua.command.ack").ok();
-                let mut fut: Option<MyFuture<call::DeleteMessageResponse>> = None;
+                let mut fut: Option<MyFuture<()>> = None;
                 for notif in updates.iter() {
                     if let Some(pos) = webpush.unacked_direct_notifs.iter().position(|v| {
                         v.channel_id == notif.channel_id && v.version == notif.version
@@ -800,10 +800,10 @@ where
                         // Topic/legacy messages have no sortkey_timestamp
                         if n.sortkey_timestamp.is_none() {
                             fut = if let Some(call) = fut {
-                                let my_fut = data.srv.delete_message(message_month, n);
+                                let my_fut = data.srv.ddb.delete_message(&message_month, n);
                                 Some(Box::new(call.and_then(move |_| my_fut)))
                             } else {
-                                Some(data.srv.delete_message(message_month, n))
+                                Some(data.srv.ddb.delete_message(&message_month, n))
                             }
                         }
                         continue;
