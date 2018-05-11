@@ -696,7 +696,6 @@ where
             );
             transition!(AwaitMigrateUser { response, data });
         } else if all_acked && webpush.flags.reset_uaid {
-
             let response = data.srv.ddb.drop_uaid(&data.srv.opts.router_table_name, &webpush.uaid);
             transition!(AwaitDropUser { response, data });
         }
@@ -733,9 +732,18 @@ where
                     transition!(AwaitInput { data });
                 }
             }
-            Either::A(ClientMessage::Register { channel_id, key }) => {
+            Either::A(ClientMessage::Register {
+                channel_id: channel_id_str,
+                key,
+            }) => {
                 debug!("Got a register command";
-                "channel_id" => channel_id.hyphenated().to_string());
+                       "channel_id" => &channel_id_str);
+                let channel_id =
+                    Uuid::parse_str(&channel_id_str).chain_err(|| "Invalid channelID")?;
+                if channel_id.hyphenated().to_string() != channel_id_str {
+                    return Err("Bad UUID format, use lower case, dashed format".into());
+                }
+
                 let uaid = webpush.uaid.clone();
                 let message_month = webpush.message_month.clone();
                 let srv = data.srv.clone();
@@ -750,6 +758,8 @@ where
             }
             Either::A(ClientMessage::Unregister { channel_id, code }) => {
                 debug!("Got a unregister command");
+                // XXX: unregister should check the format of channel_id like
+                // register does
                 let uaid = webpush.uaid.clone();
                 let message_month = webpush.message_month.clone();
                 let fut = data.srv.ddb.unregister(
