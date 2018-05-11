@@ -138,9 +138,9 @@ impl Notification {
         let chid = self.channel_id.hyphenated();
         if let Some(ref topic) = self.topic {
             format!("01:{}:{}", chid, topic)
-        } else if let Some(ref sortkey_timestamp) = self.sortkey_timestamp {
+        } else if let Some(sortkey_timestamp) = self.sortkey_timestamp {
             format!("02:{}:{}",
-                    if *sortkey_timestamp == 0 { ms_since_epoch() } else { *sortkey_timestamp },
+                    if sortkey_timestamp == 0 { ms_since_epoch() } else { sortkey_timestamp },
                     chid
             )
         } else {
