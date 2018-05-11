@@ -59,7 +59,6 @@ mod webpush_io;
 
 const UAHEADER: &str = "User-Agent";
 
-#[repr(C)]
 pub struct AutopushServer {
     inner: UnwindGuard<AutopushServerInner>,
 }
@@ -105,7 +104,7 @@ pub struct Server {
     pub ddb: DynamoStorage,
     open_connections: Cell<u32>,
     tls_acceptor: Option<SslAcceptor>,
-    pub tx: queue::Sender,
+    pub tx: queue::AutopushSender,
     pub opts: Arc<ServerOptions>,
     pub handle: Handle,
     pub metrics: StatsdClient,
@@ -291,7 +290,7 @@ impl Server {
     /// This will spawn a new server with the `opts` specified, spinning up a
     /// separate thread for the tokio reactor. The returned ShutdownHandles can
     /// be used to interact with it (e.g. shut it down).
-    fn start(opts: &Arc<ServerOptions>, tx: queue::Sender) -> Result<Vec<ShutdownHandle>> {
+    fn start(opts: &Arc<ServerOptions>, tx: queue::AutopushSender) -> Result<Vec<ShutdownHandle>> {
         let mut shutdown_handles = vec![];
         if let Some(handle) = Server::start_sentry()? {
             shutdown_handles.push(handle);
@@ -366,7 +365,7 @@ impl Server {
         Ok(Some(ShutdownHandle(donetx, thread)))
     }
 
-    fn new(opts: &Arc<ServerOptions>, tx: queue::Sender) -> Result<(Rc<Server>, Core)> {
+    fn new(opts: &Arc<ServerOptions>, tx: queue::AutopushSender) -> Result<(Rc<Server>, Core)> {
         let core = Core::new()?;
         let broadcaster = if let Some(ref megaphone_url) = opts.megaphone_api_url {
             let megaphone_token = opts.megaphone_api_token

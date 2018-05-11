@@ -12,7 +12,7 @@ RUN \
     apt-get install -y -qq libexpat1-dev gcc libssl-dev libffi-dev libjemalloc1 && \
     curl https://sh.rustup.rs | sh -s -- -y && \
     make clean && \
-    pip install -r requirements.txt && \
+    WITH_RUST=release pip install -r requirements.txt && \
     pypy setup.py develop
 
 ENTRYPOINT ["/app/entrypoint.sh"]

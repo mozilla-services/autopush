@@ -10,18 +10,38 @@ with io.open(os.path.join(here, 'README.md'), encoding='utf8') as f:
 with io.open(os.path.join(here, 'CHANGELOG.md'), encoding='utf8') as f:
     CHANGES = f.read()
 
-WITH_RUST = os.environ.get('WITH_RUST', 'true').lower() not in ('false', '0')
+WITH_RUST = os.environ.get('WITH_RUST', 'true')
 
 extra_options = {
     "packages": find_packages(),
 }
-if WITH_RUST:
+if WITH_RUST.lower() not in ('false', '0'):
+    def build_native(spec):
+        cmd = ['cargo', 'build']
+        in_path = 'target/debug'
+        if WITH_RUST.lower() == 'release':
+            cmd.append('--release')
+            in_path = 'target/release'
+
+        build = spec.add_external_build(
+            cmd=cmd,
+            path='./autopush_rs'
+        )
+
+        spec.add_cffi_module(
+            module_path='autopush_rs._native',
+            dylib=lambda: build.find_dylib('autopush', in_path=in_path),
+            header_filename=lambda: build.find_header(
+                'autopush.h', in_path='target'),
+            rtld_flags=['NOW', 'NODELETE']
+        )
+
     extra_options.update(
-        setup_requires=['snaek'],
-        install_requires=['snaek'],
-        snaek_rust_modules=[
-            ('autopush_rs._native', 'autopush_rs/'),
-        ],
+        setup_requires=['milksnake'],
+        install_requires=['milksnake'],
+        milksnake_tasks=[
+            build_native
+        ]
     )
 
 

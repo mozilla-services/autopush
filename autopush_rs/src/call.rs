@@ -28,7 +28,6 @@ use rt::{self, AutopushError, UnwindGuard};
 use protocol;
 use server::Server;
 
-#[repr(C)]
 pub struct AutopushPythonCall {
     inner: UnwindGuard<Inner>,
 }

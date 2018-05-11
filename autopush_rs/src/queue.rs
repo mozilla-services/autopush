@@ -11,13 +11,12 @@ use std::sync::Mutex;
 use call::{AutopushPythonCall, PythonCall};
 use rt::{self, AutopushError};
 
-#[repr(C)]
 pub struct AutopushQueue {
-    tx: Mutex<Sender>,
+    tx: Mutex<AutopushSender>,
     rx: Mutex<Option<mpsc::Receiver<Option<PythonCall>>>>,
 }
 
-pub type Sender = mpsc::Sender<Option<PythonCall>>;
+pub type AutopushSender = mpsc::Sender<Option<PythonCall>>;
 
 fn _assert_kinds() {
     fn _assert<T: Send + Sync>() {}
@@ -72,7 +71,7 @@ pub extern "C" fn autopush_queue_free(queue: *mut AutopushQueue) {
 }
 
 impl AutopushQueue {
-    pub fn tx(&self) -> Sender {
+    pub fn tx(&self) -> AutopushSender {
         self.tx.lock().unwrap().clone()
     }
 }

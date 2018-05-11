@@ -4,7 +4,11 @@ version = "0.1.0"
 authors = ["Alex Crichton <alex@alexcrichton.com>"]
 
 [lib]
+name = "autopush"
 crate-type = ["cdylib"]
+
+[build-dependencies]
+cbindgen = "0.6.0"
 
 [dependencies]
 base64 = "0.9.1"
@@ -36,7 +40,8 @@ rusoto_credential = "0.11.0"
 rusoto_dynamodb = "0.32.0"
 sentry = "0.2.0"
 serde = "1.0.45"
-serde_derive = "1.0.45"
+# Pinned to 1.0.21 due to cbindgen
+serde_derive = "1.0.21"
 serde_dynamodb = "0.1.2"
 serde_json = "1.0.13"
 # slog: Use this first version for debug builds
