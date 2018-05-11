@@ -27,7 +27,6 @@ from autopush.webpush_server import (
     DeleteMessage,
     MigrateUser,
     StoreMessages,
-    Unregister,
     WebPushMessage,
 )
 import autopush.tests
@@ -280,40 +279,6 @@ class TestMigrateUserProcessor(BaseSetup):
             prefix="message_int_test"
         )
         assert db.message.tablename == tablename
-
-
-class TestUnregisterProcessor(BaseSetup):
-
-    def _makeFUT(self):
-        from autopush.webpush_server import UnregisterCommand
-        return UnregisterCommand(self.conf, self.db)
-
-    def test_unregister(self):
-        cmd = self._makeFUT()
-        chid = str(uuid4())
-        result = cmd.process(Unregister(
-            uaid=uuid4().hex,
-            channel_id=chid,
-            message_month=self.db.current_msg_month)
-        )
-        assert result.success
-        assert self.metrics.increment.called
-        assert self.metrics.increment.call_args[0][0] == \
-            'ua.command.unregister'
-        assert self.logs.logged(
-            lambda e: (e['log_format'] == "Unregister" and
-                       e['channel_id'] == chid)
-        )
-
-    def test_unregister_bad_chid(self):
-        cmd = self._makeFUT()
-        result = cmd.process(Unregister(
-            uaid=uuid4().hex,
-            channel_id="quux",
-            message_month=self.db.current_msg_month)
-        )
-        assert result.error
-        assert "Invalid UUID" in result.error_msg
 
 
 class TestStoreMessagesProcessor(BaseSetup):

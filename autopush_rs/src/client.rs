@@ -25,9 +25,9 @@ use call;
 use errors::*;
 use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
 use server::Server;
-use util::{ms_since_epoch, parse_user_agent, sec_since_epoch};
 use util::ddb_helpers::{CheckStorageResponse, HelloResponse, RegisterResponse};
 use util::megaphone::{ClientServices, Service, ServiceClientInit};
+use util::{ms_since_epoch, parse_user_agent, sec_since_epoch};
 
 // Created and handed to the AutopushServer
 pub struct RegisteredClient {
@@ -606,7 +606,7 @@ where
     #[state_machine_future(transitions(SendThenWait))]
     AwaitUnregister {
         channel_id: Uuid,
-        response: MyFuture<call::UnRegisterResponse>,
+        response: MyFuture<bool>,
         data: AuthClientData<T>,
     },
 
@@ -734,7 +734,6 @@ where
                 }
             }
             Either::A(ClientMessage::Register { channel_id, key }) => {
-                data.srv.metrics.incr("ua.command.register").ok();
                 debug!("Got a register command";
                 "channel_id" => channel_id.hyphenated().to_string());
                 let uaid = webpush.uaid.clone();
@@ -753,12 +752,12 @@ where
                 debug!("Got a unregister command");
                 let uaid = webpush.uaid.clone();
                 let message_month = webpush.message_month.clone();
-                let channel_id_str = channel_id.hyphenated().to_string();
-                let fut = data.srv.unregister(
-                    uaid.simple().to_string(),
-                    message_month,
-                    channel_id_str,
+                let fut = data.srv.ddb.unregister(
+                    &uaid,
+                    &channel_id,
+                    &message_month,
                     code.unwrap_or(200),
+                    &data.srv.metrics,
                 );
                 transition!(AwaitUnregister {
                     channel_id,
@@ -961,6 +960,12 @@ where
         let msg = match try_ready!(await_register.response.poll()) {
             RegisterResponse::Success { endpoint } => {
                 let mut webpush = await_register.data.webpush.borrow_mut();
+                await_register
+                    .data
+                    .srv
+                    .metrics
+                    .incr("ua.command.register")
+                    .ok();
                 webpush.stats.registers += 1;
                 ServerMessage::Register {
                     channel_id: await_register.channel_id,
@@ -989,24 +994,19 @@ where
         await_unregister: &'a mut RentToOwn<'a, AwaitUnregister<T>>,
     ) -> Poll<AfterAwaitUnregister<T>, Error> {
         debug!("State: AwaitUnRegister");
-        let msg = match try_ready!(await_unregister.response.poll()) {
-            call::UnRegisterResponse::Success { success } => {
-                debug!("Got the unregister response");
-                let mut webpush = await_unregister.data.webpush.borrow_mut();
-                webpush.stats.unregisters += 1;
-                ServerMessage::Unregister {
-                    channel_id: await_unregister.channel_id,
-                    status: if success { 200 } else { 500 },
-                }
+        let msg = if try_ready!(await_unregister.response.poll()) {
+            debug!("Got the unregister response");
+            let mut webpush = await_unregister.data.webpush.borrow_mut();
+            webpush.stats.unregisters += 1;
+            ServerMessage::Unregister {
+                channel_id: await_unregister.channel_id,
+                status: 200,
             }
-            call::UnRegisterResponse::Error {
-                error_msg, status, ..
-            } => {
-                debug!("Got unregister fail, error: {}", error_msg);
-                ServerMessage::Unregister {
-                    channel_id: await_unregister.channel_id,
-                    status,
-                }
+        } else {
+            debug!("Got unregister fail");
+            ServerMessage::Unregister {
+                channel_id: await_unregister.channel_id,
+                status: 500,
             }
         };
 
