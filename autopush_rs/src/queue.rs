@@ -5,8 +5,8 @@
 //! pushing requests over to Python. A `Sender` here is saved off in the
 //! `Server` for sending messages.
 
-use std::sync::mpsc;
 use std::sync::Mutex;
+use std::sync::mpsc;
 
 use call::{AutopushPythonCall, PythonCall};
 use rt::{self, AutopushError};

@@ -124,5 +124,5 @@ mod protocol;
 #[macro_use]
 pub mod rt;
 pub mod call;
-pub mod server;
 pub mod queue;
+pub mod server;

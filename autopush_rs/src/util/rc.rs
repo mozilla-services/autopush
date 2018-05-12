@@ -1,5 +1,5 @@
-use std::rc::Rc;
 use std::cell::{RefCell, RefMut};
+use std::rc::Rc;
 
 use futures::{Poll, Sink, StartSend, Stream};
 

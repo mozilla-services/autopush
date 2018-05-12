@@ -696,7 +696,9 @@ where
             );
             transition!(AwaitMigrateUser { response, data });
         } else if all_acked && webpush.flags.reset_uaid {
-            let response = data.srv.ddb.drop_uaid(&data.srv.opts.router_table_name, &webpush.uaid);
+            let response = data.srv
+                .ddb
+                .drop_uaid(&data.srv.opts.router_table_name, &webpush.uaid);
             transition!(AwaitDropUser { response, data });
         }
         transition!(AwaitInput { data })

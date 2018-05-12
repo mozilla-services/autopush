@@ -2,14 +2,14 @@
 use std::io;
 use std::time::Duration;
 
-use hostname::get_hostname;
 use futures::future::{Either, Future, IntoFuture};
+use hostname::get_hostname;
 use slog;
+use slog::Drain;
 use slog_async;
-use slog_term;
 use slog_scope;
 use slog_stdlog;
-use slog::Drain;
+use slog_term;
 use tokio_core::reactor::{Handle, Timeout};
 
 use errors::*;
@@ -25,9 +25,9 @@ mod timing;
 mod user_agent;
 
 use self::aws::get_ec2_instance_id;
-pub use self::timing::{ms_since_epoch, sec_since_epoch, us_since_epoch};
-pub use self::send_all::MySendAll;
 pub use self::rc::RcObject;
+pub use self::send_all::MySendAll;
+pub use self::timing::{ms_since_epoch, sec_since_epoch, us_since_epoch};
 pub use self::user_agent::parse_user_agent;
 
 /// Convenience future to time out the resolution of `f` provided within the

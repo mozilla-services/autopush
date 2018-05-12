@@ -24,8 +24,8 @@ use serde::ser;
 use serde_json;
 
 use errors::*;
-use rt::{self, AutopushError, UnwindGuard};
 use protocol;
+use rt::{self, AutopushError, UnwindGuard};
 use server::Server;
 
 pub struct AutopushPythonCall {

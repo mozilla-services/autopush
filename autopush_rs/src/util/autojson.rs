@@ -19,15 +19,15 @@
 // }}}
 use chrono;
 use serde;
-use serde_json;
 use serde::ser::SerializeMap;
+use serde_json;
 use slog;
+use slog::Record;
 use slog::{FnValue, PushFnValue};
 use slog::{OwnedKVList, SendSyncRefUnwindSafeKV, KV};
-use slog::Record;
 use std;
-use std::{fmt, io, result};
 use std::io::Cursor;
+use std::{fmt, io, result};
 
 use std::cell::RefCell;
 use std::fmt::Write;
