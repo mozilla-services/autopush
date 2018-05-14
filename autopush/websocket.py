@@ -417,6 +417,11 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     @log_exception
     def _sendAutoPing(self):
         """Override for sanity checking during auto-ping interval"""
+        # Note: it's possible (but tracking information has yet to prove) that
+        # a websocket connection could persist longer than the message record
+        # expiration time (~30d), which might cause some problems. Most
+        # websocket connections time out far, far earlier than that, which
+        # resets the record expiration times.
         if not self.ps.uaid:
             # No uaid yet, drop the connection
             self.sendClose()
