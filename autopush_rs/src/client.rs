@@ -499,6 +499,7 @@ where
         let mut stats = webpush.stats.clone();
         let unacked_direct_notifs = webpush.unacked_direct_notifs.len();
         if unacked_direct_notifs > 0 {
+            debug!("Writing direct notifications to storage");
             stats.direct_storage += unacked_direct_notifs as i32;
             let mut notifs = mem::replace(&mut webpush.unacked_direct_notifs, Vec::new());
             // Ensure we don't store these as legacy by setting a 0 as the sortkey_timestamp
@@ -507,15 +508,14 @@ where
             for notif in notifs.iter_mut() {
                 notif.sortkey_timestamp = Some(0);
             }
-
-            srv.handle.spawn(srv.store_messages(
-                webpush.uaid.simple().to_string(),
-                webpush.message_month.clone(),
+            srv.handle.spawn(srv.ddb.store_messages(
+                &webpush.uaid,
+                &webpush.message_month,
                 notifs,
             ).then(|_| {
                 debug!("Finished saving unacked direct notifications");
                 Ok(())
-            }))
+            }));
         }
 
         // Log out the final stats message

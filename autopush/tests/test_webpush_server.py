@@ -24,7 +24,6 @@ from autopush.utils import WebPushNotification, ns_time
 from autopush.websocket import USER_RECORD_VERSION
 from autopush.webpush_server import (
     MigrateUser,
-    StoreMessages,
     WebPushMessage,
 )
 import autopush.tests
@@ -112,20 +111,6 @@ class WebPushMessageFactory(factory.Factory):
 def webpush_messages(obj):
     return [attr.asdict(WebPushMessageFactory(uaid=obj.uaid))
             for _ in range(obj.message_count)]
-
-
-class StoreMessageFactory(factory.Factory):
-    class Meta:
-        model = StoreMessages
-
-    messages = factory.LazyAttribute(webpush_messages)
-    message_month = factory.LazyFunction(
-        lambda: make_rotating_tablename("message")
-    )
-
-    class Params:
-        message_count = 20
-        uaid = factory.LazyFunction(lambda: uuid4().hex)
 
 
 class BaseSetup(unittest.TestCase):
@@ -239,15 +224,3 @@ class TestMigrateUserProcessor(BaseSetup):
             prefix="message_int_test"
         )
         assert db.message.tablename == tablename
-
-
-class TestStoreMessagesProcessor(BaseSetup):
-    def _makeFUT(self):
-        from autopush.webpush_server import StoreMessagesUserCommand
-        return StoreMessagesUserCommand(self.conf, self.db)
-
-    def test_store_messages(self):
-        cmd = self._makeFUT()
-        store_message = StoreMessageFactory()
-        response = cmd.process(store_message)
-        assert response.success is True
