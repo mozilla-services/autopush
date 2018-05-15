@@ -42,7 +42,6 @@ use errors::*;
 use errors::{Error, Result};
 use http;
 use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
-use queue::{self, AutopushQueue};
 use rt::{self, AutopushError, UnwindGuard};
 use server::dispatch::{Dispatch, RequestType};
 use server::metrics::metrics_from_opts;
@@ -104,7 +103,6 @@ pub struct Server {
     pub ddb: DynamoStorage,
     open_connections: Cell<u32>,
     tls_acceptor: Option<SslAcceptor>,
-    pub tx: queue::AutopushSender,
     pub opts: Arc<ServerOptions>,
     pub handle: Handle,
     pub metrics: StatsdClient,
@@ -124,6 +122,7 @@ pub struct ServerOptions {
     pub max_connections: Option<u32>,
     pub close_handshake_timeout: Option<Duration>,
     pub message_table_names: Vec<String>,
+    pub current_message_month: String,
     pub router_table_name: String,
     pub router_url: String,
     pub endpoint_url: String,
@@ -195,6 +194,7 @@ pub extern "C" fn autopush_server_new(
                 .split(",")
                 .map(|s| s.trim().to_string())
                 .collect(),
+            current_message_month: "".to_string(),
             router_table_name: to_s(opts.router_table_name)
                 .map(|s| s.to_string())
                 .expect("router table name must be specified"),
@@ -223,6 +223,10 @@ pub extern "C" fn autopush_server_new(
                 .expect("poll interval cannot be 0"),
         };
         opts.message_table_names.sort_unstable();
+        opts.current_message_month = opts.message_table_names
+            .last()
+            .expect("No last message month found")
+            .to_string();
 
         Box::new(AutopushServer {
             inner: UnwindGuard::new(AutopushServerInner {
@@ -236,13 +240,11 @@ pub extern "C" fn autopush_server_new(
 #[no_mangle]
 pub extern "C" fn autopush_server_start(
     srv: *mut AutopushServer,
-    queue: *mut AutopushQueue,
     err: &mut AutopushError,
 ) -> i32 {
     unsafe {
         (*srv).inner.catch(err, |srv| {
-            let tx = (*queue).tx();
-            let handles = Server::start(&srv.opts, tx).expect("failed to start server");
+            let handles = Server::start(&srv.opts).expect("failed to start server");
             srv.shutdown_handles.set(Some(handles));
         })
     }
@@ -294,7 +296,7 @@ impl Server {
     /// This will spawn a new server with the `opts` specified, spinning up a
     /// separate thread for the tokio reactor. The returned ShutdownHandles can
     /// be used to interact with it (e.g. shut it down).
-    fn start(opts: &Arc<ServerOptions>, tx: queue::AutopushSender) -> Result<Vec<ShutdownHandle>> {
+    fn start(opts: &Arc<ServerOptions>) -> Result<Vec<ShutdownHandle>> {
         let mut shutdown_handles = vec![];
         if let Some(handle) = Server::start_sentry()? {
             shutdown_handles.push(handle);
@@ -305,7 +307,7 @@ impl Server {
 
         let opts = opts.clone();
         let thread = thread::spawn(move || {
-            let (srv, mut core) = match Server::new(&opts, tx) {
+            let (srv, mut core) = match Server::new(&opts) {
                 Ok(core) => {
                     inittx.send(None).unwrap();
                     core
@@ -369,7 +371,7 @@ impl Server {
         Ok(Some(ShutdownHandle(donetx, thread)))
     }
 
-    fn new(opts: &Arc<ServerOptions>, tx: queue::AutopushSender) -> Result<(Rc<Server>, Core)> {
+    fn new(opts: &Arc<ServerOptions>) -> Result<(Rc<Server>, Core)> {
         let core = Core::new()?;
         let broadcaster = if let Some(ref megaphone_url) = opts.megaphone_api_url {
             let megaphone_token = opts.megaphone_api_token
@@ -387,7 +389,6 @@ impl Server {
             uaids: RefCell::new(HashMap::new()),
             open_connections: Cell::new(0),
             handle: core.handle(),
-            tx: tx,
             tls_acceptor: tls::configure(opts),
             metrics: metrics_from_opts(opts)?,
         });
@@ -617,13 +618,6 @@ impl Server {
         self.broadcaster
             .borrow()
             .client_service_add_service(client_services, services)
-    }
-}
-
-impl Drop for Server {
-    fn drop(&mut self) {
-        // we're done sending messages, close out the queue
-        drop(self.tx.send(None));
     }
 }
 
