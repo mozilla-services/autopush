@@ -400,6 +400,21 @@ class TestRustWebPush(unittest.TestCase):
         yield self.shut_down(client)
 
     @inlineCallbacks
+    def test_repeat_delivery_with_disconnect_without_ack(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register()
+        result = yield client.send_notification(data=data)
+        assert result != {}
+        assert result["data"] == base64url_encode(data)
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification()
+        assert result != {}
+        assert result["data"] == base64url_encode(data)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
     def test_multiple_delivery_repeat_without_ack(self):
         data = str(uuid.uuid4())
         data2 = str(uuid.uuid4())

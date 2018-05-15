@@ -1,3 +1,4 @@
+use std::cmp::min;
 /// DynamoDB Client helpers
 use std::collections::{HashMap, HashSet};
 use std::env;
@@ -16,10 +17,11 @@ use regex::RegexSet;
 use rusoto_core::Region;
 use rusoto_core::reactor::RequestDispatcher;
 use rusoto_credential::StaticProvider;
-use rusoto_dynamodb::{AttributeValue, DeleteItemError, DeleteItemInput, DeleteItemOutput,
-                      DynamoDb, DynamoDbClient, GetItemError, GetItemInput, GetItemOutput,
-                      PutItemError, PutItemInput, PutItemOutput, QueryError, QueryInput,
-                      UpdateItemError, UpdateItemInput, UpdateItemOutput};
+use rusoto_dynamodb::{AttributeValue, BatchWriteItemError, BatchWriteItemInput, DeleteItemError,
+                      DeleteItemInput, DeleteItemOutput, DynamoDb, DynamoDbClient, GetItemError,
+                      GetItemInput, GetItemOutput, PutItemError, PutItemInput, PutItemOutput,
+                      PutRequest, QueryError, QueryInput, UpdateItemError, UpdateItemInput,
+                      UpdateItemOutput, WriteRequest};
 use serde::Serializer;
 use serde_dynamodb;
 
@@ -179,6 +181,17 @@ impl From<NotificationHeaders> for HashMap<String, String> {
         insert_to_map(&mut map, "encryption_key", val.encryption_key);
         insert_to_map(&mut map, "encoding", val.encoding);
         map
+    }
+}
+
+impl From<HashMap<String, String>> for NotificationHeaders {
+    fn from(val: HashMap<String, String>) -> NotificationHeaders {
+        NotificationHeaders {
+            crypto_key: val.get("crypto_key").map(|v| v.to_string()),
+            encryption: val.get("encryption").map(|v| v.to_string()),
+            encryption_key: val.get("encryption_key").map(|v| v.to_string()),
+            encoding: val.get("encoding").map(|v| v.to_string()),
+        }
     }
 }
 
@@ -344,6 +357,7 @@ impl DynamoDbNotification {
         }
     }
 
+    // TODO: Implement as TryFrom whenever that lands
     fn to_notif(self) -> Result<Notification> {
         let key = DynamoDbNotification::parse_sort_key(&self.chidmessageid)?;
         let version = key.legacy_version
@@ -362,9 +376,25 @@ impl DynamoDbNotification {
             sortkey_timestamp: key.sortkey_timestamp,
         })
     }
-}
 
-///
+    // TODO: Implement as TryFrom when that lands in case uaid wasn't set
+    fn from_notif(val: Notification) -> Result<DynamoDbNotification> {
+        let sort_key = val.sort_key();
+        let uaid = val.uaid.ok_or("No uaid found")?;
+        let uaid = Uuid::parse_str(&uaid)?;
+        Ok(DynamoDbNotification {
+            uaid,
+            chidmessageid: sort_key,
+            timestamp: Some(val.timestamp),
+            expiry: sec_since_epoch() as u32 + min(val.ttl, MAX_EXPIRY as u32),
+            ttl: Some(val.ttl),
+            data: val.data,
+            headers: val.headers.map(|h| h.into()),
+            updateid: Some(val.version),
+            ..Default::default()
+        })
+    }
+}
 
 /// Basic requirements for notification content to deliver to websocket client
 // - channelID  (the subscription website intended for)
@@ -899,6 +929,47 @@ impl DynamoStorage {
         Box::new(response)
     }
 
+    /// Store a batch of messages when shutting down
+    pub fn store_messages(
+        &self,
+        uaid: &Uuid,
+        message_month: &str,
+        messages: Vec<Notification>,
+    ) -> MyFuture<()> {
+        let ddb = self.ddb.clone();
+        let put_items: Vec<WriteRequest> = messages
+            .into_iter()
+            .filter_map(|mut n| {
+                n.uaid = Some(uaid.simple().to_string());
+                DynamoDbNotification::from_notif(n)
+                    .map(|notif| serde_dynamodb::to_hashmap(&notif).ok())
+                    .unwrap_or_default()
+            })
+            .map(|hm| WriteRequest {
+                put_request: Some(PutRequest { item: hm }),
+                delete_request: None,
+            })
+            .collect();
+        let batch_input = BatchWriteItemInput {
+            request_items: hashmap! { message_month.to_string() => put_items },
+            ..Default::default()
+        };
+        let response = retry_if(
+            move || ddb.batch_write_item(&batch_input),
+            |err: &BatchWriteItemError| {
+                matches!(err, &BatchWriteItemError::ProvisionedThroughputExceeded(_))
+            },
+        )
+        .and_then(|_| Box::new(future::ok(())))
+            .map_err(|err| {
+                debug!("Error saving notification: {:?}", err);
+                err
+            })
+            // TODO: Use Sentry to capture/report this error
+            .chain_err(|| "Error saving notifications");
+        Box::new(response)
+    }
+
     /// Delete a given notification from the database
     ///
     /// No checks are done to see that this message came from the database or has
@@ -994,8 +1065,7 @@ impl DynamoStorage {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_sort_key;
-    use chrono::prelude::*;
+    use super::DynamoDbNotification;
     use util::us_since_epoch;
     use uuid::Uuid;
 
@@ -1003,7 +1073,7 @@ mod tests {
     fn test_parse_sort_key_ver1() {
         let chid = Uuid::new_v4();
         let chidmessageid = format!("01:{}:mytopic", chid.hyphenated().to_string());
-        let key = parse_sort_key(&chidmessageid).unwrap();
+        let key = DynamoDbNotification::parse_sort_key(&chidmessageid).unwrap();
         assert_eq!(key.topic, Some("mytopic".to_string()));
         assert_eq!(key.channel_id, chid);
         assert_eq!(key.sortkey_timestamp, None);
@@ -1014,7 +1084,7 @@ mod tests {
         let chid = Uuid::new_v4();
         let sortkey_timestamp = us_since_epoch();
         let chidmessageid = format!("02:{}:{}", sortkey_timestamp, chid.hyphenated().to_string());
-        let key = parse_sort_key(&chidmessageid).unwrap();
+        let key = DynamoDbNotification::parse_sort_key(&chidmessageid).unwrap();
         assert_eq!(key.topic, None);
         assert_eq!(key.channel_id, chid);
         assert_eq!(key.sortkey_timestamp, Some(sortkey_timestamp));
@@ -1023,7 +1093,7 @@ mod tests {
     #[test]
     fn test_parse_sort_key_bad_values() {
         for val in vec!["02j3i2o", "03:ffas:wef", "01::mytopic", "02:oops:ohnoes"] {
-            let key = parse_sort_key(val);
+            let key = DynamoDbNotification::parse_sort_key(val);
             assert!(key.is_err());
         }
     }

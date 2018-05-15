@@ -128,14 +128,6 @@ class MigrateUser(InputCommand):
     message_month = attrib()  # type: str
 
 
-@attrs(slots=True)
-class StoreMessages(InputCommand):
-    message_month = attrib()  # type: str
-    messages = attrib(
-        default=attr.Factory(list)
-    )  # type: List[WebPushMessage]
-
-
 ###############################################################################
 # Output messages serialized to the outgoing queue
 ###############################################################################
@@ -147,11 +139,6 @@ class OutputCommand(object):
 @attrs(slots=True)
 class MigrateUserResponse(OutputCommand):
     message_month = attrib()  # type: str
-
-
-@attrs(slots=True)
-class StoreMessagesResponse(OutputCommand):
-    success = attrib(default=True)  # type: bool
 
 
 ###############################################################################
@@ -222,14 +209,11 @@ class CommandProcessor(object):
         self.conf = conf
         self.db = db
         self.migrate_user_proocessor = MigrateUserCommand(conf, db)
-        self.store_messages_process = StoreMessagesUserCommand(conf, db)
         self.deserialize = dict(
             migrate_user=MigrateUser,
-            store_messages=StoreMessages,
         )
         self.command_dict = dict(
             migrate_user=self.migrate_user_proocessor,
-            store_messages=self.store_messages_process,
         )  # type: Dict[str, ProcessorCommand]
 
     def process_message(self, input):
@@ -291,19 +275,6 @@ class MigrateUserCommand(ProcessorCommand):
         self.db.router.update_message_month(command.uaid.hex,
                                             cur_month)
         return MigrateUserResponse(message_month=cur_month)
-
-
-class StoreMessagesUserCommand(ProcessorCommand):
-    def process(self, command):
-        # type: (StoreMessages) -> StoreMessagesResponse
-        message = Message(command.message_month,
-                          boto_resource=self.db.resource)
-        for m in command.messages:
-            if "topic" not in m:
-                m["topic"] = None
-            notif = WebPushMessage(**m).to_WebPushNotification()
-            message.store_message(notif)
-        return StoreMessagesResponse()
 
 
 def _validate_chid(chid):
