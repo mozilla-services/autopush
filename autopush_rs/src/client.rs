@@ -585,7 +585,7 @@ where
 
     #[state_machine_future(transitions(DetermineAck))]
     AwaitMigrateUser {
-        response: MyFuture<String>,
+        response: MyFuture<()>,
         data: AuthClientData<T>,
     },
 
@@ -947,11 +947,11 @@ where
         await_migrate_user: &'a mut RentToOwn<'a, AwaitMigrateUser<T>>,
     ) -> Poll<AfterAwaitMigrateUser<T>, Error> {
         debug!("State: AwaitMigrateUser");
-        let message_month = try_ready!(await_migrate_user.response.poll());
+        try_ready!(await_migrate_user.response.poll());
         let AwaitMigrateUser { data, .. } = await_migrate_user.take();
         {
             let mut webpush = data.webpush.borrow_mut();
-            webpush.message_month = message_month;
+            webpush.message_month = data.srv.opts.current_message_month.clone();
             webpush.flags.rotate_message_table = false;
         }
         transition!(DetermineAck { data })

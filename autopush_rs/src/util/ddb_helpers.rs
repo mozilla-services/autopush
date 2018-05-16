@@ -1005,7 +1005,7 @@ impl DynamoStorage {
         message_month: &str,
         current_message_month: &str,
         router_table_name: &str,
-    ) -> MyFuture<String> {
+    ) -> MyFuture<()> {
         let ddb = self.ddb.clone();
         let ddb1 = self.ddb.clone();
         let ddb2 = self.ddb.clone();
@@ -1013,7 +1013,6 @@ impl DynamoStorage {
         let cur_month = current_message_month.to_string();
         let cur_month1 = cur_month.clone();
         let cur_month2 = cur_month.clone();
-        let cur_month3 = cur_month.clone();
         let router_table_name = router_table_name.to_string();
         let response = DynamoStorage::all_channels(ddb, &uaid, message_month)
             .and_then(move |channels| -> MyFuture<_> {
@@ -1031,7 +1030,7 @@ impl DynamoStorage {
                     &cur_month2,
                 )
             })
-            .and_then(move |_| -> MyFuture<_> { Box::new(future::ok(cur_month3)) })
+            .and_then(move |_| -> MyFuture<_> { Box::new(future::ok(())) })
             .chain_err(|| "Unable to migrate user");
         Box::new(response)
     }
