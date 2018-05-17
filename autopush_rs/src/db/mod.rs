@@ -119,11 +119,11 @@ impl DynamoStorage {
         router_table_name: &str,
         router_url: &str,
         message_table_names: &Vec<String>,
+        current_message_month: &str,
         metrics: &StatsdClient,
     ) -> MyFuture<HelloResponse> {
         let router_table_name = router_table_name.to_string();
         let ddb = self.ddb.clone();
-        let cur_month = message_table_names.last().unwrap().clone();
         let response: MyFuture<(HelloResponse, Option<DynamoDbUser>)> = if let Some(uaid) = uaid {
             commands::lookup_user(
                 ddb,
@@ -132,12 +132,13 @@ impl DynamoStorage {
                 router_url,
                 &router_table_name,
                 message_table_names,
+                current_message_month,
                 metrics,
             )
         } else {
             Box::new(future::ok((
                 HelloResponse {
-                    message_month: cur_month,
+                    message_month: current_message_month.to_string(),
                     ..Default::default()
                 },
                 None,
@@ -151,7 +152,7 @@ impl DynamoStorage {
             let user = user_opt.unwrap_or_else(|| DynamoDbUser {
                 current_month: Some(hello_message_month),
                 node_id: Some(router_url),
-                connected_at: connected_at,
+                connected_at,
                 ..Default::default()
             });
             let uaid = user.uaid.clone();
@@ -355,11 +356,11 @@ impl DynamoStorage {
         let uaid = uaid.clone();
         let table_name = table_name.to_string();
         let ddb2 = self.ddb.clone();
-        let response = response.and_then(move |resp| {
+        let response = response.and_then(move |resp| -> MyFuture<_> {
             // Return now from this future if we have messages
             if !resp.messages.is_empty() {
                 debug!("Topic message returns: {:?}", resp.messages);
-                return future::Either::A(future::ok(CheckStorageResponse {
+                return Box::new(future::ok(CheckStorageResponse {
                     include_topic: true,
                     messages: resp.messages,
                     timestamp: resp.timestamp,
@@ -394,7 +395,7 @@ impl DynamoStorage {
                     timestamp,
                 })
             });
-            future::Either::B(next_query)
+            Box::new(next_query)
         });
         Box::new(response)
     }

@@ -51,10 +51,8 @@ struct SerdeSerializer<S: serde::Serializer> {
 impl<S: serde::Serializer> SerdeSerializer<S> {
     /// Start serializing map of values
     fn start(ser: S, len: Option<usize>) -> result::Result<Self, slog::Error> {
-        let ser_map = try!(
-            ser.serialize_map(len)
-                .map_err(|_| io::Error::new(io::ErrorKind::Other, "serde serialization error"))
-        );
+        let ser_map = ser.serialize_map(len)
+                .map_err(|_| io::Error::new(io::ErrorKind::Other, "serde serialization error"))?;
         Ok(SerdeSerializer { ser_map: ser_map })
     }
 

@@ -342,6 +342,7 @@ where
                 &data.srv.opts.router_table_name,
                 &data.srv.opts.router_url,
                 &data.srv.opts.message_table_names,
+                &data.srv.opts.current_message_month,
                 &data.srv.metrics,
             ),
             data,

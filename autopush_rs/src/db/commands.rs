@@ -345,11 +345,12 @@ pub fn lookup_user(
     router_url: &str,
     router_table_name: &str,
     message_table_names: &Vec<String>,
+    current_message_month: &str,
     metrics: &StatsdClient,
 ) -> MyFuture<(HelloResponse, Option<DynamoDbUser>)> {
     let response = get_uaid(ddb.clone(), uaid, router_table_name);
     // Prep all these for the move into the static closure capture
-    let cur_month = message_table_names.last().unwrap().clone();
+    let cur_month = current_message_month.to_string();
     let uaid2 = uaid.clone();
     let ddb2 = ddb.clone();
     let router_table = router_table_name.to_string();
