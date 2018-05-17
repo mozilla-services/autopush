@@ -46,7 +46,7 @@ use rt::{self, AutopushError, UnwindGuard};
 use server::dispatch::{Dispatch, RequestType};
 use server::metrics::metrics_from_opts;
 use server::webpush_io::WebpushIo;
-use util::ddb_helpers::DynamoStorage;
+use db::DynamoStorage;
 use util::megaphone::{ClientServices, MegaphoneAPIResponse, Service, ServiceChangeTracker,
                       ServiceClientInit};
 use util::{self, timeout, RcObject};
@@ -176,7 +176,7 @@ pub extern "C" fn autopush_server_new(
         let fernets: Vec<Fernet> = to_s(opts.crypto_key)
             .map(|s| s.to_string())
             .expect("crypto_key must be specified")
-            .split(",")
+            .split(',')
             .map(|s| s.trim().to_string())
             .map(|key| Fernet::new(&key).expect("Invalid key supplied"))
             .collect();
@@ -191,7 +191,7 @@ pub extern "C" fn autopush_server_new(
             message_table_names: to_s(opts.message_table_names)
                 .map(|s| s.to_string())
                 .expect("message table names must be specified")
-                .split(",")
+                .split(',')
                 .map(|s| s.trim().to_string())
                 .collect(),
             current_message_month: "".to_string(),
@@ -378,7 +378,7 @@ impl Server {
                 .as_ref()
                 .expect("Megaphone API requires a Megaphone API Token to be set");
             ServiceChangeTracker::with_api_services(megaphone_url, megaphone_token)
-                .expect("Unable to initialize megaphone with provided URL".into())
+                .expect("Unable to initialize megaphone with provided URL")
         } else {
             ServiceChangeTracker::new(Vec::new())
         };
@@ -397,7 +397,7 @@ impl Server {
 
         let handle = core.handle();
         let srv2 = srv.clone();
-        let ws_srv = ws_listener.incoming().map_err(|e| Error::from(e)).for_each(
+        let ws_srv = ws_listener.incoming().map_err(Error::from).for_each(
             move |(socket, addr)| {
                 // Make sure we're not handling too many clients before we start the
                 // websocket handshake.
@@ -494,7 +494,7 @@ impl Server {
                 megaphone_token,
                 opts.megaphone_poll_interval,
                 &srv2,
-            ).expect("Unable to start megaphone updater".into());
+            ).expect("Unable to start megaphone updater");
             core.handle().spawn(fut.then(|res| {
                 debug!("megaphone result: {:?}", res.map(drop));
                 Ok(())
@@ -589,8 +589,7 @@ impl Server {
         let mut uaids = self.uaids.borrow_mut();
         let client_exists = uaids
             .get(uaid)
-            .map(|client| client.uid == *uid)
-            .unwrap_or(false);
+            .map_or(false, |client| client.uid == *uid);
         if client_exists {
             uaids.remove(uaid).expect("Couldn't remove client?");
         }
@@ -646,7 +645,7 @@ impl MegaphoneUpdater {
         let client = reqwest::unstable::async::Client::builder()
             .timeout(Duration::from_secs(1))
             .build(&srv.handle)
-            .expect("Unable to build reqwest client".into());
+            .expect("Unable to build reqwest client");
         Ok(MegaphoneUpdater {
             srv: srv.clone(),
             api_url: uri.to_string(),
