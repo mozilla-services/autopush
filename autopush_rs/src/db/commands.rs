@@ -30,11 +30,10 @@ pub struct FetchMessageResponse {
 /// Indicate whether this last_connect falls in the current month
 fn has_connected_this_month(user: &DynamoDbUser) -> bool {
     user.last_connect
-        .map(|v| {
+        .map_or(false, |v| {
             let pat = Utc::now().format("%Y%m").to_string();
             v.to_string().starts_with(&pat)
         })
-        .unwrap_or(false)
 }
 
 pub fn fetch_messages(
@@ -80,7 +79,7 @@ pub fn fetch_messages(
         // TODO: Capture translation errors and report them as we shouldn't have corrupt data
         let messages = notifs
             .into_iter()
-            .filter_map(|ddb_notif| ddb_notif.to_notif().ok())
+            .filter_map(|ddb_notif| ddb_notif.into_notif().ok())
             .collect();
         Ok(FetchMessageResponse {
             timestamp,
@@ -124,7 +123,7 @@ pub fn fetch_timestamp_messages(
             items
                 .into_iter()
                 .filter_map(|item| serde_dynamodb::from_hashmap(item).ok())
-                .filter_map(|ddb_notif: DynamoDbNotification| ddb_notif.to_notif().ok())
+                .filter_map(|ddb_notif: DynamoDbNotification| ddb_notif.into_notif().ok())
                 .collect()
         });
         if messages.is_empty() {
@@ -269,7 +268,7 @@ pub fn all_channels(
             record
         });
         let channels = if let Some(record) = result {
-            record.chids.unwrap_or_else(|| HashSet::new())
+            record.chids.unwrap_or_else(HashSet::new)
         } else {
             HashSet::new()
         };
@@ -344,26 +343,25 @@ pub fn lookup_user(
     connected_at: &u64,
     router_url: &str,
     router_table_name: &str,
-    message_table_names: &Vec<String>,
+    message_table_names: &[String],
     current_message_month: &str,
     metrics: &StatsdClient,
 ) -> MyFuture<(HelloResponse, Option<DynamoDbUser>)> {
     let response = get_uaid(ddb.clone(), uaid, router_table_name);
     // Prep all these for the move into the static closure capture
     let cur_month = current_message_month.to_string();
-    let uaid2 = uaid.clone();
-    let ddb2 = ddb.clone();
+    let uaid2 = *uaid;
     let router_table = router_table_name.to_string();
-    let messages_tables = message_table_names.clone();
-    let connected_at = connected_at.clone();
+    let messages_tables = message_table_names.to_vec();
+    let connected_at = *connected_at;
     let router_url = router_url.to_string();
     let metrics = metrics.clone();
     let response = response.and_then(move |data| -> MyFuture<_> {
         let mut hello_response: HelloResponse = Default::default();
         hello_response.message_month = cur_month.clone();
         let user = _handle_user_result(
-            cur_month,
-            messages_tables,
+            &cur_month,
+            &messages_tables,
             connected_at,
             router_url,
             data,
@@ -378,7 +376,7 @@ pub fn lookup_user(
                     .with_tag("code", &code.to_string())
                     .send()
                     .ok();
-                let response = drop_user(ddb2, &uaid2, &router_table)
+                let response = drop_user(ddb, &uaid2, &router_table)
                     .and_then(|_| future::ok((hello_response, None)))
                     .chain_err(|| "Unable to drop user");
                 Box::new(response)
@@ -391,8 +389,8 @@ pub fn lookup_user(
 // Helper function for determining if a returned user record is valid for use or
 // if it should be dropped and a new one created.
 fn _handle_user_result(
-    cur_month: String,
-    messages_tables: Vec<String>,
+    cur_month: &String,
+    messages_tables: &[String],
     connected_at: u64,
     router_url: String,
     data: GetItemOutput,
@@ -403,12 +401,12 @@ fn _handle_user_result(
 
     let user_month = user.current_month.clone();
     let month = user_month.ok_or((true, 104))?;
-    if !messages_tables.contains(&cur_month) {
+    if !messages_tables.contains(cur_month) {
         return Err((true, 105));
     }
     hello_response.check_storage = true;
     hello_response.message_month = month.clone();
-    hello_response.rotate_message_table = cur_month != month;
+    hello_response.rotate_message_table = *cur_month != month;
     if has_connected_this_month(&user) {
         user.last_connect = None;
     } else {
@@ -421,5 +419,5 @@ fn _handle_user_result(
     }
     user.node_id = Some(router_url);
     user.connected_at = connected_at;
-    return Ok(user);
+    Ok(user)
 }

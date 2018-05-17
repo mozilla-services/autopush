@@ -37,7 +37,7 @@ impl ServiceRegistry {
     // exists
     fn add_service(&mut self, service_id: String) -> ServiceKey {
         if let Some(v) = self.lookup.get(&service_id) {
-            return ServiceKey(v.clone());
+            return ServiceKey(*v);
         }
         let i = self.table.len();
         self.table.push(service_id.clone());
@@ -49,8 +49,8 @@ impl ServiceRegistry {
         self.table.get(key.0 as usize).cloned()
     }
 
-    fn lookup_key(&self, service_id: String) -> Option<ServiceKey> {
-        self.lookup.get(&service_id).cloned().map(ServiceKey)
+    fn lookup_key(&self, service_id: &str) -> Option<ServiceKey> {
+        self.lookup.get(service_id).cloned().map(ServiceKey)
     }
 }
 
@@ -166,7 +166,7 @@ impl ServiceChangeTracker {
     /// Returns an error if the `service` was never initialized/added.
     pub fn update_service(&mut self, service: Service) -> Result<u32> {
         let key = self.service_registry
-            .lookup_key(service.service_id)
+            .lookup_key(&service.service_id)
             .ok_or("Service not found")?;
 
         if let Some(ver) = self.service_versions.get_mut(&key) {
@@ -203,9 +203,8 @@ impl ServiceChangeTracker {
         if self.change_count <= client_set.change_count {
             return None;
         }
-        let mut svc_iter = self.service_list.iter().rev();
         let mut svc_delta = Vec::new();
-        while let Some(svc) = svc_iter.next() {
+        for svc in self.service_list.iter().rev() {
             if svc.change_count <= client_set.change_count {
                 break;
             }
@@ -235,7 +234,7 @@ impl ServiceChangeTracker {
         let mut svc_list = Vec::new();
         let mut svc_delta = Vec::new();
         for svc in services.iter() {
-            if let Some(svc_key) = self.service_registry.lookup_key(svc.service_id.clone()) {
+            if let Some(svc_key) = self.service_registry.lookup_key(&svc.service_id) {
                 if let Some(ver) = self.service_versions.get(&svc_key) {
                     if *ver != svc.version {
                         svc_delta.push(Service {
@@ -265,9 +264,9 @@ impl ServiceChangeTracker {
         services: &[Service],
     ) -> Option<Vec<Service>> {
         let mut svc_delta = self.change_count_delta(client_service)
-            .unwrap_or(Vec::new());
+            .unwrap_or_default();
         for svc in services.iter() {
-            if let Some(svc_key) = self.service_registry.lookup_key(svc.service_id.clone()) {
+            if let Some(svc_key) = self.service_registry.lookup_key(&svc.service_id) {
                 if let Some(ver) = self.service_versions.get(&svc_key) {
                     if *ver != svc.version {
                         svc_delta.push(Service {

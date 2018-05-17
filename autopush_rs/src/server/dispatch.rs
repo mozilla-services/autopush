@@ -43,8 +43,8 @@ pub enum RequestType {
 }
 
 impl Dispatch {
-    pub fn new(socket: MaybeTlsStream<TcpStream>) -> Dispatch {
-        Dispatch {
+    pub fn new(socket: MaybeTlsStream<TcpStream>) -> Self {
+        Self {
             socket: Some(socket),
             data: BytesMut::new(),
         }

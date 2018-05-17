@@ -29,7 +29,7 @@ use util::timing::sec_since_epoch;
 use self::commands::FetchMessageResponse;
 use self::models::{DynamoDbNotification, DynamoDbUser};
 
-const MAX_EXPIRY: u64 = 2592000;
+const MAX_EXPIRY: u64 = 2_592_000;
 const USER_RECORD_VERSION: u8 = 1;
 
 /// Basic requirements for notification content to deliver to websocket client
@@ -65,7 +65,7 @@ pub struct DynamoStorage {
 }
 
 impl DynamoStorage {
-    pub fn new() -> DynamoStorage {
+    pub fn new() -> Self {
         let ddb: Box<DynamoDb> = if let Ok(endpoint) = env::var("AWS_LOCAL_DYNAMODB") {
             Box::new(DynamoDbClient::new(
                 RequestDispatcher::default(),
@@ -78,7 +78,7 @@ impl DynamoStorage {
         } else {
             Box::new(DynamoDbClient::simple(Region::default()))
         };
-        DynamoStorage { ddb: Rc::new(ddb) }
+        Self { ddb: Rc::new(ddb) }
     }
 
     pub fn increment_storage(
@@ -118,7 +118,7 @@ impl DynamoStorage {
         uaid: Option<&Uuid>,
         router_table_name: &str,
         router_url: &str,
-        message_table_names: &Vec<String>,
+        message_table_names: &[String],
         current_message_month: &str,
         metrics: &StatsdClient,
     ) -> MyFuture<HelloResponse> {
@@ -146,7 +146,7 @@ impl DynamoStorage {
         };
         let ddb = self.ddb.clone();
         let router_url = router_url.to_string();
-        let connected_at = connected_at.clone();
+        let connected_at = *connected_at;
         let response = response.and_then(move |(mut hello_response, user_opt)| -> MyFuture<_> {
             let hello_message_month = hello_response.message_month.clone();
             let user = user_opt.unwrap_or_else(|| DynamoDbUser {
@@ -155,7 +155,7 @@ impl DynamoStorage {
                 connected_at,
                 ..Default::default()
             });
-            let uaid = user.uaid.clone();
+            let uaid = user.uaid;
             let mut err_response = hello_response.clone();
             err_response.connected_at = connected_at;
             let ddb_response = commands::register_user(ddb, &user, router_table_name.as_ref())
@@ -176,7 +176,7 @@ impl DynamoStorage {
 
     pub fn register(
         &self,
-        srv: Rc<Server>,
+        srv: &Rc<Server>,
         uaid: &Uuid,
         channel_id: &Uuid,
         message_month: &str,
@@ -246,7 +246,7 @@ impl DynamoStorage {
         let ddb = self.ddb.clone();
         let ddb1 = self.ddb.clone();
         let ddb2 = self.ddb.clone();
-        let uaid = uaid.clone();
+        let uaid = *uaid;
         let cur_month = current_message_month.to_string();
         let cur_month1 = cur_month.clone();
         let cur_month2 = cur_month.clone();
@@ -279,13 +279,15 @@ impl DynamoStorage {
             .into_iter()
             .filter_map(|mut n| {
                 n.uaid = Some(uaid.simple().to_string());
-                DynamoDbNotification::from_notif(n)
+                let hm = DynamoDbNotification::from_notif(n)
                     .map(|notif| serde_dynamodb::to_hashmap(&notif).ok())
-                    .unwrap_or_default()
-            })
-            .map(|hm| WriteRequest {
-                put_request: Some(PutRequest { item: hm }),
-                delete_request: None,
+                    .unwrap_or_default();
+                hm.map(|hm| {
+                    WriteRequest {
+                        put_request: Some(PutRequest { item: hm }),
+                        delete_request: None,
+                    }
+                })
             })
             .collect();
         let batch_input = BatchWriteItemInput {
@@ -314,7 +316,7 @@ impl DynamoStorage {
     /// sufficient properties for a delete as that is expected to have been done
     /// before this is called. In the event information is missing, a future::ok
     /// is returned.
-    pub fn delete_message(&self, table_name: &str, notif: Notification) -> MyFuture<()> {
+    pub fn delete_message(&self, table_name: &str, notif: &Notification) -> MyFuture<()> {
         let ddb = self.ddb.clone();
         let uaid = if let Some(ref uaid) = notif.uaid {
             uaid.clone()
@@ -353,7 +355,7 @@ impl DynamoStorage {
         } else {
             Box::new(future::ok(Default::default()))
         };
-        let uaid = uaid.clone();
+        let uaid = *uaid;
         let table_name = table_name.to_string();
         let ddb2 = self.ddb.clone();
         let response = response.and_then(move |resp| -> MyFuture<_> {

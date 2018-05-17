@@ -1,6 +1,6 @@
-//! WIP: Implementation of WebPush ("autopush" as well) in Rust
+//! WIP: Implementation of Web Push ("autopush" as well) in Rust
 //!
-//! This crate currently provides an implementation of an asynchronous WebPush
+//! This crate currently provides an implementation of an asynchronous Web Push
 //! server which is intended to be interfaced with from Python. The crate mostly
 //! has a C API which is driven from `__init__.py` in Python and orchestrated
 //! from Python. This is currently done to help ease the transition from the old
@@ -50,13 +50,13 @@
 //! * `client` - this is where the state machine for each connected client is
 //!   located, managing connections over time and sending out notifications as
 //!   they arrive.
-//! * `protocol` - a definition of the WebPush protocol messages which are send
+//! * `protocol` - a definition of the Web Push protocol messages which are send
 //!   over websockets.
 //! * `call` - definitions of various calls that can be made into Python, each
 //!   of which returning a future of the response.
 //!
 //! Other modules tend to be miscellaneous implementation details and likely
-//! aren't as relevant to the WebPush implementation.
+//! aren't as relevant to the Web Push implementation.
 //!
 //! Otherwise be sure to check out each module for more documentation!
 extern crate base64;

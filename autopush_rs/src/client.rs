@@ -5,7 +5,6 @@
 //! of connected clients. Note that it's expected there'll be a lot of connected
 //! clients, so this may appears relatively heavily optimized!
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::mem;
 use std::rc::Rc;
 
@@ -36,9 +35,9 @@ pub struct RegisteredClient {
 }
 
 pub struct Client<T>
-where
-    T: Stream<Item = ClientMessage, Error = Error>
-        + Sink<SinkItem = ServerMessage, SinkError = Error>
+    where
+        T: Stream<Item=ClientMessage, Error=Error>
+        + Sink<SinkItem=ServerMessage, SinkError=Error>
         + 'static,
 {
     state_machine: UnAuthClientStateFuture<T>,
@@ -95,7 +94,7 @@ where
             rx,
         );
 
-        Client {
+        Self {
             state_machine: sm,
             srv: srv.clone(),
             broadcast_services,
@@ -164,9 +163,9 @@ pub struct WebPushClient {
 }
 
 impl Default for WebPushClient {
-    fn default() -> WebPushClient {
+    fn default() -> Self {
         let (_, rx) = mpsc::unbounded();
-        WebPushClient {
+        Self {
             uaid: Default::default(),
             uid: Default::default(),
             rx,
@@ -183,7 +182,7 @@ impl Default for WebPushClient {
 
 impl WebPushClient {
     fn unacked_messages(&self) -> bool {
-        self.unacked_stored_notifs.len() > 0 || self.unacked_direct_notifs.len() > 0
+        !self.unacked_stored_notifs.is_empty() || !self.unacked_direct_notifs.is_empty()
     }
 }
 
@@ -197,8 +196,8 @@ pub struct ClientFlags {
 }
 
 impl ClientFlags {
-    fn new() -> ClientFlags {
-        ClientFlags {
+    fn new() -> Self {
+        Self {
             include_topic: true,
             increment_storage: false,
             check: false,
@@ -327,7 +326,7 @@ where
                     ..
                 } => (
                     uaid.and_then(|uaid| Uuid::parse_str(uaid.as_str()).ok()),
-                    Service::from_hashmap(broadcasts.unwrap_or(HashMap::new())),
+                    Service::from_hashmap(broadcasts.unwrap_or_default()),
                 ),
                 _ => return Err("Invalid message, must be hello".into()),
             }
@@ -405,7 +404,7 @@ where
         let uid = Uuid::new_v4();
         let webpush = Rc::new(RefCell::new(WebPushClient {
             uaid,
-            uid: uid.clone(),
+            uid: uid,
             flags,
             rx,
             message_month,
@@ -470,15 +469,12 @@ where
         loop {
             match webpush.rx.poll() {
                 Ok(Async::Ready(Some(msg))) => match msg {
-                    ServerNotification::CheckStorage => continue,
+                    ServerNotification::CheckStorage | ServerNotification::Disconnect => continue,
                     ServerNotification::Notification(notif) => {
                         webpush.unacked_direct_notifs.push(notif)
                     }
-                    ServerNotification::Disconnect => continue,
                 },
-                Ok(Async::Ready(None)) => break,
-                Ok(Async::NotReady) => break,
-                Err(_) => break,
+                Ok(Async::Ready(None)) | Ok(Async::NotReady) | Err(_) => break,
             }
         }
         let now = ms_since_epoch();
@@ -505,7 +501,7 @@ where
             // Ensure we don't store these as legacy by setting a 0 as the sortkey_timestamp
             // That will ensure the Python side doesn't mark it as legacy during conversion and
             // still get the correct default us_time when saving.
-            for notif in notifs.iter_mut() {
+            for notif in &mut notifs {
                 notif.sortkey_timestamp = Some(0);
             }
             srv.handle.spawn(
@@ -642,7 +638,7 @@ where
             if poll_complete {
                 try_ready!(data.ws.poll_complete());
                 false
-            } else if remaining_data.len() > 0 {
+            } else if !remaining_data.is_empty() {
                 let item = remaining_data.remove(0);
                 let ret = data.ws.start_send(item).chain_err(|| "unable to send")?;
                 match ret {
@@ -668,7 +664,7 @@ where
                 poll_complete: true,
                 data,
             });
-        } else if remaining_data.len() > 0 {
+        } else if !remaining_data.is_empty() {
             transition!(SendThenWait {
                 remaining_data,
                 poll_complete: false,
@@ -749,12 +745,12 @@ where
                     return Err("Bad UUID format, use lower case, dashed format".into());
                 }
 
-                let uaid = webpush.uaid.clone();
+                let uaid = webpush.uaid;
                 let message_month = webpush.message_month.clone();
                 let srv = data.srv.clone();
                 let fut = data.srv
                     .ddb
-                    .register(srv, &uaid, &channel_id, &message_month, key);
+                    .register(&srv, &uaid, &channel_id, &message_month, key);
                 transition!(AwaitRegister {
                     channel_id,
                     response: fut,
@@ -765,7 +761,7 @@ where
                 debug!("Got a unregister command");
                 // XXX: unregister should check the format of channel_id like
                 // register does
-                let uaid = webpush.uaid.clone();
+                let uaid = webpush.uaid;
                 let message_month = webpush.message_month.clone();
                 let fut = data.srv.ddb.unregister(
                     &uaid,
@@ -788,7 +784,7 @@ where
             Either::A(ClientMessage::Ack { updates }) => {
                 data.srv.metrics.incr("ua.command.ack").ok();
                 let mut fut: Option<MyFuture<()>> = None;
-                for notif in updates.iter() {
+                for notif in &updates {
                     if let Some(pos) = webpush.unacked_direct_notifs.iter().position(|v| {
                         v.channel_id == notif.channel_id && v.version == notif.version
                     }) {
@@ -805,10 +801,10 @@ where
                         // Topic/legacy messages have no sortkey_timestamp
                         if n.sortkey_timestamp.is_none() {
                             fut = if let Some(call) = fut {
-                                let my_fut = data.srv.ddb.delete_message(&message_month, n);
+                                let my_fut = data.srv.ddb.delete_message(&message_month, &n);
                                 Some(Box::new(call.and_then(move |_| my_fut)))
                             } else {
-                                Some(data.srv.ddb.delete_message(&message_month, n))
+                                Some(data.srv.ddb.delete_message(&message_month, &n))
                             }
                         }
                         continue;
@@ -841,9 +837,9 @@ where
             }
             Either::B(ServerNotification::Disconnect) => {
                 debug!("Got told to disconnect, connecting client has our uaid");
-                return Err("Repeat UAID disconnect".into());
+                Err("Repeat UAID disconnect".into())
             }
-            _ => return Err("Invalid message".into()),
+            _ => Err("Invalid message".into()),
         }
     }
 
@@ -916,13 +912,13 @@ where
         webpush.flags.include_topic = include_topic;
         debug!("Setting unacked stored highest to {:?}", timestamp);
         webpush.unacked_stored_highest = timestamp;
-        if messages.len() > 0 {
+        if !messages.is_empty() {
             // Filter out TTL expired messages
             let now = sec_since_epoch() as u32;
             messages.retain(|ref msg| now < msg.ttl + msg.timestamp);
             webpush.flags.increment_storage = !include_topic && timestamp.is_some();
             // If there's still messages send them out
-            if messages.len() > 0 {
+            if !messages.is_empty() {
                 webpush
                     .unacked_stored_notifs
                     .extend(messages.iter().cloned());
@@ -990,7 +986,7 @@ where
                 debug!("Got unregister fail, error: {}", error_msg);
                 ServerMessage::Register {
                     channel_id: await_register.channel_id,
-                    status: status,
+                    status,
                     push_endpoint: "".into(),
                 }
             }

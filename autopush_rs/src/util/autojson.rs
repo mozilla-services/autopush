@@ -268,7 +268,7 @@ where
 
         let mut io = self.io.borrow_mut();
         io.write_all(payload.as_bytes())?;
-        io.write_all("\n".as_bytes())?;
+        io.write_all(b"\n")?;
         Ok(())
     }
 }

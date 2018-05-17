@@ -89,14 +89,14 @@ impl AutopushError {
 /// there is no error message.
 #[no_mangle]
 pub extern "C" fn autopush_error_msg_len(err: *const AutopushError) -> usize {
-    abort_on_panic(|| unsafe { (*err).string().map(|s| s.len()).unwrap_or(0) })
+    abort_on_panic(|| unsafe { (*err).string().map_or(0, |s| s.len()) })
 }
 
 /// Returns the data pointer of the error message, if any. If not present
 /// returns null.
 #[no_mangle]
 pub extern "C" fn autopush_error_msg_ptr(err: *const AutopushError) -> *const u8 {
-    abort_on_panic(|| unsafe { (*err).string().map(|s| s.as_ptr()).unwrap_or(ptr::null()) })
+    abort_on_panic(|| unsafe { (*err).string().map_or(ptr::null(), |s| s.as_ptr()) })
 }
 
 /// Deallocates the internal `Box<Any>`, freeing any resources it contains.
@@ -118,7 +118,7 @@ pub struct UnwindGuard<T> {
 
 impl<T> UnwindGuard<T> {
     pub fn new(t: T) -> UnwindGuard<T> {
-        UnwindGuard {
+        Self {
             poisoned: Cell::new(false),
             inner: t,
         }
@@ -158,13 +158,13 @@ impl<T> UnwindGuard<T> {
             panic::AssertUnwindSafe(|| {
                 let ret = f(&self.inner);
                 panicked = false;
-                return ret;
+                ret
             }),
         );
         if panicked {
             self.poisoned.set(true);
         }
-        return ret;
+        ret
     }
 }
 
@@ -214,7 +214,7 @@ where
     let mut bomb = Bomb { active: true };
     let r = f();
     bomb.active = false;
-    return r;
+    r
 }
 
 pub trait AbiInto {
@@ -240,7 +240,7 @@ impl<T> AbiInto for Box<T> {
     type AbiRet = *mut T;
 
     fn abi_into(self) -> *mut T {
-        Box::into_raw(self)
+        Self::into_raw(self)
     }
 
     fn null() -> *mut T {

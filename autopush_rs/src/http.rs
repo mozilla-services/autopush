@@ -31,7 +31,7 @@ impl Service for Push {
     fn call(&self, req: hyper::Request) -> Self::Future {
         let mut response = hyper::Response::new();
         let req_path = req.path().to_string();
-        let path_vec: Vec<&str> = req_path.split("/").collect();
+        let path_vec: Vec<&str> = req_path.split('/').collect();
         if path_vec.len() != 3 {
             response.set_status(StatusCode::NotFound);
             return Box::new(ok(response));
@@ -53,11 +53,12 @@ impl Service for Push {
                 return Box::new(body.and_then(move |body| {
                     let s = String::from_utf8(body.to_vec()).unwrap();
                     if let Ok(msg) = serde_json::from_str(&s) {
-                        match srv.notify_client(uaid, msg) {
-                            Ok(_) => Ok(hyper::Response::new().with_status(StatusCode::Ok)),
-                            _ => Ok(hyper::Response::new()
+                        if srv.notify_client(uaid, msg).is_ok() {
+                            Ok(hyper::Response::new().with_status(StatusCode::Ok))
+                        } else {
+                            Ok(hyper::Response::new()
                                 .with_status(StatusCode::BadGateway)
-                                .with_body("Client not available.")),
+                                .with_body("Client not available."))
                         }
                     } else {
                         Ok(hyper::Response::new()
@@ -66,15 +67,15 @@ impl Service for Push {
                     }
                 }));
             }
-            (&Method::Put, "notif", uaid) => match srv.check_client_storage(uaid) {
-                Ok(_) => response.set_status(StatusCode::Ok),
-                _ => {
+            (&Method::Put, "notif", uaid) => {
+                if srv.check_client_storage(uaid).is_ok() {
+                    response.set_status(StatusCode::Ok)
+                } else {
                     response.set_status(StatusCode::BadGateway);
                     response.set_body("Client not available.");
                 }
             },
-            (_, "push", _) => response.set_status(StatusCode::MethodNotAllowed),
-            (_, "notif", _) => response.set_status(StatusCode::MethodNotAllowed),
+            (_, "push", _) | (_, "notif", _) => response.set_status(StatusCode::MethodNotAllowed),
             _ => response.set_status(StatusCode::NotFound),
         };
         Box::new(ok(response))

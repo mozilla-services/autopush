@@ -44,8 +44,8 @@ fn insert_to_map(map: &mut HashMap<String, String>, name: &str, val: Option<Stri
 }
 
 impl From<NotificationHeaders> for HashMap<String, String> {
-    fn from(val: NotificationHeaders) -> HashMap<String, String> {
-        let mut map = HashMap::new();
+    fn from(val: NotificationHeaders) -> Self {
+        let mut map = Self::new();
         insert_to_map(&mut map, "crypto_key", val.crypto_key);
         insert_to_map(&mut map, "encryption", val.encryption);
         insert_to_map(&mut map, "encryption_key", val.encryption_key);
@@ -55,8 +55,8 @@ impl From<NotificationHeaders> for HashMap<String, String> {
 }
 
 impl From<HashMap<String, String>> for NotificationHeaders {
-    fn from(val: HashMap<String, String>) -> NotificationHeaders {
-        NotificationHeaders {
+    fn from(val: HashMap<String, String>) -> Self {
+        Self {
             crypto_key: val.get("crypto_key").map(|v| v.to_string()),
             encryption: val.get("encryption").map(|v| v.to_string()),
             encryption_key: val.get("encryption_key").map(|v| v.to_string()),
@@ -90,7 +90,7 @@ pub struct DynamoDbUser {
 
 impl Default for DynamoDbUser {
     fn default() -> Self {
-        DynamoDbUser {
+        Self {
             uaid: Uuid::new_v4(),
             connected_at: ms_since_epoch(),
             router_type: "webpush".to_string(),
@@ -149,10 +149,10 @@ impl DynamoDbNotification {
                 RegexSet::new(&[r"^01:\S+:\S+$", r"^02:\d+:\S+$", r"^\S{3,}:\S+$",]).unwrap();
         }
         if !RE.is_match(key) {
-            return Err("Invalid chidmessageid".into()).into();
+            return Err("Invalid chidmessageid".into());
         }
 
-        let v: Vec<&str> = key.split(":").collect();
+        let v: Vec<&str> = key.split(':').collect();
         match v[0] {
             "01" => {
                 if v.len() != 3 {
@@ -197,8 +197,8 @@ impl DynamoDbNotification {
     }
 
     // TODO: Implement as TryFrom whenever that lands
-    pub fn to_notif(self) -> Result<Notification> {
-        let key = DynamoDbNotification::parse_sort_key(&self.chidmessageid)?;
+    pub fn into_notif(self) -> Result<Notification> {
+        let key = Self::parse_sort_key(&self.chidmessageid)?;
         let version = key.legacy_version
             .or(self.updateid)
             .ok_or("No valid updateid/version found")?;
@@ -217,11 +217,11 @@ impl DynamoDbNotification {
     }
 
     // TODO: Implement as TryFrom when that lands in case uaid wasn't set
-    pub fn from_notif(val: Notification) -> Result<DynamoDbNotification> {
+    pub fn from_notif(val: Notification) -> Result<Self> {
         let sort_key = val.sort_key();
         let uaid = val.uaid.ok_or("No uaid found")?;
         let uaid = Uuid::parse_str(&uaid)?;
-        Ok(DynamoDbNotification {
+        Ok(Self {
             uaid,
             chidmessageid: sort_key,
             timestamp: Some(val.timestamp),
