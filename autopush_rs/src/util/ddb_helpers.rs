@@ -664,16 +664,80 @@ impl DynamoStorage {
         Box::new(response)
     }
 
-    fn register_channel_id(
+    fn update_user_message_month(
         ddb: Rc<Box<DynamoDb>>,
         uaid: &Uuid,
-        channel_id: &Uuid,
+        router_table_name: &str,
+        message_month: &str,
+    ) -> MyFuture<()> {
+        let attr_values = hashmap! {
+            ":curmonth".to_string() => val!(S => message_month.to_string()),
+            ":lastconnect".to_string() => val!(N => generate_last_connect().to_string()),
+        };
+        let update_item = UpdateItemInput {
+            key: ddb_item! { uaid: s => uaid.simple().to_string() },
+            update_expression: Some(
+                "SET current_month=:curmonth, last_connect=:lastconnect".to_string(),
+            ),
+            expression_attribute_values: Some(attr_values),
+            table_name: router_table_name.to_string(),
+            ..Default::default()
+        };
+        let ddb_response = retry_if(
+            move || {
+                ddb.update_item(&update_item)
+                    .and_then(|_| Box::new(future::ok(())))
+            },
+            |err: &UpdateItemError| {
+                matches!(err, &UpdateItemError::ProvisionedThroughputExceeded(_))
+            },
+        ).chain_err(|| "Error updating user message month");
+        Box::new(ddb_response)
+    }
+
+    fn all_channels(
+        ddb: Rc<Box<DynamoDb>>,
+        uaid: &Uuid,
         message_table_name: &str,
-    ) -> MyFuture<UpdateItemOutput> {
-        let chid = channel_id.hyphenated().to_string();
+    ) -> MyFuture<HashSet<String>> {
+        let get_input = GetItemInput {
+            table_name: message_table_name.to_string(),
+            consistent_read: Some(true),
+            key: ddb_item! {
+                uaid: s => uaid.simple().to_string(),
+                chidmessageid: s => " ".to_string()
+            },
+            ..Default::default()
+        };
+        let response = retry_if(
+            move || ddb.get_item(&get_input),
+            |err: &GetItemError| matches!(err, &GetItemError::ProvisionedThroughputExceeded(_)),
+        ).and_then(|get_item_output| {
+            let result = get_item_output.item.and_then(|item| {
+                let record: Option<DynamoDbNotification> = serde_dynamodb::from_hashmap(item).ok();
+                record
+            });
+            let channels = if let Some(record) = result {
+                record.chids.unwrap_or_else(|| HashSet::new())
+            } else {
+                HashSet::new()
+            };
+            Box::new(future::ok(channels))
+        })
+            .or_else(|_err| Box::new(future::ok(HashSet::new())));
+        Box::new(response)
+    }
+
+    fn save_channels(
+        ddb: Rc<Box<DynamoDb>>,
+        uaid: &Uuid,
+        channels: HashSet<String>,
+        message_table_name: &str,
+    ) -> MyFuture<()> {
+        let chids: Vec<String> = channels.into_iter().collect();
         let expiry = sec_since_epoch() + 2 * MAX_EXPIRY;
         let attr_values = hashmap! {
-            ":channel_id".to_string() => val!(SS => vec![chid]),
+            ":chids".to_string() => val!(SS => chids),
             ":expiry".to_string() => val!(N => expiry),
         };
         let update_item = UpdateItemInput {
@@ -681,17 +745,20 @@ impl DynamoStorage {
                 uaid: s => uaid.simple().to_string(),
                 chidmessageid: s => " ".to_string()
             },
-            update_expression: Some("ADD chids :channel_id SET expiry=:expiry".to_string()),
+            update_expression: Some("ADD chids :chids SET expiry=:expiry".to_string()),
             expression_attribute_values: Some(attr_values),
             table_name: message_table_name.to_string(),
             ..Default::default()
         };
         let ddb_response = retry_if(
-            move || ddb.update_item(&update_item),
+            move || {
+                ddb.update_item(&update_item)
+                    .and_then(|_| Box::new(future::ok(())))
+            },
             |err: &UpdateItemError| {
                 matches!(err, &UpdateItemError::ProvisionedThroughputExceeded(_))
             },
-        ).chain_err(|| "Error registering channel");
+        ).chain_err(|| "Error saving channels");
         Box::new(ddb_response)
     }
 
@@ -888,7 +955,9 @@ impl DynamoStorage {
                 }))
             }
         };
-        let response = DynamoStorage::register_channel_id(ddb, uaid, channel_id, message_month)
+        let mut chids = HashSet::new();
+        chids.insert(channel_id.hyphenated().to_string());
+        let response = DynamoStorage::save_channels(ddb, uaid, chids, message_month)
             .and_then(move |_| -> MyFuture<_> {
                 Box::new(future::ok(RegisterResponse::Success { endpoint }))
             })
@@ -926,6 +995,43 @@ impl DynamoStorage {
             .with_tag("code", &code.to_string())
             .send()
             .ok();
+        Box::new(response)
+    }
+
+    /// Migrate a user to a new month table
+    pub fn migrate_user(
+        &self,
+        uaid: &Uuid,
+        message_month: &str,
+        current_message_month: &str,
+        router_table_name: &str,
+    ) -> MyFuture<()> {
+        let ddb = self.ddb.clone();
+        let ddb1 = self.ddb.clone();
+        let ddb2 = self.ddb.clone();
+        let uaid = uaid.clone();
+        let cur_month = current_message_month.to_string();
+        let cur_month1 = cur_month.clone();
+        let cur_month2 = cur_month.clone();
+        let router_table_name = router_table_name.to_string();
+        let response = DynamoStorage::all_channels(ddb, &uaid, message_month)
+            .and_then(move |channels| -> MyFuture<_> {
+                if channels.is_empty() {
+                    Box::new(future::ok(()))
+                } else {
+                    DynamoStorage::save_channels(ddb1, &uaid, channels, &cur_month1)
+                }
+            })
+            .and_then(move |_| -> MyFuture<_> {
+                DynamoStorage::update_user_message_month(
+                    ddb2,
+                    &uaid,
+                    &router_table_name,
+                    &cur_month2,
+                )
+            })
+            .and_then(move |_| -> MyFuture<_> { Box::new(future::ok(())) })
+            .chain_err(|| "Unable to migrate user");
         Box::new(response)
     }
 

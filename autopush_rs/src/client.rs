@@ -21,7 +21,6 @@ use tokio_core::reactor::Timeout;
 use uuid::Uuid;
 use woothee::parser::Parser;
 
-use call;
 use errors::*;
 use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
 use server::Server;
@@ -508,14 +507,14 @@ where
             for notif in notifs.iter_mut() {
                 notif.sortkey_timestamp = Some(0);
             }
-            srv.handle.spawn(srv.ddb.store_messages(
-                &webpush.uaid,
-                &webpush.message_month,
-                notifs,
-            ).then(|_| {
-                debug!("Finished saving unacked direct notifications");
-                Ok(())
-            }));
+            srv.handle.spawn(
+                srv.ddb
+                    .store_messages(&webpush.uaid, &webpush.message_month, notifs)
+                    .then(|_| {
+                        debug!("Finished saving unacked direct notifications");
+                        Ok(())
+                    }),
+            );
         }
 
         // Log out the final stats message
@@ -586,7 +585,7 @@ where
 
     #[state_machine_future(transitions(DetermineAck))]
     AwaitMigrateUser {
-        response: MyFuture<call::MigrateUserResponse>,
+        response: MyFuture<()>,
         data: AuthClientData<T>,
     },
 
@@ -690,9 +689,12 @@ where
         } else if all_acked && webpush.flags.check {
             transition!(CheckStorage { data });
         } else if all_acked && webpush.flags.rotate_message_table {
-            let response = data.srv.migrate_user(
-                webpush.uaid.simple().to_string(),
-                webpush.message_month.clone(),
+            debug!("Triggering migration");
+            let response = data.srv.ddb.migrate_user(
+                &webpush.uaid,
+                &webpush.message_month,
+                &data.srv.opts.current_message_month,
+                &data.srv.opts.router_table_name,
             );
             transition!(AwaitMigrateUser { response, data });
         } else if all_acked && webpush.flags.reset_uaid {
@@ -945,13 +947,11 @@ where
         await_migrate_user: &'a mut RentToOwn<'a, AwaitMigrateUser<T>>,
     ) -> Poll<AfterAwaitMigrateUser<T>, Error> {
         debug!("State: AwaitMigrateUser");
-        let message_month = match try_ready!(await_migrate_user.response.poll()) {
-            call::MigrateUserResponse { message_month } => message_month,
-        };
+        try_ready!(await_migrate_user.response.poll());
         let AwaitMigrateUser { data, .. } = await_migrate_user.take();
         {
             let mut webpush = data.webpush.borrow_mut();
-            webpush.message_month = message_month;
+            webpush.message_month = data.srv.opts.current_message_month.clone();
             webpush.flags.rotate_message_table = false;
         }
         transition!(DetermineAck { data })
