@@ -105,8 +105,6 @@ pub enum ServerMessage {
 
 #[derive(Serialize, Default, Deserialize, Clone, Debug)]
 pub struct Notification {
-    #[serde(skip_serializing)]
-    pub uaid: Option<String>,
     #[serde(rename = "channelID")]
     pub channel_id: Uuid,
     pub version: String,

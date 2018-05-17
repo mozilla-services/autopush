@@ -277,17 +277,13 @@ impl DynamoStorage {
         let ddb = self.ddb.clone();
         let put_items: Vec<WriteRequest> = messages
             .into_iter()
-            .filter_map(|mut n| {
-                n.uaid = Some(uaid.simple().to_string());
-                let hm = DynamoDbNotification::from_notif(n)
-                    .map(|notif| serde_dynamodb::to_hashmap(&notif).ok())
-                    .unwrap_or_default();
-                hm.map(|hm| {
-                    WriteRequest {
+            .filter_map(|n| {
+                serde_dynamodb::to_hashmap(&DynamoDbNotification::from_notif(uaid, n))
+                    .ok()
+                    .map(|hm| WriteRequest {
                         put_request: Some(PutRequest { item: hm }),
                         delete_request: None,
-                    }
-                })
+                    })
             })
             .collect();
         let batch_input = BatchWriteItemInput {
@@ -314,21 +310,19 @@ impl DynamoStorage {
     ///
     /// No checks are done to see that this message came from the database or has
     /// sufficient properties for a delete as that is expected to have been done
-    /// before this is called. In the event information is missing, a future::ok
-    /// is returned.
-    pub fn delete_message(&self, table_name: &str, notif: &Notification) -> MyFuture<()> {
+    /// before this is called.
+    pub fn delete_message(
+        &self,
+        table_name: &str,
+        uaid: &Uuid,
+        notif: &Notification,
+    ) -> MyFuture<()> {
         let ddb = self.ddb.clone();
-        let uaid = if let Some(ref uaid) = notif.uaid {
-            uaid.clone()
-        } else {
-            return Box::new(future::ok(()));
-        };
-        let chidmessageid = notif.sort_key();
         let delete_input = DeleteItemInput {
             table_name: table_name.to_string(),
             key: ddb_item! {
-               uaid: s => uaid,
-               chidmessageid: s => chidmessageid
+               uaid: s => uaid.simple().to_string(),
+               chidmessageid: s => notif.sort_key()
             },
             ..Default::default()
         };

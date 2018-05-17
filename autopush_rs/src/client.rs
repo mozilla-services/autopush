@@ -801,10 +801,10 @@ where
                         // Topic/legacy messages have no sortkey_timestamp
                         if n.sortkey_timestamp.is_none() {
                             fut = if let Some(call) = fut {
-                                let my_fut = data.srv.ddb.delete_message(&message_month, &n);
+                                let my_fut = data.srv.ddb.delete_message(&message_month, &webpush.uaid, &n);
                                 Some(Box::new(call.and_then(move |_| my_fut)))
                             } else {
-                                Some(data.srv.ddb.delete_message(&message_month, &n))
+                                Some(data.srv.ddb.delete_message(&message_month, &webpush.uaid, &n))
                             }
                         }
                         continue;
