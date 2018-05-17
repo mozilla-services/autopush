@@ -199,12 +199,12 @@ impl DynamoDbNotification {
     // TODO: Implement as TryFrom whenever that lands
     pub fn into_notif(self) -> Result<Notification> {
         let key = Self::parse_sort_key(&self.chidmessageid)?;
-        let version = key.legacy_version
+        let version = key
+            .legacy_version
             .or(self.updateid)
             .ok_or("No valid updateid/version found")?;
 
         Ok(Notification {
-            uaid: Some(self.uaid.simple().to_string()),
             channel_id: key.channel_id,
             version,
             ttl: self.ttl.ok_or("No TTL found")?,
@@ -216,14 +216,10 @@ impl DynamoDbNotification {
         })
     }
 
-    // TODO: Implement as TryFrom when that lands in case uaid wasn't set
-    pub fn from_notif(val: Notification) -> Result<Self> {
-        let sort_key = val.sort_key();
-        let uaid = val.uaid.ok_or("No uaid found")?;
-        let uaid = Uuid::parse_str(&uaid)?;
-        Ok(Self {
-            uaid,
-            chidmessageid: sort_key,
+    pub fn from_notif(uaid: &Uuid, val: Notification) -> Self {
+        Self {
+            uaid: *uaid,
+            chidmessageid: val.sort_key(),
             timestamp: Some(val.timestamp),
             expiry: sec_since_epoch() as u32 + min(val.ttl, MAX_EXPIRY as u32),
             ttl: Some(val.ttl),
@@ -231,7 +227,7 @@ impl DynamoDbNotification {
             headers: val.headers.map(|h| h.into()),
             updateid: Some(val.version),
             ..Default::default()
-        })
+        }
     }
 }
 

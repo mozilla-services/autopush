@@ -14,12 +14,12 @@ use rusoto_dynamodb::{
 };
 use serde_dynamodb;
 
-use errors::*;
-use protocol::Notification;
-use util::timing::sec_since_epoch;
 use super::models::{DynamoDbNotification, DynamoDbUser};
 use super::util::generate_last_connect;
 use super::{HelloResponse, MAX_EXPIRY, USER_RECORD_VERSION};
+use errors::*;
+use protocol::Notification;
+use util::timing::sec_since_epoch;
 
 #[derive(Default)]
 pub struct FetchMessageResponse {
@@ -29,11 +29,10 @@ pub struct FetchMessageResponse {
 
 /// Indicate whether this last_connect falls in the current month
 fn has_connected_this_month(user: &DynamoDbUser) -> bool {
-    user.last_connect
-        .map_or(false, |v| {
-            let pat = Utc::now().format("%Y%m").to_string();
-            v.to_string().starts_with(&pat)
-        })
+    user.last_connect.map_or(false, |v| {
+        let pat = Utc::now().format("%Y%m").to_string();
+        v.to_string().starts_with(&pat)
+    })
 }
 
 pub fn fetch_messages(
