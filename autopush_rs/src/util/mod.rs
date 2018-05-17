@@ -17,11 +17,9 @@ use errors::*;
 mod autojson;
 mod aws;
 pub mod megaphone;
-#[macro_use]
-pub mod ddb_helpers;
 mod rc;
 mod send_all;
-mod timing;
+pub mod timing;
 mod user_agent;
 
 use self::aws::get_ec2_instance_id;

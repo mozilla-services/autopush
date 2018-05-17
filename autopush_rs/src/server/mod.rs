@@ -46,7 +46,7 @@ use rt::{self, AutopushError, UnwindGuard};
 use server::dispatch::{Dispatch, RequestType};
 use server::metrics::metrics_from_opts;
 use server::webpush_io::WebpushIo;
-use util::ddb_helpers::DynamoStorage;
+use db::DynamoStorage;
 use util::megaphone::{ClientServices, MegaphoneAPIResponse, Service, ServiceChangeTracker,
                       ServiceClientInit};
 use util::{self, timeout, RcObject};

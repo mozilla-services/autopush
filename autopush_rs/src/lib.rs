@@ -114,13 +114,13 @@ extern crate woothee;
 extern crate error_chain;
 
 #[macro_use]
-mod util;
-
+mod db;
 mod client;
 mod errors;
 mod http;
 mod protocol;
-
 #[macro_use]
 pub mod rt;
 pub mod server;
+#[macro_use]
+mod util;

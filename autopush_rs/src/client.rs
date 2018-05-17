@@ -24,7 +24,7 @@ use woothee::parser::Parser;
 use errors::*;
 use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
 use server::Server;
-use util::ddb_helpers::{CheckStorageResponse, HelloResponse, RegisterResponse};
+use db::{CheckStorageResponse, HelloResponse, RegisterResponse};
 use util::megaphone::{ClientServices, Service, ServiceClientInit};
 use util::{ms_since_epoch, parse_user_agent, sec_since_epoch};
 
