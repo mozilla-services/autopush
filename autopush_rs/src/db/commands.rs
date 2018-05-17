@@ -358,7 +358,7 @@ pub fn lookup_user(
     let response = response.and_then(move |data| -> MyFuture<_> {
         let mut hello_response: HelloResponse = Default::default();
         hello_response.message_month = cur_month.clone();
-        let user = _handle_user_result(
+        let user = handle_user_result(
             &cur_month,
             &messages_tables,
             connected_at,
@@ -385,9 +385,9 @@ pub fn lookup_user(
     Box::new(response)
 }
 
-// Helper function for determining if a returned user record is valid for use or
-// if it should be dropped and a new one created.
-fn _handle_user_result(
+/// Helper function for determining if a returned user record is valid for use
+/// or if it should be dropped and a new one created.
+fn handle_user_result(
     cur_month: &String,
     messages_tables: &[String],
     connected_at: u64,

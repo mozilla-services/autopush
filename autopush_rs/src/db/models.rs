@@ -26,7 +26,7 @@ where
 /// Direct representation of a DynamoDB Notification as we store it in the database
 /// Most attributes are optional
 #[derive(Default, Deserialize, PartialEq, Debug, Clone, Serialize)]
-pub struct NotificationHeaders {
+struct NotificationHeaders {
     #[serde(skip_serializing_if = "Option::is_none")]
     crypto_key: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
