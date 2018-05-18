@@ -38,7 +38,11 @@ from autopush.db import (
     Message,
 )
 from autopush.logging import begin_or_register
-from autopush.main import EndpointApplication, RustConnectionApplication
+from autopush.main import (
+    ConnectionApplication,
+    EndpointApplication,
+    RustConnectionApplication,
+)
 from autopush.utils import base64url_encode
 from autopush.tests.support import TestingLogObserver
 from autopush.tests.test_integration import (
@@ -53,6 +57,13 @@ twisted.internet.base.DelayedCall.debug = True
 ROUTER_TABLE = os.environ.get("ROUTER_TABLE", "router_int_test")
 MESSAGE_TABLE = os.environ.get("MESSAGE_TABLE", "message_int_test")
 
+CRYPTO_KEY = Fernet.generate_key()
+CONNECTION_PORT = 9050
+ENDPOINT_PORT = 9060
+ROUTER_PORT = 9070
+
+CN_SERVER = None
+
 
 def get_free_port():
     s = socket.socket(socket.AF_INET, type=socket.SOCK_STREAM)
@@ -63,9 +74,44 @@ def get_free_port():
 
 
 def setup_module():
+    global CN_SERVER
     logging.getLogger('boto').setLevel(logging.CRITICAL)
     if "SKIP_INTEGRATION" in os.environ:  # pragma: nocover
         raise SkipTest("Skipping integration tests")
+
+    conn_defaults = dict(
+        hostname='localhost',
+        port=CONNECTION_PORT,
+        endpoint_port=ENDPOINT_PORT,
+        router_port=ROUTER_PORT,
+        endpoint_scheme='http',
+        statsd_host=None,
+        router_table=dict(tablename=ROUTER_TABLE),
+        message_table=dict(tablename=MESSAGE_TABLE),
+        use_cryptography=True,
+    )
+
+    conn_conf = AutopushConfig(
+        crypto_key=CRYPTO_KEY,
+        auto_ping_interval=60.0,
+        auto_ping_timeout=10.0,
+        close_handshake_timeout=5,
+        max_connections=5000,
+        human_logs=False,
+        **conn_defaults
+    )
+
+    CN_SERVER = conn = RustConnectionApplication(
+        conn_conf,
+        resource=autopush.tests.boto_resource,
+    )
+    conn.setup(rotate_tables=False, num_threads=2)
+    conn.startService()
+
+
+def teardown_module():
+    global CN_SERVER
+    CN_SERVER.stopService()
 
 
 class MockMegaphoneRequestHandler(BaseHTTPRequestHandler):
@@ -89,28 +135,12 @@ class MockMegaphoneRequestHandler(BaseHTTPRequestHandler):
 
 
 class TestRustWebPush(unittest.TestCase):
-    connection_port = 9050
-    endpoint_port = 9060
-    router_port = 9070
-
     _endpoint_defaults = dict(
         hostname='localhost',
-        port=endpoint_port,
-        endpoint_port=endpoint_port,
+        port=ENDPOINT_PORT,
+        endpoint_port=ENDPOINT_PORT,
         endpoint_scheme='http',
-        router_port=router_port,
-        statsd_host=None,
-        router_table=dict(tablename=ROUTER_TABLE),
-        message_table=dict(tablename=MESSAGE_TABLE),
-        use_cryptography=True,
-    )
-
-    _conn_defaults = dict(
-        hostname='localhost',
-        port=connection_port,
-        endpoint_port=endpoint_port,
-        router_port=router_port,
-        endpoint_scheme='http',
+        router_port=ROUTER_PORT,
         statsd_host=None,
         router_table=dict(tablename=ROUTER_TABLE),
         message_table=dict(tablename=MESSAGE_TABLE),
@@ -127,47 +157,23 @@ class TestRustWebPush(unittest.TestCase):
         ep.startService()
         self.addCleanup(ep.stopService)
 
-    def start_conn(self, conn_conf):
-        self.conn = conn = RustConnectionApplication(
-            conn_conf,
-            resource=autopush.tests.boto_resource,
-        )
-        conn.setup(rotate_tables=False, num_threads=2)
-        conn.startService()
-        self.addCleanup(conn.stopService)
-
     def setUp(self):
         self.logs = TestingLogObserver()
         begin_or_register(self.logs)
         self.addCleanup(globalLogPublisher.removeObserver, self.logs)
 
-        crypto_key = Fernet.generate_key()
         self._ep_conf = AutopushConfig(
-            crypto_key=crypto_key,
+            crypto_key=CRYPTO_KEY,
             **self.endpoint_kwargs()
         )
-        self._conn_conf = AutopushConfig(
-            crypto_key=crypto_key,
-            auto_ping_interval=60.0,
-            auto_ping_timeout=10.0,
-            close_handshake_timeout=5,
-            max_connections=5000,
-            human_logs=False,
-            **self.conn_kwargs()
-        )
         self.start_ep(self._ep_conf)
-        # Websocket server
-        self.start_conn(self._conn_conf)
 
     def endpoint_kwargs(self):
         return self._endpoint_defaults
 
-    def conn_kwargs(self):
-        return self._conn_defaults
-
     @inlineCallbacks
     def quick_register(self, sslcontext=None):
-        client = Client("ws://localhost:{}/".format(self.connection_port),
+        client = Client("ws://localhost:{}/".format(CONNECTION_PORT),
                         sslcontext=sslcontext)
         yield client.connect()
         yield client.hello()
@@ -187,44 +193,7 @@ class TestRustWebPush(unittest.TestCase):
 
     @property
     def _ws_url(self):
-        return "ws://localhost:{}/".format(self.connection_port)
-
-    @inlineCallbacks
-    def test_no_rotation(self):
-        # override autopush settings
-        ep_safe = self._ep_conf.allow_table_rotation
-        conn_safe = self._conn_conf.allow_table_rotation
-        self._ep_conf.allow_table_rotation = False
-        self._conn_conf.allow_table_rotation = False
-        yield self.ep.stopService()
-        yield self.conn.stopService()
-        try:
-            self.start_ep(self._ep_conf)
-            self.start_conn(self._conn_conf)
-            data = str(uuid.uuid4())
-            client = yield self.quick_register()
-            result = yield client.send_notification(data=data)
-            assert result["headers"]["encryption"] == client._crypto_key
-            assert result["data"] == base64url_encode(data)
-            assert result["messageType"] == "notification"
-
-            assert len(self.ep.db.message_tables) == 1
-            table_name = self.ep.db.message_tables[0]
-            target_day = datetime.date(2016, 2, 29)
-            with patch.object(datetime, 'date',
-                              Mock(wraps=datetime.date)) as patched:
-                patched.today.return_value = target_day
-                yield self.ep.db.update_rotating_tables()
-                assert len(self.ep.db.message_tables) == 1
-                assert table_name == self.ep.db.message_tables[0]
-        finally:
-            yield self.ep.stopService()
-            yield self.conn.stopService()
-            self._ep_conf.allow_table_rotation = ep_safe
-            self._conn_conf.allow_table_rotation = conn_safe
-            self.start_ep(self._ep_conf)
-            self.start_conn(self._conn_conf)
-        yield self.shut_down(client)
+        return "ws://localhost:{}/".format(CONNECTION_PORT)
 
     @inlineCallbacks
     def test_hello_echo(self):
@@ -461,7 +430,7 @@ class TestRustWebPush(unittest.TestCase):
             yield client.send_notification(data=data2)
         yield client.connect()
         yield client.hello()
-        result = yield client.get_notification(timeout=5)
+        result = yield client.get_notification(timeout=0.5)
         assert result != {}
         assert result["data"] in map(base64url_encode, [data, data2])
         result = yield client.get_notification()
@@ -476,7 +445,7 @@ class TestRustWebPush(unittest.TestCase):
         assert result != {}
         assert result["data"] in map(base64url_encode, [data, data2])
         assert result["messageType"] == "notification"
-        result = yield client.get_notification()
+        result = yield client.get_notification(timeout=0.5)
         assert result is None
         yield self.shut_down(client)
 
@@ -491,10 +460,10 @@ class TestRustWebPush(unittest.TestCase):
         yield client.send_notification(data=data2)
         yield client.connect()
         yield client.hello()
-        result = yield client.get_notification()
+        result = yield client.get_notification(timeout=0.5)
         assert result != {}
         assert result["data"] == base64url_encode(data)
-        result2 = yield client.get_notification()
+        result2 = yield client.get_notification(timeout=0.5)
         assert result2 != {}
         assert result2["data"] == base64url_encode(data2)
         yield client.ack(result["channelID"], result["version"])
@@ -502,7 +471,7 @@ class TestRustWebPush(unittest.TestCase):
         yield client.disconnect()
         yield client.connect()
         yield client.hello()
-        result = yield client.get_notification()
+        result = yield client.get_notification(timeout=0.5)
         assert result != {}
         assert result["data"] == base64url_encode(data)
         assert result["messageType"] == "notification"
@@ -516,7 +485,7 @@ class TestRustWebPush(unittest.TestCase):
         yield client.disconnect()
         yield client.connect()
         yield client.hello()
-        result = yield client.get_notification()
+        result = yield client.get_notification(timeout=0.5)
         assert result is None
         yield self.shut_down(client)
 
@@ -531,7 +500,7 @@ class TestRustWebPush(unittest.TestCase):
         yield client.send_notification(data=data2)
         yield client.connect()
         yield client.hello()
-        result = yield client.get_notification()
+        result = yield client.get_notification(timeout=0.5)
         assert result != {}
         assert result["data"] in map(base64url_encode, [data, data2])
         result2 = yield client.get_notification()
@@ -543,7 +512,7 @@ class TestRustWebPush(unittest.TestCase):
         yield client.disconnect()
         yield client.connect()
         yield client.hello()
-        result = yield client.get_notification()
+        result = yield client.get_notification(timeout=0.5)
         assert result is None
         yield self.shut_down(client)
 
@@ -588,7 +557,7 @@ class TestRustWebPush(unittest.TestCase):
         yield client.send_notification(data=data, ttl=0)
         yield client.connect()
         yield client.hello()
-        result = yield client.get_notification()
+        result = yield client.get_notification(timeout=0.5)
         assert result is None
         yield self.shut_down(client)
 
@@ -598,10 +567,10 @@ class TestRustWebPush(unittest.TestCase):
         client = yield self.quick_register()
         yield client.disconnect()
         yield client.send_notification(data=data, ttl=1)
-        time.sleep(1.5)
+        time.sleep(1)
         yield client.connect()
         yield client.hello()
-        result = yield client.get_notification()
+        result = yield client.get_notification(timeout=0.5)
         assert result is None
         yield self.shut_down(client)
 
@@ -615,7 +584,7 @@ class TestRustWebPush(unittest.TestCase):
             yield client.send_notification(data=data, ttl=1)
 
         yield client.send_notification(data=data2)
-        time.sleep(1.5)
+        time.sleep(0.75)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification(timeout=4)
@@ -623,7 +592,7 @@ class TestRustWebPush(unittest.TestCase):
         assert result["headers"]["encryption"] == client._crypto_key
         assert result["data"] == base64url_encode(data2)
         assert result["messageType"] == "notification"
-        result = yield client.get_notification()
+        result = yield client.get_notification(timeout=0.5)
         assert result is None
         yield self.shut_down(client)
 
@@ -641,7 +610,7 @@ class TestRustWebPush(unittest.TestCase):
             yield client.send_notification(data=data1, ttl=1)
 
         yield client.send_notification(data=data2)
-        time.sleep(1.5)
+        time.sleep(1)
         yield client.connect()
         yield client.hello()
 
@@ -737,6 +706,269 @@ class TestRustWebPush(unittest.TestCase):
         yield client.hello()
         result = yield client.get_notification()
         assert result is None
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_with_key(self):
+        private_key = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
+        claims = {"aud": "http://example.com",
+                  "exp": int(time.time()) + 86400,
+                  "sub": "a@example.com"}
+        vapid = _get_vapid(private_key, claims)
+        pk_hex = vapid['crypto-key']
+        chid = str(uuid.uuid4())
+        client = Client("ws://localhost:{}/".format(CONNECTION_PORT))
+        yield client.connect()
+        yield client.hello()
+        yield client.register(chid=chid, key=pk_hex)
+
+        # Send an update with a properly formatted key.
+        yield client.send_notification(vapid=vapid)
+
+        # now try an invalid key.
+        new_key = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
+        vapid = _get_vapid(new_key, claims)
+
+        yield client.send_notification(
+            vapid=vapid,
+            status=401)
+
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_with_bad_key(self):
+        chid = str(uuid.uuid4())
+        client = Client("ws://localhost:{}/".format(CONNECTION_PORT))
+        yield client.connect()
+        yield client.hello()
+        result = yield client.register(chid=chid, key="af1883%&!@#*(",
+                                       status=400)
+        assert result["status"] == 400
+
+        yield self.shut_down(client)
+
+
+class TestRustWebPushBroadcast(unittest.TestCase):
+    connection_port = 9052
+    endpoint_port = 9060
+    router_port = 9072
+
+    _endpoint_defaults = dict(
+        hostname='localhost',
+        port=endpoint_port,
+        endpoint_port=endpoint_port,
+        endpoint_scheme='http',
+        router_port=router_port,
+        statsd_host=None,
+        router_table=dict(tablename=ROUTER_TABLE),
+        message_table=dict(tablename=MESSAGE_TABLE),
+        use_cryptography=True,
+    )
+
+    _conn_defaults = dict(
+        hostname='localhost',
+        port=connection_port,
+        endpoint_port=endpoint_port,
+        router_port=router_port,
+        endpoint_scheme='http',
+        statsd_host=None,
+        router_table=dict(tablename=ROUTER_TABLE),
+        message_table=dict(tablename=MESSAGE_TABLE),
+        use_cryptography=True,
+        human_logs=False,
+    )
+
+    def start_ep(self, ep_conf):
+        # Endpoint HTTP router
+        self.ep = ep = EndpointApplication(
+            ep_conf,
+            resource=autopush.tests.boto_resource
+        )
+        ep.setup(rotate_tables=False)
+        ep.startService()
+        self.addCleanup(ep.stopService)
+
+    def start_conn(self, conn_conf):
+        self.conn = conn = RustConnectionApplication(
+            conn_conf,
+            resource=autopush.tests.boto_resource,
+        )
+        conn.setup(rotate_tables=False, num_threads=2)
+        conn.startService()
+        self.addCleanup(conn.stopService)
+
+    def setUp(self):
+        # Megaphone API mock
+        mock_server_port = get_free_port()
+        MockMegaphoneRequestHandler.services = {}
+        MockMegaphoneRequestHandler.polled.clear()
+        mock_server = HTTPServer(('localhost', mock_server_port),
+                                 MockMegaphoneRequestHandler)
+        mock_server_thread = Thread(target=mock_server.serve_forever)
+        mock_server_thread.setDaemon(True)
+        mock_server_thread.start()
+        self.addCleanup(mock_server.shutdown)
+        self.mock_server_thread = mock_server_thread
+        self.mock_megaphone = MockMegaphoneRequestHandler
+
+        self.logs = TestingLogObserver()
+        begin_or_register(self.logs)
+        self.addCleanup(globalLogPublisher.removeObserver, self.logs)
+
+        megaphone_api_url = 'http://localhost:{port}/v1/broadcasts'.format(
+            port=mock_server.server_port)
+
+        self._ep_conf = AutopushConfig(
+            crypto_key=CRYPTO_KEY,
+            **self.endpoint_kwargs()
+        )
+        self._conn_conf = AutopushConfig(
+            crypto_key=CRYPTO_KEY,
+            auto_ping_interval=0.5,
+            auto_ping_timeout=10.0,
+            close_handshake_timeout=5,
+            max_connections=5000,
+            megaphone_api_url=megaphone_api_url,
+            megaphone_api_token=MockMegaphoneRequestHandler.token,
+            megaphone_poll_interval=1,
+            **self.conn_kwargs()
+        )
+
+        self.start_ep(self._ep_conf)
+        self.start_conn(self._conn_conf)
+
+    def endpoint_kwargs(self):
+        return self._endpoint_defaults
+
+    def conn_kwargs(self):
+        return self._conn_defaults
+
+    @inlineCallbacks
+    def quick_register(self, sslcontext=None, connection_port=None):
+        conn_port = connection_port or self.connection_port
+        client = Client("ws://localhost:{}/".format(conn_port),
+                        sslcontext=sslcontext)
+        yield client.connect()
+        yield client.hello()
+        yield client.register()
+        returnValue(client)
+
+    @inlineCallbacks
+    def shut_down(self, client=None):
+        if client:
+            yield client.disconnect()
+
+    @contextmanager
+    def legacy_endpoint(self):
+        self.ep.conf._notification_legacy = True
+        yield
+        self.ep.conf._notification_legacy = False
+
+    @property
+    def _ws_url(self):
+        return "ws://localhost:{}/".format(self.connection_port)
+
+    @inlineCallbacks
+    def test_broadcast_update_on_connect(self):
+        self.mock_megaphone.services = {"kinto:123": "ver1"}
+        self.mock_megaphone.polled.clear()
+        self.mock_megaphone.polled.wait()
+
+        old_ver = {"kinto:123": "ver0"}
+        client = Client(self._ws_url)
+        yield client.connect()
+        result = yield client.hello(services=old_ver)
+        assert result != {}
+        assert result["use_webpush"] is True
+        assert result["broadcasts"]["kinto:123"] == "ver1"
+
+        self.mock_megaphone.services = {"kinto:123": "ver2"}
+        self.mock_megaphone.polled.clear()
+        self.mock_megaphone.polled.wait()
+
+        result = yield client.get_broadcast(2)
+        assert result["broadcasts"]["kinto:123"] == "ver2"
+
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_broadcast_subscribe(self):
+        self.mock_megaphone.services = {"kinto:123": "ver1"}
+        self.mock_megaphone.polled.clear()
+        self.mock_megaphone.polled.wait()
+
+        old_ver = {"kinto:123": "ver0"}
+        client = Client(self._ws_url)
+        yield client.connect()
+        result = yield client.hello()
+        assert result != {}
+        assert result["use_webpush"] is True
+        assert result["broadcasts"] == {}
+
+        client.broadcast_subscribe(old_ver)
+        result = yield client.get_broadcast()
+        assert result["broadcasts"]["kinto:123"] == "ver1"
+
+        self.mock_megaphone.services = {"kinto:123": "ver2"}
+        self.mock_megaphone.polled.clear()
+        self.mock_megaphone.polled.wait()
+
+        result = yield client.get_broadcast(2)
+        assert result["broadcasts"]["kinto:123"] == "ver2"
+
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_broadcast_no_changes(self):
+        self.mock_megaphone.services = {"kinto:123": "ver1"}
+        self.mock_megaphone.polled.clear()
+        self.mock_megaphone.polled.wait()
+
+        old_ver = {"kinto:123": "ver1"}
+        client = Client(self._ws_url)
+        yield client.connect()
+        result = yield client.hello(services=old_ver)
+        assert result != {}
+        assert result["use_webpush"] is True
+        assert result["broadcasts"] == {}
+
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_no_rotation(self):
+        # override autopush settings
+        ep_safe = self._ep_conf.allow_table_rotation
+        conn_safe = self._conn_conf.allow_table_rotation
+        self._ep_conf.allow_table_rotation = False
+        self._conn_conf.allow_table_rotation = False
+        yield self.ep.stopService()
+        yield self.conn.stopService()
+        try:
+            self.start_ep(self._ep_conf)
+            self.start_conn(self._conn_conf)
+            data = str(uuid.uuid4())
+            client = yield self.quick_register()
+            result = yield client.send_notification(data=data)
+            assert result["headers"]["encryption"] == client._crypto_key
+            assert result["data"] == base64url_encode(data)
+            assert result["messageType"] == "notification"
+
+            assert len(self.ep.db.message_tables) == 1
+            table_name = self.ep.db.message_tables[0]
+            target_day = datetime.date(2016, 2, 29)
+            with patch.object(datetime, 'date',
+                              Mock(wraps=datetime.date)) as patched:
+                patched.today.return_value = target_day
+                yield self.ep.db.update_rotating_tables()
+                assert len(self.ep.db.message_tables) == 1
+                assert table_name == self.ep.db.message_tables[0]
+        finally:
+            yield self.ep.stopService()
+            yield self.conn.stopService()
+            self._ep_conf.allow_table_rotation = ep_safe
+            self._conn_conf.allow_table_rotation = conn_safe
+            self.start_ep(self._ep_conf)
+            self.start_conn(self._conn_conf)
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -1002,50 +1234,11 @@ class TestRustWebPush(unittest.TestCase):
         assert c["current_month"] == self.conn.db.current_msg_month
         yield self.shut_down(client)
 
-    @inlineCallbacks
-    def test_with_key(self):
-        private_key = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
-        claims = {"aud": "http://example.com",
-                  "exp": int(time.time()) + 86400,
-                  "sub": "a@example.com"}
-        vapid = _get_vapid(private_key, claims)
-        pk_hex = vapid['crypto-key']
-        chid = str(uuid.uuid4())
-        client = Client("ws://localhost:{}/".format(self.connection_port))
-        yield client.connect()
-        yield client.hello()
-        yield client.register(chid=chid, key=pk_hex)
 
-        # Send an update with a properly formatted key.
-        yield client.send_notification(vapid=vapid)
-
-        # now try an invalid key.
-        new_key = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
-        vapid = _get_vapid(new_key, claims)
-
-        yield client.send_notification(
-            vapid=vapid,
-            status=401)
-
-        yield self.shut_down(client)
-
-    @inlineCallbacks
-    def test_with_bad_key(self):
-        chid = str(uuid.uuid4())
-        client = Client("ws://localhost:{}/".format(self.connection_port))
-        yield client.connect()
-        yield client.hello()
-        result = yield client.register(chid=chid, key="af1883%&!@#*(",
-                                       status=400)
-        assert result["status"] == 400
-
-        yield self.shut_down(client)
-
-
-class TestRustWebPushBroadcast(unittest.TestCase):
-    connection_port = 9050
+class TestRustAndPythonWebPush(unittest.TestCase):
+    connection_port = 9052
     endpoint_port = 9060
-    router_port = 9070
+    router_port = 9072
 
     _endpoint_defaults = dict(
         hostname='localhost',
@@ -1072,44 +1265,7 @@ class TestRustWebPushBroadcast(unittest.TestCase):
         human_logs=False,
     )
 
-    def setUp(self):
-        # Megaphone API mock
-        mock_server_port = get_free_port()
-        MockMegaphoneRequestHandler.services = {}
-        MockMegaphoneRequestHandler.polled.clear()
-        mock_server = HTTPServer(('localhost', mock_server_port),
-                                 MockMegaphoneRequestHandler)
-        mock_server_thread = Thread(target=mock_server.serve_forever)
-        mock_server_thread.setDaemon(True)
-        mock_server_thread.start()
-        self.addCleanup(mock_server.shutdown)
-        self.mock_server_thread = mock_server_thread
-        self.mock_megaphone = MockMegaphoneRequestHandler
-
-        self.logs = TestingLogObserver()
-        begin_or_register(self.logs)
-        self.addCleanup(globalLogPublisher.removeObserver, self.logs)
-
-        megaphone_api_url = 'http://localhost:{port}/v1/broadcasts'.format(
-            port=mock_server.server_port)
-
-        crypto_key = Fernet.generate_key()
-        ep_conf = AutopushConfig(
-            crypto_key=crypto_key,
-            **self.endpoint_kwargs()
-        )
-        conn_conf = AutopushConfig(
-            crypto_key=crypto_key,
-            auto_ping_interval=0.5,
-            auto_ping_timeout=10.0,
-            close_handshake_timeout=5,
-            max_connections=5000,
-            megaphone_api_url=megaphone_api_url,
-            megaphone_api_token=MockMegaphoneRequestHandler.token,
-            megaphone_poll_interval=1,
-            **self.conn_kwargs()
-        )
-
+    def start_ep(self, ep_conf):
         # Endpoint HTTP router
         self.ep = ep = EndpointApplication(
             ep_conf,
@@ -1119,20 +1275,49 @@ class TestRustWebPushBroadcast(unittest.TestCase):
         ep.startService()
         self.addCleanup(ep.stopService)
 
-        # Websocket server
-        self.conn = conn = RustConnectionApplication(
+    def start_conn(self, conn_conf):
+        # Startup only the Python connection application as we will use
+        # the module global Rust one as well
+        self.conn = conn = ConnectionApplication(
             conn_conf,
-            resource=autopush.tests.boto_resource
+            resource=autopush.tests.boto_resource,
         )
-        conn.setup(rotate_tables=False, num_threads=2)
+        conn.setup(rotate_tables=False)
         conn.startService()
         self.addCleanup(conn.stopService)
+
+    def setUp(self):
+        self.logs = TestingLogObserver()
+        begin_or_register(self.logs)
+        self.addCleanup(globalLogPublisher.removeObserver, self.logs)
+
+        self._ep_conf = AutopushConfig(
+            crypto_key=CRYPTO_KEY,
+            **self.endpoint_kwargs()
+        )
+        self._conn_conf = AutopushConfig(
+            crypto_key=CRYPTO_KEY,
+            **self.conn_kwargs()
+        )
+
+        self.start_ep(self._ep_conf)
+        self.start_conn(self._conn_conf)
 
     def endpoint_kwargs(self):
         return self._endpoint_defaults
 
     def conn_kwargs(self):
         return self._conn_defaults
+
+    @inlineCallbacks
+    def quick_register(self, sslcontext=None, connection_port=None):
+        conn_port = connection_port or self.connection_port
+        client = Client("ws://localhost:{}/".format(conn_port),
+                        sslcontext=sslcontext)
+        yield client.connect()
+        yield client.hello()
+        yield client.register()
+        returnValue(client)
 
     @inlineCallbacks
     def shut_down(self, client=None):
@@ -1144,67 +1329,185 @@ class TestRustWebPushBroadcast(unittest.TestCase):
         return "ws://localhost:{}/".format(self.connection_port)
 
     @inlineCallbacks
-    def test_broadcast_update_on_connect(self):
-        self.mock_megaphone.services = {"kinto:123": "ver1"}
-        self.mock_megaphone.polled.clear()
-        self.mock_megaphone.polled.wait()
-
-        old_ver = {"kinto:123": "ver0"}
-        client = Client(self._ws_url)
-        yield client.connect()
-        result = yield client.hello(services=old_ver)
-        assert result != {}
-        assert result["use_webpush"] is True
-        assert result["broadcasts"]["kinto:123"] == "ver1"
-
-        self.mock_megaphone.services = {"kinto:123": "ver2"}
-        self.mock_megaphone.polled.clear()
-        self.mock_megaphone.polled.wait()
-
-        result = yield client.get_broadcast(2)
-        assert result["broadcasts"]["kinto:123"] == "ver2"
-
+    def test_cross_topic_no_delivery_on_reconnect(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register(connection_port=CONNECTION_PORT)
+        yield client.disconnect()
+        yield client.send_notification(data=data, topic="Inbox")
+        yield client.connect(connection_port=self.connection_port)
+        yield client.hello()
+        result = yield client.get_notification(timeout=10)
+        assert result["headers"]["encryption"] == client._crypto_key
+        assert result["data"] == base64url_encode(data)
+        assert result["messageType"] == "notification"
+        yield client.ack(result["channelID"], result["version"])
+        yield client.disconnect()
+        yield client.connect(connection_port=CONNECTION_PORT)
+        yield client.hello()
+        result = yield client.get_notification(0.5)
+        assert result is None
+        yield client.disconnect()
+        yield client.connect(connection_port=self.connection_port)
+        yield client.hello()
+        result = yield client.get_notification(0.5)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
-    def test_broadcast_subscribe(self):
-        self.mock_megaphone.services = {"kinto:123": "ver1"}
-        self.mock_megaphone.polled.clear()
-        self.mock_megaphone.polled.wait()
-
-        old_ver = {"kinto:123": "ver0"}
-        client = Client(self._ws_url)
-        yield client.connect()
-        result = yield client.hello()
-        assert result != {}
-        assert result["use_webpush"] is True
-        assert result["broadcasts"] == {}
-
-        client.broadcast_subscribe(old_ver)
-        result = yield client.get_broadcast()
-        assert result["broadcasts"]["kinto:123"] == "ver1"
-
-        self.mock_megaphone.services = {"kinto:123": "ver2"}
-        self.mock_megaphone.polled.clear()
-        self.mock_megaphone.polled.wait()
-
-        result = yield client.get_broadcast(2)
-        assert result["broadcasts"]["kinto:123"] == "ver2"
-
+    def test_cross_topic_no_delivery_on_reconnect_reverse(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register()
+        yield client.disconnect()
+        yield client.send_notification(data=data, topic="Inbox")
+        yield client.connect(connection_port=CONNECTION_PORT)
+        yield client.hello()
+        result = yield client.get_notification(timeout=10)
+        assert result["headers"]["encryption"] == client._crypto_key
+        assert result["data"] == base64url_encode(data)
+        assert result["messageType"] == "notification"
+        yield client.ack(result["channelID"], result["version"])
+        yield client.disconnect()
+        yield client.connect(connection_port=self.connection_port)
+        yield client.hello()
+        result = yield client.get_notification(0.5)
+        assert result is None
+        yield client.disconnect()
+        yield client.connect(connection_port=CONNECTION_PORT)
+        yield client.hello()
+        result = yield client.get_notification(0.5)
+        assert result is None
         yield self.shut_down(client)
 
     @inlineCallbacks
-    def test_broadcast_no_changes(self):
-        self.mock_megaphone.services = {"kinto:123": "ver1"}
-        self.mock_megaphone.polled.clear()
-        self.mock_megaphone.polled.wait()
-
-        old_ver = {"kinto:123": "ver1"}
-        client = Client(self._ws_url)
+    def test_cross_multiple_delivery_with_single_ack(self):
+        data = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        client = yield self.quick_register(connection_port=CONNECTION_PORT)
+        yield client.disconnect()
+        assert client.channels
+        yield client.send_notification(data=data)
+        yield client.send_notification(data=data2)
         yield client.connect()
-        result = yield client.hello(services=old_ver)
+        yield client.hello()
+        result = yield client.get_notification(timeout=0.5)
         assert result != {}
-        assert result["use_webpush"] is True
-        assert result["broadcasts"] == {}
+        assert result["data"] == base64url_encode(data)
+        result2 = yield client.get_notification(timeout=0.5)
+        assert result2 != {}
+        assert result2["data"] == base64url_encode(data2)
+        yield client.ack(result["channelID"], result["version"])
 
+        yield client.disconnect()
+        yield client.connect(connection_port=CONNECTION_PORT)
+        yield client.hello()
+        result = yield client.get_notification(timeout=0.5)
+        assert result != {}
+        assert result["data"] == base64url_encode(data)
+        assert result["messageType"] == "notification"
+        result2 = yield client.get_notification()
+        assert result2 != {}
+        assert result2["data"] == base64url_encode(data2)
+        yield client.ack(result["channelID"], result["version"])
+        yield client.ack(result2["channelID"], result2["version"])
+
+        # Verify no messages are delivered
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification(timeout=0.5)
+        assert result is None
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_cross_multiple_delivery_with_single_ack_reverse(self):
+        data = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        client = yield self.quick_register()
+        yield client.disconnect()
+        assert client.channels
+        yield client.send_notification(data=data)
+        yield client.send_notification(data=data2)
+        yield client.connect(connection_port=CONNECTION_PORT)
+        yield client.hello()
+        result = yield client.get_notification(timeout=0.5)
+        assert result != {}
+        assert result["data"] == base64url_encode(data)
+        result2 = yield client.get_notification(timeout=0.5)
+        assert result2 != {}
+        assert result2["data"] == base64url_encode(data2)
+        yield client.ack(result["channelID"], result["version"])
+
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification(timeout=0.5)
+        assert result != {}
+        assert result["data"] == base64url_encode(data)
+        assert result["messageType"] == "notification"
+        result2 = yield client.get_notification()
+        assert result2 != {}
+        assert result2["data"] == base64url_encode(data2)
+        yield client.ack(result["channelID"], result["version"])
+        yield client.ack(result2["channelID"], result2["version"])
+
+        # Verify no messages are delivered
+        yield client.disconnect()
+        yield client.connect(connection_port=CONNECTION_PORT)
+        yield client.hello()
+        result = yield client.get_notification(timeout=0.5)
+        assert result is None
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_cross_multiple_delivery_with_multiple_ack(self):
+        data = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        client = yield self.quick_register()
+        yield client.disconnect()
+        assert client.channels
+        yield client.send_notification(data=data)
+        yield client.send_notification(data=data2)
+        yield client.connect(connection_port=CONNECTION_PORT)
+        yield client.hello()
+        result = yield client.get_notification(timeout=0.5)
+        assert result != {}
+        assert result["data"] in map(base64url_encode, [data, data2])
+        result2 = yield client.get_notification()
+        assert result2 != {}
+        assert result2["data"] in map(base64url_encode, [data, data2])
+        yield client.ack(result2["channelID"], result2["version"])
+        yield client.ack(result["channelID"], result["version"])
+
+        yield client.disconnect()
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification(timeout=0.5)
+        assert result is None
+        yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_cross_multiple_delivery_with_multiple_ack_reverse(self):
+        data = str(uuid.uuid4())
+        data2 = str(uuid.uuid4())
+        client = yield self.quick_register(connection_port=CONNECTION_PORT)
+        yield client.disconnect()
+        assert client.channels
+        yield client.send_notification(data=data)
+        yield client.send_notification(data=data2)
+        yield client.connect()
+        yield client.hello()
+        result = yield client.get_notification(timeout=0.5)
+        assert result != {}
+        assert result["data"] in map(base64url_encode, [data, data2])
+        result2 = yield client.get_notification()
+        assert result2 != {}
+        assert result2["data"] in map(base64url_encode, [data, data2])
+        yield client.ack(result2["channelID"], result2["version"])
+        yield client.ack(result["channelID"], result["version"])
+
+        yield client.disconnect()
+        yield client.connect(connection_port=CONNECTION_PORT)
+        yield client.hello()
+        result = yield client.get_notification(timeout=0.5)
+        assert result is None
         yield self.shut_down(client)

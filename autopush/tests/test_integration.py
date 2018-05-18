@@ -100,8 +100,11 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         else:
             return f
 
-    def connect(self):
-        self.ws = websocket.create_connection(self.url)
+    def connect(self, connection_port=None):
+        url = self.url
+        if connection_port:
+            url = "ws://localhost:{}/".format(connection_port)
+        self.ws = websocket.create_connection(url)
         return self.ws.connected
 
     def hello(self, uaid=None, services=None):
