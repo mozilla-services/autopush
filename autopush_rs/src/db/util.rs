@@ -5,8 +5,8 @@ use rand::distributions::{IndependentSample, Range};
 /// Generate a last_connect
 ///
 /// This intentionally generates a limited set of keys for each month in a
-//  known sequence. For each month, there's 24 hours * 10 random numbers for
-//  a total of 240 keys per month depending on when the user migrates forward.
+///  known sequence. For each month, there's 24 hours * 10 random numbers for
+///  a total of 240 keys per month depending on when the user migrates forward.
 pub fn generate_last_connect() -> u64 {
     let today = Utc::now();
     let mut rng = rand::thread_rng();

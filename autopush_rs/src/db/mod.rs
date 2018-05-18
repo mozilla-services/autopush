@@ -33,11 +33,11 @@ const MAX_EXPIRY: u64 = 2_592_000;
 const USER_RECORD_VERSION: u8 = 1;
 
 /// Basic requirements for notification content to deliver to websocket client
-// - channelID  (the subscription website intended for)
-// - version    (only really utilized for notification acknowledgement in
-//               webpush, used to be the sole carrier of data, can now be anything)
-// - data       (encrypted content)
-// - headers    (hash of crypto headers: encoding, encrypption, crypto-key, encryption-key)
+///  - channelID  (the subscription website intended for)
+///  - version    (only really utilized for notification acknowledgement in
+///                webpush, used to be the sole carrier of data, can now be anything)
+///  - data       (encrypted content)
+///  - headers    (hash of crypto headers: encoding, encrypption, crypto-key, encryption-key)
 #[derive(Default, Clone)]
 pub struct HelloResponse {
     pub uaid: Option<Uuid>,
@@ -123,10 +123,9 @@ impl DynamoStorage {
         metrics: &StatsdClient,
     ) -> MyFuture<HelloResponse> {
         let router_table_name = router_table_name.to_string();
-        let ddb = self.ddb.clone();
         let response: MyFuture<(HelloResponse, Option<DynamoDbUser>)> = if let Some(uaid) = uaid {
             commands::lookup_user(
-                ddb,
+                self.ddb.clone(),
                 &uaid,
                 connected_at,
                 router_url,
@@ -208,8 +207,7 @@ impl DynamoStorage {
     }
 
     pub fn drop_uaid(&self, table_name: &str, uaid: &Uuid) -> MyFuture<()> {
-        let ddb = self.ddb.clone();
-        let response = commands::drop_user(ddb, uaid, table_name)
+        let response = commands::drop_user(self.ddb.clone(), uaid, table_name)
             .and_then(move |_| -> MyFuture<_> { Box::new(future::ok(())) })
             .chain_err(|| "Unable to drop user record");
         Box::new(response)
@@ -223,10 +221,10 @@ impl DynamoStorage {
         code: u32,
         metrics: &StatsdClient,
     ) -> MyFuture<bool> {
-        let ddb = self.ddb.clone();
-        let response = commands::unregister_channel_id(ddb, uaid, channel_id, message_month)
-            .and_then(move |_| -> MyFuture<_> { Box::new(future::ok(true)) })
-            .or_else(move |_| -> MyFuture<_> { Box::new(future::ok(false)) });
+        let response =
+            commands::unregister_channel_id(self.ddb.clone(), uaid, channel_id, message_month)
+                .and_then(move |_| -> MyFuture<_> { Box::new(future::ok(true)) })
+                .or_else(move |_| -> MyFuture<_> { Box::new(future::ok(false)) });
         metrics
             .incr_with_tags("ua.command.unregister")
             .with_tag("code", &code.to_string())
@@ -243,20 +241,18 @@ impl DynamoStorage {
         current_message_month: &str,
         router_table_name: &str,
     ) -> MyFuture<()> {
-        let ddb = self.ddb.clone();
-        let ddb1 = self.ddb.clone();
-        let ddb2 = self.ddb.clone();
         let uaid = *uaid;
+        let ddb = self.ddb.clone();
+        let ddb2 = self.ddb.clone();
         let cur_month = current_message_month.to_string();
-        let cur_month1 = cur_month.clone();
         let cur_month2 = cur_month.clone();
         let router_table_name = router_table_name.to_string();
-        let response = commands::all_channels(ddb, &uaid, message_month)
+        let response = commands::all_channels(self.ddb.clone(), &uaid, message_month)
             .and_then(move |channels| -> MyFuture<_> {
                 if channels.is_empty() {
                     Box::new(future::ok(()))
                 } else {
-                    commands::save_channels(ddb1, &uaid, channels, &cur_month1)
+                    commands::save_channels(ddb, &uaid, channels, &cur_month)
                 }
             })
             .and_then(move |_| -> MyFuture<_> {
@@ -343,15 +339,14 @@ impl DynamoStorage {
         include_topic: bool,
         timestamp: Option<u64>,
     ) -> MyFuture<CheckStorageResponse> {
-        let ddb = self.ddb.clone();
         let response: MyFuture<FetchMessageResponse> = if include_topic {
-            commands::fetch_messages(ddb, table_name, uaid, 11 as u32)
+            commands::fetch_messages(self.ddb.clone(), table_name, uaid, 11 as u32)
         } else {
             Box::new(future::ok(Default::default()))
         };
         let uaid = *uaid;
         let table_name = table_name.to_string();
-        let ddb2 = self.ddb.clone();
+        let ddb = self.ddb.clone();
         let response = response.and_then(move |resp| -> MyFuture<_> {
             // Return now from this future if we have messages
             if !resp.messages.is_empty() {
@@ -371,7 +366,7 @@ impl DynamoStorage {
             let next_query = {
                 if resp.messages.is_empty() || resp.timestamp.is_some() {
                     commands::fetch_timestamp_messages(
-                        ddb2,
+                        ddb,
                         table_name.as_ref(),
                         &uaid,
                         timestamp,
