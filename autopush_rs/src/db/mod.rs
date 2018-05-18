@@ -86,7 +86,7 @@ impl DynamoStorage {
         table_name: &str,
         uaid: &Uuid,
         timestamp: &str,
-    ) -> MyFuture<UpdateItemOutput> {
+    ) -> impl Future<Item = UpdateItemOutput, Error = Error> {
         let ddb = self.ddb.clone();
         let expiry = sec_since_epoch() + 2 * MAX_EXPIRY;
         let attr_values = hashmap! {
@@ -120,7 +120,7 @@ impl DynamoStorage {
         message_table_names: &[String],
         current_message_month: &str,
         metrics: &StatsdClient,
-    ) -> MyFuture<HelloResponse> {
+    ) -> impl Future<Item = HelloResponse, Error = Error> {
         let router_table_name = router_table_name.to_string();
         let response: MyFuture<(HelloResponse, Option<DynamoDbUser>)> = if let Some(uaid) = uaid {
             commands::lookup_user(
@@ -145,7 +145,7 @@ impl DynamoStorage {
         let ddb = self.ddb.clone();
         let router_url = router_url.to_string();
         let connected_at = *connected_at;
-        let response = response.and_then(move |(mut hello_response, user_opt)| -> MyFuture<_> {
+        let response = response.and_then(move |(mut hello_response, user_opt)| {
             let hello_message_month = hello_response.message_month.clone();
             let user = user_opt.unwrap_or_else(|| DynamoDbUser {
                 current_month: Some(hello_message_month),
@@ -156,7 +156,7 @@ impl DynamoStorage {
             let uaid = user.uaid;
             let mut err_response = hello_response.clone();
             err_response.connected_at = connected_at;
-            let ddb_response = commands::register_user(ddb, &user, router_table_name.as_ref())
+            commands::register_user(ddb, &user, router_table_name.as_ref())
                 .and_then(move |result| {
                     debug!("Success adding user, item output: {:?}", result);
                     hello_response.uaid = Some(uaid);
@@ -165,11 +165,10 @@ impl DynamoStorage {
                 .or_else(move |e| {
                     debug!("Error registering user: {:?}", e);
                     future::ok(err_response)
-                });
-            Box::new(ddb_response)
+                })
         });
         metrics.incr("ua.command.hello").ok();
-        Box::new(response)
+        response
     }
 
     pub fn register(
@@ -203,7 +202,7 @@ impl DynamoStorage {
         Box::new(response)
     }
 
-    pub fn drop_uaid(&self, table_name: &str, uaid: &Uuid) -> MyFuture<()> {
+    pub fn drop_uaid(&self, table_name: &str, uaid: &Uuid) -> impl Future<Item = (), Error = Error> {
         commands::drop_user(self.ddb.clone(), uaid, table_name)
             .and_then(move |_| future::ok(()))
             .chain_err(|| "Unable to drop user record")
@@ -216,7 +215,7 @@ impl DynamoStorage {
         message_month: &str,
         code: u32,
         metrics: &StatsdClient,
-    ) -> MyFuture<bool> {
+    ) -> impl Future<Item = bool, Error = Error> {
         let response =
             commands::unregister_channel_id(self.ddb.clone(), uaid, channel_id, message_month)
                 .and_then(|_| future::ok(true))
@@ -226,7 +225,7 @@ impl DynamoStorage {
             .with_tag("code", &code.to_string())
             .send()
             .ok();
-        Box::new(response)
+        response
     }
 
     /// Migrate a user to a new month table
@@ -236,7 +235,7 @@ impl DynamoStorage {
         message_month: &str,
         current_message_month: &str,
         router_table_name: &str,
-    ) -> MyFuture<()> {
+    ) -> impl Future<Item = (), Error = Error> {
         let uaid = *uaid;
         let ddb = self.ddb.clone();
         let ddb2 = self.ddb.clone();
@@ -264,7 +263,7 @@ impl DynamoStorage {
         uaid: &Uuid,
         message_month: &str,
         messages: Vec<Notification>,
-    ) -> MyFuture<()> {
+    ) -> impl Future<Item = (), Error = Error> {
         let ddb = self.ddb.clone();
         let put_items: Vec<WriteRequest> = messages
             .into_iter()
@@ -304,7 +303,7 @@ impl DynamoStorage {
         table_name: &str,
         uaid: &Uuid,
         notif: &Notification,
-    ) -> MyFuture<()> {
+    ) -> impl Future<Item = (), Error = Error> {
         let ddb = self.ddb.clone();
         let delete_input = DeleteItemInput {
             table_name: table_name.to_string(),
@@ -328,7 +327,7 @@ impl DynamoStorage {
         uaid: &Uuid,
         include_topic: bool,
         timestamp: Option<u64>,
-    ) -> MyFuture<CheckStorageResponse> {
+    ) -> impl Future<Item = CheckStorageResponse, Error = Error> {
         let response: MyFuture<FetchMessageResponse> = if include_topic {
             Box::new(commands::fetch_messages(
                 self.ddb.clone(),
@@ -383,6 +382,6 @@ impl DynamoStorage {
             });
             Box::new(next_query)
         });
-        Box::new(response)
+        response
     }
 }
