@@ -103,13 +103,12 @@ impl DynamoStorage {
             table_name: table_name.to_string(),
             ..Default::default()
         };
-        let ddb_response = retry_if(
+        retry_if(
             move || ddb.update_item(&update_input),
             |err: &UpdateItemError| {
                 matches!(err, &UpdateItemError::ProvisionedThroughputExceeded(_))
             },
-        ).chain_err(|| "Error incrementing storage");
-        Box::new(ddb_response)
+        ).chain_err(|| "Error incrementing storage")
     }
 
     pub fn hello(
@@ -194,23 +193,20 @@ impl DynamoStorage {
         let mut chids = HashSet::new();
         chids.insert(channel_id.hyphenated().to_string());
         let response = commands::save_channels(ddb, uaid, chids, message_month)
-            .and_then(move |_| -> MyFuture<_> {
-                Box::new(future::ok(RegisterResponse::Success { endpoint }))
-            })
-            .or_else(move |_| -> MyFuture<_> {
-                Box::new(future::ok(RegisterResponse::Error {
+            .and_then(move |_| future::ok(RegisterResponse::Success { endpoint }))
+            .or_else(move |_| {
+                future::ok(RegisterResponse::Error {
                     status: 503,
                     error_msg: "Failed to register channel".to_string(),
-                }))
+                })
             });
         Box::new(response)
     }
 
     pub fn drop_uaid(&self, table_name: &str, uaid: &Uuid) -> MyFuture<()> {
-        let response = commands::drop_user(self.ddb.clone(), uaid, table_name)
-            .and_then(move |_| -> MyFuture<_> { Box::new(future::ok(())) })
-            .chain_err(|| "Unable to drop user record");
-        Box::new(response)
+        commands::drop_user(self.ddb.clone(), uaid, table_name)
+            .and_then(move |_| future::ok(()))
+            .chain_err(|| "Unable to drop user record")
     }
 
     pub fn unregister(
@@ -223,8 +219,8 @@ impl DynamoStorage {
     ) -> MyFuture<bool> {
         let response =
             commands::unregister_channel_id(self.ddb.clone(), uaid, channel_id, message_month)
-                .and_then(move |_| -> MyFuture<_> { Box::new(future::ok(true)) })
-                .or_else(move |_| -> MyFuture<_> { Box::new(future::ok(false)) });
+                .and_then(|_| future::ok(true))
+                .or_else(|_| future::ok(false));
         metrics
             .incr_with_tags("ua.command.unregister")
             .with_tag("code", &code.to_string())
@@ -247,20 +243,19 @@ impl DynamoStorage {
         let cur_month = current_message_month.to_string();
         let cur_month2 = cur_month.clone();
         let router_table_name = router_table_name.to_string();
-        let response = commands::all_channels(self.ddb.clone(), &uaid, message_month)
+        commands::all_channels(self.ddb.clone(), &uaid, message_month)
             .and_then(move |channels| -> MyFuture<_> {
                 if channels.is_empty() {
                     Box::new(future::ok(()))
                 } else {
-                    commands::save_channels(ddb, &uaid, channels, &cur_month)
+                    Box::new(commands::save_channels(ddb, &uaid, channels, &cur_month))
                 }
             })
-            .and_then(move |_| -> MyFuture<_> {
+            .and_then(move |_| {
                 commands::update_user_message_month(ddb2, &uaid, &router_table_name, &cur_month2)
             })
-            .and_then(move |_| -> MyFuture<_> { Box::new(future::ok(())) })
-            .chain_err(|| "Unable to migrate user");
-        Box::new(response)
+            .and_then(move |_| future::ok(()))
+            .chain_err(|| "Unable to migrate user")
     }
 
     /// Store a batch of messages when shutting down
@@ -286,20 +281,19 @@ impl DynamoStorage {
             request_items: hashmap! { message_month.to_string() => put_items },
             ..Default::default()
         };
-        let response = retry_if(
+        retry_if(
             move || ddb.batch_write_item(&batch_input),
             |err: &BatchWriteItemError| {
                 matches!(err, &BatchWriteItemError::ProvisionedThroughputExceeded(_))
             },
         )
-        .and_then(|_| Box::new(future::ok(())))
+        .and_then(|_| future::ok(()))
             .map_err(|err| {
                 debug!("Error saving notification: {:?}", err);
                 err
             })
             // TODO: Use Sentry to capture/report this error
-            .chain_err(|| "Error saving notifications");
-        Box::new(response)
+            .chain_err(|| "Error saving notifications")
     }
 
     /// Delete a given notification from the database
@@ -322,14 +316,13 @@ impl DynamoStorage {
             },
             ..Default::default()
         };
-        let response = retry_if(
+        retry_if(
             move || ddb.delete_item(&delete_input),
             |err: &DeleteItemError| {
                 matches!(err, &DeleteItemError::ProvisionedThroughputExceeded(_))
             },
-        ).and_then(|_| Box::new(future::ok(())))
-            .chain_err(|| "Error deleting notification");
-        Box::new(response)
+        ).and_then(|_| future::ok(()))
+            .chain_err(|| "Error deleting notification")
     }
 
     pub fn check_storage(
@@ -340,7 +333,12 @@ impl DynamoStorage {
         timestamp: Option<u64>,
     ) -> MyFuture<CheckStorageResponse> {
         let response: MyFuture<FetchMessageResponse> = if include_topic {
-            commands::fetch_messages(self.ddb.clone(), table_name, uaid, 11 as u32)
+            Box::new(commands::fetch_messages(
+                self.ddb.clone(),
+                table_name,
+                uaid,
+                11 as u32,
+            ))
         } else {
             Box::new(future::ok(Default::default()))
         };
@@ -363,15 +361,15 @@ impl DynamoStorage {
             } else {
                 timestamp
             };
-            let next_query = {
+            let next_query: MyFuture<_> = {
                 if resp.messages.is_empty() || resp.timestamp.is_some() {
-                    commands::fetch_timestamp_messages(
+                    Box::new(commands::fetch_timestamp_messages(
                         ddb,
                         table_name.as_ref(),
                         &uaid,
                         timestamp,
                         10 as u32,
-                    )
+                    ))
                 } else {
                     Box::new(future::ok(Default::default()))
                 }
