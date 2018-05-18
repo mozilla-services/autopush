@@ -335,14 +335,14 @@ where
         let AwaitHello { data, tx, rx, .. } = hello.take();
         let connected_at = ms_since_epoch();
         let response = Box::new(data.srv.ddb.hello(
-                &connected_at,
-                uaid.as_ref(),
-                &data.srv.opts.router_table_name,
-                &data.srv.opts.router_url,
-                &data.srv.opts.message_table_names,
-                &data.srv.opts.current_message_month,
-                &data.srv.metrics,
-            ));
+            &connected_at,
+            uaid.as_ref(),
+            &data.srv.opts.router_table_name,
+            &data.srv.opts.router_url,
+            &data.srv.opts.message_table_names,
+            &data.srv.opts.current_message_month,
+            &data.srv.metrics,
+        ));
         transition!(AwaitProcessHello {
             response,
             data,
@@ -386,6 +386,8 @@ where
             rx,
             ..
         } = process_hello.take();
+        data.srv.metrics.incr("ua.command.hello").ok();
+
         let UnAuthClientData {
             srv,
             ws,
@@ -603,6 +605,7 @@ where
     #[state_machine_future(transitions(SendThenWait))]
     AwaitUnregister {
         channel_id: Uuid,
+        code: u32,
         response: MyFuture<bool>,
         data: AuthClientData<T>,
     },
@@ -696,9 +699,11 @@ where
             ));
             transition!(AwaitMigrateUser { response, data });
         } else if all_acked && webpush.flags.reset_uaid {
-            let response = Box::new(data.srv
-                .ddb
-                .drop_uaid(&data.srv.opts.router_table_name, &webpush.uaid));
+            let response = Box::new(
+                data.srv
+                    .ddb
+                    .drop_uaid(&data.srv.opts.router_table_name, &webpush.uaid)
+            );
             transition!(AwaitDropUser { response, data });
         }
         transition!(AwaitInput { data })
@@ -764,15 +769,11 @@ where
                 // register does
                 let uaid = webpush.uaid;
                 let message_month = webpush.message_month.clone();
-                let response = Box::new(data.srv.ddb.unregister(
-                    &uaid,
-                    &channel_id,
-                    &message_month,
-                    code.unwrap_or(200),
-                    &data.srv.metrics,
-                ));
+                let response =
+                    Box::new(data.srv.ddb.unregister(&uaid, &channel_id, &message_month));
                 transition!(AwaitUnregister {
                     channel_id,
+                    code: code.unwrap_or(200),
                     response,
                     data,
                 });
@@ -802,10 +803,17 @@ where
                         // Topic/legacy messages have no sortkey_timestamp
                         if n.sortkey_timestamp.is_none() {
                             fut = if let Some(call) = fut {
-                                let my_fut = data.srv.ddb.delete_message(&message_month, &webpush.uaid, &n);
+                                let my_fut =
+                                    data.srv
+                                        .ddb
+                                        .delete_message(&message_month, &webpush.uaid, &n);
                                 Some(Box::new(call.and_then(move |_| my_fut)))
                             } else {
-                                Some(Box::new(data.srv.ddb.delete_message(&message_month, &webpush.uaid, &n)))
+                                Some(Box::new(data.srv.ddb.delete_message(
+                                    &message_month,
+                                    &webpush.uaid,
+                                    &n,
+                                )))
                             }
                         }
                         continue;
@@ -1020,10 +1028,17 @@ where
             }
         };
 
+        let AwaitUnregister { code, data, .. } = await_unregister.take();
+        data.srv
+            .metrics
+            .incr_with_tags("ua.command.unregister")
+            .with_tag("code", &code.to_string())
+            .send()
+            .ok();
         transition!(SendThenWait {
             remaining_data: vec![msg],
             poll_complete: false,
-            data: await_unregister.take().data,
+            data
         })
     }
 
