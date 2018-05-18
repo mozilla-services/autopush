@@ -151,7 +151,7 @@ pub fn drop_user(
     let response = retry_if(
         move || ddb.delete_item(&delete_input),
         |err: &DeleteItemError| matches!(err, &DeleteItemError::ProvisionedThroughputExceeded(_)),
-    ).chain_err(|| "Error fetching user");
+    ).chain_err(|| "Error dropping user");
     Box::new(response)
 }
 
@@ -262,15 +262,14 @@ pub fn all_channels(
         move || ddb.get_item(&get_input),
         |err: &GetItemError| matches!(err, &GetItemError::ProvisionedThroughputExceeded(_)),
     ).and_then(|get_item_output| {
-        let result = get_item_output.item.and_then(|item| {
-            let record: Option<DynamoDbNotification> = serde_dynamodb::from_hashmap(item).ok();
-            record
-        });
-        let channels = if let Some(record) = result {
-            record.chids.unwrap_or_else(HashSet::new)
-        } else {
-            HashSet::new()
-        };
+        let channels = get_item_output
+            .item
+            .and_then(|item| {
+                serde_dynamodb::from_hashmap::<DynamoDbNotification>(item)
+                    .ok()
+                    .and_then(|notif| notif.chids)
+            })
+            .unwrap_or_else(HashSet::new);
         Box::new(future::ok(channels))
     })
         .or_else(|_err| Box::new(future::ok(HashSet::new())));
@@ -406,16 +405,15 @@ fn handle_user_result(
     hello_response.check_storage = true;
     hello_response.message_month = month.clone();
     hello_response.rotate_message_table = *cur_month != month;
-    if has_connected_this_month(&user) {
-        user.last_connect = None;
+    hello_response.reset_uaid = user
+        .record_version
+        .map_or(true, |rec_ver| rec_ver < USER_RECORD_VERSION);
+
+    user.last_connect = if has_connected_this_month(&user) {
+        None
     } else {
-        user.last_connect = Some(generate_last_connect());
-    }
-    if let Some(rec_ver) = user.record_version {
-        hello_response.reset_uaid = rec_ver < USER_RECORD_VERSION;
-    } else {
-        hello_response.reset_uaid = true;
-    }
+        Some(generate_last_connect())
+    };
     user.node_id = Some(router_url);
     user.connected_at = connected_at;
     Ok(user)
