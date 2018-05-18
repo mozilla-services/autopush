@@ -544,17 +544,17 @@ class Message(object):
         # Generate our update expression
         if ttl is None:
             ttl = self._max_ttl
-        expr_values = {
-            ":channel_id": set([normalize_id(channel_id)]),
-            ":expiry": _expiry(ttl)
-        }
+        # Create/Append to list of channel_ids
         self.table.update_item(
             Key={
                 'uaid': hasher(uaid),
                 'chidmessageid': ' ',
             },
-            UpdateExpression='ADD chids :channel_id, expiry :expiry',
-            ExpressionAttributeValues=expr_values,
+            UpdateExpression='ADD chids :channel_id SET expiry = :expiry',
+            ExpressionAttributeValues={
+                ":channel_id": set([normalize_id(channel_id)]),
+                ":expiry": _expiry(ttl)
+            },
         )
         return True
 
@@ -562,17 +562,18 @@ class Message(object):
     def unregister_channel(self, uaid, channel_id, **kwargs):
         # type: (str, str, **str) -> bool
         """Remove a channel registration for a given uaid"""
-        expr = "DELETE chids :channel_id"
         chid = normalize_id(channel_id)
-        expr_values = {":channel_id": set([chid])}
 
         response = self.table.update_item(
             Key={
                 'uaid': hasher(uaid),
                 'chidmessageid': ' ',
             },
-            UpdateExpression=expr,
-            ExpressionAttributeValues=expr_values,
+            UpdateExpression="DELETE chids :channel_id SET expiry = :expiry",
+            ExpressionAttributeValues={
+                ":channel_id": set([chid]),
+                ":expiry": _expiry(self._max_ttl)
+            },
             ReturnValues="UPDATED_OLD",
         )
         chids = response.get('Attributes', {}).get('chids', {})
