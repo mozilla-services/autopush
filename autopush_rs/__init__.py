@@ -1,5 +1,3 @@
-import json
-
 from autopush_rs._native import ffi, lib
 
 
@@ -19,8 +17,8 @@ def free(obj, free_fn):
 
 
 class AutopushServer(object):
-    def __init__(self, conf, message_tables, queue):
-        # type: (AutopushConfig, List[str], AutopushQueue) -> AutopushServer
+    def __init__(self, conf, message_tables):
+        # type: (AutopushConfig, List[str]) -> AutopushServer
         cfg = ffi.new('AutopushServerOptions*')
         cfg.auto_ping_interval = conf.auto_ping_interval
         cfg.auto_ping_timeout = conf.auto_ping_timeout
@@ -51,12 +49,10 @@ class AutopushServer(object):
 
         ptr = _call(lib.autopush_server_new, cfg)
         self.ffi = ffi.gc(ptr, lib.autopush_server_free)
-        self.queue = queue
 
     def startService(self):
         _call(lib.autopush_server_start,
-              self.ffi,
-              self.queue.ffi)
+              self.ffi)
 
     def stopService(self):
         if self.ffi is None:
@@ -66,43 +62,6 @@ class AutopushServer(object):
 
     def _free_ffi(self):
         free(self, lib.autopush_server_free)
-
-
-class AutopushCall:
-    def __init__(self, ptr):
-        self.ffi = ffi.gc(ptr, lib.autopush_python_call_free)
-
-    def json(self):
-        msg_ptr = _call(lib.autopush_python_call_input_ptr, self.ffi)
-        msg_len = _call(lib.autopush_python_call_input_len, self.ffi) - 1
-        buf = ffi.buffer(msg_ptr, msg_len)
-        return json.loads(str(buf[:]))
-
-    def complete(self, ret):
-        s = json.dumps(ret)
-        _call(lib.autopush_python_call_complete, self.ffi, s)
-        self._free_ffi()
-
-    def cancel(self):
-        self._free_ffi()
-
-    def _free_ffi(self):
-        free(self, lib.autopush_python_call_free)
-
-
-class AutopushQueue:
-    def __init__(self):
-        ptr = _call(lib.autopush_queue_new)
-        self.ffi = ffi.gc(ptr, lib.autopush_queue_free)
-
-    def recv(self):
-        if self.ffi is None:
-            return None
-        ret = _call(lib.autopush_queue_recv, self.ffi)
-        if ffi.cast('size_t', ret) == 1:
-            return None
-        else:
-            return AutopushCall(ret)
 
 
 last_err = None

@@ -26,10 +26,20 @@ matrix:
 install:
 - ${DDB:+make ddb}
 - pip install tox ${CODECOV:+codecov}
-- if [ ${WITH_RUST:-true} != "false" ]; then curl https://sh.rustup.rs | sh -s -- -y || travis_terminate 1; fi
-- export PATH=$PATH:$HOME/.cargo/bin
+- |
+  if [ ${WITH_RUST:-true} != "false" ]; then
+      curl https://sh.rustup.rs | sh -s -- -y || travis_terminate 1;
+      export PATH=$PATH:$HOME/.cargo/bin
+      # Build here instead of within tox's pip install -e. It hides the output
+      # which can kill the job on slower travis runs
+      if [ ${WITH_RUST} == "release" ]; then
+          export CARGO_ARG="--release"
+      fi
+      cargo build --manifest-path autopush_rs/Cargo.toml ${CARGO_ARG:-""} || \
+          travis_terminate 1
+  fi
 script:
-- travis_wait 25 tox -- ${CODECOV:+--with-coverage --cover-xml --cover-package=autopush}
+- tox -v -- ${CODECOV:+--with-coverage --cover-xml --cover-package=autopush}
 after_success:
 - ${CODECOV:+codecov}
 notifications:

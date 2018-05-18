@@ -21,8 +21,8 @@ pub struct WebpushIo {
 }
 
 impl WebpushIo {
-    pub fn new(tcp: MaybeTlsStream<TcpStream>, header: BytesMut) -> WebpushIo {
-        WebpushIo {
+    pub fn new(tcp: MaybeTlsStream<TcpStream>, header: BytesMut) -> Self {
+        Self {
             tcp: tcp,
             header_to_read: Some(header),
         }
@@ -36,7 +36,7 @@ impl Read for WebpushIo {
         if let Some(ref mut header) = self.header_to_read {
             let n = (&header[..]).read(buf)?;
             header.split_to(n);
-            if buf.len() == 0 || n > 0 {
+            if buf.is_empty() || n > 0 {
                 return Ok(n);
             }
         }

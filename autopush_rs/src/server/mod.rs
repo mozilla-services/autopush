@@ -42,12 +42,11 @@ use errors::*;
 use errors::{Error, Result};
 use http;
 use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
-use queue::{self, AutopushQueue};
 use rt::{self, AutopushError, UnwindGuard};
 use server::dispatch::{Dispatch, RequestType};
 use server::metrics::metrics_from_opts;
 use server::webpush_io::WebpushIo;
-use util::ddb_helpers::DynamoStorage;
+use db::DynamoStorage;
 use util::megaphone::{ClientServices, MegaphoneAPIResponse, Service, ServiceChangeTracker,
                       ServiceClientInit};
 use util::{self, timeout, RcObject};
@@ -104,7 +103,6 @@ pub struct Server {
     pub ddb: DynamoStorage,
     open_connections: Cell<u32>,
     tls_acceptor: Option<SslAcceptor>,
-    pub tx: queue::AutopushSender,
     pub opts: Arc<ServerOptions>,
     pub handle: Handle,
     pub metrics: StatsdClient,
@@ -124,6 +122,7 @@ pub struct ServerOptions {
     pub max_connections: Option<u32>,
     pub close_handshake_timeout: Option<Duration>,
     pub message_table_names: Vec<String>,
+    pub current_message_month: String,
     pub router_table_name: String,
     pub router_url: String,
     pub endpoint_url: String,
@@ -177,7 +176,7 @@ pub extern "C" fn autopush_server_new(
         let fernets: Vec<Fernet> = to_s(opts.crypto_key)
             .map(|s| s.to_string())
             .expect("crypto_key must be specified")
-            .split(",")
+            .split(',')
             .map(|s| s.trim().to_string())
             .map(|key| Fernet::new(&key).expect("Invalid key supplied"))
             .collect();
@@ -192,9 +191,10 @@ pub extern "C" fn autopush_server_new(
             message_table_names: to_s(opts.message_table_names)
                 .map(|s| s.to_string())
                 .expect("message table names must be specified")
-                .split(",")
+                .split(',')
                 .map(|s| s.trim().to_string())
                 .collect(),
+            current_message_month: "".to_string(),
             router_table_name: to_s(opts.router_table_name)
                 .map(|s| s.to_string())
                 .expect("router table name must be specified"),
@@ -223,6 +223,10 @@ pub extern "C" fn autopush_server_new(
                 .expect("poll interval cannot be 0"),
         };
         opts.message_table_names.sort_unstable();
+        opts.current_message_month = opts.message_table_names
+            .last()
+            .expect("No last message month found")
+            .to_string();
 
         Box::new(AutopushServer {
             inner: UnwindGuard::new(AutopushServerInner {
@@ -236,13 +240,11 @@ pub extern "C" fn autopush_server_new(
 #[no_mangle]
 pub extern "C" fn autopush_server_start(
     srv: *mut AutopushServer,
-    queue: *mut AutopushQueue,
     err: &mut AutopushError,
 ) -> i32 {
     unsafe {
         (*srv).inner.catch(err, |srv| {
-            let tx = (*queue).tx();
-            let handles = Server::start(&srv.opts, tx).expect("failed to start server");
+            let handles = Server::start(&srv.opts).expect("failed to start server");
             srv.shutdown_handles.set(Some(handles));
         })
     }
@@ -294,7 +296,7 @@ impl Server {
     /// This will spawn a new server with the `opts` specified, spinning up a
     /// separate thread for the tokio reactor. The returned ShutdownHandles can
     /// be used to interact with it (e.g. shut it down).
-    fn start(opts: &Arc<ServerOptions>, tx: queue::AutopushSender) -> Result<Vec<ShutdownHandle>> {
+    fn start(opts: &Arc<ServerOptions>) -> Result<Vec<ShutdownHandle>> {
         let mut shutdown_handles = vec![];
         if let Some(handle) = Server::start_sentry()? {
             shutdown_handles.push(handle);
@@ -305,7 +307,7 @@ impl Server {
 
         let opts = opts.clone();
         let thread = thread::spawn(move || {
-            let (srv, mut core) = match Server::new(&opts, tx) {
+            let (srv, mut core) = match Server::new(&opts) {
                 Ok(core) => {
                     inittx.send(None).unwrap();
                     core
@@ -369,14 +371,14 @@ impl Server {
         Ok(Some(ShutdownHandle(donetx, thread)))
     }
 
-    fn new(opts: &Arc<ServerOptions>, tx: queue::AutopushSender) -> Result<(Rc<Server>, Core)> {
+    fn new(opts: &Arc<ServerOptions>) -> Result<(Rc<Server>, Core)> {
         let core = Core::new()?;
         let broadcaster = if let Some(ref megaphone_url) = opts.megaphone_api_url {
             let megaphone_token = opts.megaphone_api_token
                 .as_ref()
                 .expect("Megaphone API requires a Megaphone API Token to be set");
             ServiceChangeTracker::with_api_services(megaphone_url, megaphone_token)
-                .expect("Unable to initialize megaphone with provided URL".into())
+                .expect("Unable to initialize megaphone with provided URL")
         } else {
             ServiceChangeTracker::new(Vec::new())
         };
@@ -387,7 +389,6 @@ impl Server {
             uaids: RefCell::new(HashMap::new()),
             open_connections: Cell::new(0),
             handle: core.handle(),
-            tx: tx,
             tls_acceptor: tls::configure(opts),
             metrics: metrics_from_opts(opts)?,
         });
@@ -396,7 +397,7 @@ impl Server {
 
         let handle = core.handle();
         let srv2 = srv.clone();
-        let ws_srv = ws_listener.incoming().map_err(|e| Error::from(e)).for_each(
+        let ws_srv = ws_listener.incoming().map_err(Error::from).for_each(
             move |(socket, addr)| {
                 // Make sure we're not handling too many clients before we start the
                 // websocket handshake.
@@ -493,7 +494,7 @@ impl Server {
                 megaphone_token,
                 opts.megaphone_poll_interval,
                 &srv2,
-            ).expect("Unable to start megaphone updater".into());
+            ).expect("Unable to start megaphone updater");
             core.handle().spawn(fut.then(|res| {
                 debug!("megaphone result: {:?}", res.map(drop));
                 Ok(())
@@ -588,8 +589,7 @@ impl Server {
         let mut uaids = self.uaids.borrow_mut();
         let client_exists = uaids
             .get(uaid)
-            .map(|client| client.uid == *uid)
-            .unwrap_or(false);
+            .map_or(false, |client| client.uid == *uid);
         if client_exists {
             uaids.remove(uaid).expect("Couldn't remove client?");
         }
@@ -620,13 +620,6 @@ impl Server {
     }
 }
 
-impl Drop for Server {
-    fn drop(&mut self) {
-        // we're done sending messages, close out the queue
-        drop(self.tx.send(None));
-    }
-}
-
 enum MegaphoneState {
     Waiting,
     Requesting(MyFuture<MegaphoneAPIResponse>),
@@ -652,7 +645,7 @@ impl MegaphoneUpdater {
         let client = reqwest::unstable::async::Client::builder()
             .timeout(Duration::from_secs(1))
             .build(&srv.handle)
-            .expect("Unable to build reqwest client".into());
+            .expect("Unable to build reqwest client");
         Ok(MegaphoneUpdater {
             srv: srv.clone(),
             api_url: uri.to_string(),
