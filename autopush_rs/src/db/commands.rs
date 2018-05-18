@@ -52,10 +52,9 @@ pub fn fetch_messages(
         limit: Some(limit as i64),
         ..Default::default()
     };
-    retry_if(
-        move || ddb.query(&input),
-        |err: &QueryError| matches!(err, &QueryError::ProvisionedThroughputExceeded(_)),
-    ).chain_err(|| "Error fetching messages")
+    let cond = |err: &QueryError| matches!(err, &QueryError::ProvisionedThroughputExceeded(_));
+    retry_if(move || ddb.query(&input), cond)
+        .chain_err(|| "Error fetching messages")
         .and_then(|output| {
             let mut notifs: Vec<DynamoDbNotification> =
                 output.items.map_or_else(Vec::new, |items| {
@@ -111,10 +110,9 @@ pub fn fetch_timestamp_messages(
         limit: Some(limit as i64),
         ..Default::default()
     };
-    retry_if(
-        move || ddb.query(&input),
-        |err: &QueryError| matches!(err, &QueryError::ProvisionedThroughputExceeded(_)),
-    ).chain_err(|| "Error fetching messages")
+    let cond = |err: &QueryError| matches!(err, &QueryError::ProvisionedThroughputExceeded(_));
+    retry_if(move || ddb.query(&input), cond)
+        .chain_err(|| "Error fetching messages")
         .and_then(|output| {
             let messages = output.items.map_or_else(Vec::new, |items| {
                 debug!("Got response of: {:?}", items);
@@ -247,20 +245,19 @@ pub fn all_channels(
         },
         ..Default::default()
     };
-    retry_if(
-        move || ddb.get_item(&input),
-        |err: &GetItemError| matches!(err, &GetItemError::ProvisionedThroughputExceeded(_)),
-    ).and_then(|output| {
-        let channels = output
-            .item
-            .and_then(|item| {
-                serde_dynamodb::from_hashmap::<DynamoDbNotification>(item)
-                    .ok()
-                    .and_then(|notif| notif.chids)
-            })
-            .unwrap_or_else(HashSet::new);
-        future::ok(channels)
-    })
+    let cond = |err: &GetItemError| matches!(err, &GetItemError::ProvisionedThroughputExceeded(_));
+    retry_if(move || ddb.get_item(&input), cond)
+        .and_then(|output| {
+            let channels = output
+                .item
+                .and_then(|item| {
+                    serde_dynamodb::from_hashmap::<DynamoDbNotification>(item)
+                        .ok()
+                        .and_then(|notif| notif.chids)
+                })
+                .unwrap_or_else(HashSet::new);
+            future::ok(channels)
+        })
         .or_else(|_err| future::ok(HashSet::new()))
 }
 

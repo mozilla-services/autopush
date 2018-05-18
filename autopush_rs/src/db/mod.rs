@@ -281,19 +281,17 @@ impl DynamoStorage {
             request_items: hashmap! { message_month.to_string() => put_items },
             ..Default::default()
         };
-        retry_if(
-            move || ddb.batch_write_item(&batch_input),
-            |err: &BatchWriteItemError| {
-                matches!(err, &BatchWriteItemError::ProvisionedThroughputExceeded(_))
-            },
-        )
+        let cond = |err: &BatchWriteItemError| {
+            matches!(err, &BatchWriteItemError::ProvisionedThroughputExceeded(_))
+        };
+        retry_if(move || ddb.batch_write_item(&batch_input), cond)
         .and_then(|_| future::ok(()))
-            .map_err(|err| {
-                debug!("Error saving notification: {:?}", err);
-                err
-            })
-            // TODO: Use Sentry to capture/report this error
-            .chain_err(|| "Error saving notifications")
+        .map_err(|err| {
+            debug!("Error saving notification: {:?}", err);
+            err
+        })
+        // TODO: Use Sentry to capture/report this error
+        .chain_err(|| "Error saving notifications")
     }
 
     /// Delete a given notification from the database
@@ -316,12 +314,11 @@ impl DynamoStorage {
             },
             ..Default::default()
         };
-        retry_if(
-            move || ddb.delete_item(&delete_input),
-            |err: &DeleteItemError| {
-                matches!(err, &DeleteItemError::ProvisionedThroughputExceeded(_))
-            },
-        ).and_then(|_| future::ok(()))
+        let cond = |err: &DeleteItemError| {
+            matches!(err, &DeleteItemError::ProvisionedThroughputExceeded(_))
+        };
+        retry_if(move || ddb.delete_item(&delete_input), cond)
+            .and_then(|_| future::ok(()))
             .chain_err(|| "Error deleting notification")
     }
 
