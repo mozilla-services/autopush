@@ -3,7 +3,7 @@ use std::env;
 use std::rc::Rc;
 use uuid::Uuid;
 
-use cadence::{Counted, StatsdClient};
+use cadence::StatsdClient;
 use futures::{future, Future};
 use futures_backoff::retry_if;
 use rusoto_core::reactor::RequestDispatcher;
@@ -86,7 +86,7 @@ impl DynamoStorage {
         table_name: &str,
         uaid: &Uuid,
         timestamp: &str,
-    ) -> MyFuture<UpdateItemOutput> {
+    ) -> impl Future<Item = UpdateItemOutput, Error = Error> {
         let ddb = self.ddb.clone();
         let expiry = sec_since_epoch() + 2 * MAX_EXPIRY;
         let attr_values = hashmap! {
@@ -103,6 +103,7 @@ impl DynamoStorage {
             table_name: table_name.to_string(),
             ..Default::default()
         };
+
         retry_if(
             move || ddb.update_item(&update_input),
             |err: &UpdateItemError| {
@@ -120,7 +121,7 @@ impl DynamoStorage {
         message_table_names: &[String],
         current_message_month: &str,
         metrics: &StatsdClient,
-    ) -> MyFuture<HelloResponse> {
+    ) -> impl Future<Item = HelloResponse, Error = Error> {
         let router_table_name = router_table_name.to_string();
         let response: MyFuture<(HelloResponse, Option<DynamoDbUser>)> = if let Some(uaid) = uaid {
             commands::lookup_user(
@@ -145,7 +146,8 @@ impl DynamoStorage {
         let ddb = self.ddb.clone();
         let router_url = router_url.to_string();
         let connected_at = *connected_at;
-        let response = response.and_then(move |(mut hello_response, user_opt)| -> MyFuture<_> {
+
+        response.and_then(move |(mut hello_response, user_opt)| {
             let hello_message_month = hello_response.message_month.clone();
             let user = user_opt.unwrap_or_else(|| DynamoDbUser {
                 current_month: Some(hello_message_month),
@@ -156,7 +158,7 @@ impl DynamoStorage {
             let uaid = user.uaid;
             let mut err_response = hello_response.clone();
             err_response.connected_at = connected_at;
-            let ddb_response = commands::register_user(ddb, &user, router_table_name.as_ref())
+            commands::register_user(ddb, &user, router_table_name.as_ref())
                 .and_then(move |result| {
                     debug!("Success adding user, item output: {:?}", result);
                     hello_response.uaid = Some(uaid);
@@ -165,11 +167,8 @@ impl DynamoStorage {
                 .or_else(move |e| {
                     debug!("Error registering user: {:?}", e);
                     future::ok(err_response)
-                });
-            Box::new(ddb_response)
-        });
-        metrics.incr("ua.command.hello").ok();
-        Box::new(response)
+                })
+        })
     }
 
     pub fn register(
@@ -203,9 +202,13 @@ impl DynamoStorage {
         Box::new(response)
     }
 
-    pub fn drop_uaid(&self, table_name: &str, uaid: &Uuid) -> MyFuture<()> {
+    pub fn drop_uaid(
+        &self,
+        table_name: &str,
+        uaid: &Uuid,
+    ) -> impl Future<Item = (), Error = Error> {
         commands::drop_user(self.ddb.clone(), uaid, table_name)
-            .and_then(move |_| future::ok(()))
+            .and_then(|_| future::ok(()))
             .chain_err(|| "Unable to drop user record")
     }
 
@@ -214,19 +217,10 @@ impl DynamoStorage {
         uaid: &Uuid,
         channel_id: &Uuid,
         message_month: &str,
-        code: u32,
-        metrics: &StatsdClient,
-    ) -> MyFuture<bool> {
-        let response =
-            commands::unregister_channel_id(self.ddb.clone(), uaid, channel_id, message_month)
-                .and_then(|_| future::ok(true))
-                .or_else(|_| future::ok(false));
-        metrics
-            .incr_with_tags("ua.command.unregister")
-            .with_tag("code", &code.to_string())
-            .send()
-            .ok();
-        Box::new(response)
+    ) -> impl Future<Item = bool, Error = Error> {
+        commands::unregister_channel_id(self.ddb.clone(), uaid, channel_id, message_month)
+            .and_then(|_| future::ok(true))
+            .or_else(|_| future::ok(false))
     }
 
     /// Migrate a user to a new month table
@@ -236,13 +230,14 @@ impl DynamoStorage {
         message_month: &str,
         current_message_month: &str,
         router_table_name: &str,
-    ) -> MyFuture<()> {
+    ) -> impl Future<Item = (), Error = Error> {
         let uaid = *uaid;
         let ddb = self.ddb.clone();
         let ddb2 = self.ddb.clone();
         let cur_month = current_message_month.to_string();
         let cur_month2 = cur_month.clone();
         let router_table_name = router_table_name.to_string();
+
         commands::all_channels(self.ddb.clone(), &uaid, message_month)
             .and_then(move |channels| -> MyFuture<_> {
                 if channels.is_empty() {
@@ -254,7 +249,7 @@ impl DynamoStorage {
             .and_then(move |_| {
                 commands::update_user_message_month(ddb2, &uaid, &router_table_name, &cur_month2)
             })
-            .and_then(move |_| future::ok(()))
+            .and_then(|_| future::ok(()))
             .chain_err(|| "Unable to migrate user")
     }
 
@@ -264,7 +259,7 @@ impl DynamoStorage {
         uaid: &Uuid,
         message_month: &str,
         messages: Vec<Notification>,
-    ) -> MyFuture<()> {
+    ) -> impl Future<Item = (), Error = Error> {
         let ddb = self.ddb.clone();
         let put_items: Vec<WriteRequest> = messages
             .into_iter()
@@ -281,19 +276,18 @@ impl DynamoStorage {
             request_items: hashmap! { message_month.to_string() => put_items },
             ..Default::default()
         };
-        retry_if(
-            move || ddb.batch_write_item(&batch_input),
-            |err: &BatchWriteItemError| {
-                matches!(err, &BatchWriteItemError::ProvisionedThroughputExceeded(_))
-            },
-        )
+
+        let cond = |err: &BatchWriteItemError| {
+            matches!(err, &BatchWriteItemError::ProvisionedThroughputExceeded(_))
+        };
+        retry_if(move || ddb.batch_write_item(&batch_input), cond)
         .and_then(|_| future::ok(()))
-            .map_err(|err| {
-                debug!("Error saving notification: {:?}", err);
-                err
-            })
-            // TODO: Use Sentry to capture/report this error
-            .chain_err(|| "Error saving notifications")
+        .map_err(|err| {
+            debug!("Error saving notification: {:?}", err);
+            err
+        })
+        // TODO: Use Sentry to capture/report this error
+        .chain_err(|| "Error saving notifications")
     }
 
     /// Delete a given notification from the database
@@ -306,7 +300,7 @@ impl DynamoStorage {
         table_name: &str,
         uaid: &Uuid,
         notif: &Notification,
-    ) -> MyFuture<()> {
+    ) -> impl Future<Item = (), Error = Error> {
         let ddb = self.ddb.clone();
         let delete_input = DeleteItemInput {
             table_name: table_name.to_string(),
@@ -316,12 +310,12 @@ impl DynamoStorage {
             },
             ..Default::default()
         };
-        retry_if(
-            move || ddb.delete_item(&delete_input),
-            |err: &DeleteItemError| {
-                matches!(err, &DeleteItemError::ProvisionedThroughputExceeded(_))
-            },
-        ).and_then(|_| future::ok(()))
+
+        let cond = |err: &DeleteItemError| {
+            matches!(err, &DeleteItemError::ProvisionedThroughputExceeded(_))
+        };
+        retry_if(move || ddb.delete_item(&delete_input), cond)
+            .and_then(|_| future::ok(()))
             .chain_err(|| "Error deleting notification")
     }
 
@@ -331,7 +325,7 @@ impl DynamoStorage {
         uaid: &Uuid,
         include_topic: bool,
         timestamp: Option<u64>,
-    ) -> MyFuture<CheckStorageResponse> {
+    ) -> impl Future<Item = CheckStorageResponse, Error = Error> {
         let response: MyFuture<FetchMessageResponse> = if include_topic {
             Box::new(commands::fetch_messages(
                 self.ddb.clone(),
@@ -345,7 +339,8 @@ impl DynamoStorage {
         let uaid = *uaid;
         let table_name = table_name.to_string();
         let ddb = self.ddb.clone();
-        let response = response.and_then(move |resp| -> MyFuture<_> {
+
+        response.and_then(move |resp| -> MyFuture<_> {
             // Return now from this future if we have messages
             if !resp.messages.is_empty() {
                 debug!("Topic message returns: {:?}", resp.messages);
@@ -385,7 +380,6 @@ impl DynamoStorage {
                 })
             });
             Box::new(next_query)
-        });
-        Box::new(response)
+        })
     }
 }

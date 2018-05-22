@@ -334,16 +334,17 @@ where
 
         let AwaitHello { data, tx, rx, .. } = hello.take();
         let connected_at = ms_since_epoch();
+        let response = Box::new(data.srv.ddb.hello(
+            &connected_at,
+            uaid.as_ref(),
+            &data.srv.opts.router_table_name,
+            &data.srv.opts.router_url,
+            &data.srv.opts.message_table_names,
+            &data.srv.opts.current_message_month,
+            &data.srv.metrics,
+        ));
         transition!(AwaitProcessHello {
-            response: data.srv.ddb.hello(
-                &connected_at,
-                uaid.as_ref(),
-                &data.srv.opts.router_table_name,
-                &data.srv.opts.router_url,
-                &data.srv.opts.message_table_names,
-                &data.srv.opts.current_message_month,
-                &data.srv.metrics,
-            ),
+            response,
             data,
             interested_broadcasts: services,
             tx,
@@ -385,6 +386,8 @@ where
             rx,
             ..
         } = process_hello.take();
+        data.srv.metrics.incr("ua.command.hello").ok();
+
         let UnAuthClientData {
             srv,
             ws,
@@ -567,7 +570,7 @@ where
 
     #[state_machine_future(transitions(DetermineAck))]
     AwaitIncrementStorage {
-        ddb_response: MyFuture<UpdateItemOutput>,
+        response: MyFuture<UpdateItemOutput>,
         data: AuthClientData<T>,
     },
 
@@ -602,6 +605,7 @@ where
     #[state_machine_future(transitions(SendThenWait))]
     AwaitUnregister {
         channel_id: Uuid,
+        code: u32,
         response: MyFuture<bool>,
         data: AuthClientData<T>,
     },
@@ -687,17 +691,19 @@ where
             transition!(CheckStorage { data });
         } else if all_acked && webpush.flags.rotate_message_table {
             debug!("Triggering migration");
-            let response = data.srv.ddb.migrate_user(
+            let response = Box::new(data.srv.ddb.migrate_user(
                 &webpush.uaid,
                 &webpush.message_month,
                 &data.srv.opts.current_message_month,
                 &data.srv.opts.router_table_name,
-            );
+            ));
             transition!(AwaitMigrateUser { response, data });
         } else if all_acked && webpush.flags.reset_uaid {
-            let response = data.srv
-                .ddb
-                .drop_uaid(&data.srv.opts.router_table_name, &webpush.uaid);
+            let response = Box::new(
+                data.srv
+                    .ddb
+                    .drop_uaid(&data.srv.opts.router_table_name, &webpush.uaid)
+            );
             transition!(AwaitDropUser { response, data });
         }
         transition!(AwaitInput { data })
@@ -763,16 +769,12 @@ where
                 // register does
                 let uaid = webpush.uaid;
                 let message_month = webpush.message_month.clone();
-                let fut = data.srv.ddb.unregister(
-                    &uaid,
-                    &channel_id,
-                    &message_month,
-                    code.unwrap_or(200),
-                    &data.srv.metrics,
-                );
+                let response =
+                    Box::new(data.srv.ddb.unregister(&uaid, &channel_id, &message_month));
                 transition!(AwaitUnregister {
                     channel_id,
-                    response: fut,
+                    code: code.unwrap_or(200),
+                    response,
                     data,
                 });
             }
@@ -801,10 +803,17 @@ where
                         // Topic/legacy messages have no sortkey_timestamp
                         if n.sortkey_timestamp.is_none() {
                             fut = if let Some(call) = fut {
-                                let my_fut = data.srv.ddb.delete_message(&message_month, &webpush.uaid, &n);
+                                let my_fut =
+                                    data.srv
+                                        .ddb
+                                        .delete_message(&message_month, &webpush.uaid, &n);
                                 Some(Box::new(call.and_then(move |_| my_fut)))
                             } else {
-                                Some(data.srv.ddb.delete_message(&message_month, &webpush.uaid, &n))
+                                Some(Box::new(data.srv.ddb.delete_message(
+                                    &message_month,
+                                    &webpush.uaid,
+                                    &n,
+                                )))
                             }
                         }
                         continue;
@@ -853,13 +862,13 @@ where
             .unacked_stored_highest
             .ok_or("unacked_stored_highest unset")?
             .to_string();
-        let ddb_response = increment_storage.data.srv.ddb.increment_storage(
+        let response = Box::new(increment_storage.data.srv.ddb.increment_storage(
             &webpush.message_month,
             &webpush.uaid,
             &timestamp,
-        );
+        ));
         transition!(AwaitIncrementStorage {
-            ddb_response,
+            response,
             data: increment_storage.take().data,
         })
     }
@@ -868,7 +877,7 @@ where
         await_increment_storage: &'a mut RentToOwn<'a, AwaitIncrementStorage<T>>,
     ) -> Poll<AfterAwaitIncrementStorage<T>, Error> {
         debug!("State: AwaitIncrementStorage");
-        try_ready!(await_increment_storage.ddb_response.poll());
+        try_ready!(await_increment_storage.response.poll());
         let AwaitIncrementStorage { data, .. } = await_increment_storage.take();
         let webpush = data.webpush.clone();
         webpush.borrow_mut().flags.increment_storage = false;
@@ -880,7 +889,7 @@ where
     ) -> Poll<AfterCheckStorage<T>, Error> {
         debug!("State: CheckStorage");
         let CheckStorage { data } = check_storage.take();
-        let response = {
+        let response = Box::new({
             let webpush = data.webpush.borrow();
             data.srv.ddb.check_storage(
                 &webpush.message_month.clone(),
@@ -888,7 +897,7 @@ where
                 webpush.flags.include_topic,
                 webpush.unacked_stored_highest,
             )
-        };
+        });
         transition!(AwaitCheckStorage { response, data })
     }
 
@@ -1019,10 +1028,17 @@ where
             }
         };
 
+        let AwaitUnregister { code, data, .. } = await_unregister.take();
+        data.srv
+            .metrics
+            .incr_with_tags("ua.command.unregister")
+            .with_tag("code", &code.to_string())
+            .send()
+            .ok();
         transition!(SendThenWait {
             remaining_data: vec![msg],
             poll_complete: false,
-            data: await_unregister.take().data,
+            data
         })
     }
 
