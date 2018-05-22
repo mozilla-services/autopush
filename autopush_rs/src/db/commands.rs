@@ -49,6 +49,7 @@ pub fn fetch_messages(
         key_condition_expression: Some("uaid = :uaid AND chidmessageid < :cmi".to_string()),
         expression_attribute_values: Some(attr_values),
         table_name: table_name.to_string(),
+        consistent_read: Some(true),
         limit: Some(limit as i64),
         ..Default::default()
     };
@@ -108,6 +109,7 @@ pub fn fetch_timestamp_messages(
         key_condition_expression: Some("uaid = :uaid AND chidmessageid > :cmi".to_string()),
         expression_attribute_values: Some(attr_values),
         table_name: table_name.to_string(),
+        consistent_read: Some(true),
         limit: Some(limit as i64),
         ..Default::default()
     };
@@ -125,10 +127,6 @@ pub fn fetch_timestamp_messages(
                     .filter_map(|ddb_notif: DynamoDbNotification| ddb_notif.into_notif().ok())
                     .collect()
             });
-            if messages.is_empty() {
-                return Ok(Default::default());
-            }
-
             let timestamp = messages.iter().filter_map(|m| m.sortkey_timestamp).max();
             Ok(FetchMessageResponse {
                 timestamp,
