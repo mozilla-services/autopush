@@ -584,7 +584,7 @@ class TestRustWebPush(unittest.TestCase):
             yield client.send_notification(data=data, ttl=1)
 
         yield client.send_notification(data=data2)
-        time.sleep(0.75)
+        time.sleep(1)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification(timeout=4)
