@@ -12,6 +12,9 @@ RUN \
     curl https://sh.rustup.rs | sh -s -- -y && \
     make clean && \
     WITH_RUST=release pip install -r requirements.txt && \
-    python setup.py develop
+    python setup.py develop && \
+    cd autopush_rs && \
+    cargo clean && \
+    rustup self uninstall -y
 
 CMD ["autopush"]

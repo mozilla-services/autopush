@@ -13,7 +13,10 @@ RUN \
     curl https://sh.rustup.rs | sh -s -- -y && \
     make clean && \
     WITH_RUST=release pip install -r requirements.txt && \
-    pypy setup.py develop
+    pypy setup.py develop && \
+    cd autopush_rs && \
+    cargo clean && \
+    rustup self uninstall -y
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["autopush"]
