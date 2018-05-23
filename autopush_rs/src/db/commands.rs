@@ -9,8 +9,8 @@ use futures::{future, Future};
 use futures_backoff::retry_if;
 use rusoto_dynamodb::{
     AttributeValue, DeleteItemError, DeleteItemInput, DeleteItemOutput, DynamoDb, GetItemError,
-    GetItemInput, GetItemOutput, PutItemError, PutItemInput, PutItemOutput, QueryError, QueryInput,
-    UpdateItemError, UpdateItemInput, UpdateItemOutput,
+    GetItemInput, GetItemOutput, ListTablesInput, ListTablesOutput, PutItemError, PutItemInput,
+    PutItemOutput, QueryError, QueryInput, UpdateItemError, UpdateItemInput, UpdateItemOutput,
 };
 use serde_dynamodb;
 
@@ -33,6 +33,18 @@ fn has_connected_this_month(user: &DynamoDbUser) -> bool {
         let pat = Utc::now().format("%Y%m").to_string();
         v.to_string().starts_with(&pat)
     })
+}
+
+pub fn list_tables(
+    ddb: Rc<Box<DynamoDb>>,
+    start_key: Option<String>,
+) -> impl Future<Item = ListTablesOutput, Error = Error> {
+    let input = ListTablesInput {
+        exclusive_start_table_name: start_key,
+        limit: Some(100),
+    };
+    ddb.list_tables(&input)
+        .chain_err(|| "Unable to list tables")
 }
 
 pub fn fetch_messages(

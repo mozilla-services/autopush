@@ -1,6 +1,5 @@
 """autopush/autoendpoint daemon scripts"""
 import os
-import time
 from argparse import Namespace  # noqa
 
 from twisted.application.internet import (
@@ -40,7 +39,6 @@ from autopush.ssl import (
     monkey_patch_ssl_wrap_socket,
     undo_monkey_patch_ssl_wrap_socket,
 )
-from autopush.webpush_server import WebPushServer
 from autopush.websocket import (
     ConnectionWSSite,
     PushServerFactory,
@@ -305,83 +303,5 @@ class ConnectionApplication(AutopushMultiService):
             max_connections=ns.max_connections,
             close_handshake_timeout=ns.close_handshake_timeout,
             aws_ddb_endpoint=ns.aws_ddb_endpoint,
-            resource=resource
-        )
-
-
-class RustConnectionApplication(AutopushMultiService):
-    """The autopush application"""
-
-    config_files = AutopushMultiService.shared_config_files + (
-        '/etc/autopush_connection.ini',
-        'configs/autopush_connection.ini',
-        '~/.autopush_connection.ini',
-        '.autopush_connection.ini'
-    )
-
-    parse_args = staticmethod(parse_connection)  # type: ignore
-    logger_name = "AutopushRust"
-    push_server = None
-
-    def setup(self, rotate_tables=True, num_threads=10):
-        super(RustConnectionApplication, self).setup(rotate_tables)
-
-        self.db.setup(self.conf.preflight_uaid)
-
-        # No add_memusage: requires twisted
-        self.push_server = WebPushServer(
-            self.conf,
-            self.db,
-            num_threads=num_threads,
-        )
-
-    def run(self):  # pragma: nocover
-        try:
-            self.startService()
-            while True:
-                try:
-                    # handle a graceful shutdown on SIGINT w/ a busy
-                    # loop. we can't Thread.join because SIGINT won't
-                    # interrupt it
-                    time.sleep(6000)
-                except KeyboardInterrupt:
-                    return 1
-        finally:
-            self.stopService()
-
-    def startService(self):
-        self.push_server.start()
-
-    def stopService(self):
-        self.push_server.stop()
-
-    @classmethod
-    def from_argparse(cls, ns, resource=None):  # pragma: nocover
-        # type: (Namespace, DynamoDBResource) -> AutopushMultiService
-        return super(RustConnectionApplication, cls)._from_argparse(
-            ns,
-            port=ns.port,
-            endpoint_scheme=ns.endpoint_scheme,
-            endpoint_hostname=ns.endpoint_hostname,
-            endpoint_port=ns.endpoint_port,
-            router_scheme="https" if ns.router_ssl_key else "http",
-            router_hostname=ns.router_hostname,
-            router_port=ns.router_port,
-            env=ns.env,
-            hello_timeout=ns.hello_timeout,
-            router_ssl=dict(
-                key=ns.router_ssl_key,
-                cert=ns.router_ssl_cert,
-                dh_param=ns.ssl_dh_param
-            ),
-            # XXX: default is for autopush_rs
-            auto_ping_interval=ns.auto_ping_interval or 300,
-            auto_ping_timeout=ns.auto_ping_timeout,
-            max_connections=ns.max_connections,
-            close_handshake_timeout=ns.close_handshake_timeout,
-            aws_ddb_endpoint=ns.aws_ddb_endpoint,
-            megaphone_api_url=ns.megaphone_api_url,
-            megaphone_api_token=ns.megaphone_api_token,
-            megaphone_poll_interval=ns.megaphone_poll_interval,
             resource=resource
         )

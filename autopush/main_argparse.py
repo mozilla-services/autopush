@@ -232,16 +232,6 @@ def parse_connection(config_files, args):
                         help="The client handshake timeout. Set to 0 to"
                         "disable.", default=0, type=int,
                         env_var="HELLO_TIMEOUT")
-    parser.add_argument('--megaphone_api_url',
-                        help="The megaphone API URL to query for updates",
-                        default=None, type=str, env_var="MEGAPHONE_API_URL")
-    parser.add_argument('--megaphone_api_token',
-                        help="The megaphone API token",
-                        default=None, type=str, env_var="MEGAPHONE_API_TOKEN")
-    parser.add_argument('--megaphone_poll_interval',
-                        help="The megaphone API polling interval",
-                        default=30, type=int,
-                        env_var="MEGAPHONE_POLL_INTERVAL")
 
     add_shared_args(parser)
     return parser.parse_args(args)

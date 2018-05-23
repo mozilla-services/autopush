@@ -2,7 +2,6 @@ use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::default::Default;
 use std::env;
-use std::ffi::CStr;
 use std::io;
 use std::net::SocketAddr;
 use std::panic;
@@ -22,7 +21,6 @@ use futures::{Async, AsyncSink, Future, Poll, Sink, StartSend, Stream};
 use hex;
 use hyper::server::Http;
 use hyper::{self, header, StatusCode};
-use libc::c_char;
 use openssl::hash;
 use openssl::ssl::SslAcceptor;
 use reqwest;
@@ -33,22 +31,23 @@ use tokio_core::net::TcpListener;
 use tokio_core::reactor::{Core, Handle, Timeout};
 use tokio_io;
 use tokio_tungstenite::{accept_hdr_async, WebSocketStream};
-use tungstenite::Message;
 use tungstenite::handshake::server::Request;
+use tungstenite::Message;
 use uuid::Uuid;
 
 use client::{Client, RegisteredClient};
+use db::DynamoStorage;
 use errors::*;
 use errors::{Error, Result};
 use http;
 use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
-use rt::{self, AutopushError, UnwindGuard};
 use server::dispatch::{Dispatch, RequestType};
 use server::metrics::metrics_from_opts;
 use server::webpush_io::WebpushIo;
-use db::DynamoStorage;
-use util::megaphone::{ClientServices, MegaphoneAPIResponse, Service, ServiceChangeTracker,
-                      ServiceClientInit};
+use settings::Settings;
+use util::megaphone::{
+    ClientServices, MegaphoneAPIResponse, Service, ServiceChangeTracker, ServiceClientInit,
+};
 use util::{self, timeout, RcObject};
 
 mod dispatch;
@@ -58,54 +57,62 @@ mod webpush_io;
 
 const UAHEADER: &str = "User-Agent";
 
-pub struct AutopushServer {
-    inner: UnwindGuard<AutopushServerInner>,
+fn ito_dur(seconds: u32) -> Option<Duration> {
+    if seconds == 0 {
+        None
+    } else {
+        Some(Duration::new(seconds.into(), 0))
+    }
+}
+
+fn fto_dur(seconds: f64) -> Option<Duration> {
+    if seconds == 0.0 {
+        None
+    } else {
+        Some(Duration::new(
+            seconds as u64,
+            (seconds.fract() * 1_000_000_000.0) as u32,
+        ))
+    }
 }
 
 // a signaler to shut down a tokio Core and its associated thread
 struct ShutdownHandle(oneshot::Sender<()>, thread::JoinHandle<()>);
 
-struct AutopushServerInner {
+pub struct AutopushServer {
     opts: Arc<ServerOptions>,
-    // Used when shutting down a server
     shutdown_handles: Cell<Option<Vec<ShutdownHandle>>>,
 }
 
-#[repr(C)]
-pub struct AutopushServerOptions {
-    pub debug: i32,
-    pub router_port: u16,
-    pub port: u16,
-    pub ssl_key: *const c_char,
-    pub ssl_cert: *const c_char,
-    pub ssl_dh_param: *const c_char,
-    pub open_handshake_timeout: u32,
-    pub auto_ping_interval: f64,
-    pub auto_ping_timeout: f64,
-    pub max_connections: u32,
-    pub close_handshake_timeout: u32,
-    pub json_logging: i32,
-    pub message_table_names: *const c_char,
-    pub router_table_name: *const c_char,
-    pub router_url: *const c_char,
-    pub endpoint_url: *const c_char,
-    pub crypto_key: *const c_char,
-    pub statsd_host: *const c_char,
-    pub statsd_port: u16,
-    pub megaphone_api_url: *const c_char,
-    pub megaphone_api_token: *const c_char,
-    pub megaphone_poll_interval: u32,
-}
+impl AutopushServer {
+    pub fn new(opts: ServerOptions) -> Self {
+        Self {
+            opts: Arc::new(opts),
+            shutdown_handles: Cell::new(None),
+        }
+    }
 
-pub struct Server {
-    uaids: RefCell<HashMap<Uuid, RegisteredClient>>,
-    broadcaster: RefCell<ServiceChangeTracker>,
-    pub ddb: DynamoStorage,
-    open_connections: Cell<u32>,
-    tls_acceptor: Option<SslAcceptor>,
-    pub opts: Arc<ServerOptions>,
-    pub handle: Handle,
-    pub metrics: StatsdClient,
+    pub fn start(&self) {
+        util::init_logging(!self.opts.human_logs);
+        let handles = Server::start(&self.opts).expect("failed to start server");
+        self.shutdown_handles.set(Some(handles));
+    }
+
+    /// Blocks execution of the calling thread until the helper thread with the
+    /// tokio reactor has exited.
+    pub fn stop(&self) -> Result<()> {
+        let mut result = Ok(());
+        if let Some(shutdown_handles) = self.shutdown_handles.take() {
+            for ShutdownHandle(tx, thread) in shutdown_handles {
+                let _ = tx.send(());
+                if let Err(err) = thread.join() {
+                    result = Err(From::from(ErrorKind::Thread(err)));
+                }
+            }
+        }
+        util::reset_logging();
+        result
+    }
 }
 
 pub struct ServerOptions {
@@ -131,163 +138,79 @@ pub struct ServerOptions {
     pub megaphone_api_url: Option<String>,
     pub megaphone_api_token: Option<String>,
     pub megaphone_poll_interval: Duration,
+    pub human_logs: bool,
 }
 
-#[no_mangle]
-pub extern "C" fn autopush_server_new(
-    opts: *const AutopushServerOptions,
-    err: &mut AutopushError,
-) -> *mut AutopushServer {
-    unsafe fn to_s<'a>(ptr: *const c_char) -> Option<&'a str> {
-        if ptr.is_null() {
-            return None;
-        }
-        let s = CStr::from_ptr(ptr).to_str().expect("invalid utf-8");
-        if s.is_empty() {
-            None
-        } else {
-            Some(s)
-        }
-    }
-
-    unsafe fn ito_dur(seconds: u32) -> Option<Duration> {
-        if seconds == 0 {
-            None
-        } else {
-            Some(Duration::new(seconds.into(), 0))
-        }
-    }
-
-    unsafe fn fto_dur(seconds: f64) -> Option<Duration> {
-        if seconds == 0.0 {
-            None
-        } else {
-            Some(Duration::new(
-                seconds as u64,
-                (seconds.fract() * 1_000_000_000.0) as u32,
-            ))
-        }
-    }
-
-    rt::catch(err, || unsafe {
-        let opts = &*opts;
-
-        util::init_logging(opts.json_logging != 0);
-        let fernets: Vec<Fernet> = to_s(opts.crypto_key)
-            .map(|s| s.to_string())
-            .expect("crypto_key must be specified")
+impl ServerOptions {
+    pub fn from_settings(settings: Settings) -> Result<Self> {
+        let fernets: Vec<Fernet> = settings
+            .crypto_key
             .split(',')
             .map(|s| s.trim().to_string())
             .map(|key| Fernet::new(&key).expect("Invalid key supplied"))
             .collect();
         let fernet = MultiFernet::new(fernets);
-        let mut opts = ServerOptions {
-            debug: opts.debug != 0,
-            port: opts.port,
+        let ddb = DynamoStorage::new();
+        let message_table_names = ddb
+            .list_message_tables(&settings.message_tablename)
+            .expect("Failed to locate message tables");
+        let router_url = settings.router_url();
+        let endpoint_url = settings.endpoint_url();
+        let mut opts = Self {
+            debug: settings.debug,
+            port: settings.port,
             fernet,
-            router_port: opts.router_port,
-            statsd_host: to_s(opts.statsd_host).map(|s| s.to_string()),
-            statsd_port: opts.statsd_port,
-            message_table_names: to_s(opts.message_table_names)
-                .map(|s| s.to_string())
-                .expect("message table names must be specified")
-                .split(',')
-                .map(|s| s.trim().to_string())
-                .collect(),
-            current_message_month: "".to_string(),
-            router_table_name: to_s(opts.router_table_name)
-                .map(|s| s.to_string())
-                .expect("router table name must be specified"),
-            router_url: to_s(opts.router_url)
-                .map(|s| s.to_string())
-                .expect("router url must be specified"),
-            endpoint_url: to_s(opts.endpoint_url)
-                .map(|s| s.to_string())
-                .expect("endpoint url must be specified"),
-            ssl_key: to_s(opts.ssl_key).map(PathBuf::from),
-            ssl_cert: to_s(opts.ssl_cert).map(PathBuf::from),
-            ssl_dh_param: to_s(opts.ssl_dh_param).map(PathBuf::from),
-            auto_ping_interval: fto_dur(opts.auto_ping_interval)
-                .expect("ping interval cannot be 0"),
-            auto_ping_timeout: fto_dur(opts.auto_ping_timeout).expect("ping timeout cannot be 0"),
-            close_handshake_timeout: ito_dur(opts.close_handshake_timeout),
-            max_connections: if opts.max_connections == 0 {
+            router_port: settings.router_port,
+            statsd_host: if settings.statsd_host.is_empty() {
                 None
             } else {
-                Some(opts.max_connections)
+                Some(settings.statsd_host)
             },
-            open_handshake_timeout: ito_dur(opts.open_handshake_timeout),
-            megaphone_api_url: to_s(opts.megaphone_api_url).map(|s| s.to_string()),
-            megaphone_api_token: to_s(opts.megaphone_api_token).map(|s| s.to_string()),
-            megaphone_poll_interval: ito_dur(opts.megaphone_poll_interval)
-                .expect("poll interval cannot be 0"),
+            statsd_port: settings.statsd_port,
+            message_table_names,
+            current_message_month: "".to_string(),
+            router_table_name: settings.router_tablename,
+            router_url,
+            endpoint_url,
+            ssl_key: settings.router_ssl_key.map(PathBuf::from),
+            ssl_cert: settings.router_ssl_cert.map(PathBuf::from),
+            ssl_dh_param: settings.router_ssl_dh_param.map(PathBuf::from),
+            auto_ping_interval: fto_dur(settings.auto_ping_interval)
+                .expect("auto ping interval cannot be 0"),
+            auto_ping_timeout: fto_dur(settings.auto_ping_timeout)
+                .expect("auto ping timeout cannot be 0"),
+            close_handshake_timeout: ito_dur(settings.close_handshake_timeout),
+            max_connections: if settings.max_connections == 0 {
+                None
+            } else {
+                Some(settings.max_connections)
+            },
+            open_handshake_timeout: ito_dur(5),
+            megaphone_api_url: settings.megaphone_api_url,
+            megaphone_api_token: settings.megaphone_api_token,
+            megaphone_poll_interval: ito_dur(settings.megaphone_poll_interval)
+                .expect("megaphone poll interval cannot be 0"),
+            human_logs: settings.human_logs,
         };
         opts.message_table_names.sort_unstable();
-        opts.current_message_month = opts.message_table_names
+        opts.current_message_month = opts
+            .message_table_names
             .last()
             .expect("No last message month found")
             .to_string();
-
-        Box::new(AutopushServer {
-            inner: UnwindGuard::new(AutopushServerInner {
-                opts: Arc::new(opts),
-                shutdown_handles: Cell::new(None),
-            }),
-        })
-    })
-}
-
-#[no_mangle]
-pub extern "C" fn autopush_server_start(
-    srv: *mut AutopushServer,
-    err: &mut AutopushError,
-) -> i32 {
-    unsafe {
-        (*srv).inner.catch(err, |srv| {
-            let handles = Server::start(&srv.opts).expect("failed to start server");
-            srv.shutdown_handles.set(Some(handles));
-        })
+        Ok(opts)
     }
 }
 
-#[no_mangle]
-pub extern "C" fn autopush_server_stop(srv: *mut AutopushServer, err: &mut AutopushError) -> i32 {
-    unsafe {
-        (*srv).inner.catch(err, |srv| {
-            srv.stop().expect("tokio thread panicked");
-        })
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn autopush_server_free(srv: *mut AutopushServer) {
-    rt::abort_on_panic(|| unsafe {
-        Box::from_raw(srv);
-    });
-    util::reset_logging();
-}
-
-impl AutopushServerInner {
-    /// Blocks execution of the calling thread until the helper thread with the
-    /// tokio reactor has exited.
-    fn stop(&self) -> Result<()> {
-        let mut result = Ok(());
-        if let Some(shutdown_handles) = self.shutdown_handles.take() {
-            for ShutdownHandle(tx, thread) in shutdown_handles {
-                let _ = tx.send(());
-                if let Err(err) = thread.join() {
-                    result = Err(From::from(ErrorKind::Thread(err)));
-                }
-            }
-        }
-        result
-    }
-}
-
-impl Drop for AutopushServerInner {
-    fn drop(&mut self) {
-        drop(self.stop());
-    }
+pub struct Server {
+    uaids: RefCell<HashMap<Uuid, RegisteredClient>>,
+    broadcaster: RefCell<ServiceChangeTracker>,
+    pub ddb: DynamoStorage,
+    open_connections: Cell<u32>,
+    tls_acceptor: Option<SslAcceptor>,
+    pub opts: Arc<ServerOptions>,
+    pub handle: Handle,
+    pub metrics: StatsdClient,
 }
 
 impl Server {
@@ -374,7 +297,8 @@ impl Server {
     fn new(opts: &Arc<ServerOptions>) -> Result<(Rc<Server>, Core)> {
         let core = Core::new()?;
         let broadcaster = if let Some(ref megaphone_url) = opts.megaphone_api_url {
-            let megaphone_token = opts.megaphone_api_token
+            let megaphone_token = opts
+                .megaphone_api_token
                 .as_ref()
                 .expect("Megaphone API requires a Megaphone API Token to be set");
             ServiceChangeTracker::with_api_services(megaphone_url, megaphone_token)
@@ -397,8 +321,10 @@ impl Server {
 
         let handle = core.handle();
         let srv2 = srv.clone();
-        let ws_srv = ws_listener.incoming().map_err(Error::from).for_each(
-            move |(socket, addr)| {
+        let ws_srv = ws_listener
+            .incoming()
+            .map_err(Error::from)
+            .for_each(move |(socket, addr)| {
                 // Make sure we're not handling too many clients before we start the
                 // websocket handshake.
                 let max = srv.opts.max_connections.unwrap_or(u32::max_value());
@@ -459,10 +385,12 @@ impl Server {
                             // communication with the client, managing pings
                             // here and deferring to `Client` to start driving
                             // the internal state machine.
-                            Box::new(ws.and_then(move |ws| {
-                                PingManager::new(&srv2, ws, uarx, host)
-                                    .chain_err(|| "failed to make ping handler")
-                            }).flatten())
+                            Box::new(
+                                ws.and_then(move |ws| {
+                                    PingManager::new(&srv2, ws, uarx, host)
+                                        .chain_err(|| "failed to make ping handler")
+                                }).flatten(),
+                            )
                         }
                     }
                 });
@@ -482,11 +410,11 @@ impl Server {
                 }));
 
                 Ok(())
-            },
-        );
+            });
 
         if let Some(ref megaphone_url) = opts.megaphone_api_url {
-            let megaphone_token = opts.megaphone_api_token
+            let megaphone_token = opts
+                .megaphone_api_token
                 .as_ref()
                 .expect("Megaphone API requires a Megaphone API Token to be set");
             let fut = MegaphoneUpdater::new(
@@ -523,14 +451,16 @@ impl Server {
             let key_digest = hash::hash(hash::MessageDigest::sha256(), &raw_key)
                 .chain_err(|| "Error creating message digest for key")?;
             base.extend(key_digest.iter());
-            let encrypted = self.opts
+            let encrypted = self
+                .opts
                 .fernet
                 .encrypt(&base)
                 .trim_matches('=')
                 .to_string();
             Ok(format!("{}v2/{}", root, encrypted))
         } else {
-            let encrypted = self.opts
+            let encrypted = self
+                .opts
                 .fernet
                 .encrypt(&base)
                 .trim_matches('=')
@@ -587,9 +517,7 @@ impl Server {
     pub fn disconnet_client(&self, uaid: &Uuid, uid: &Uuid) {
         debug!("Disconnecting client!");
         let mut uaids = self.uaids.borrow_mut();
-        let client_exists = uaids
-            .get(uaid)
-            .map_or(false, |client| client.uid == *uid);
+        let client_exists = uaids.get(uaid).map_or(false, |client| client.uid == *uid);
         if client_exists {
             uaids.remove(uaid).expect("Couldn't remove client?");
         }
@@ -668,7 +596,8 @@ impl Future for MegaphoneUpdater {
                 MegaphoneState::Waiting => {
                     try_ready!(self.timeout.poll());
                     debug!("Sending megaphone API request");
-                    let fut = self.client
+                    let fut = self
+                        .client
                         .get(&self.api_url)
                         .header(header::Authorization(self.api_token.clone()))
                         .send()
@@ -702,14 +631,6 @@ impl Future for MegaphoneUpdater {
     }
 }
 
-struct PingManager {
-    socket: RcObject<WebpushSocket<WebSocketStream<WebpushIo>>>,
-    timeout: Timeout,
-    waiting: WaitingFor,
-    srv: Rc<Server>,
-    client: CloseState<Client<RcObject<WebpushSocket<WebSocketStream<WebpushIo>>>>>,
-}
-
 enum WaitingFor {
     SendPing,
     Pong,
@@ -719,6 +640,14 @@ enum WaitingFor {
 enum CloseState<T> {
     Exchange(T),
     Closing,
+}
+
+struct PingManager {
+    socket: RcObject<WebpushSocket<WebSocketStream<WebpushIo>>>,
+    timeout: Timeout,
+    waiting: WaitingFor,
+    srv: Rc<Server>,
+    client: CloseState<Client<RcObject<WebpushSocket<WebSocketStream<WebpushIo>>>>>,
 }
 
 impl PingManager {

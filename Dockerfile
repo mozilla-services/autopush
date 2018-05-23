@@ -15,7 +15,7 @@ RUN \
     make clean && \
     pip install -r requirements.txt && \
     pypy setup.py develop && \
-    cd autopush_rs && \
+    cargo install --path autopush_rs && \
     cargo clean && \
     rustup self uninstall -y
 

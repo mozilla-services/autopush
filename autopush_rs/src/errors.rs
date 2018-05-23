@@ -29,6 +29,7 @@ use std::io;
 use std::num;
 
 use cadence;
+use config;
 use futures::Future;
 use httparse;
 use sentry;
@@ -46,6 +47,7 @@ error_chain! {
         SentryError(sentry::Error);
         UuidParseError(uuid::ParseError);
         ParseIntError(num::ParseIntError);
+        ConfigError(config::ConfigError);
     }
 
     errors {
