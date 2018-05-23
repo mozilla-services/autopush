@@ -1,3 +1,41 @@
+<a name="1.47.0"></a>
+## 1.47.0 (2018-05-23)
+
+
+#### Refactor
+
+*   rip most of metrics out of db ([9d53f20a](https://github.com/mozilla-services/autopush/commit/9d53f20af263cb2245c2d5ff69ca903ed46a99b5))
+*   prefer impl trait in db.mod when possible ([8b6dd7d3](https://github.com/mozilla-services/autopush/commit/8b6dd7d35dc3ee2cc8af86fd6ec022400af32708))
+*   fix our odd indents ([fd484056](https://github.com/mozilla-services/autopush/commit/fd484056a404aa12c00a36b154331577ec3a6505))
+*   prefer impl trait when possible ([04cae080](https://github.com/mozilla-services/autopush/commit/04cae0808d7fe771b29987681996ff8e95fe65b4))
+*   minor cleanup ([1b2fdcf7](https://github.com/mozilla-services/autopush/commit/1b2fdcf71582cb89f3b41aff8ff852f055cc50b5))
+*   remove/rearrange some clones ([f8c6e050](https://github.com/mozilla-services/autopush/commit/f8c6e050fdde50be698ae3b9fca13737b35bf11f))
+*   remove unneeded uaid from Notification ([e755bb42](https://github.com/mozilla-services/autopush/commit/e755bb422be38cdc7cf5a67f41b747927f8b8a61))
+*   move ddb helpers into its own modules ([ac4983e2](https://github.com/mozilla-services/autopush/commit/ac4983e23d96c93c70dc57944c3b456a68a609c0), closes [#1238](https://github.com/mozilla-services/autopush/issues/1238))
+
+#### Bug Fixes
+
+*   ensure consistent_read on fetch messages fns ([ecd09c5f](https://github.com/mozilla-services/autopush/commit/ecd09c5f90fbb1c6504c0ef73453ded3f9f287b4))
+*   shrink the Docker build ([2bffb326](https://github.com/mozilla-services/autopush/commit/2bffb326397d89b2729c7a1d24952e7dbfe80151))
+*   remove use of unwrap's by passing current message month ([7b1444d9](https://github.com/mozilla-services/autopush/commit/7b1444d9af52d4a11554adfe55f65e0d9a0deffb))
+*   properly set record expiration ([e155e34f](https://github.com/mozilla-services/autopush/commit/e155e34fdc27db9cd09f2e6edada8edc295a6737), closes [#1231](https://github.com/mozilla-services/autopush/issues/1231))
+*   let the build continue to rustc on cbindgen failures ([46f048ad](https://github.com/mozilla-services/autopush/commit/46f048ad63fba7c9d684b12a004edcb3a2f74fb8), closes [#1235](https://github.com/mozilla-services/autopush/issues/1235))
+*   re-rustfmt it all, set expiry on register instead of add with 2x ([35b0c62e](https://github.com/mozilla-services/autopush/commit/35b0c62eebc5f58a1e186e5345c8822dd224973a))
+
+#### Features
+
+*   add Rust + Python mixed integration tests ([7a88c736](https://github.com/mozilla-services/autopush/commit/7a88c736f23a14eca71d8f956ea23ccb83a3342a), closes [#1221](https://github.com/mozilla-services/autopush/issues/1221))
+*   port migrate user to Rust, remove Python calling ([9ae1fb59](https://github.com/mozilla-services/autopush/commit/9ae1fb597e319fb2d30de57839dc1fb2d49805d6), closes [#1206](https://github.com/mozilla-services/autopush/issues/1206))
+*   port migrate user to Rust, remove Python calling ([733bd464](https://github.com/mozilla-services/autopush/commit/733bd464b17a1aff3f45adf325db52cb580f2cc0), closes [#1206](https://github.com/mozilla-services/autopush/issues/1206))
+*   port store messages command to Rust ([b9f46248](https://github.com/mozilla-services/autopush/commit/b9f462484dd0ea014b071fb246e60a69870e322d), closes [#1208](https://github.com/mozilla-services/autopush/issues/1208))
+
+#### Chore
+
+*   avoid cargo build within tox ([116f556c](https://github.com/mozilla-services/autopush/commit/116f556c21693772a4dd1ddae82b7ac45ff3e986))
+*   address clippy things we care to fix ([4241e76a](https://github.com/mozilla-services/autopush/commit/4241e76a5faacf710c4600252f86c1cf3393430e))
+
+
+
 <a name="1.46.0"></a>
 ## 1.46.0 (2018-05-11)
 
