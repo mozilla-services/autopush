@@ -1,3 +1,13 @@
+<a name="1.47.1"></a>
+## 1.47.1 (2018-05-23)
+
+
+#### Bug Fixes
+
+*   actually pass thru $WITH_RUST ([cfc506f9](https://github.com/mozilla-services/autopush/commit/cfc506f98b43bacf788099a5898dc321e3374d96))
+
+
+
 <a name="1.47.0"></a>
 ## 1.47.0 (2018-05-23)
 
