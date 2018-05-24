@@ -7,10 +7,6 @@ cache:
 sudo: required
 dist: trusty
 
-env:
-  global:
-    - WITH_RUST=release
-
 matrix:
   include:
     - python: 2.7
@@ -33,10 +29,12 @@ install:
       # Build here instead of within tox's pip install -e. It hides the output
       # which can kill the job on slower travis runs
       if [ ${WITH_RUST} == "release" ]; then
-          export CARGO_ARG="--release"
+          cargo build --manifest-path autopush_rs/Cargo.toml --release || \
+              travis_terminate 1
+      else
+          cargo build --manifest-path autopush_rs/Cargo.toml || \
+              travis_terminate 1
       fi
-      cargo build --manifest-path autopush_rs/Cargo.toml ${CARGO_ARG:-""} || \
-          travis_terminate 1
   fi
 script:
 - tox -v -- ${CODECOV:+--with-coverage --cover-xml --cover-package=autopush}
