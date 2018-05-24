@@ -62,7 +62,10 @@
 extern crate base64;
 extern crate bytes;
 extern crate cadence;
+extern crate chan_signal;
 extern crate chrono;
+extern crate config;
+extern crate docopt;
 extern crate fernet;
 #[macro_use]
 extern crate futures;
@@ -116,11 +119,10 @@ extern crate error_chain;
 #[macro_use]
 mod db;
 mod client;
-mod errors;
+pub mod errors;
 mod http;
 mod protocol;
-#[macro_use]
-pub mod rt;
 pub mod server;
+pub mod settings;
 #[macro_use]
 mod util;

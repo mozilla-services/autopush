@@ -27,4 +27,5 @@ pypy/
 .eggs/
 autopush_rs/target
 autopush_rs/_native*
+target
 *.rs.bk

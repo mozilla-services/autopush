@@ -11,17 +11,19 @@ import json
 import logging
 import os
 import re
+import signal
 import socket
+import subprocess
 import time
-import datetime
 import uuid
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from mock import Mock, patch
 from threading import Thread, Event
+from queue import Queue, Empty
 from unittest.case import SkipTest
 
 import ecdsa
+import psutil
 import requests
 import twisted.internet.base
 from cryptography.fernet import Fernet
@@ -41,7 +43,6 @@ from autopush.logging import begin_or_register
 from autopush.main import (
     ConnectionApplication,
     EndpointApplication,
-    RustConnectionApplication,
 )
 from autopush.utils import base64url_encode
 from autopush.tests.support import TestingLogObserver
@@ -52,17 +53,27 @@ from autopush.tests.test_integration import (
 
 log = logging.getLogger(__name__)
 
+here_dir = os.path.abspath(os.path.dirname(__file__))
+root_dir = os.path.dirname(os.path.dirname(here_dir))
+
 twisted.internet.base.DelayedCall.debug = True
 
 ROUTER_TABLE = os.environ.get("ROUTER_TABLE", "router_int_test")
 MESSAGE_TABLE = os.environ.get("MESSAGE_TABLE", "message_int_test")
 
 CRYPTO_KEY = Fernet.generate_key()
-CONNECTION_PORT = 9050
-ENDPOINT_PORT = 9060
-ROUTER_PORT = 9070
+CONNECTION_PORT = 9150
+ENDPOINT_PORT = 9160
+ROUTER_PORT = 9170
+MP_CONNECTION_PORT = 9052
+MP_ROUTER_PORT = 9072
+RP_CONNECTION_PORT = 9054
+RP_ROUTER_PORT = 9074
 
 CN_SERVER = None
+CN_MP_SERVER = None
+MOCK_SERVER_THREAD = None
+CN_QUEUES = []
 
 
 def get_free_port():
@@ -73,45 +84,115 @@ def get_free_port():
     return port
 
 
+MOCK_MP_SERVER_PORT = get_free_port()
+
+
+def enqueue_output(out, queue):
+    for line in iter(out.readline, b''):
+        queue.put(line)
+    out.close()
+
+
 def setup_module():
-    global CN_SERVER
+    global CN_SERVER, CN_QUEUES, CN_MP_SERVER, MOCK_SERVER_THREAD
     logging.getLogger('boto').setLevel(logging.CRITICAL)
     if "SKIP_INTEGRATION" in os.environ:  # pragma: nocover
         raise SkipTest("Skipping integration tests")
 
-    conn_defaults = dict(
+    conn_conf = dict(
         hostname='localhost',
         port=CONNECTION_PORT,
+        endpoint_hostname="localhost",
         endpoint_port=ENDPOINT_PORT,
         router_port=ROUTER_PORT,
         endpoint_scheme='http',
-        statsd_host=None,
-        router_table=dict(tablename=ROUTER_TABLE),
-        message_table=dict(tablename=MESSAGE_TABLE),
-        use_cryptography=True,
-    )
-
-    conn_conf = AutopushConfig(
+        statsd_host="",
+        router_tablename=ROUTER_TABLE,
+        message_tablename=MESSAGE_TABLE,
         crypto_key=CRYPTO_KEY,
         auto_ping_interval=60.0,
         auto_ping_timeout=10.0,
         close_handshake_timeout=5,
         max_connections=5000,
-        human_logs=False,
-        **conn_defaults
+        human_logs="false",
     )
+    rust_bin = root_dir + "/target/release/autopush_rs"
+    possible_paths = ["/target/debug/autopush_rs",
+                      "/autopush_rs/target/release/autopush_rs",
+                      "/autopush_rs/target/debug/autopush_rs"]
+    while possible_paths and not os.path.exists(rust_bin):  # pragma: nocover
+        rust_bin = root_dir + possible_paths.pop(0)
 
-    CN_SERVER = conn = RustConnectionApplication(
-        conn_conf,
-        resource=autopush.tests.boto_resource,
-    )
-    conn.setup(rotate_tables=False, num_threads=2)
-    conn.startService()
+    # Setup the environment
+    for key, val in conn_conf.items():
+        key = "autopush_" + key
+        os.environ[key.upper()] = str(val)
+
+    cmd = [rust_bin]
+    CN_SERVER = subprocess.Popen(cmd, shell=True, env=os.environ,
+                                 stdout=subprocess.PIPE,
+                                 stderr=subprocess.PIPE,
+                                 universal_newlines=True)
+    # Spin up the readers to dump the output from stdout/stderr
+    out_q = Queue()
+    t = Thread(target=enqueue_output, args=(CN_SERVER.stdout, out_q))
+    t.daemon = True  # thread dies with the program
+    t.start()
+    err_q = Queue()
+    t = Thread(target=enqueue_output, args=(CN_SERVER.stderr, err_q))
+    t.daemon = True  # thread dies with the program
+    t.start()
+    CN_QUEUES.extend([out_q, err_q])
+
+    # Megaphone API mock
+    MockMegaphoneRequestHandler.services = {}
+    MockMegaphoneRequestHandler.polled.clear()
+    mock_server = HTTPServer(('localhost', MOCK_MP_SERVER_PORT),
+                             MockMegaphoneRequestHandler)
+    MOCK_SERVER_THREAD = Thread(target=mock_server.serve_forever)
+    MOCK_SERVER_THREAD.setDaemon(True)
+    MOCK_SERVER_THREAD.start()
+
+    # Setup the megaphone connection node
+    megaphone_api_url = 'http://localhost:{port}/v1/broadcasts'.format(
+        port=MOCK_MP_SERVER_PORT)
+    conn_conf.update(dict(
+        port=MP_CONNECTION_PORT,
+        endpoint_port=ENDPOINT_PORT,
+        router_port=MP_ROUTER_PORT,
+        auto_ping_interval=0.5,
+        auto_ping_timeout=10.0,
+        close_handshake_timeout=5,
+        max_connections=5000,
+        megaphone_api_url=megaphone_api_url,
+        megaphone_api_token=MockMegaphoneRequestHandler.token,
+        megaphone_poll_interval=1,
+    ))
+
+    # Setup the environment
+    for key, val in conn_conf.items():
+        key = "autopush_" + key
+        os.environ[key.upper()] = str(val)
+
+    cmd = [rust_bin]
+    CN_MP_SERVER = subprocess.Popen(cmd, shell=True, env=os.environ)
+    time.sleep(1)
 
 
 def teardown_module():
-    global CN_SERVER
-    CN_SERVER.stopService()
+    global CN_SERVER, CN_MP_SERVER
+    # This kinda sucks, but its the only way to nuke the child procs
+    proc = psutil.Process(pid=CN_SERVER.pid)
+    child_procs = proc.children(recursive=True)
+    for p in [proc] + child_procs:
+        os.kill(p.pid, signal.SIGTERM)
+        CN_SERVER.wait()
+
+    proc = psutil.Process(pid=CN_MP_SERVER.pid)
+    child_procs = proc.children(recursive=True)
+    for p in [proc] + child_procs:
+        os.kill(p.pid, signal.SIGTERM)
+        CN_MP_SERVER.wait()
 
 
 class MockMegaphoneRequestHandler(BaseHTTPRequestHandler):
@@ -167,6 +248,17 @@ class TestRustWebPush(unittest.TestCase):
             **self.endpoint_kwargs()
         )
         self.start_ep(self._ep_conf)
+
+    def tearDown(self):
+        for queue in CN_QUEUES:
+            is_empty = False
+            while not is_empty:
+                try:
+                    line = queue.get_nowait()
+                except Empty:
+                    is_empty = True
+                else:
+                    print(line)
 
     def endpoint_kwargs(self):
         return self._endpoint_defaults
@@ -749,16 +841,12 @@ class TestRustWebPush(unittest.TestCase):
 
 
 class TestRustWebPushBroadcast(unittest.TestCase):
-    connection_port = 9052
-    endpoint_port = 9060
-    router_port = 9072
-
     _endpoint_defaults = dict(
         hostname='localhost',
-        port=endpoint_port,
-        endpoint_port=endpoint_port,
+        port=ENDPOINT_PORT,
+        endpoint_port=ENDPOINT_PORT,
         endpoint_scheme='http',
-        router_port=router_port,
+        router_port=MP_ROUTER_PORT,
         statsd_host=None,
         router_table=dict(tablename=ROUTER_TABLE),
         message_table=dict(tablename=MESSAGE_TABLE),
@@ -767,9 +855,9 @@ class TestRustWebPushBroadcast(unittest.TestCase):
 
     _conn_defaults = dict(
         hostname='localhost',
-        port=connection_port,
-        endpoint_port=endpoint_port,
-        router_port=router_port,
+        port=RP_CONNECTION_PORT,
+        endpoint_port=ENDPOINT_PORT,
+        router_port=RP_ROUTER_PORT,
         endpoint_scheme='http',
         statsd_host=None,
         router_table=dict(tablename=ROUTER_TABLE),
@@ -788,54 +876,42 @@ class TestRustWebPushBroadcast(unittest.TestCase):
         ep.startService()
         self.addCleanup(ep.stopService)
 
-    def start_conn(self, conn_conf):
-        self.conn = conn = RustConnectionApplication(
-            conn_conf,
-            resource=autopush.tests.boto_resource,
-        )
-        conn.setup(rotate_tables=False, num_threads=2)
-        conn.startService()
-        self.addCleanup(conn.stopService)
-
     def setUp(self):
-        # Megaphone API mock
-        mock_server_port = get_free_port()
-        MockMegaphoneRequestHandler.services = {}
-        MockMegaphoneRequestHandler.polled.clear()
-        mock_server = HTTPServer(('localhost', mock_server_port),
-                                 MockMegaphoneRequestHandler)
-        mock_server_thread = Thread(target=mock_server.serve_forever)
-        mock_server_thread.setDaemon(True)
-        mock_server_thread.start()
-        self.addCleanup(mock_server.shutdown)
-        self.mock_server_thread = mock_server_thread
+        self.mock_server_thread = MOCK_SERVER_THREAD
         self.mock_megaphone = MockMegaphoneRequestHandler
 
         self.logs = TestingLogObserver()
         begin_or_register(self.logs)
         self.addCleanup(globalLogPublisher.removeObserver, self.logs)
 
-        megaphone_api_url = 'http://localhost:{port}/v1/broadcasts'.format(
-            port=mock_server.server_port)
-
         self._ep_conf = AutopushConfig(
             crypto_key=CRYPTO_KEY,
             **self.endpoint_kwargs()
         )
-        self._conn_conf = AutopushConfig(
-            crypto_key=CRYPTO_KEY,
-            auto_ping_interval=0.5,
-            auto_ping_timeout=10.0,
-            close_handshake_timeout=5,
-            max_connections=5000,
-            megaphone_api_url=megaphone_api_url,
-            megaphone_api_token=MockMegaphoneRequestHandler.token,
-            megaphone_poll_interval=1,
-            **self.conn_kwargs()
-        )
 
         self.start_ep(self._ep_conf)
-        self.start_conn(self._conn_conf)
+
+        # Create a Python connection application for accessing the db
+        self._conn_conf = AutopushConfig(
+            crypto_key=CRYPTO_KEY,
+            **self.conn_kwargs()
+        )
+        self.conn = conn = ConnectionApplication(
+            self._conn_conf,
+            resource=autopush.tests.boto_resource,
+        )
+        conn.setup(rotate_tables=True)
+
+    def tearDown(self):
+        for queue in CN_QUEUES:
+            is_empty = False
+            while not is_empty:
+                try:
+                    line = queue.get_nowait()
+                except Empty:
+                    is_empty = True
+                else:
+                    print(line)
 
     def endpoint_kwargs(self):
         return self._endpoint_defaults
@@ -845,7 +921,7 @@ class TestRustWebPushBroadcast(unittest.TestCase):
 
     @inlineCallbacks
     def quick_register(self, sslcontext=None, connection_port=None):
-        conn_port = connection_port or self.connection_port
+        conn_port = connection_port or MP_CONNECTION_PORT
         client = Client("ws://localhost:{}/".format(conn_port),
                         sslcontext=sslcontext)
         yield client.connect()
@@ -866,13 +942,13 @@ class TestRustWebPushBroadcast(unittest.TestCase):
 
     @property
     def _ws_url(self):
-        return "ws://localhost:{}/".format(self.connection_port)
+        return "ws://localhost:{}/".format(MP_CONNECTION_PORT)
 
     @inlineCallbacks
     def test_broadcast_update_on_connect(self):
         self.mock_megaphone.services = {"kinto:123": "ver1"}
         self.mock_megaphone.polled.clear()
-        self.mock_megaphone.polled.wait()
+        self.mock_megaphone.polled.wait(timeout=5)
 
         old_ver = {"kinto:123": "ver0"}
         client = Client(self._ws_url)
@@ -884,7 +960,7 @@ class TestRustWebPushBroadcast(unittest.TestCase):
 
         self.mock_megaphone.services = {"kinto:123": "ver2"}
         self.mock_megaphone.polled.clear()
-        self.mock_megaphone.polled.wait()
+        self.mock_megaphone.polled.wait(timeout=5)
 
         result = yield client.get_broadcast(2)
         assert result["broadcasts"]["kinto:123"] == "ver2"
@@ -895,7 +971,7 @@ class TestRustWebPushBroadcast(unittest.TestCase):
     def test_broadcast_subscribe(self):
         self.mock_megaphone.services = {"kinto:123": "ver1"}
         self.mock_megaphone.polled.clear()
-        self.mock_megaphone.polled.wait()
+        self.mock_megaphone.polled.wait(timeout=5)
 
         old_ver = {"kinto:123": "ver0"}
         client = Client(self._ws_url)
@@ -911,7 +987,7 @@ class TestRustWebPushBroadcast(unittest.TestCase):
 
         self.mock_megaphone.services = {"kinto:123": "ver2"}
         self.mock_megaphone.polled.clear()
-        self.mock_megaphone.polled.wait()
+        self.mock_megaphone.polled.wait(timeout=5)
 
         result = yield client.get_broadcast(2)
         assert result["broadcasts"]["kinto:123"] == "ver2"
@@ -922,7 +998,7 @@ class TestRustWebPushBroadcast(unittest.TestCase):
     def test_broadcast_no_changes(self):
         self.mock_megaphone.services = {"kinto:123": "ver1"}
         self.mock_megaphone.polled.clear()
-        self.mock_megaphone.polled.wait()
+        self.mock_megaphone.polled.wait(timeout=5)
 
         old_ver = {"kinto:123": "ver1"}
         client = Client(self._ws_url)
@@ -932,43 +1008,6 @@ class TestRustWebPushBroadcast(unittest.TestCase):
         assert result["use_webpush"] is True
         assert result["broadcasts"] == {}
 
-        yield self.shut_down(client)
-
-    @inlineCallbacks
-    def test_no_rotation(self):
-        # override autopush settings
-        ep_safe = self._ep_conf.allow_table_rotation
-        conn_safe = self._conn_conf.allow_table_rotation
-        self._ep_conf.allow_table_rotation = False
-        self._conn_conf.allow_table_rotation = False
-        yield self.ep.stopService()
-        yield self.conn.stopService()
-        try:
-            self.start_ep(self._ep_conf)
-            self.start_conn(self._conn_conf)
-            data = str(uuid.uuid4())
-            client = yield self.quick_register()
-            result = yield client.send_notification(data=data)
-            assert result["headers"]["encryption"] == client._crypto_key
-            assert result["data"] == base64url_encode(data)
-            assert result["messageType"] == "notification"
-
-            assert len(self.ep.db.message_tables) == 1
-            table_name = self.ep.db.message_tables[0]
-            target_day = datetime.date(2016, 2, 29)
-            with patch.object(datetime, 'date',
-                              Mock(wraps=datetime.date)) as patched:
-                patched.today.return_value = target_day
-                yield self.ep.db.update_rotating_tables()
-                assert len(self.ep.db.message_tables) == 1
-                assert table_name == self.ep.db.message_tables[0]
-        finally:
-            yield self.ep.stopService()
-            yield self.conn.stopService()
-            self._ep_conf.allow_table_rotation = ep_safe
-            self._conn_conf.allow_table_rotation = conn_safe
-            self.start_ep(self._ep_conf)
-            self.start_conn(self._conn_conf)
         yield self.shut_down(client)
 
     @inlineCallbacks
@@ -1184,7 +1223,7 @@ class TestRustWebPushBroadcast(unittest.TestCase):
     @inlineCallbacks
     def test_webpush_monthly_rotation_no_channels(self):
         from autopush.db import make_rotating_tablename
-        client = Client("ws://localhost:{}/".format(self.connection_port))
+        client = Client("ws://localhost:{}/".format(MP_CONNECTION_PORT))
         yield client.connect()
         yield client.hello()
         yield client.disconnect()
@@ -1236,16 +1275,12 @@ class TestRustWebPushBroadcast(unittest.TestCase):
 
 
 class TestRustAndPythonWebPush(unittest.TestCase):
-    connection_port = 9052
-    endpoint_port = 9060
-    router_port = 9072
-
     _endpoint_defaults = dict(
         hostname='localhost',
-        port=endpoint_port,
-        endpoint_port=endpoint_port,
+        port=ENDPOINT_PORT,
+        endpoint_port=ENDPOINT_PORT,
         endpoint_scheme='http',
-        router_port=router_port,
+        router_port=RP_ROUTER_PORT,
         statsd_host=None,
         router_table=dict(tablename=ROUTER_TABLE),
         message_table=dict(tablename=MESSAGE_TABLE),
@@ -1254,9 +1289,9 @@ class TestRustAndPythonWebPush(unittest.TestCase):
 
     _conn_defaults = dict(
         hostname='localhost',
-        port=connection_port,
-        endpoint_port=endpoint_port,
-        router_port=router_port,
+        port=RP_CONNECTION_PORT,
+        endpoint_port=ENDPOINT_PORT,
+        router_port=RP_ROUTER_PORT,
         endpoint_scheme='http',
         statsd_host=None,
         router_table=dict(tablename=ROUTER_TABLE),
@@ -1303,6 +1338,17 @@ class TestRustAndPythonWebPush(unittest.TestCase):
         self.start_ep(self._ep_conf)
         self.start_conn(self._conn_conf)
 
+    def tearDown(self):
+        for queue in CN_QUEUES:
+            is_empty = False
+            while not is_empty:
+                try:
+                    line = queue.get_nowait()
+                except Empty:
+                    is_empty = True
+                else:
+                    print(line)
+
     def endpoint_kwargs(self):
         return self._endpoint_defaults
 
@@ -1311,7 +1357,7 @@ class TestRustAndPythonWebPush(unittest.TestCase):
 
     @inlineCallbacks
     def quick_register(self, sslcontext=None, connection_port=None):
-        conn_port = connection_port or self.connection_port
+        conn_port = connection_port or RP_CONNECTION_PORT
         client = Client("ws://localhost:{}/".format(conn_port),
                         sslcontext=sslcontext)
         yield client.connect()
@@ -1324,17 +1370,13 @@ class TestRustAndPythonWebPush(unittest.TestCase):
         if client:
             yield client.disconnect()
 
-    @property
-    def _ws_url(self):
-        return "ws://localhost:{}/".format(self.connection_port)
-
     @inlineCallbacks
     def test_cross_topic_no_delivery_on_reconnect(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register(connection_port=CONNECTION_PORT)
         yield client.disconnect()
         yield client.send_notification(data=data, topic="Inbox")
-        yield client.connect(connection_port=self.connection_port)
+        yield client.connect(connection_port=RP_CONNECTION_PORT)
         yield client.hello()
         result = yield client.get_notification(timeout=10)
         assert result["headers"]["encryption"] == client._crypto_key
@@ -1347,7 +1389,7 @@ class TestRustAndPythonWebPush(unittest.TestCase):
         result = yield client.get_notification(0.5)
         assert result is None
         yield client.disconnect()
-        yield client.connect(connection_port=self.connection_port)
+        yield client.connect(connection_port=RP_CONNECTION_PORT)
         yield client.hello()
         result = yield client.get_notification(0.5)
         assert result is None
@@ -1367,7 +1409,7 @@ class TestRustAndPythonWebPush(unittest.TestCase):
         assert result["messageType"] == "notification"
         yield client.ack(result["channelID"], result["version"])
         yield client.disconnect()
-        yield client.connect(connection_port=self.connection_port)
+        yield client.connect(connection_port=RP_CONNECTION_PORT)
         yield client.hello()
         result = yield client.get_notification(0.5)
         assert result is None

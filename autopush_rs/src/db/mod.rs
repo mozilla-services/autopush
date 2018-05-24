@@ -81,6 +81,26 @@ impl DynamoStorage {
         Self { ddb: Rc::new(ddb) }
     }
 
+    pub fn list_message_tables(&self, prefix: &str) -> Result<Vec<String>> {
+        let mut names: Vec<String> = Vec::new();
+        let mut start_key = None;
+        loop {
+            let result = commands::list_tables(self.ddb.clone(), start_key).wait()?;
+            start_key = result.last_evaluated_table_name;
+            if let Some(table_names) = result.table_names {
+                names.extend(table_names);
+            }
+            if start_key.is_none() {
+                break;
+            }
+        }
+        let names = names
+            .into_iter()
+            .filter(|name| name.starts_with(prefix))
+            .collect();
+        Ok(names)
+    }
+
     pub fn increment_storage(
         &self,
         table_name: &str,

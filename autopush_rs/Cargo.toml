@@ -1,20 +1,31 @@
 [package]
 name = "autopush"
 version = "0.1.0"
-authors = ["Alex Crichton <alex@alexcrichton.com>"]
+authors = [
+  "Ben Bangert <ben@groovie.org>",
+  "JR Conlin <jrconlin@mozilla.com>",
+  "Alex Crichton <alex@alexcrichton.com>",
+  "Phil Jenvey <pjenvey@underboss.org>",
+]
 
 [lib]
 name = "autopush"
-crate-type = ["cdylib"]
 
-[build-dependencies]
-cbindgen = "0.6.0"
+[[bin]]
+name = "autopush_rs"
+path = "src/main.rs"
+
+[dependencies.config]
+git = "https://github.com/mehcode/config-rs"
+rev = "e8fa9fee96185ddd18ebcef8a925c75459111edb"
 
 [dependencies]
 base64 = "0.9.1"
 bytes = "0.4.6"
 cadence = "0.13.2"
+chan-signal = "0.3.1"
 chrono = "0.4.2"
+docopt = "1.0.0"
 env_logger = { version = "0.5.6", default-features = false }
 error-chain = "0.11.0"
 fernet = "0.1"
@@ -40,7 +51,6 @@ rusoto_credential = "0.11.0"
 rusoto_dynamodb = "0.32.0"
 sentry = "0.2.0"
 serde = "1.0.45"
-# Pinned to 1.0.21 due to cbindgen
 serde_derive = "1.0.21"
 serde_dynamodb = "0.1.2"
 serde_json = "1.0.13"
