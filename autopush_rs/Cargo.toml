@@ -28,16 +28,13 @@ fernet = "0.1.0"
 futures = "0.1.21"
 futures-backoff = "0.1.0"
 hex = "0.3.2"
-hostname = "0.1.5"
 httparse = "1.2.4"
 hyper = "0.11.27"
 lazy_static = "1.0.1"
 libc = "0.2.41"
-# log: Use this version for debug builds
-# log = "0.4.1"
-# log: Use this for release builds (leave in for commits)
-log = { version = "0.4.1", features = ["max_level_trace", "release_max_level_warn"] }
+log = { version = "0.4.1", features = ["max_level_info", "release_max_level_info"] }
 matches = "0.1.6"
+mozsvc-common = "0.1.0"
 openssl = "0.10.8"
 rand = "0.5.0"
 regex = "1.0.0"
@@ -50,13 +47,10 @@ serde = "1.0.63"
 serde_derive = "1.0.63"
 serde_dynamodb = "0.1.2"
 serde_json = "1.0.18"
-# slog: Use this first version for debug builds
-# slog = { version = "2.2.3" , features = ["max_level_trace", "release_max_level_debug"] }
-# slog: Use this for release builds (leave in for commits)
-slog = "2.2.3"
+slog = { version = "2.2.3" , features = ["max_level_trace", "release_max_level_info"] }
 slog-async = "2.3.0"
 slog-term = "2.4.0"
-slog-json = "2.2.0"
+slog-mozlog-json = "0.1"
 slog-scope = "4.0.1"
 slog-stdlog = "3.0.2"
 # state_machine_future = { version = "0.1.6", features = ["debug_code_generation"] }

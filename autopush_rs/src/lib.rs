@@ -71,7 +71,6 @@ extern crate fernet;
 extern crate futures;
 extern crate futures_backoff;
 extern crate hex;
-extern crate hostname;
 extern crate httparse;
 extern crate hyper;
 #[macro_use]
@@ -79,6 +78,7 @@ extern crate lazy_static;
 extern crate libc;
 #[macro_use]
 extern crate matches;
+extern crate mozsvc_common;
 extern crate openssl;
 extern crate rand;
 extern crate regex;
@@ -96,7 +96,7 @@ extern crate serde_json;
 #[macro_use]
 extern crate slog;
 extern crate slog_async;
-extern crate slog_json;
+extern crate slog_mozlog_json;
 #[macro_use]
 extern crate slog_scope;
 extern crate slog_stdlog;
@@ -121,6 +121,7 @@ mod db;
 mod client;
 pub mod errors;
 mod http;
+mod logging;
 mod protocol;
 pub mod server;
 pub mod settings;

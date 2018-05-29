@@ -40,6 +40,7 @@ use db::DynamoStorage;
 use errors::*;
 use errors::{Error, Result};
 use http;
+use logging;
 use protocol::{ClientMessage, Notification, ServerMessage, ServerNotification};
 use server::dispatch::{Dispatch, RequestType};
 use server::metrics::metrics_from_opts;
@@ -48,7 +49,7 @@ use settings::Settings;
 use util::megaphone::{
     ClientServices, MegaphoneAPIResponse, Service, ServiceChangeTracker, ServiceClientInit,
 };
-use util::{self, timeout, RcObject};
+use util::{timeout, RcObject};
 
 mod dispatch;
 mod metrics;
@@ -93,7 +94,7 @@ impl AutopushServer {
     }
 
     pub fn start(&self) {
-        util::init_logging(!self.opts.human_logs);
+        logging::init_logging(!self.opts.human_logs).expect("init_logging failed");
         let handles = Server::start(&self.opts).expect("failed to start server");
         self.shutdown_handles.set(Some(handles));
     }
@@ -110,7 +111,7 @@ impl AutopushServer {
                 }
             }
         }
-        util::reset_logging();
+        logging::reset_logging();
         result
     }
 }

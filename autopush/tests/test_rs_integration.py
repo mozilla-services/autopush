@@ -114,7 +114,7 @@ def setup_module():
         auto_ping_timeout=10.0,
         close_handshake_timeout=5,
         max_connections=5000,
-        human_logs="false",
+        human_logs="true",
     )
     rust_bin = root_dir + "/target/release/autopush_rs"
     possible_paths = ["/target/debug/autopush_rs",
