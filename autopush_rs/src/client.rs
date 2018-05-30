@@ -311,7 +311,7 @@ where
     fn poll_await_hello<'a>(
         hello: &'a mut RentToOwn<'a, AwaitHello<T>>,
     ) -> Poll<AfterAwaitHello<T>, Error> {
-        debug!("State: AwaitHello");
+        trace!("State: AwaitHello");
         let (uaid, services) = {
             let AwaitHello {
                 ref mut data,
@@ -355,7 +355,7 @@ where
     fn poll_await_process_hello<'a>(
         process_hello: &'a mut RentToOwn<'a, AwaitProcessHello<T>>,
     ) -> Poll<AfterAwaitProcessHello<T>, Error> {
-        debug!("State: AwaitProcessHello");
+        trace!("State: AwaitProcessHello");
         let (uaid, message_month, check_storage, reset_uaid, rotate_message_table, connected_at) = {
             match try_ready!(process_hello.response.poll()) {
                 HelloResponse {
@@ -631,6 +631,7 @@ where
     fn poll_send_then_wait<'a>(
         send: &'a mut RentToOwn<'a, SendThenWait<T>>,
     ) -> Poll<AfterSendThenWait<T>, Error> {
+        trace!("State: SendThenWait");
         let start_send = {
             let SendThenWait {
                 ref mut remaining_data,
@@ -711,6 +712,7 @@ where
     fn poll_await_input<'a>(
         await: &'a mut RentToOwn<'a, AwaitInput<T>>,
     ) -> Poll<AfterAwaitInput<T>, Error> {
+        trace!("State: AwaitInput");
         let input = try_ready!(await.data.input_or_notif());
         let AwaitInput { data } = await.take();
         let webpush_rc = data.webpush.clone();
@@ -854,7 +856,7 @@ where
     fn poll_increment_storage<'a>(
         increment_storage: &'a mut RentToOwn<'a, IncrementStorage<T>>,
     ) -> Poll<AfterIncrementStorage<T>, Error> {
-        debug!("State: IncrementStorage");
+        trace!("State: IncrementStorage");
         let webpush_rc = increment_storage.data.webpush.clone();
         let webpush = webpush_rc.borrow();
         let timestamp = webpush
@@ -875,7 +877,7 @@ where
     fn poll_await_increment_storage<'a>(
         await_increment_storage: &'a mut RentToOwn<'a, AwaitIncrementStorage<T>>,
     ) -> Poll<AfterAwaitIncrementStorage<T>, Error> {
-        debug!("State: AwaitIncrementStorage");
+        trace!("State: AwaitIncrementStorage");
         try_ready!(await_increment_storage.response.poll());
         let AwaitIncrementStorage { data, .. } = await_increment_storage.take();
         let webpush = data.webpush.clone();
@@ -886,7 +888,7 @@ where
     fn poll_check_storage<'a>(
         check_storage: &'a mut RentToOwn<'a, CheckStorage<T>>,
     ) -> Poll<AfterCheckStorage<T>, Error> {
-        debug!("State: CheckStorage");
+        trace!("State: CheckStorage");
         let CheckStorage { data } = check_storage.take();
         let response = Box::new({
             let webpush = data.webpush.borrow();
@@ -903,7 +905,7 @@ where
     fn poll_await_check_storage<'a>(
         await_check_storage: &'a mut RentToOwn<'a, AwaitCheckStorage<T>>,
     ) -> Poll<AfterAwaitCheckStorage<T>, Error> {
-        debug!("State: AwaitCheckStorage");
+        trace!("State: AwaitCheckStorage");
         let (include_topic, mut messages, timestamp) =
             match try_ready!(await_check_storage.response.poll()) {
                 CheckStorageResponse {
@@ -951,7 +953,7 @@ where
     fn poll_await_migrate_user<'a>(
         await_migrate_user: &'a mut RentToOwn<'a, AwaitMigrateUser<T>>,
     ) -> Poll<AfterAwaitMigrateUser<T>, Error> {
-        debug!("State: AwaitMigrateUser");
+        trace!("State: AwaitMigrateUser");
         try_ready!(await_migrate_user.response.poll());
         let AwaitMigrateUser { data, .. } = await_migrate_user.take();
         {
@@ -965,7 +967,7 @@ where
     fn poll_await_drop_user<'a>(
         await_drop_user: &'a mut RentToOwn<'a, AwaitDropUser<T>>,
     ) -> Poll<AfterAwaitDropUser, Error> {
-        debug!("State: AwaitDropUser");
+        trace!("State: AwaitDropUser");
         try_ready!(await_drop_user.response.poll());
         transition!(AuthDone(()))
     }
@@ -973,7 +975,7 @@ where
     fn poll_await_register<'a>(
         await_register: &'a mut RentToOwn<'a, AwaitRegister<T>>,
     ) -> Poll<AfterAwaitRegister<T>, Error> {
-        debug!("State: AwaitRegister");
+        trace!("State: AwaitRegister");
         let msg = match try_ready!(await_register.response.poll()) {
             RegisterResponse::Success { endpoint } => {
                 let mut webpush = await_register.data.webpush.borrow_mut();
@@ -1010,7 +1012,7 @@ where
     fn poll_await_unregister<'a>(
         await_unregister: &'a mut RentToOwn<'a, AwaitUnregister<T>>,
     ) -> Poll<AfterAwaitUnregister<T>, Error> {
-        debug!("State: AwaitUnRegister");
+        trace!("State: AwaitUnRegister");
         let msg = if try_ready!(await_unregister.response.poll()) {
             debug!("Got the unregister response");
             let mut webpush = await_unregister.data.webpush.borrow_mut();
@@ -1043,7 +1045,7 @@ where
     fn poll_await_delete<'a>(
         await_delete: &'a mut RentToOwn<'a, AwaitDelete<T>>,
     ) -> Poll<AfterAwaitDelete<T>, Error> {
-        debug!("State: AwaitDelete");
+        trace!("State: AwaitDelete");
         try_ready!(await_delete.response.poll());
         transition!(DetermineAck {
             data: await_delete.take().data,

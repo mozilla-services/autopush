@@ -1,28 +1,17 @@
 //! Various small utilities accumulated over time for the WebPush server
-use std::io;
 use std::time::Duration;
 
 use futures::future::{Either, Future, IntoFuture};
-use hostname::get_hostname;
-use slog;
-use slog::Drain;
-use slog_async;
-use slog_scope;
-use slog_stdlog;
-use slog_term;
 use tokio_core::reactor::{Handle, Timeout};
 
 use errors::*;
 
-mod autojson;
-mod aws;
 pub mod megaphone;
 mod rc;
 mod send_all;
 pub mod timing;
 mod user_agent;
 
-use self::aws::get_ec2_instance_id;
 pub use self::rc::RcObject;
 pub use self::send_all::MySendAll;
 pub use self::timing::{ms_since_epoch, sec_since_epoch, us_since_epoch};
@@ -50,49 +39,4 @@ where
         Ok(Either::B(((), _item))) => Err("timed out".into()),
         Err(Either::B((e, _item))) => Err(e.into()),
     }))
-}
-
-pub fn init_logging(json: bool) {
-    let instance_id_or_hostname = if json {
-        get_ec2_instance_id().unwrap_or_else(|_| get_hostname().expect("Couldn't get_hostname"))
-    } else {
-        get_hostname().expect("Couldn't get_hostname")
-    };
-    let logger = if json {
-        let drain = autojson::AutoJson::new(io::stdout())
-            .add_default_keys()
-            .add_key_value(o!(
-                "Hostname" => instance_id_or_hostname,
-                "Type" => "autopush_rs:log",
-                "EnvVersion" => "2.0",
-                "Logger" => format!("AutopushRust-{}", env!("CARGO_PKG_VERSION")),
-            ))
-            .build()
-            .fuse();
-        let drain = slog_async::Async::new(drain).build().fuse();
-        slog::Logger::root(drain, o!())
-    } else {
-        let decorator = slog_term::TermDecorator::new().build();
-        let drain = slog_term::FullFormat::new(decorator).build().fuse();
-        let drain = slog_async::Async::new(drain).build().fuse();
-        slog::Logger::root(
-            drain,
-            slog_o!(
-                "Hostname" => instance_id_or_hostname,
-                "Type" => "autopush_rs:log",
-                "EnvVersion" => "2.0",
-                "Logger" => format!("AutopushRust-{}", env!("CARGO_PKG_VERSION"))
-            ),
-        )
-    };
-    // XXX: cancel slog_scope's NoGlobalLoggerSet for now, it's difficult to
-    // prevent it from potentially panicing during tests. reset_logging resets
-    // the global logger during shutdown anyway
-    slog_scope::set_global_logger(logger).cancel_reset();
-    slog_stdlog::init().ok();
-}
-
-pub fn reset_logging() {
-    let logger = slog::Logger::root(slog::Discard, o!());
-    slog_scope::set_global_logger(logger).cancel_reset();
 }

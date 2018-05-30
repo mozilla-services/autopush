@@ -2,7 +2,7 @@ use std::net::ToSocketAddrs;
 
 use config::{Config, ConfigError, Environment, File};
 use fernet::Fernet;
-use hostname::get_hostname;
+use mozsvc_common::get_hostname;
 
 lazy_static! {
     static ref HOSTNAME: String = get_hostname().unwrap();
@@ -67,7 +67,7 @@ impl Settings {
         s.set_default("close_handshake_timeout", 0)?;
         s.set_default("endpoint_scheme", "http")?;
         s.set_default("endpoint_port", 8082)?;
-        s.set_default("crypto_key", vec![Fernet::generate_key()])?;
+        s.set_default("crypto_key", Fernet::generate_key())?;
         s.set_default("statsd_host", "localhost")?;
         s.set_default("statsd_port", 8125)?;
         s.set_default("megaphone_poll_interval", 30)?;
