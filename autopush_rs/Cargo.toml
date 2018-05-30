@@ -15,62 +15,62 @@ name = "autopush"
 name = "autopush_rs"
 path = "src/main.rs"
 
-[dependencies.config]
-git = "https://github.com/mehcode/config-rs"
-rev = "e8fa9fee96185ddd18ebcef8a925c75459111edb"
-
 [dependencies]
 base64 = "0.9.1"
-bytes = "0.4.6"
-cadence = "0.13.2"
+bytes = "0.4.8"
+cadence = "0.14.0"
 chan-signal = "0.3.1"
 chrono = "0.4.2"
 docopt = "1.0.0"
-env_logger = { version = "0.5.6", default-features = false }
+env_logger = { version = "0.5.10", default-features = false }
 error-chain = "0.11.0"
-fernet = "0.1"
+fernet = "0.1.0"
 futures = "0.1.21"
-futures-backoff = "0.1"
+futures-backoff = "0.1.0"
 hex = "0.3.2"
-hostname = "0.1.4"
+hostname = "0.1.5"
 httparse = "1.2.4"
-hyper = "0.11.25"
-lazy_static = "1.0.0"
-libc = "0.2.40"
+hyper = "0.11.27"
+lazy_static = "1.0.1"
+libc = "0.2.41"
 # log: Use this version for debug builds
 # log = "0.4.1"
 # log: Use this for release builds (leave in for commits)
 log = { version = "0.4.1", features = ["max_level_trace", "release_max_level_warn"] }
 matches = "0.1.6"
-openssl = "0.10.5"
-rand = "0.4"
-regex = "0.2"
+openssl = "0.10.8"
+rand = "0.5.0"
+regex = "1.0.0"
 reqwest = { version = "0.8.5", features = ["unstable"] }
 rusoto_core = "0.32.0"
 rusoto_credential = "0.11.0"
 rusoto_dynamodb = "0.32.0"
 sentry = "0.2.0"
-serde = "1.0.45"
-serde_derive = "1.0.21"
+serde = "1.0.63"
+serde_derive = "1.0.63"
 serde_dynamodb = "0.1.2"
-serde_json = "1.0.13"
+serde_json = "1.0.18"
 # slog: Use this first version for debug builds
 # slog = { version = "2.2.3" , features = ["max_level_trace", "release_max_level_debug"] }
 # slog: Use this for release builds (leave in for commits)
 slog = "2.2.3"
-slog-async = "2.2.0"
-slog-term = "2.3.0"
+slog-async = "2.3.0"
+slog-term = "2.4.0"
 slog-json = "2.2.0"
 slog-scope = "4.0.1"
 slog-stdlog = "3.0.2"
 # state_machine_future = { version = "0.1.6", features = ["debug_code_generation"] }
 state_machine_future = "0.1.6"
-time = "0.1.39"
-tokio-core = "0.1.16"
+time = "0.1.40"
+tokio-core = "0.1.17"
 tokio-io = "0.1.6"
 tokio-openssl = "0.2.0"
 tokio-service = "0.1.0"
 tokio-tungstenite = { version = "0.5.1", default-features = false }
 tungstenite = { version = "0.5.3", default-features = false }
-uuid = { version = "0.6.2", features = ["serde", "v4"] }
+uuid = { version = "0.6.5", features = ["serde", "v4"] }
 woothee = "0.7.3"
+
+[dependencies.config]
+git = "https://github.com/mehcode/config-rs"
+rev = "e8fa9fee96185ddd18ebcef8a925c75459111edb"

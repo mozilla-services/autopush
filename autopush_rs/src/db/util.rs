@@ -1,6 +1,5 @@
 use chrono::Utc;
-use rand;
-use rand::distributions::{IndependentSample, Range};
+use rand::{thread_rng, Rng};
 
 /// Generate a last_connect
 ///
@@ -9,9 +8,8 @@ use rand::distributions::{IndependentSample, Range};
 ///  a total of 240 keys per month depending on when the user migrates forward.
 pub fn generate_last_connect() -> u64 {
     let today = Utc::now();
-    let mut rng = rand::thread_rng();
-    let between = Range::new(0, 10);
-    let num = between.ind_sample(&mut rng);
+    let mut rng = thread_rng();
+    let num = rng.gen_range(0, 10);
     let val = format!("{}{:04}", today.format("%Y%m%H"), num);
     val.parse::<u64>().unwrap()
 }

@@ -369,8 +369,7 @@ pub fn lookup_user(
                 metrics
                     .incr_with_tags("ua.expiration")
                     .with_tag("code", &code.to_string())
-                    .send()
-                    .ok();
+                    .send();
                 let response = drop_user(ddb, &uaid2, &router_table)
                     .and_then(|_| future::ok((hello_response, None)))
                     .chain_err(|| "Unable to drop user");

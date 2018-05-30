@@ -489,8 +489,7 @@ where
             .with_tag("ua_os_family", metrics_os)
             .with_tag("ua_browser_family", metrics_browser)
             .with_tag("host", &webpush.stats.host)
-            .send()
-            .ok();
+            .send();
 
         // If there's direct unack'd messages, they need to be saved out without blocking
         // here
@@ -1033,8 +1032,7 @@ where
             .metrics
             .incr_with_tags("ua.command.unregister")
             .with_tag("code", &code.to_string())
-            .send()
-            .ok();
+            .send();
         transition!(SendThenWait {
             remaining_data: vec![msg],
             poll_complete: false,
