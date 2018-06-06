@@ -1,8 +1,6 @@
 language: python
 cache:
   directories:
-    - $HOME/.cargo
-    - autopush_rs/target
     - $HOME/.cache/pip
 sudo: required
 dist: trusty
@@ -13,29 +11,15 @@ matrix:
       env: TOXENV=py27 DDB=true CODECOV=true
     - python: pypy
       env: TOXENV=pypy DDB=true CODECOV=true
-    - env: TOXENV=flake8 WITH_RUST=false
+    - env: TOXENV=flake8
     - python: 3.6
-      env: TOXENV=py36-mypy WITH_RUST=false
+      env: TOXENV=py36-mypy
   allow_failures:
-    - env: TOXENV=py36-mypy WITH_RUST=false
+    - env: TOXENV=py36-mypy
 
 install:
 - ${DDB:+make ddb}
 - pip install tox ${CODECOV:+codecov}
-- |
-  if [ ${WITH_RUST:-true} != "false" ]; then
-      curl https://sh.rustup.rs | sh -s -- -y || travis_terminate 1;
-      export PATH=$PATH:$HOME/.cargo/bin
-      # Build here instead of within tox's pip install -e. It hides the output
-      # which can kill the job on slower travis runs
-      if [ ${WITH_RUST} == "release" ]; then
-          cargo build --manifest-path autopush_rs/Cargo.toml --release || \
-              travis_terminate 1
-      else
-          cargo build --manifest-path autopush_rs/Cargo.toml || \
-              travis_terminate 1
-      fi
-  fi
 script:
 - tox -v -- ${CODECOV:+--with-coverage --cover-xml --cover-package=autopush}
 after_success:

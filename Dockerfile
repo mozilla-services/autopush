@@ -8,16 +8,11 @@ WORKDIR /app
 ENV PATH=$PATH:/root/.cargo/bin
 
 RUN \
-    export WITH_RUST=release && \
     apt-get update && \
     apt-get install -y -qq libexpat1-dev gcc libssl-dev libffi-dev libjemalloc1 && \
-    curl https://sh.rustup.rs | sh -s -- -y && \
     make clean && \
     pip install -r requirements.txt && \
-    pypy setup.py develop && \
-    cargo install --path autopush_rs && \
-    cargo clean && \
-    rustup self uninstall -y
+    pypy setup.py develop
 
 ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["autopush"]
