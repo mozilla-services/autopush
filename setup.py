@@ -10,30 +10,9 @@ with io.open(os.path.join(here, 'README.md'), encoding='utf8') as f:
 with io.open(os.path.join(here, 'CHANGELOG.md'), encoding='utf8') as f:
     CHANGES = f.read()
 
-WITH_RUST = os.environ.get('WITH_RUST', 'true')
-
 extra_options = {
     "packages": find_packages(),
 }
-
-if WITH_RUST.lower() not in ('false', '0'):
-    def build_native(spec):
-        cmd = ['cargo', 'build']
-        if WITH_RUST.lower() == 'release':
-            cmd.append('--release')
-
-        spec.add_external_build(
-            cmd=cmd,
-            path='./autopush_rs'
-        )
-
-    extra_options.update(
-        setup_requires=['milksnake'],
-        install_requires=['milksnake'],
-        milksnake_tasks=[
-            build_native
-        ]
-)
 
 setup(name="AutoPush",
       version=__version__,

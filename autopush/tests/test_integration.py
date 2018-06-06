@@ -102,7 +102,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 
     def connect(self, connection_port=None):
         url = self.url
-        if connection_port:
+        if connection_port:  # pragma: nocover
             url = "ws://localhost:{}/".format(connection_port)
         self.ws = websocket.create_connection(url)
         return self.ws.connected
@@ -117,7 +117,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
                           channelIDs=chans)
         if uaid or self.uaid:
             hello_dict["uaid"] = uaid or self.uaid
-        if services:
+        if services:  # pragma: nocover
             hello_dict["broadcasts"] = services
         msg = json.dumps(hello_dict)
         log.debug("Send: %s", msg)
@@ -133,7 +133,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         self.uaid = result["uaid"]
         return result
 
-    def broadcast_subscribe(self, services):
+    def broadcast_subscribe(self, services):  # pragma: nocover
         msg = json.dumps(dict(messageType="broadcast_subscribe",
                               broadcasts=services))
         log.debug("Send: %s", msg)
@@ -259,7 +259,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         finally:
             self.ws.settimeout(orig_timeout)
 
-    def get_broadcast(self, timeout=1):
+    def get_broadcast(self, timeout=1):  # pragma: nocover
         orig_timeout = self.ws.gettimeout()
         self.ws.settimeout(timeout)
         try:
