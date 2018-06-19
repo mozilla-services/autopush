@@ -1,7 +1,12 @@
 version: '2'
 services:
   autopush:
-    image: bbangert/autopush
+    build: .
+    # If you do not wish to use a local build, comment out
+    # the previous 'build:' line and uncomment the following
+    # 'image:' line. This will use the latest production
+    # built image.
+    #image: mozilla/autopush
     hostname: autopush
     environment:
       - LOCAL_HOSTNAME=localhost
@@ -17,7 +22,12 @@ services:
     volumes:
       - ./boto-compose.cfg:/etc/boto.cfg:ro
   autoendpoint:
-    image: bbangert/autopush
+    build: .
+    # If you do not wish to use a local build, comment out
+    # the previous 'build:' line and uncomment the following
+    # 'image:' line. This will use the latest production
+    # built image.
+    #image: mozilla/autopush
     hostname: autoendpoint
     command: autoendpoint
     environment:

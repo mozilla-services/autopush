@@ -18,11 +18,6 @@ Daemon Script Entry Points
     :private-members:
     :member-order: bysource
 
-.. autoclass:: RustConnectionApplication
-    :members:
-    :private-members:
-    :member-order: bysource
-
 Common Root
 +++++++++++
 

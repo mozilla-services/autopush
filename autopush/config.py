@@ -43,7 +43,10 @@ from autopush.crypto_key import CryptoKey, CryptoKeyException
 def _init_crypto_key(ck):
     # type: (Optional[Union[str, List[str]]]) -> List[str]
     """Provide a default or ensure the provided's a list"""
-    if ck is None:
+    # if CRYPTO_KEY is not set by docker, it may pass an empty string,
+    # which is converted into an Array element and prevents the config
+    # file value from being read
+    if ck is None or ck == ['']:
         return [Fernet.generate_key()]
     return ck if isinstance(ck, list) else [ck]
 
@@ -300,7 +303,6 @@ class AutopushConfig(object):
             ami_id = get_amid() or "Unknown"
 
         allow_table_rotation = not ns.no_table_rotation
-
         return cls(
             crypto_key=ns.crypto_key,
             datadog_api_key=ns.datadog_api_key,

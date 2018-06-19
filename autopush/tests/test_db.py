@@ -132,6 +132,8 @@ class DdbResourceTest(unittest.TestCase):
             del(os.environ["AWS_LOCAL_DYNAMODB"])
             DynamoDBResource(region_name="us-east-1")
             assert mresource.call_args[0] == ('dynamodb',)
+            resource = DynamoDBResource(endpoint_url="")
+            assert resource.conf == {}
         finally:
             if safe:  # pragma: nocover
                 os.environ["AWS_LOCAL_DYNAMODB"] = safe
