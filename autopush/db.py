@@ -467,7 +467,11 @@ class DynamoDBResource(threading.local):
     def __init__(self, **kwargs):
         conf = kwargs
         if not conf.get("endpoint_url"):
-            conf["endpoint_url"] = os.getenv("AWS_LOCAL_DYNAMODB")
+            if os.getenv("AWS_LOCAL_DYNAMODB"):
+                conf.update(dict(
+                    endpoint_url=os.getenv("AWS_LOCAL_DYNAMODB"),
+                    aws_access_key_id="Bogus",
+                    aws_secret_access_key="Bogus"))
         # If there is no endpoint URL, we must delete the entry
         if "endpoint_url" in conf and not conf["endpoint_url"]:
             del(conf["endpoint_url"])

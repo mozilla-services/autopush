@@ -28,12 +28,7 @@ def setUp():
     ddb_process = subprocess.Popen(cmd, shell=True, env=os.environ)
     if os.getenv("AWS_LOCAL_DYNAMODB") is None:
         os.environ["AWS_LOCAL_DYNAMODB"] = "http://127.0.0.1:8000"
-    ddb_session_args = dict(
-        endpoint_url=os.getenv("AWS_LOCAL_DYNAMODB"),
-        aws_access_key_id="BogusKey",
-        aws_secret_access_key="BogusKey",
-    )
-    boto_resource = DynamoDBResource(**ddb_session_args)
+    boto_resource = DynamoDBResource()
     # Setup the necessary message tables
     message_table = os.environ.get("MESSAGE_TABLE", "message_int_test")
     create_rotating_message_table(prefix=message_table, delta=-1,

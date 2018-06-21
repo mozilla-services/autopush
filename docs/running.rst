@@ -47,15 +47,6 @@ daemons use other ports.
 
         $ curl -O https://raw.githubusercontent.com/mozilla-services/autopush/master/docker-compose.yml
 
-5. Fetch the latest ``boto-compose.cfg`` file:
-
-    .. code-block:: bash
-
-        $ curl -O https://raw.githubusercontent.com/mozilla-services/autopush/master/boto-compose.cfg
-
-The ``boto-compose.cfg`` file will be mounted inside the Autopush docker
-containers when running to point Autopush at the locally running DynamoDB
-
 .. note::
 
     The docker images used take approximately 1.5 GB of disk-space, make sure
@@ -69,10 +60,10 @@ run both of the Autopush daemons. To generate one with the docker image:
 
 .. code-block:: bash
 
-    $ docker run -t -i ~/autopush autokey
-    Key = hkclU1V37Dnp-0DMF9HLe_40Nnr8kDTYVbo2yxuylzk=
+    $ docker run -t -i bbangert/autopush autokey
+    CRYPTO_KEY="hkclU1V37Dnp-0DMF9HLe_40Nnr8kDTYVbo2yxuylzk="
 
-Store the key for later use (including the trailing ``=``).
+Store the key for later use (including any trailing ``=``).
 
 Start Autopush
 ==============
@@ -82,7 +73,7 @@ Autopush with a single command:
 
 .. code-block:: bash
 
-    $ CRYPTO_KEY=hkclU1V37Dnp-0DMF9HLe_40Nnr8kDTYVbo2yxuylzk= docker-compose up
+    $ CRYPTO_KEY="hkclU1V37Dnp-0DMF9HLe_40Nnr8kDTYVbo2yxuylzk=" docker-compose up
 
 `docker-compose`_ will start up three containers, two for each Autopush daemon,
 and a third for DynamoDB.
@@ -93,8 +84,11 @@ By default, the following services will be exposed:
 
 ``http://localhost:8082/`` - HTTP Endpoint Server (See :ref:`the HTTP API <http>`)
 
-You could set the ``CRYPTO_KEY`` as an environment variable, or setup a more
-thorough configuration using config files as documented below.
+You could set the ``CRYPTO_KEY`` as an environment variable if you are using Docker.
+If you are running these programs "stand-alone" or outside of docker-compose, you may
+setup a more thorough configuration using config files as documented below.
+
+*Note*:
 
 The load-tester can be run against it or you can run Firefox with the
 local Autopush per the :ref:`test-with-firefox` docs.
@@ -118,7 +112,7 @@ it is either True if enabled, or False if disabled. The configuration files are
 usually richly commented, and you're encouraged to read them to learn how to
 set up your installation of autopush.
 
-Please note: any line that does not begin with a `#` or `;` is considered an option
+*Note*: any line that does not begin with a `#` or `;` is considered an option
 line. if an unexpected option is present in a configuration file, the application
 will fail to start.
 
@@ -171,6 +165,13 @@ as ``/etc/autopush_connection.ini``, update the ``autopush`` section of the
 
 Autopush automatically searches for a configuration file at this location so
 nothing else is needed.
+
+*Note*: The `docker-compose.yml` file provides a number of overrides as environment
+variables, such as `CRYPTO_KEY`. If these values are not defined, they are submitted
+as `""`, which will prevent values from being read from the config files. In the case
+of `CRYPTO_KEY`, a new, random key is automatically generated, which will result in
+existing endpoints no longer being valid. It is recommended that for docker based
+images, that you ***always*** supply a `CRYPTO_KEY` as part of the run command.
 
 Notes on GCM/FCM support
 ------------------------

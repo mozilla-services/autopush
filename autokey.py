@@ -3,4 +3,4 @@ from cryptography.fernet import Fernet
 
 
 def main():
-    print "Key = %s" % Fernet.generate_key()
+    print "CRYPTO_KEY=\"%s\"" % Fernet.generate_key()

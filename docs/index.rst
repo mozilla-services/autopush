@@ -8,7 +8,12 @@ autopush
 .. image:: https://codecov.io/github/mozilla-services/autopush/coverage.svg
   :target: https://codecov.io/github/mozilla-services/autopush
 
-Mozilla Push server and Push Endpoint utilizing PyPy, twisted, rust, and DynamoDB.
+Mozilla Push server and Push Endpoint utilizing PyPy, twisted, and DynamoDB.
+
+*Please note*: The python components of this server are being deprecated in favor of
+`a pure rust <https://github.com/mozilla-services/autopush-rs>`_ implementation.
+We are planning on moving the websocket handler first, followed by the endpoint
+handlers. See :ref:`Migrating to Rust <rust>` for details.
 
 This is the third generation of Push server built in Mozilla Services, first
 to handle Push for FirefoxOS clients, then extended for push notifications for
@@ -137,6 +142,7 @@ Reference
    :hidden:
 
    glossary
+   rust
 
 License
 =======
