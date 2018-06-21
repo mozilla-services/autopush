@@ -81,7 +81,7 @@ def add_shared_args(parser):
                         action="store_true", default=False,
                         env_var="HUMAN_LOGS")
     parser.add_argument('--no_aws', help="Skip AWS meta information checks",
-                        action="store_true", default=False)
+                        action="store_true", default=False, env_var="NO_AWS")
     parser.add_argument('--msg_limit', help="Max limit for messages per uaid "
                         "before reset", type=int, default="100",
                         env_var="MSG_LIMIT")
@@ -160,7 +160,7 @@ def _add_external_router_args(parser):
                         type=str, default="simplepush",
                         env_var="GCM_COLLAPSEKEY")
     parser.add_argument('--senderid_list', help='GCM SenderIDs/auth keys',
-                        type=str, default="{}")
+                        type=str, default="{}", env_var="SENDERID_LIST")
     # FCM
     parser.add_argument('--fcm_enabled', help="Enable FCM Bridge",
                         action="store_true", default=False,
@@ -177,9 +177,9 @@ def _add_external_router_args(parser):
                         type=str, default="simplepush",
                         env_var="FCM_COLLAPSEKEY")
     parser.add_argument('--fcm_auth', help='Auth Key for FCM',
-                        type=str, default="")
+                        type=str, default="", env_var="FCM_AUTH")
     parser.add_argument('--fcm_senderid', help='SenderID for FCM',
-                        type=str, default="")
+                        type=str, default="", env_var="FCM_SENDERID")
     # Apple Push Notification system (APNs) for iOS
     # credentials consist of JSON struct containing a channel type
     # followed by the settings,
