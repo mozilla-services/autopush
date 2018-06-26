@@ -1,3 +1,24 @@
+<a name="1.48.0"></a>
+## 1.48.0 (2018-06-21)
+
+
+#### Features
+
+*   remove rust code ([7ab7a14a](https://github.com/mozilla-services/autopush/commit/7ab7a14af819d5e0a418be17bf9cf50c7204956c), closes [#1258](https://github.com/mozilla-services/autopush/issues/1258))
+*   switch to slog-mozlog-json/mozsvc-common for logging ([41fc523a](https://github.com/mozilla-services/autopush/commit/41fc523aa31d4fca11c6d4237f4d3b2ff07b140a), closes [#1247](https://github.com/mozilla-services/autopush/issues/1247))
+*   switch Rust startup to Rust only ([0ef11b63](https://github.com/mozilla-services/autopush/commit/0ef11b637640efbfea3d537450abdf12ad79baf6), closes [#1243](https://github.com/mozilla-services/autopush/issues/1243))
+
+#### Chore
+
+*   upgrade Rust dependencies ([d4cd1a6e](https://github.com/mozilla-services/autopush/commit/d4cd1a6ee0bfce68f8d92b8f8bd7ef040cf4598d))
+
+#### Bug Fixes
+
+*   doc fixup ([b8c3201e](https://github.com/mozilla-services/autopush/commit/b8c3201e3e4005fa905e96bc5de86a66fc60e47e), closes [#1260](https://github.com/mozilla-services/autopush/issues/1260))
+*   add env_vars for cmd line args missing them ([baa1c54a](https://github.com/mozilla-services/autopush/commit/baa1c54a3c4670a0739963e723d922166975c18b), closes [#1262](https://github.com/mozilla-services/autopush/issues/1262))
+
+
+
 <a name="1.47.1"></a>
 ## 1.47.1 (2018-05-23)
 
