@@ -101,10 +101,13 @@ class WebPushRouter(object):
         #   - Error (db error): Done, return 503
         try:
             yield self._save_notification(uaid_data, notification)
-        except ClientError:
+        except ClientError as e:
+            log_exception = (e.response["Error"]["Code"] !=
+                             "ProvisionedThroughputExceededException")
             raise RouterException("Error saving to database",
                                   status_code=503,
                                   response_body="Retry Request",
+                                  log_exception=log_exception,
                                   errno=201)
 
         # - Lookup client again to get latest node state after save.
