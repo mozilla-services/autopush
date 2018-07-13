@@ -18,7 +18,7 @@ class TestUserAgentParser(unittest.TestCase):
     def test_windows_extraction(self):
         dd, raw = self._makeFUT('Mozilla/5.0 (Windows; U; Windows NT 6.1; en-US; rv:1.9.2.3) Gecko/20100401 Firefox/3.6.3 (.NET CLR 3.5.30729)')  # NOQA
         assert dd["ua_os_family"] == "Windows"
-        assert raw["ua_os_family"] == "Windows 7"
+        assert raw["ua_os_family"] == "Windows"
 
     def test_valid_os(self):
         dd, raw = self._makeFUT('Mozilla/5.0 (Macintosh; Intel Mac OS X 10.5; rv:2.1.1) Gecko/ Firefox/5.0.1')  # NOQA
