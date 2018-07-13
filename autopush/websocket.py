@@ -104,6 +104,8 @@ from autopush.utils import (
 USER_RECORD_VERSION = 1
 DEFAULT_WS_ERR = "http://autopush.readthedocs.io/en/" \
                  "latest/api/websocket.html#private-http-endpoint"
+# codes expected from the client (and emitted as a metric tag)
+NACK_CODES = range(301, 304)
 
 
 def extract_code(data):
@@ -1013,11 +1015,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.sent_notification_count += 1
             if self.sent_notification_count > self.conf.msg_limit:
                 raise MessageOverloadException()
-            if notif.topic:
-                self.metrics.increment("ua.notification.topic")
-            self.metrics.increment('ua.message_data',
-                                   len(msg.get('data', '')),
-                                   tags=make_tags(source=notif.source))
+            self.emit_send_metrics(notif)
             self.sendJSON(msg)
 
         # Did we send any messages?
@@ -1318,8 +1316,8 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.log.debug(format="Nack", uaid_hash=self.ps.uaid_hash,
                        user_agent=self.ps.user_agent, message_id=str(version),
                        code=code, **self.ps.raw_agent)
-        tags = ["code:401"]
-        self.metrics.increment('ua.command.nack', tags=tags)
+        mcode = code if code in NACK_CODES else 0
+        self.metrics.increment('ua.command.nack', tags=make_tags(code=mcode))
         self.ps.stats.nacks += 1
 
     def check_missed_notifications(self, results, resume=False):
@@ -1367,9 +1365,14 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         # Create the notification
         notif = WebPushNotification.from_serialized(self.ps.uaid_obj, update)
         self.ps.direct_updates[chid].append(notif)
+        self.emit_send_metrics(notif)
+        self.sendJSON(notif.websocket_format())
+
+    def emit_send_metrics(self, notif):
         if notif.topic:
             self.metrics.increment("ua.notification.topic")
-        self.sendJSON(notif.websocket_format())
+        self.metrics.increment('ua.message_data', notif.data_length,
+                               tags=make_tags(source=notif.source))
 
 
 class PushServerFactory(WebSocketServerFactory):
