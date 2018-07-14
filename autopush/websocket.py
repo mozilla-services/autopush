@@ -236,6 +236,8 @@ class PushState(object):
             for tag_name, tag_value in dd_tags.items():
                 setattr(self.stats, tag_name, tag_value)
                 self._base_tags.append("%s:%s" % (tag_name, tag_value))
+            self.stats.ua_os_ver = self.raw_agent["ua_os_ver"]
+            self.stats.ua_browser_ver = self.raw_agent["ua_browser_ver"]
         if self.stats.host:
             self._base_tags.append("host:%s" % self.stats.host)
 

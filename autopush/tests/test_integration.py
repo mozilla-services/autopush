@@ -88,6 +88,11 @@ class Client(object):
 keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
 """
         self.sslcontext = sslcontext
+        self.headers = {
+            "User-Agent":
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.13; rv:61.0) "
+            "Gecko/20100101 Firefox/61.0"
+        }
 
     def __getattribute__(self, name):
         # Python fun to turn all functions into deferToThread functions
@@ -104,7 +109,7 @@ keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
         url = self.url
         if connection_port:  # pragma: nocover
             url = "ws://localhost:{}/".format(connection_port)
-        self.ws = websocket.create_connection(url)
+        self.ws = websocket.create_connection(url, header=self.headers)
         return self.ws.connected
 
     def hello(self, uaid=None, services=None):
@@ -677,6 +682,8 @@ class TestWebPush(IntegrationBase):
         log_event = self.logs.logged_session()
         assert log_event["connection_type"] == "webpush"
         assert log_event["direct_storage"] == 1
+        assert log_event["ua_os_ver"] == "10.13"
+        assert log_event["ua_browser_ver"] == "61.0"
 
     @inlineCallbacks
     def test_topic_basic_delivery(self):

@@ -21,7 +21,6 @@ raven
 requests
 service-identity
 simplejson
--e git+https://github.com/mitsuhiko/snaek.git@2b14b8b010a9486af0f298b4ad4c73dc1ceff9d6#egg=snaek
 twisted
 -e git+https://github.com/habnabit/txstatsd.git@157ef85fbdeafe23865c7c4e176237ffcb3c3f1f#egg=txStatsD-master
 typing
