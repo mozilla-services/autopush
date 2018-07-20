@@ -11,6 +11,10 @@ jobs:
       - image: docker:18.03.1-ce
     working_directory: /dockerflow
     steps:
+      - run:
+          name: Install Docker build dependencies
+          command: apk add --no-cache openssh-client git
+
       - checkout
       - setup_remote_docker
 
