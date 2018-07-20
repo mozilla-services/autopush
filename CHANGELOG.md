@@ -1,3 +1,13 @@
+<a name="1.49.1"></a>
+## 1.49.1 (2018-07-20)
+
+
+#### Chore
+
+*   install openssh-client git & git on docker-in-docker ([8e435d22](https://github.com/mozilla-services/autopush/commit/8e435d22b7af654a503d940b0f977ba2f51d2712))
+
+
+
 <a name="1.49.0"></a>
 ## 1.49.0 (2018-07-20)
 
