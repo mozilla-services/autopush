@@ -1,3 +1,32 @@
+<a name="1.49.1"></a>
+## 1.49.1 (2018-07-20)
+
+
+#### Chore
+
+*   install openssh-client git & git on docker-in-docker ([8e435d22](https://github.com/mozilla-services/autopush/commit/8e435d22b7af654a503d940b0f977ba2f51d2712))
+
+
+
+<a name="1.49.0"></a>
+## 1.49.0 (2018-07-20)
+
+
+#### Chore
+
+*   switch to circleci 2 ([5345ce3f](https://github.com/mozilla-services/autopush/commit/5345ce3f4f9a7222cbae3818b7c998a0337bbb1c), closes [#1139](https://github.com/mozilla-services/autopush/issues/1139))
+
+#### Bug Fixes
+
+*   emit metrics for Direct messages and client nack codes ([3bb227a8](https://github.com/mozilla-services/autopush/commit/3bb227a8511f2ca2617ac751dfa94280e5780a8a), closes [#1268](https://github.com/mozilla-services/autopush/issues/1268))
+*   remove legacy notification saving to address intermittent fails ([9dc1a5f0](https://github.com/mozilla-services/autopush/commit/9dc1a5f045f89afc305f2fd6f5d68f8f120f89e0), closes [#878](https://github.com/mozilla-services/autopush/issues/878))
+
+#### Features
+
+*   update dependencies ([5a2c3d08](https://github.com/mozilla-services/autopush/commit/5a2c3d089aef5525421f4ecdd2973cdd921613cd), closes [#1270](https://github.com/mozilla-services/autopush/issues/1270))
+
+
+
 <a name="1.48.0"></a>
 ## 1.48.0 (2018-06-21)
 
