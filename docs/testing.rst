@@ -4,6 +4,26 @@
 Testing
 =======
 
+Testing Configuration
+=====================
+
+When testing, it's important to reduce the number of potential conflicts as much
+as possible. To that end, it's advised to have as clean a testing environment as
+possible before running tests.
+
+This includes:
+
+* Making sure notifications are not globally blocked by your browser.
+* "Do Not Disturb" or similar "distraction free" mode is disabled on your OS
+* You run a "fresh" Firefox profile (start `firefox --P` to display the profile picker) which does not have extra extensions or optional plug-ins running. Running `firefox --P --no-remote` allows two different firefox profiles run at the same time.)
+
+You may find it useful to run firefox in a Virtual Machine (like VirtualBox or
+VMWare), but this is not required.
+
+In addition, it may be useful to open the Firefox Brower Console (Ctrl+Shift+J)
+as well as the Firefox Web Console (Ctrl+Shift+K). Both are located under the *Web
+Developer* sub-menu.
+
 Running Tests
 =============
 
@@ -20,6 +40,7 @@ Once the Makefile has been run, you can run ``make test`` to run the test suite.
 
     Failures may occur if a ``.boto`` file exists in your home directory. This
     file should be moved elsewhere before running the tests.
+
 
 Disabling Integration Tests
 ---------------------------

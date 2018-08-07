@@ -5,11 +5,32 @@ import re
 
 import configargparse
 from twisted.logger import Logger
+from cryptography.fernet import InvalidToken
 
 from autopush.config import AutopushConfig
 from autopush.db import DatabaseManager, Message
+from autopush.exceptions import ItemNotFound, InvalidTokenException
 from autopush.main import AutopushMultiService
 from autopush.main_argparse import add_shared_args
+
+"""
+Diagnostic Command Line Interface for Autopush Subscription URLS.
+
+This tool extracts the User Agent ID and Channel ID from a
+Push Subscription URL.
+
+Push subscription endpoints generally follow the form:
+```
+https://updates.push.services.mozilla.com/wpush/v1/gAAA...f9x
+```
+
+To use this tool:
+```
+endpoint_diagnostic <subscription endpoint>
+```
+
+
+"""
 
 
 PUSH_RE = re.compile(r"push/(?:(?P<api_ver>v\d+)/)?(?P<token>[^/]+)")
@@ -54,25 +75,35 @@ class EndpointDiagnosticCLI(object):
         md = match.groupdict()
         api_ver, token = md.get("api_ver", "v1"), md["token"]
 
-        parsed = self._conf.parse_endpoint(
-            self.db.metrics,
-            token=token,
-            version=api_ver,
-        )
-        uaid, chid = parsed["uaid"], parsed["chid"]
+        try:
+            parsed = self._conf.parse_endpoint(
+                self.db.metrics,
+                token=token,
+                version=api_ver,
+            )
+            uaid, chid = parsed["uaid"], parsed["chid"]
+        except (InvalidTokenException, InvalidToken) as ex:
+            print(("Token could not be deciphered: {}. "
+                   "Are you using the correct configuration or platform?")
+                  .format(ex))
+            return "Invalid Token"
 
         print("UAID: {}\nCHID: {}\n".format(uaid, chid))
 
-        rec = self.db.router.get_uaid(uaid)
-        print("Router record:")
-        self._pp.pprint(rec._data)
+        try:
+            rec = self.db.router.get_uaid(uaid)
+            print("Router record:")
+            self._pp.pprint(rec)
+            if "current_month" in rec:
+                chans = Message(rec["current_month"],
+                                boto_resource=self.db.resource).all_channels(
+                    uaid)
+                print("Channels in message table:")
+                self._pp.pprint(chans)
+        except ItemNotFound as ex:
+            print("Item Missing from database: {}".format(ex))
+            return "Not Found"
         print("\n")
-
-        if "current_month" in rec:
-            chans = Message(rec["current_month"],
-                            boto_resource=self.db.resource).all_channels(uaid)
-            print("Channels in message table:")
-            self._pp.pprint(chans)
 
 
 def run_endpoint_diagnostic_cli(sysargs=None, use_files=True, resource=None):

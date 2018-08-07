@@ -2,6 +2,9 @@ import unittest
 
 from mock import Mock, patch
 
+from cryptography.fernet import InvalidToken
+
+from autopush.exceptions import ItemNotFound
 import autopush.tests
 
 
@@ -32,6 +35,31 @@ class DiagnosticCLITestCase(unittest.TestCase):
         ])
         returncode = cli.run()
         assert returncode not in (None, 0)
+
+    def test_invalid_endpoint(self):
+        def err(*args, **kwargs):
+            raise InvalidToken("You are unworthy")
+
+        cli = self._makeFUT([
+            "--router_tablename=fred",
+            "http://something/wpush/v1/indecipherable_token"])
+        cli._conf = Mock()
+        cli._conf.parse_endpoint.side_effect = err
+        returncode = cli.run()
+        assert returncode == "Invalid Token"
+
+    def test_invalid_db(self):
+        cli = self._makeFUT([
+            "--router_tablename=fred",
+            "http://something/wpush/v1/indecipherable_token"])
+        cli._conf = Mock()
+        cli._conf.parse_endpoint.return_value = dict(
+            uaid="adsf", chid="adsf"
+        )
+        cli.db.router.get_uaid = Mock()
+        cli.db.router.get_uaid.side_effect = ItemNotFound
+        returncode = cli.run()
+        assert returncode == "Not Found"
 
     @patch("autopush.diagnostic_cli.Message")
     @patch("autopush.diagnostic_cli.AutopushConfig")
