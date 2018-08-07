@@ -1,3 +1,13 @@
+<a name="1.49.2"></a>
+## 1.49.2 (2018-08-02)
+
+
+#### Chore
+
+*   Update cryptography from 2.2.2 to 2.3 ([08e3cee6](https://github.com/mozilla-services/autopush/commit/08e3cee6abbfa39b3af38f814cc3f13df0d7346d))
+
+
+
 <a name="1.49.1"></a>
 ## 1.49.1 (2018-07-20)
 
