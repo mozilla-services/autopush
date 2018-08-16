@@ -179,6 +179,11 @@ class WebPushBasicHeaderSchema(Schema):
             raise InvalidRequest("Topic must be URL and Filename safe Base"
                                  "64 alphabet", errno=113)
 
+    @validates('ttl')
+    def validate_ttl(self, value):
+        if value is not None and value < 0:
+            raise InvalidRequest("TTL must be greater than 0", errno=114)
+
     @post_load
     def cap_ttl(self, d):
         if 'ttl' in d:

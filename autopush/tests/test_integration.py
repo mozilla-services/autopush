@@ -1059,6 +1059,12 @@ class TestWebPush(IntegrationBase):
         yield self.shut_down(client)
 
     @inlineCallbacks
+    def test_ttl_neg(self):
+        client = yield self.quick_register()
+        yield client.send_notification(ttl=-1, status=400)
+        yield self.shut_down(client)
+
+    @inlineCallbacks
     def test_ttl_batch_expired_and_good_one(self):
         data = str(uuid.uuid4())
         data2 = str(uuid.uuid4())
