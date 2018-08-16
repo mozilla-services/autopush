@@ -1,3 +1,17 @@
+<a name="1.50.0"></a>
+## 1.50.0 (2018-08-16)
+
+
+#### Features
+
+*   improve endpoint_diagnostic tool and documents ([66c9a21e](https://github.com/mozilla-services/autopush/commit/66c9a21e2e8d12be8b4e860b2f3aec9308182572), closes [#1281](https://github.com/mozilla-services/autopush/issues/1281))
+
+#### Bug Fixes
+
+*   disallow negative ttls ([3d9b6713](https://github.com/mozilla-services/autopush/commit/3d9b671326e4a3a77e9af4e41c0e6779cb5531ad), closes [#1276](https://github.com/mozilla-services/autopush/issues/1276))
+
+
+
 <a name="1.49.2"></a>
 ## 1.49.2 (2018-08-02)
 
