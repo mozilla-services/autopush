@@ -41,6 +41,8 @@ def memusage(do_dump_rpy_heap=True, do_objgraph=True):
     trap_err(pmap_extended, buf)
     trap_err(jemalloc_stats, buf)
     trap_err(glibc_malloc_info, buf)
+    if hasattr(gc, 'get_stats'):
+        buf.writelines(['\n\n', gc.get_stats(), '\n\n'])
     if do_dump_rpy_heap:
         # dump rpython's heap before objgraph potentially pollutes the
         # heap with its heavy workload
