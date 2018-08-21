@@ -1,3 +1,13 @@
+<a name="1.50.1"></a>
+## 1.50.1 (2018-08-21)
+
+
+#### Bug Fixes
+
+*   timeout gcm calls ([440a9d83](https://github.com/mozilla-services/autopush/commit/440a9d83d38910ec542aab80d68390e451ab0844), closes [#1285](https://github.com/mozilla-services/autopush/issues/1285))
+
+
+
 <a name="1.50.0"></a>
 ## 1.50.0 (2018-08-16)
 
