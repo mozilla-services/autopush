@@ -1,7 +1,7 @@
 """GCM Router"""
 from typing import Any  # noqa
 
-from requests.exceptions import ConnectionError
+from requests.exceptions import ConnectionError, Timeout
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
@@ -27,6 +27,7 @@ class GCMRouter(object):
         self.min_ttl = router_conf.get("ttl", 60)
         self.dryRun = router_conf.get("dryrun", False)
         self.collapseKey = router_conf.get("collapseKey")
+        timeout = router_conf.get("timeout", 10)
         self.gcm = {}
         self.senderIDs = {}
         # Flatten the SenderID list from human readable and init gcmclient
@@ -35,7 +36,7 @@ class GCMRouter(object):
         for sid in router_conf.get("senderIDs"):
             auth = router_conf.get("senderIDs").get(sid).get("auth")
             self.senderIDs[sid] = auth
-            self.gcm[sid] = gcmclient.GCM(auth)
+            self.gcm[sid] = gcmclient.GCM(auth, timeout=timeout)
         self._base_tags = ["platform:gcm"]
         self.log.debug("Starting GCM router...")
 
@@ -128,6 +129,15 @@ class GCMRouter(object):
                                    tags=make_tags(
                                        self._base_tags,
                                        reason="connection_unavailable"))
+            raise RouterException("Server error", status_code=502,
+                                  errno=902,
+                                  log_exception=False)
+        except Timeout as e:
+            self.log.warn("GCM Timeout: %s" % e)
+            self.metrics.increment("notification.bridge.error",
+                                   tags=make_tags(
+                                       self._base_tags,
+                                       reason="timeout"))
             raise RouterException("Server error", status_code=502,
                                   errno=902,
                                   log_exception=False)
