@@ -308,6 +308,14 @@ class EndpointMainTestCase(unittest.TestCase):
         _no_sslcontext_cache = False
         aws_ddb_endpoint = None
         no_table_rotation = False
+        adm_creds = json.dumps({
+            "dev":
+                {
+                    "app_id": "amzn1.application.StringOfStuff",
+                    "client_id": "amzn1.application-oa2-client.ev4nM0reStuff",
+                    "client_secret": "deadbeef0000decafbad1111"
+                }
+        })
 
     def setUp(self):
         patchers = [
@@ -405,6 +413,12 @@ class EndpointMainTestCase(unittest.TestCase):
         assert app.routers["apns"].router_conf['firefox']['cert'] == \
             "cert.file"
         assert app.routers["apns"].router_conf['firefox']['key'] == "key.file"
+        assert app.routers["adm"].router_conf['dev']['app_id'] == \
+            "amzn1.application.StringOfStuff"
+        assert app.routers["adm"].router_conf['dev']['client_id'] == \
+            "amzn1.application-oa2-client.ev4nM0reStuff"
+        assert app.routers["adm"].router_conf['dev']['client_secret'] == \
+            "deadbeef0000decafbad1111"
 
     def test_bad_senders(self):
         old_list = self.TestArg.senderid_list

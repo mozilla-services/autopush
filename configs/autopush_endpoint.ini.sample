@@ -41,3 +41,6 @@ port = 8082
 ; Enable a secondary port to listen for notifications with HAProxy
 ; Proxy Protocol handling
 #proxy_protocol_port = 8083
+
+; Amazon Device Messaging credentials
+#adm_creds={"profileId":{"client_id":"...","client_secret":"..."}}

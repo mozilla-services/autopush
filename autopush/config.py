@@ -258,7 +258,6 @@ class AutopushConfig(object):
                                   "max_data": ns.max_data,
                                   "collapsekey": ns.gcm_collapsekey,
                                   "senderIDs": sender_ids}
-
         client_certs = None
         # endpoint only
         if getattr(ns, 'client_certs', None):
@@ -295,6 +294,14 @@ class AutopushConfig(object):
                                   "collapsekey": ns.fcm_collapsekey,
                                   "auth": ns.fcm_auth,
                                   "senderid": ns.fcm_senderid}
+
+        if ns.adm_creds:
+            # Create a common admclient
+            try:
+                router_conf["adm"] = json.loads(ns.adm_creds)
+            except (ValueError, TypeError):
+                raise InvalidConfig(
+                    "Invalid JSON specified for ADM config options")
 
         ami_id = None
         # Not a fan of double negatives, but this makes more

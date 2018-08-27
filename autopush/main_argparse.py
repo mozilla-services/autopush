@@ -189,6 +189,12 @@ def _add_external_router_args(parser):
                                              "APNS settings",
                         type=str, default="",
                         env_var="APNS_CREDS")
+    # Amazon Device Messaging client credentials
+    parser.add_argument('--adm_creds', help="JSON dictionary of "
+                                            "Amazon Device Message "
+                                            "credentials",
+                        type=str, default="",
+                        env_var="ADM_CREDS")
 
 
 def parse_connection(config_files, args):
