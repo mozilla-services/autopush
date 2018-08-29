@@ -129,6 +129,13 @@ Unless otherwise specified, all calls return one the following error statuses:
 
    - errno 999 - Unknown error
 
+-  502 - **Bad Gateway** - The Push Service received an invalid response from an upstream Bridge service.
+
+   - errno 900 - Internal Bridge misconfiguration
+   - errno 901 - Invalid authentication
+   - errno 902 - An error occurred while establishing a connection
+   - errno 903 - The request timed out
+
 -  503 - **Server temporarily unavaliable.** - The Push Service is currently unavailable. See the error number "errno" value to see if retries are available.
 
    -  errno 201 - Use exponential back-off for retries

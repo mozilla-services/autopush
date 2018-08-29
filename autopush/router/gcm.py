@@ -139,7 +139,7 @@ class GCMRouter(object):
                                        self._base_tags,
                                        reason="timeout"))
             raise RouterException("Server error", status_code=502,
-                                  errno=902,
+                                  errno=903,
                                   log_exception=False)
         except Exception as e:
             self.log.error("Unhandled exception in GCM Routing: %s" % e)

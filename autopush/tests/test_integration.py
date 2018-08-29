@@ -2190,6 +2190,8 @@ class TestMemUsage(IntegrationBase):
             assert 'size: ' in body
             assert 'rpy_unicode' in body
             assert 'get_stats_asmmemmgr: (' in body
+            if sys.pypy_version_info.major >= 6:
+                assert 'Total memory allocated:' in body
 
     @inlineCallbacks
     def test_memusage_options(self):
