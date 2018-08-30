@@ -1,3 +1,14 @@
+<a name="1.51.0"></a>
+## 1.51.0 (2018-08-30)
+
+
+#### Features
+
+*   add ADM support ([0d84de62](https://github.com/mozilla-services/autopush/commit/0d84de622e6ee0773d5354780df3f5ef0963bd59), closes [#1275](https://github.com/mozilla-services/autopush/issues/1275))
+*   upgrade to pypy6 for debug symbols ([b4d5e73e](https://github.com/mozilla-services/autopush/commit/b4d5e73e82ce945a89d04e7d0875ffa52a89d355), closes [#1288](https://github.com/mozilla-services/autopush/issues/1288))
+
+
+
 <a name="1.50.1"></a>
 ## 1.50.1 (2018-08-21)
 
