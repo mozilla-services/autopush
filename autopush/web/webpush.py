@@ -54,7 +54,7 @@ MAX_TTL = 60 * 60 * 24 * 60
 # Base64 URL validation
 VALID_BASE64_URL = re.compile(r'^[0-9A-Za-z\-_]+=*$')
 
-VALID_ROUTER_TYPES = ["simplepush", "webpush", "gcm", "fcm", "apns"]
+VALID_ROUTER_TYPES = ["simplepush", "webpush", "gcm", "fcm", "apns", "adm"]
 
 
 class WebPushSubscriptionSchema(Schema):

@@ -36,7 +36,7 @@ Glossary
        Every :term:`UAID` that connects has a router type. This indicates the
        type of routing to use when dispatching notifications. For most clients, this
        value will be ``webpush``. Clients using :term:`Bridging` it will use either
-       ``gcm``, ``fcm``, or ``apns``.
+       ``gcm``, ``fcm``, ``apns``, or ``adm``.
 
     Subscription
        A unique route between an :term:`AppServer` and the Application. May

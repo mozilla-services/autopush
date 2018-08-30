@@ -73,6 +73,7 @@ class TokenSchema(SubInfoSchema):
 
 
 valid_token = validate.Regexp("^[^ ]{8,}$")
+valid_adm_token = validate.Regexp("^amzn1.adm-registration.v3.[^ ]{256,}$")
 
 
 class GCMTokenSchema(SubInfoSchema):
@@ -86,6 +87,12 @@ class APNSTokenSchema(SubInfoSchema):
                        validate=valid_token,
                        error="Missing required token value")
     aps = fields.Dict(allow_none=True)
+
+
+class ADMTokenSchema(SubInfoSchema):
+    token = fields.Str(allow_none=False,
+                       validate=valid_adm_token,
+                       error="Missing required token value")
 
 
 #############################################################
@@ -174,7 +181,7 @@ class AuthorizationCheckSchema(Schema):
 def conditional_token_check(object_dict, parent_dict):
     ptype = parent_dict['path_kwargs']['type']
     # Basic "bozo-filter" to prevent customer surprises later.
-    if ptype not in ['apns', 'fcm', 'gcm', 'webpush', 'test']:
+    if ptype not in ['apns', 'fcm', 'gcm', 'webpush', 'adm', 'test']:
         raise InvalidRequest("Unknown registration type",
                              status_code=400,
                              errno=108,
@@ -183,6 +190,8 @@ def conditional_token_check(object_dict, parent_dict):
         return GCMTokenSchema()
     if ptype == 'apns':
         return APNSTokenSchema()
+    if ptype == 'adm':
+        return ADMTokenSchema()
     return TokenSchema()
 
 
