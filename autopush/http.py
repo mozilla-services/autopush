@@ -44,6 +44,7 @@ from autopush.websocket import (
     RouterHandler,
 )
 from autopush.websocket import PushServerProtocol  # noqa
+from autopush.web.dockerflow import VersionHandler, LBHeartbeatHandler
 
 APHandlers = Sequence[Tuple[str, Type[BaseHandler]]]
 CycloneLogger = Callable[[BaseHandler], None]
@@ -61,6 +62,10 @@ class BaseHTTPFactory(cyclone.web.Application):
     health_ap_handlers = (
         (r"^/status", StatusHandler),
         (r"^/health", HealthHandler),
+        # DockerFlow checks
+        (r"^/__version__", VersionHandler),
+        (r"^/__heartbeat__", StatusHandler),
+        (r"^/__lbheartbeat__", LBHeartbeatHandler),
     )
 
     def __init__(self,
