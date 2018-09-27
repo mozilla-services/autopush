@@ -1,9 +1,11 @@
 import json
 
 import pytest
-import requests
+import treq
 from mock import Mock
+from twisted.internet.defer import Deferred, inlineCallbacks
 from twisted.trial import unittest
+from twisted.web.http_headers import Headers
 
 from autopush.exceptions import RouterException
 from autopush.router import gcmclient
@@ -13,10 +15,14 @@ class GCMClientTestCase(unittest.TestCase):
 
     def setUp(self):
         self.gcm = gcmclient.GCM(api_key="FakeValue")
-        self.gcm._sender = self._m_request = Mock(spec=requests.post)
-        self._m_response = Mock(spec=requests.Response)
-        self._m_response.return_value = 200
-        self._m_response.headers = dict()
+        self.gcm._sender = Mock(spec=treq.request)
+        self._m_request = Deferred()
+        self.gcm._sender.return_value = self._m_request
+        self._m_response = Mock(spec=treq.response._Response)
+        self._m_response.code = 200
+        self._m_response.headers = Headers()
+        self._m_resp_text = Deferred()
+        self._m_response.text.return_value = self._m_resp_text
         self.m_payload = gcmclient.JSONMessage(
             registration_ids="some_reg_id",
             collapse_key="coll_key",
@@ -25,9 +31,9 @@ class GCMClientTestCase(unittest.TestCase):
             data={"foo": "bar"}
         )
 
+    @inlineCallbacks
     def test_send(self):
-        self._m_response.status_code = 200
-        self._m_response.content = json.dumps({
+        content = json.dumps({
             "multicast_id": 5174939174563864884,
             "success": 1,
             "failure": 0,
@@ -38,16 +44,17 @@ class GCMClientTestCase(unittest.TestCase):
                 }
             ]
         })
-        self._m_request.return_value = self._m_response
-        result = self.gcm.send(self.m_payload)
+        self._m_resp_text.callback(content)
+        self._m_request.callback(self._m_response)
+        result = yield self.gcm.send(self.m_payload)
         assert len(result.failed) == 0
         assert len(result.canonicals) == 0
         assert (len(result.success) == 1
                 and self.m_payload.registration_ids[0] in result.success)
 
+    @inlineCallbacks
     def test_canonical(self):
-        self._m_response.status_code = 200
-        self._m_response.content = json.dumps({
+        content = json.dumps({
             "multicast_id": 5174939174563864884,
             "success": 1,
             "failure": 0,
@@ -59,8 +66,11 @@ class GCMClientTestCase(unittest.TestCase):
                 }
             ]
         })
-        self._m_request.return_value = self._m_response
-        result = self.gcm.send(self.m_payload)
+        # pre-trigger the callbacks
+        self._m_resp_text.callback(content)
+        self._m_request.callback(self._m_response)
+        # and then trigger the main thread
+        result = yield self.gcm.send(self.m_payload)
         assert len(result.failed) == 0
         assert len(result.canonicals) == 1
         assert (len(result.success) == 1
@@ -76,9 +86,9 @@ class GCMClientTestCase(unittest.TestCase):
                 data={"foo": "bar"}
             )
 
+    @inlineCallbacks
     def test_fail_invalid(self):
-        self._m_response.status_code = 200
-        self._m_response.content = json.dumps({
+        content = json.dumps({
             "multicast_id": 5174939174563864884,
             "success": 0,
             "failure": 1,
@@ -89,14 +99,17 @@ class GCMClientTestCase(unittest.TestCase):
                 }
             ]
         })
+        self._m_resp_text.callback(content)
+        self._m_request.callback(self._m_response)
         self._m_request.return_value = self._m_response
-        result = self.gcm.send(self.m_payload)
+        result = yield self.gcm.send(self.m_payload)
         assert len(result.failed) == 1
         assert len(result.success) == 0
 
+    @inlineCallbacks
     def test_fail_unavailable(self):
-        self._m_response.status_code = 200
-        self._m_response.content = json.dumps({
+        self._m_response.code = 200
+        content = json.dumps({
             "multicast_id": 5174939174563864884,
             "success": 0,
             "failure": 1,
@@ -107,14 +120,15 @@ class GCMClientTestCase(unittest.TestCase):
                 }
             ]
         })
-        self._m_request.return_value = self._m_response
-        result = self.gcm.send(self.m_payload)
+        self._m_resp_text.callback(content)
+        self._m_request.callback(self._m_response)
+        result = yield self.gcm.send(self.m_payload)
         assert len(result.unavailable) == 1
         assert len(result.success) == 0
 
+    @inlineCallbacks
     def test_fail_not_registered(self):
-        self._m_response.status_code = 200
-        self._m_response.content = json.dumps({
+        content = json.dumps({
             "multicast_id": 5174939174563864884,
             "success": 0,
             "failure": 1,
@@ -125,53 +139,63 @@ class GCMClientTestCase(unittest.TestCase):
                 }
             ]
         })
-        self._m_request.return_value = self._m_response
-        result = self.gcm.send(self.m_payload)
+        self._m_resp_text.callback(content)
+        self._m_request.callback(self._m_response)
+        result = yield self.gcm.send(self.m_payload)
         assert len(result.not_registered) == 1
         assert len(result.success) == 0
 
+    @inlineCallbacks
     def test_fail_bad_response(self):
-        self._m_response.status_code = 200
-        self._m_response.content = json.dumps({
+        content = json.dumps({
             "multicast_id": 5174939174563864884,
             "success": 0,
             "failure": 1,
             "canonical_ids": 0,
         })
-        self._m_request.return_value = self._m_response
+        self._m_resp_text.callback(content)
+        self._m_request.callback(self._m_response)
         with pytest.raises(RouterException):
-            self.gcm.send(self.m_payload)
+            yield self.gcm.send(self.m_payload)
 
+    @inlineCallbacks
     def test_fail_400(self):
-        self._m_response.status_code = 400
-        self._m_response.content = msg = "Invalid JSON"
-        self._m_request.return_value = self._m_response
+        self._m_response.code = 400
+        content = msg = "Invalid JSON"
+        self._m_resp_text.callback(content)
+        self._m_request.callback(self._m_response)
         with pytest.raises(RouterException) as ex:
-            self.gcm.send(self.m_payload)
+            yield self.gcm.send(self.m_payload)
         assert ex.value.status_code == 500
-        assert ex.value.message == msg
+        assert ex.value.message == "Server error: {}".format(msg)
 
+    @inlineCallbacks
     def test_fail_404(self):
-        self._m_response.status_code = 404
-        self._m_response.content = msg = "Invalid URL"
-        self._m_request.return_value = self._m_response
+        self._m_response.code = 404
+        content = msg = "Invalid URL"
+        self._m_resp_text.callback(content)
+        self._m_request.callback(self._m_response)
         with pytest.raises(RouterException) as ex:
-            self.gcm.send(self.m_payload)
+            yield self.gcm.send(self.m_payload)
         assert ex.value.status_code == 500
-        assert ex.value.message == msg
+        assert ex.value.message == "Server error: {}".format(msg)
 
+    @inlineCallbacks
     def test_fail_401(self):
-        self._m_response.status_code = 401
-        self._m_response.content = "Unauthorized"
-        self._m_request.return_value = self._m_response
+        self._m_response.code = 401
+        content = "Unauthorized"
+        self._m_resp_text.callback(content)
+        self._m_request.callback(self._m_response)
         with pytest.raises(gcmclient.GCMAuthenticationError):
-            self.gcm.send(self.m_payload)
+            yield self.gcm.send(self.m_payload)
 
+    @inlineCallbacks
     def test_fail_500(self):
-        self._m_response.status_code = 500
-        self._m_response.content = "OMG"
-        self._m_response.headers['Retry-After'] = 123
-        self._m_request.return_value = self._m_response
-        result = self.gcm.send(self.m_payload)
+        self._m_response.code = 500
+        content = "OMG"
+        self._m_response.headers.addRawHeader('Retry-After', 123)
+        self._m_resp_text.callback(content)
+        self._m_request.callback(self._m_response)
+        result = yield self.gcm.send(self.m_payload)
         assert 'some_reg_id' in result.retry_message.registration_ids
         assert result.retry_after == 123

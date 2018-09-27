@@ -1,6 +1,9 @@
 import json
 
-import requests
+import treq
+from twisted.web.http_headers import Headers
+from twisted.logger import Logger
+from twisted.internet.error import ConnectError
 
 from autopush.exceptions import RouterException
 
@@ -12,7 +15,7 @@ class GCMAuthenticationError(Exception):
 class Result(object):
     """Abstraction object for GCM response"""
 
-    def __init__(self, message, response):
+    def __init__(self, response, message):
         """Process GCM message and response into abstracted object
 
         :param message: Message payload
@@ -30,14 +33,13 @@ class Result(object):
         self.message = message
         self.retry_message = None
 
-        self.retry_after = response.headers.get('Retry-After', None)
+        self.retry_after = (
+            response.headers.getRawHeaders('Retry-After') or [None])[0]
 
-        if response.status_code != 200:
-            self.retry_message = message
-        else:
-            self._parse_response(message, response.content)
-
-    def _parse_response(self, message, content):
+    def parse_response(self, content, code, message):
+        # 401 handled in GCM.process()
+        if code in (400, 404):
+            raise RouterException(content)
         data = json.loads(content)
         if not data.get('results'):
             raise RouterException("Recv'd invalid response from GCM")
@@ -54,6 +56,7 @@ class Result(object):
                     self.not_registered.append(reg_id)
                 else:
                     self.failed[reg_id] = res['error']
+        return self
 
 
 class JSONMessage(object):
@@ -124,9 +127,31 @@ class GCM(object):
         self._endpoint = "https://{}".format(endpoint)
         self._api_key = api_key
         self.metrics = metrics
-        self.log = logger
+        self.log = logger or Logger()
         self._options = options
-        self._sender = requests.post
+        self._sender = treq.post
+
+    def process(self, response, payload):
+        if response.code == 401:
+            raise GCMAuthenticationError("Authentication Error")
+
+        result = Result(response, payload)
+
+        if 500 <= response.code <= 599:
+            result.retry_message = payload
+            return result
+
+        # Fetch the content body
+        d = response.text()
+        d.addCallback(result.parse_response, response.code, payload)
+        return d
+
+    def error(self, failure):
+        if isinstance(failure.value, GCMAuthenticationError) or \
+                isinstance(failure.value, ConnectError):
+            raise failure.value
+        self.log.error("GCMClient failure: {}".format(failure.value))
+        raise RouterException("Server error: {}".format(failure.value))
 
     def send(self, payload):
         """Send a payload to GCM
@@ -136,23 +161,21 @@ class GCM(object):
         :return: Result
 
         """
-        headers = {
-            'Content-Type': 'application/json',
-            'Authorization': 'key={}'.format(self._api_key),
-        }
+        headers = Headers({
+            'Content-Type': ['application/json'],
+            'Authorization': ['key={}'.format(self._api_key)],
+        })
 
-        response = self._sender(
+        if 'timeout' not in self._options:
+            self._options['timeout'] = 3
+
+        d = self._sender(
             url=self._endpoint,
             headers=headers,
             data=json.dumps(payload.payload),
             **self._options
         )
-
-        if response.status_code in (400, 404):
-            raise RouterException(response.content)
-
-        if response.status_code == 401:
-            raise GCMAuthenticationError("Authentication Error")
-
-        if response.status_code == 200 or (500 <= response.status_code <= 599):
-            return Result(payload, response)
+        # handle the immediate response (which contains no body)
+        d.addCallback(self.process, payload)
+        d.addErrback(self.error)
+        return d

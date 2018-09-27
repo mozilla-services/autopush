@@ -13,6 +13,7 @@ from StringIO import StringIO
 from httplib import HTTPResponse  # noqa
 
 import pytest
+import treq
 from mock import Mock, call, patch
 from unittest.case import SkipTest
 
@@ -1676,10 +1677,31 @@ class TestGCMBridgeIntegration(IntegrationBase):
         # The problem with calling the live system (even sandboxed) is that
         # you need a valid credential set from a mobile device, which can be
         # subject to change.
-        self._mock_send = Mock()
-        self._mock_reply = self.MockReply
-        self._mock_send.return_value = self._mock_reply
-        gcm.gcm[self.senderID].send = self._mock_send
+        self._mock_send = Mock(spec=treq.request)
+        self._m_request = Deferred()
+        self._mock_send.return_value = self._m_request
+        self._m_response = Mock(spec=treq.response._Response)
+        self._m_response.code = 200
+        self._m_response.headers = Headers()
+        self._m_resp_text = Deferred()
+        self._m_response.text.return_value = self._m_resp_text
+        gcm.gcmclients[self.senderID]._sender = self._mock_send
+
+    def _set_content(self, content=None):
+        if content is None:
+            content = {
+                "multicast_id": 5174939174563864884,
+                "success": 1,
+                "failure": 0,
+                "canonical_ids": 0,
+                "results": [
+                    {
+                        "message_id": "0:1510011451922224%7a0e7efbaab8b7cc"
+                    }
+                ]
+            }
+        self._m_resp_text.callback(json.dumps(content))
+        self._m_request.callback(self._m_response)
 
     @inlineCallbacks
     def test_registration(self):
@@ -1706,6 +1728,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
                       "SYP0cZWNMJaT7YNaJUiSqBuGUxfRj-9vpTPz5ANmUYq3-u-HWOI")
         salt = "keyid=p256dh;salt=S82AseB7pAVBJ2143qtM3A"
         content_encoding = "aesgcm"
+        self._set_content()
 
         response, body = yield _agent(
             'POST',
@@ -1719,7 +1742,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
             body=data
         )
 
-        ca_data = self._mock_send.call_args[0][0].payload['data']
+        ca_data = json.loads(self._mock_send.call_args[1]['data'])['data']
         assert response.code == 201
         # ChannelID here MUST match what we got from the registration call.
         # Currently, this is a lowercase, hex UUID without dashes.
@@ -1767,6 +1790,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
                 "\xe4\x43\x02\x5a\x72\xe0\x64\x69\xcd\x29\x6f\x65\x44\x53\x78"
                 "\xe1\xd9\xf6\x46\x26\xce\x69")
         content_encoding = "aes128gcm"
+        self._set_content()
 
         response, body = yield _agent(
             'POST',
@@ -1778,7 +1802,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
             body=data
         )
 
-        ca_data = self._mock_send.call_args[0][0].payload['data']
+        ca_data = json.loads(self._mock_send.call_args[1]['data'])['data']
         assert response.code == 201
         # ChannelID here MUST match what we got from the registration call.
         # Currently, this is a lowercase, hex UUID without dashes.
@@ -1812,6 +1836,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
                       "SYP0cZWNMJaT7YNaJUiSqBuGUxfRj-9vpTPz5ANmUYq3-u-HWOI")
         salt = "keyid=p256dh;salt=S82AseB7pAVBJ2143qtM3A"
         content_encoding = "aes128gcm"
+        self._set_content()
 
         response, body = yield _agent(
             'POST',
@@ -1848,6 +1873,8 @@ class TestGCMBridgeIntegration(IntegrationBase):
             "gcm",
             self.senderID,
         )
+        self._set_content()
+
         response, body = yield _agent('POST', url, body=json.dumps(
             {
                 "chid": str(uuid.uuid4()),
