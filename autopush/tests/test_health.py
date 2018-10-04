@@ -1,7 +1,8 @@
 import json
 
+import pytest
 import twisted.internet.base
-from mock import Mock
+from mock import Mock, patch
 from twisted.internet.defer import inlineCallbacks
 from twisted.logger import globalLogPublisher
 from twisted.trial import unittest
@@ -15,6 +16,7 @@ from autopush.logging import begin_or_register
 from autopush.tests.client import Client
 from autopush.tests.support import TestingLogObserver
 from autopush.web.health import HealthHandler, StatusHandler
+from autopush.web.dockerflow import LBHeartbeatHandler, VersionHandler
 import autopush.tests
 
 
@@ -99,3 +101,68 @@ class StatusTestCase(unittest.TestCase):
             "status": "OK",
             "version": __version__
         })
+
+
+class DockerflowTestCase(unittest.TestCase):
+    def setUp(self):
+        self.timeout = 4
+        twisted.internet.base.DelayedCall.debug = True
+
+        conf = AutopushConfig(
+            hostname="localhost",
+            statsd_host=None,
+        )
+
+        # ignore logging
+        logs = TestingLogObserver()
+        begin_or_register(logs)
+        self.addCleanup(globalLogPublisher.removeObserver, logs)
+
+        lb_app = EndpointHTTPFactory.for_handler(
+            LBHeartbeatHandler, conf, db=None
+        )
+        ver_app = EndpointHTTPFactory.for_handler(
+            VersionHandler, conf, db=None
+        )
+        self.lb_client = Client(lb_app)
+        self.ver_client = Client(ver_app)
+
+    @inlineCallbacks
+    def test_lbheartbeat(self):
+        resp = yield self.lb_client.get("/__lbheartbeat__")
+        assert resp.get_status() == 200
+
+    @patch('autopush.web.dockerflow.open')
+    def test_version(self, mopen):
+        version = """{
+  "source" : "https://github.com/mozilla-services/autopush",
+  "version": "devel",
+  "commit" : "",
+  "build"  : ""
+}
+"""
+        reader = Mock()
+        reader.read.return_value = version
+        mopen.__enter__.return_value = reader
+        mopen.return_value = mopen
+        resp = yield self.ver_client.get("/__version__")
+        assert resp.get_status() == 200
+        assert resp.content == version
+
+    @patch('autopush.web.dockerflow.open')
+    def test_bad_version(self, mopen):
+        reader = Mock()
+        reader.read.side_effect = IOError
+        mopen.__enter__.return_value = reader
+        mopen.return_value = mopen
+        conf = AutopushConfig(
+            hostname="localhost",
+            statsd_host=None,
+        )
+        self.request_mock = Mock()
+        bad_ver = VersionHandler(
+            EndpointHTTPFactory(conf, db=None, routers=None),
+            self.request_mock
+        )
+        with pytest.raises(IOError):
+            bad_ver._get_version()
