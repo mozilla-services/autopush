@@ -1,9 +1,8 @@
 """GCM Router"""
 from typing import Any  # noqa
 
-from requests.exceptions import ConnectionError, Timeout
-from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
+from twisted.internet.error import ConnectError, TimeoutError
 
 from autopush.exceptions import RouterException
 from autopush.metrics import make_tags
@@ -28,7 +27,7 @@ class GCMRouter(object):
         self.dryRun = router_conf.get("dryrun", False)
         self.collapseKey = router_conf.get("collapseKey")
         timeout = router_conf.get("timeout", 10)
-        self.gcm = {}
+        self.gcmclients = {}
         self.senderIDs = {}
         # Flatten the SenderID list from human readable and init gcmclient
         if not router_conf.get("senderIDs"):
@@ -36,7 +35,8 @@ class GCMRouter(object):
         for sid in router_conf.get("senderIDs"):
             auth = router_conf.get("senderIDs").get(sid).get("auth")
             self.senderIDs[sid] = auth
-            self.gcm[sid] = gcmclient.GCM(auth, timeout=timeout)
+            self.gcmclients[sid] = gcmclient.GCM(auth, timeout=timeout,
+                                                 logger=self.log)
         self._base_tags = ["platform:gcm"]
         self.log.debug("Starting GCM router...")
 
@@ -69,7 +69,7 @@ class GCMRouter(object):
     def route_notification(self, notification, uaid_data):
         """Start the GCM notification routing, returns a deferred"""
         # Kick the entire notification routing off to a thread
-        return deferToThread(self._route, notification, uaid_data)
+        return self._route(notification, uaid_data)
 
     def _route(self, notification, uaid_data):
         """Blocking GCM call to route the notification"""
@@ -111,29 +111,31 @@ class GCMRouter(object):
             data=data,
         )
         try:
-            gcm = self.gcm[router_data['creds']['senderID']]
-            result = gcm.send(payload)
-        except RouterException:
-            raise  # pragma nocover
+            client = self.gcmclients[router_data['creds']['senderID']]
+            d = client.send(payload)
+            d.addCallback(
+                self._process_reply,
+                uaid_data,
+                router_ttl,
+                notification)
+
+            d.addErrback(
+                self._process_error
+            )
+            return d
         except KeyError:
             self.log.critical("Missing GCM bridge credentials")
             raise RouterException("Server error", status_code=500,
                                   errno=900)
-        except gcmclient.GCMAuthenticationError as e:
-            self.log.error("GCM Authentication Error: %s" % e)
+
+    def _process_error(self, failure):
+        err = failure.value
+        if isinstance(err, gcmclient.GCMAuthenticationError):
+            self.log.error("GCM Authentication Error: %s" % err)
             raise RouterException("Server error", status_code=500,
                                   errno=901)
-        except ConnectionError as e:
-            self.log.warn("GCM Unavailable: %s" % e)
-            self.metrics.increment("notification.bridge.error",
-                                   tags=make_tags(
-                                       self._base_tags,
-                                       reason="connection_unavailable"))
-            raise RouterException("Server error", status_code=502,
-                                  errno=902,
-                                  log_exception=False)
-        except Timeout as e:
-            self.log.warn("GCM Timeout: %s" % e)
+        if isinstance(err, TimeoutError):
+            self.log.warn("GCM Timeout: %s" % err)
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(
                                        self._base_tags,
@@ -141,11 +143,16 @@ class GCMRouter(object):
             raise RouterException("Server error", status_code=502,
                                   errno=903,
                                   log_exception=False)
-        except Exception as e:
-            self.log.error("Unhandled exception in GCM Routing: %s" % e)
-            raise RouterException("Server error", status_code=500)
-        return self._process_reply(result, uaid_data, ttl=router_ttl,
-                                   notification=notification)
+        if isinstance(err, ConnectError):
+            self.log.warn("GCM Unavailable: %s" % err)
+            self.metrics.increment("notification.bridge.error",
+                                   tags=make_tags(
+                                       self._base_tags,
+                                       reason="connection_unavailable"))
+            raise RouterException("Server error", status_code=502,
+                                  errno=902,
+                                  log_exception=False)
+        return failure
 
     def _error(self, err, status, **kwargs):
         """Error handler that raises the RouterException"""
