@@ -21,6 +21,7 @@ raven
 requests
 service-identity
 simplejson
+treq
 twisted
 -e git+https://github.com/habnabit/txstatsd.git@157ef85fbdeafe23865c7c4e176237ffcb3c3f1f#egg=txStatsD-master
 typing
