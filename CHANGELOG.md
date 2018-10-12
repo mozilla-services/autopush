@@ -1,3 +1,18 @@
+<a name="1.52.0"></a>
+## 1.52.0 (2018-10-12)
+
+
+#### Chore
+
+*   upgrade dependencies ([8a0d2178](https://github.com/mozilla-services/autopush/commit/8a0d217881cac387713295e81dc8e66a084da944), closes [#1297](https://github.com/mozilla-services/autopush/issues/1297))
+
+#### Features
+
+*   make gcm calls use async callbacks ([d67dcb45](https://github.com/mozilla-services/autopush/commit/d67dcb45f85e90af94cd5ca9318979dd4e00ff89), closes [#1291](https://github.com/mozilla-services/autopush/issues/1291))
+*   add dockerflow callbacks for endpoint ([2a5e7765](https://github.com/mozilla-services/autopush/commit/2a5e7765f02a6f22ddc8582158fbe68001b29dcb), closes [#1293](https://github.com/mozilla-services/autopush/issues/1293))
+
+
+
 <a name="1.51.0"></a>
 ## 1.51.0 (2018-08-30)
 
