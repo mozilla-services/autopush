@@ -1,3 +1,13 @@
+<a name="1.52.1"></a>
+## 1.52.1 (2018-11-12)
+
+
+#### Chore
+
+*   upgrade requests per CVE-2018-18074 ([c71558e1](https://github.com/mozilla-services/autopush/commit/c71558e1f1e44aad8150d6005b3c2f0c8e912a7d), closes [#1300](https://github.com/mozilla-services/autopush/issues/1300))
+
+
+
 <a name="1.52.0"></a>
 ## 1.52.0 (2018-10-12)
 
