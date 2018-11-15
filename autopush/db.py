@@ -266,36 +266,11 @@ def create_router_table(tablename="router", read_throughput=5,
             {
                 'AttributeName': 'uaid',
                 'AttributeType': 'S'
-            },
-            {
-                'AttributeName': 'last_connect',
-                'AttributeType': 'N'
             }],
         ProvisionedThroughput={
             'ReadCapacityUnits': read_throughput,
             'WriteCapacityUnits': write_throughput,
-        },
-        GlobalSecondaryIndexes=[
-            {
-                'IndexName': 'AccessIndex',
-                'KeySchema': [
-                    {
-                        'AttributeName': "last_connect",
-                        'KeyType': "HASH"
-                    }
-                ],
-                'Projection': {
-                    'ProjectionType': 'INCLUDE',
-                    'NonKeyAttributes': [
-                        'last_connect'
-                    ],
-                },
-                'ProvisionedThroughput': {
-                    'ReadCapacityUnits': read_throughput,
-                    'WriteCapacityUnits': write_throughput,
-                }
-            }
-        ]
+        }
     )
     table.meta.client.get_waiter('table_exists').wait(
         TableName=tablename)
@@ -434,23 +409,6 @@ def generate_last_connect():
         str(random.randint(0, 10)).zfill(4),
     ])
     return int(val)
-
-
-def generate_last_connect_values(date):
-    # type: (datetime.date) -> Iterable[int]
-    """Generator of last_connect values for a given date
-
-    Creates an iterator that yields all the valid values for ``last_connect``
-    for a given year/month.
-
-    """
-    year = str(date.year)
-    month = str(date.month).zfill(2)
-    for hour in range(0, 24):
-        for rand_int in range(0, 11):
-            val = "".join([year, month, str(hour).zfill(2),
-                           str(rand_int).zfill(4)])
-            yield int(val)
 
 
 def table_exists(tablename, boto_resource=None):
@@ -901,61 +859,6 @@ class Router(object):
         result = self.table.delete_item(
             Key={'uaid': hasher(uaid)})
         return result['ResponseMetadata']['HTTPStatusCode'] == 200
-
-    def delete_uaids(self, uaids):
-        # type: (List[str]) -> None
-        """Issue a batch delete call for the given uaids"""
-        with self.table.batch_writer() as batch:
-            for uaid in uaids:
-                batch.delete_item(Key={'uaid': uaid})
-
-    def drop_old_users(self, months_ago=2):
-        # type: (int) -> Iterable[int]
-        """Drops user records that have no recent connection
-
-        Utilizes the last_connect index to locate users that haven't
-        connected in the given time-frame.
-
-        The caller must iterate through this generator to trigger batch
-        delete calls. Caller should wait as appropriate to avoid exceeding
-        table limits.
-
-        Each iteration will result in a batch delete for the currently
-        iterated batch. This implies a set of writes equal in size to the
-        ``25 * record-size`` minimum.
-
-        .. warning::
-
-            Calling list() on this generator will likely exceed provisioned
-            write through-put as the batch-delete calls will be made as
-            quickly as possible.
-
-        :param months_ago: how many months ago since the last connect
-
-        :returns: Iterable of how many deletes were run
-
-        """
-        prior_date = get_month(-months_ago)
-
-        batched = []
-        for hash_key in generate_last_connect_values(prior_date):
-            response = self.table.query(
-                KeyConditionExpression=Key("last_connect").eq(hash_key),
-                IndexName="AccessIndex",
-            )
-            result_set = response.get('Items', [])
-            for result in result_set:
-                batched.append(result["uaid"])
-
-                if len(batched) == 25:
-                    self.delete_uaids(batched)
-                    batched = []
-                    yield 25
-
-        # Delete any leftovers
-        if batched:
-            self.delete_uaids(batched)
-            yield len(batched)
 
     @track_provisioned
     def _update_last_connect(self, uaid, last_connect):

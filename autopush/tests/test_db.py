@@ -475,16 +475,6 @@ class RouterTestCase(unittest.TestCase):
         }
         return data
 
-    def test_drop_old_users(self):
-        # First create a bunch of users
-        # Purge any existing users from previous runs.
-        self.router.drop_old_users(months_ago=0)
-        for _ in range(0, 53):
-            self.router.register_user(self._create_minimal_record())
-
-        results = self.router.drop_old_users(months_ago=0)
-        assert list(results) == [25, 25, 3]
-
     def test_old_mobile_user(self):
         # Old mobile users (ones that use a bridge) don't regularly check
         # in, or update their expiry record. It's important that we don't
