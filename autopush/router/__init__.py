@@ -15,10 +15,11 @@ from autopush.router.gcm import GCMRouter
 from autopush.router.interface import IRouter  # noqa
 from autopush.router.webpush import WebPushRouter
 from autopush.router.fcm import FCMRouter
+from autopush.router.fcm_v1 import FCMv1Router
 from autopush.router.adm import ADMRouter
 
-__all__ = ["APNSRouter", "FCMRouter", "GCMRouter", "WebPushRouter",
-           "ADMRouter"]
+__all__ = ["APNSRouter", "FCMRouter", "FCMv1Router", "GCMRouter",
+           "WebPushRouter", "ADMRouter"]
 
 
 def routers_from_config(conf, db, agent):
@@ -34,4 +35,12 @@ def routers_from_config(conf, db, agent):
         routers["gcm"] = GCMRouter(conf, router_conf["gcm"], db.metrics)
     if 'adm' in router_conf:
         routers["adm"] = ADMRouter(conf, router_conf["adm"], db.metrics)
+    if 'fcm' in router_conf:
+        # There are two forms of FCM that can be used. "Legacy" and "v1".
+        # While possible, they really should not be used in parallel, and only
+        # one form should be defined.
+        if router_conf['fcm']['version'] == 0:
+            routers["fcm"] = FCMRouter(conf, router_conf["fcm"], db.metrics)
+        if router_conf['fcm']['version'] == 1:
+            routers["fcm"] = FCMv1Router(conf, router_conf["fcm"], db.metrics)
     return routers

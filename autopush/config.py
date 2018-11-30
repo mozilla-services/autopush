@@ -283,17 +283,27 @@ class AutopushConfig(object):
                         client_certs[sig] = name
 
         if ns.fcm_enabled:
-            # Create a common gcmclient
-            if not ns.fcm_auth:
-                raise InvalidConfig("No Authorization Key found for FCM")
-            if not ns.fcm_senderid:
-                raise InvalidConfig("No SenderID found for FCM")
-            router_conf["fcm"] = {"ttl": ns.fcm_ttl,
-                                  "dryrun": ns.fcm_dryrun,
-                                  "max_data": ns.max_data,
-                                  "collapsekey": ns.fcm_collapsekey,
-                                  "auth": ns.fcm_auth,
-                                  "senderid": ns.fcm_senderid}
+            fcm_core = {
+                "ttl": ns.fcm_ttl,
+                "dryrun": ns.fcm_dryrun,
+                "max_data": ns.max_data,
+                "collapsekey": ns.fcm_collapsekey}
+            if len(ns.fcm_auth) > 0:
+                if not ns.fcm_senderid:
+                    raise InvalidConfig("No SenderID found for FCM")
+                fcm_core.update({
+                    "version": 0,
+                    "auth": ns.fcm_auth,
+                    "senderID": ns.fcm_senderid})
+            if len(ns.fcm_service_cred_path) > 0:
+                fcm_core.update({
+                    "ttl": ns.fcm_ttl,
+                    "version": 1,
+                    "service_cred_path": ns.fcm_service_cred_path,
+                    "senderID": ns.fcm_project_id})
+            if "version" not in fcm_core:
+                raise InvalidConfig("No credential info found for FCM")
+            router_conf["fcm"] = fcm_core
 
         if ns.adm_creds:
             # Create a common admclient

@@ -13,6 +13,7 @@ import pytest
 from twisted.internet.defer import Deferred
 from twisted.trial import unittest as trialtest
 import hyper
+import oauth2client
 import hyper.tls
 
 import autopush.db
@@ -290,6 +291,7 @@ class EndpointMainTestCase(unittest.TestCase):
         fcm_collapsekey = "collapse"
         fcm_senderid = '12345'
         fcm_auth = 'abcde'
+        fcm_service_cred_path = ''
         ssl_key = "keys/server.crt"
         ssl_cert = "keys/server.key"
         ssl_dh_param = None
@@ -403,7 +405,11 @@ class EndpointMainTestCase(unittest.TestCase):
     @patch('autopush.router.apns2.HTTP20Connection',
            spec=hyper.HTTP20Connection)
     @patch('hyper.tls', spec=hyper.tls)
+    @patch('autopush.router.fcmv1client.ServiceAccountCredentials',
+           spec=oauth2client.service_account.ServiceAccountCredentials)
     def test_conf(self, *args):
+        self.TestArg.fcm_service_cred_path = "some/file.json"
+        self.TestArg.fcm_project_id = "fir_testbridge"
         conf = AutopushConfig.from_argparse(self.TestArg)
         app = EndpointApplication(conf,
                                   resource=autopush.tests.boto_resource)
@@ -419,6 +425,14 @@ class EndpointMainTestCase(unittest.TestCase):
             "amzn1.application-oa2-client.ev4nM0reStuff"
         assert app.routers["adm"].router_conf['dev']['client_secret'] == \
             "deadbeef0000decafbad1111"
+
+        self.TestArg.fcm_service_cred_path = ""
+        self.TestArg.fcm_project_id = ""
+        conf = AutopushConfig.from_argparse(self.TestArg)
+        assert conf.router_conf['fcm']['version'] == 0
+        app = EndpointApplication(conf,
+                                  resource=autopush.tests.boto_resource)
+        assert app.routers["fcm"].router_conf["version"] == 0
 
     def test_bad_senders(self):
         old_list = self.TestArg.senderid_list

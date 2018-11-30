@@ -11,6 +11,7 @@ import pytest
 import treq
 from botocore.exceptions import ClientError
 from mock import Mock, PropertyMock, patch
+from oauth2client.service_account import ServiceAccountCredentials
 from twisted.trial import unittest
 from twisted.internet.error import (
     ConnectionRefusedError,
@@ -37,7 +38,8 @@ from autopush.router import (
     GCMRouter,
     WebPushRouter,
     FCMRouter,
-    gcmclient)
+    gcmclient,
+    FCMv1Router, fcmv1client)
 from autopush.router.interface import RouterResponse, IRouter
 from autopush.tests import MockAssist
 from autopush.tests.support import test_db
@@ -748,6 +750,340 @@ class GCMRouterTestCase(unittest.TestCase):
         self.router.amend_endpoint_response(
             resp, self.router_data.get('router_data'))
         assert {"key": "value", "senderid": "test123"} == resp
+
+    def test_register_invalid_token(self):
+        with pytest.raises(RouterException):
+            self.router.register(
+                uaid="uaid",
+                router_data={"token": "invalid"},
+                app_id="invalid")
+
+
+class FCMv1RouterTestCase(unittest.TestCase):
+    def setUp(self):
+        conf = AutopushConfig(
+            hostname="localhost",
+            statsd_host=None,
+        )
+        self.fcm_config = {'max_data': 32,
+                           'ttl': 60,
+                           'version': 1,
+                           # We specify 'None' here because we're going to
+                           # mock out the actual service credential service.
+                           # This should be a path to a valid service
+                           # credential JSON file.
+                           'service_cred_path': None,
+                           'senderID': 'fir-bridgetest'}
+        self._m_request = Deferred()
+        self.response = Mock(spec=treq.response._Response)
+        self.response.code = 200
+        self.response.headers = Headers()
+        self._m_resp_text = Deferred()
+        self.response.text.return_value = self._m_resp_text
+        self.response.content = json.dumps(
+            {u'name': (u'projects/fir-bridgetest/messages/'
+                       u'0:1510011451922224%7a0e7efbaab8b7cc')})
+        self.client = fcmv1client.FCMv1(project_id="SomeKey")
+        self.client._sender = Mock()
+        self.client.svc_cred = Mock(spec=ServiceAccountCredentials)
+        self.client._sender.return_value = self._m_request
+        self.router = FCMv1Router(conf, self.fcm_config, SinkMetrics())
+        self.router.fcm = self.client
+        self.headers = {"content-encoding": "aesgcm",
+                        "encryption": "test",
+                        "encryption-key": "test"}
+        # Payloads are Base64-encoded.
+        self.notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="q60d6g",
+            headers=self.headers,
+            ttl=200,
+            message_id=10,
+        )
+        self.notif.cleanup_headers()
+        self.router_data = dict(
+            router_data=dict(
+                token="connect_data",
+                creds=dict(senderID="fir-bridgetest")))
+
+    def _set_content(self, content=None):
+        if content is None:
+            content = self.response.content
+        self._m_resp_text.callback(content)
+        self._m_request.callback(self.response)
+
+    def _check_error_call(self, exc, code, response=None, errno=None):
+        assert isinstance(exc, RouterException)
+        assert exc.status_code == code
+        if errno is not None:
+            assert exc.errno == errno
+        assert self.client._sender.called
+        if response:
+            assert response in exc.response_body
+        self.flushLoggedErrors()
+
+    @patch("autopush.router.fcmv1client.ServiceAccountCredentials")
+    def test_init(self, m_sac):
+        conf = AutopushConfig(
+            hostname="localhost",
+            statsd_host=None,
+        )
+        m_sac.from_json_keyfile_name.side_effect = IOError
+        with pytest.raises(IOError):
+            FCMv1Router(conf,
+                        {"service_cred_path": "invalid_path",
+                         "senderID": "fir-bridgetest",
+                         "version": 1},
+                        SinkMetrics())
+
+    def test_register(self):
+        router_data = {"token": "fir-bridgetest"}
+        self.router.register(
+            "uaid", router_data=router_data, app_id="fir-bridgetest")
+        # Check the information that will be recorded for this user
+        assert router_data == {
+            "token": "fir-bridgetest",
+            "creds": {"senderID": "fir-bridgetest"}}
+
+    def test_register_bad(self):
+        with pytest.raises(RouterException):
+            self.router.register("uaid", router_data={}, app_id="")
+        with pytest.raises(RouterException):
+            self.router.register("uaid", router_data={}, app_id=None)
+        with pytest.raises(RouterException):
+            self.router.register(
+                "uaid",
+                router_data={"token": "abcd1234"},
+                app_id="invalid123")
+
+    def test_route_notification(self):
+        d = self.router.route_notification(self.notif, self.router_data)
+        self._set_content()
+
+        def check_results(result):
+            assert isinstance(result, RouterResponse)
+            assert self.client._sender.called
+            # Make sure the data was encoded as base64
+            payload = json.loads(self.client._sender.call_args[1]['data'])
+            data = payload['message']['android']['data']
+            assert data['body'] == 'q60d6g'
+            assert data['enc'] == 'test'
+            assert data['chid'] == dummy_chid
+            assert data['enckey'] == 'test'
+            assert data['con'] == 'aesgcm'
+        d.addCallback(check_results)
+        return d
+
+    def test_ttl_none(self):
+        self.notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="q60d6g",
+            headers=self.headers,
+            ttl=None
+        )
+        self.notif.cleanup_headers()
+        self._set_content()
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(result):
+            assert isinstance(result, RouterResponse)
+            assert result.status_code == 201
+            assert result.logged_status == 200
+            assert "TTL" in result.headers
+            assert self.client._sender.called
+            # Make sure the data was encoded as base64
+            payload = json.loads(self.client._sender.call_args[1]['data'])
+            data = payload['message']['android']['data']
+            assert data['body'] == 'q60d6g'
+            assert data['enc'] == 'test'
+            assert data['chid'] == dummy_chid
+            assert data['enckey'] == 'test'
+            assert data['con'] == 'aesgcm'
+            # use the defined min TTL
+            assert payload['message']['android']['ttl'] == "60s"
+        d.addCallback(check_results)
+        return d
+
+    def test_ttl_high(self):
+        self.notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="q60d6g",
+            headers=self.headers,
+            ttl=5184000
+        )
+        self.notif.cleanup_headers()
+        self._set_content()
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(result):
+            assert isinstance(result, RouterResponse)
+            assert self.client._sender.called
+            # Make sure the data was encoded as base64
+            payload = json.loads(self.client._sender.call_args[1]['data'])
+            data = payload['message']['android']['data']
+            assert data['body'] == 'q60d6g'
+            assert data['enc'] == 'test'
+            assert data['chid'] == dummy_chid
+            assert data['enckey'] == 'test'
+            assert data['con'] == 'aesgcm'
+            # use the defined min TTL
+            assert payload['message']['android']['ttl'] == "2419200s"
+        d.addCallback(check_results)
+        return d
+
+    def test_long_data(self):
+        bad_notif = WebPushNotification(
+            uaid=uuid.UUID(dummy_uaid),
+            channel_id=uuid.UUID(dummy_chid),
+            data="\x01abcdefghijklmnopqrstuvwxyz0123456789",
+            headers=self.headers,
+            ttl=200
+        )
+        self._set_content()
+
+        with pytest.raises(RouterException) as ex:
+            self.router.route_notification(bad_notif, self.router_data)
+
+        assert isinstance(ex.value, RouterException)
+        assert ex.value.status_code == 413
+        assert ex.value.errno == 104
+
+    def test_route_crypto_notification(self):
+        del(self.notif.headers['encryption_key'])
+        self.notif.headers['crypto_key'] = 'crypto'
+        self._set_content()
+
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(result):
+            assert isinstance(result, RouterResponse)
+            assert self.client._sender.called
+        d.addCallback(check_results)
+        return d
+
+    def test_router_notification_gcm_auth_error(self):
+        self.response.code = 401
+        self._set_content()
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(fail):
+            self._check_error_call(fail.value, 500, "Server error", 901)
+        d.addBoth(check_results)
+        return d
+
+    def test_router_notification_gcm_other_error(self):
+        self._m_request.errback(Failure(Exception))
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(fail):
+            self._check_error_call(fail.value, 500, "Server error")
+        d.addBoth(check_results)
+        return d
+
+    def test_router_notification_connection_error(self):
+
+        self._m_request.errback(Failure(ConnectError("oh my!")))
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(fail):
+            self._check_error_call(fail.value, 502, "Server error", 902)
+        d.addBoth(check_results)
+        return d
+
+    def test_router_notification_fcm_error(self):
+        self.response.code = 400
+        self.response.content = json.dumps({
+            u'error': {
+                u'status': u'INVALID_ARGUMENT',
+                u'message': (u'The registration token is not a valid '
+                             u'FCM registration token'),
+                u'code': 400,
+                u'details': [
+                    {
+                        u'errorCode': u'INVALID_ARGUMENT',
+                        u'@type': (u'type.googleapis.com/google.firebase'
+                                   u'.fcm.v1.FcmError')},
+                    {u'fieldViolations': [
+                        {u'field': u'message.token',
+                         u'description': (u'The registration token is not '
+                                          u'a valid FCM registration token')}],
+                        u'@type': u'type.googleapis.com/google.rpc.BadRequest'}
+                            ]
+            }
+        })
+        self.router.metrics = Mock()
+        self._set_content()
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(fail):
+            assert self.router.metrics.increment.called
+            assert self.router.metrics.increment.call_args[0][0] == (
+                'notification.bridge.error')
+            self.router.metrics.increment.call_args[1]['tags'].sort()
+            assert self.router.metrics.increment.call_args[1]['tags'] == [
+                'platform:fcmv1', 'reason:server_error']
+            assert "INVALID_ARGUMENT" in fail.value.message
+            self._check_error_call(fail.value, 500)
+        d.addBoth(check_results)
+        return d
+
+    def test_router_no_token(self):
+        uaid_data = dict(
+            router_data=dict(
+                token=None,
+                creds=dict(
+                    senderID="fir-bridgetest")))
+        with pytest.raises(RouterException):
+            self.router.route_notification(self.notif, uaid_data)
+
+    def test_router_timeout(self):
+        self.router.metrics = Mock()
+
+        def timeout(*args, **kwargs):
+            self._m_request.errback(Failure(TimeoutError()))
+            return self._m_request
+
+        self.client._sender.side_effect = timeout
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(fail):
+            assert self.router.metrics.increment.called
+            assert self.router.metrics.increment.call_args[0][0] == (
+                'notification.bridge.error')
+            self.router.metrics.increment.call_args[1]['tags'].sort()
+            assert self.router.metrics.increment.call_args[1]['tags'] == [
+                'platform:fcmv1', 'reason:timeout']
+
+        d.addBoth(check_results)
+        return d
+
+    def test_router_unknown_err(self):
+        self.router.metrics = Mock()
+
+        def timeout(*args, **kwargs):
+            self._m_request.errback(Failure(Exception()))
+            return self._m_request
+
+        self.client._sender.side_effect = timeout
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(fail):
+            assert isinstance(fail.value, RouterException)
+
+        d.addBoth(check_results)
+        return d
+
+    def test_amend(self):
+        router_data = {"token": "fir-bridgetest"}
+        self.router.register("uaid", router_data=router_data,
+                             app_id="fir-bridgetest")
+        resp = {"key": "value"}
+        self.router.amend_endpoint_response(
+            resp, self.router_data.get('router_data'))
+        assert {"key": "value", "senderid": "fir-bridgetest"} == resp
 
     def test_register_invalid_token(self):
         with pytest.raises(RouterException):
