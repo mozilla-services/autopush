@@ -44,3 +44,18 @@ port = 8082
 
 ; Amazon Device Messaging credentials
 #adm_creds={"profileId":{"client_id":"...","client_secret":"..."}}
+
+; Google Firebase Cloud Messaging (FCM)
+;  There are two APIs available for FCM, the older Legacy and the newer HTTP v1. Both are functionally equivalent,
+;  but use different methods to authenticate.
+; Common:
+# fcm_enabled
+# fcm_ttl = 60
+# fcm_dryrun
+# fcm_collapsekey=simplepush
+; Legacy API
+# fcm_auth =
+# fcm_senderid =
+; v1 HTTP API (this will override the Legacy API)
+# fcm_project_id =
+# fcm_service_cred_path =
