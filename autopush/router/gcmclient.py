@@ -5,6 +5,7 @@ from twisted.web.http_headers import Headers
 from twisted.logger import Logger
 from twisted.internet.error import ConnectError
 
+from autopush.constants import DEFAULT_ROUTER_TIMEOUT
 from autopush.exceptions import RouterException
 
 
@@ -167,7 +168,7 @@ class GCM(object):
         })
 
         if 'timeout' not in self._options:
-            self._options['timeout'] = 3
+            self._options['timeout'] = DEFAULT_ROUTER_TIMEOUT
 
         d = self._sender(
             url=self._endpoint,

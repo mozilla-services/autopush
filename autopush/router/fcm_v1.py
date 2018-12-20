@@ -50,7 +50,7 @@ class FCMv1Router(FCMRouter):
                               status=401,
                               uri=kwargs.get('uri'),
                               senderid=repr(senderid))
-        if not (senderid == self.senderID):
+        if senderid != self.senderID:
             raise self._error("Invalid SenderID", status=410, errno=105)
         # Assign a senderid
         router_data["creds"] = {"senderID": self.senderID}
@@ -151,9 +151,6 @@ class FCMv1Router(FCMRouter):
 
     def _process_reply(self, reply, notification, router_data, ttl):
         """Process FCM send reply"""
-        # acks:
-        #  for reg_id, msg_id in reply.success.items():
-        # updates
         # Failures are returned as non-200 messages (404, 410, etc.)
         self.metrics.increment("notification.bridge.sent",
                                tags=self._base_tags)

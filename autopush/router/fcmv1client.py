@@ -5,6 +5,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 from twisted.logger import Logger
 from twisted.internet.error import (ConnectError, TimeoutError)
 
+from autopush.constants import DEFAULT_ROUTER_TIMEOUT
 from autopush.exceptions import RouterException
 
 
@@ -114,9 +115,8 @@ class FCMv1(object):
         return d
 
     def error(self, failure):
-        if isinstance(failure.value, FCMAuthenticationError) or \
-                isinstance(failure.value, TimeoutError) or \
-                isinstance(failure.value, ConnectError):
+        if isinstance(failure.value,
+                      (FCMAuthenticationError, TimeoutError, ConnectError)):
             raise failure.value
         self.logger.error("FCMv1Client failure: {}".format(failure.value))
         raise RouterException("Server error: {}".format(failure.value))
@@ -129,7 +129,7 @@ class FCMv1(object):
         }
         message = self._build_message(token, payload)
         if 'timeout' not in self._options:
-            self._options['timeout'] = 3
+            self._options['timeout'] = DEFAULT_ROUTER_TIMEOUT
 
         d = self._sender(
             url=self.endpoint,
