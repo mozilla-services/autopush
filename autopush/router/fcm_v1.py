@@ -58,7 +58,6 @@ class FCMv1Router(FCMRouter):
     def route_notification(self, notification, uaid_data):
         """Start the FCM notification routing, returns a deferred"""
         router_data = uaid_data["router_data"]
-        # Kick the entire notification routing off to a thread
         return self._route(notification, router_data)
 
     def _route(self, notification, router_data):
