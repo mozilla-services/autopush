@@ -4,6 +4,7 @@ from typing import Any  # noqa
 from twisted.logger import Logger
 from twisted.internet.error import ConnectError, TimeoutError
 
+from autopush.constants import DEFAULT_ROUTER_TIMEOUT
 from autopush.exceptions import RouterException
 from autopush.metrics import make_tags
 from autopush.router import gcmclient
@@ -26,7 +27,7 @@ class GCMRouter(object):
         self.min_ttl = router_conf.get("ttl", 60)
         self.dryRun = router_conf.get("dryrun", False)
         self.collapseKey = router_conf.get("collapseKey")
-        timeout = router_conf.get("timeout", 10)
+        timeout = router_conf.get("timeout", DEFAULT_ROUTER_TIMEOUT)
         self.gcmclients = {}
         self.senderIDs = {}
         # Flatten the SenderID list from human readable and init gcmclient

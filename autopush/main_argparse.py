@@ -180,6 +180,14 @@ def _add_external_router_args(parser):
                         type=str, default="", env_var="FCM_AUTH")
     parser.add_argument('--fcm_senderid', help='SenderID for FCM',
                         type=str, default="", env_var="FCM_SENDERID")
+    # FCM v1 HTTP API
+    parser.add_argument('--fcm_project_id', help="FCM Project identifier",
+                        type=str, default="", env_var="FCM_PROJECT_ID")
+    parser.add_argument('--fcm_service_cred_path',
+                        help="Path to FCM Service Credentials",
+                        type=str, default="",
+                        env_var="FCM_SERVICE_CRED_PATH")
+
     # Apple Push Notification system (APNs) for iOS
     # credentials consist of JSON struct containing a channel type
     # followed by the settings,

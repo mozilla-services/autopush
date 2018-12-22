@@ -8,6 +8,7 @@ from requests.exceptions import ConnectionError, Timeout
 from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
+from autopush.constants import DEFAULT_ROUTER_TIMEOUT
 from autopush.exceptions import RouterException
 from autopush.metrics import make_tags
 from autopush.router.interface import RouterResponse
@@ -24,7 +25,7 @@ class ADMClient(object):
                  logger=None,
                  metrics=None,
                  endpoint="api.amazon.com",
-                 timeout=2,
+                 timeout=DEFAULT_ROUTER_TIMEOUT,
                  **options
                  ):
 
@@ -106,7 +107,7 @@ class ADMRouter(object):
         self.router_conf = router_conf
         self.metrics = metrics
         self.min_ttl = router_conf.get("ttl", 60)
-        timeout = router_conf.get("timeout", 10)
+        timeout = router_conf.get("timeout", DEFAULT_ROUTER_TIMEOUT)
         self.profiles = dict()
         for profile in router_conf:
             config = router_conf[profile]

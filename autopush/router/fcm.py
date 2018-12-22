@@ -1,4 +1,4 @@
-"""FCM Router"""
+"""FCM legacy HTTP Router"""
 from typing import Any  # noqa
 
 import pyfcm
