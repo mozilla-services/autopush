@@ -28,7 +28,7 @@ google-cloud-firestore==0.30.0  # via firebase-admin
 google-cloud-storage==1.13.0    # via firebase-admin
 google-resumable-media==0.3.1   # via firebase-admin
 googleapis-common-protos==1.5.5 # via firebase-admin
-msgpack==0.5.6                  # via firebase-admin
+msgpack==0.6.0                  # via firebase-admin
 protobuf==3.6.1                 # via firebase-admin
 oauth2client==4.1.3
 future==0.16.0            # via python-jose
