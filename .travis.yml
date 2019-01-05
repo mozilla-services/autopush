@@ -3,13 +3,13 @@ cache:
   directories:
     - $HOME/.cache/pip
 sudo: required
-dist: trusty
+dist: xenial
 
 matrix:
   include:
     - python: 2.7
       env: TOXENV=py27 DDB=true CODECOV=true
-    - python: pypy
+    - python: pypy2.7-6.0
       env: TOXENV=pypy DDB=true CODECOV=true
     - env: TOXENV=flake8
     - python: 3.6
