@@ -284,10 +284,10 @@ class WebPushCrypto04HeaderSchema(Schema):
             )
 
 
-class WebPushCrypto06HeaderSchema(Schema):
+class WebPushCrypto8188HeaderSchema(Schema):
     """Validates WebPush Message Encryption
 
-    Uses draft-ietf-httpbis-encryption-encoding-06 rules for validation
+    Uses RFC 8188 rules for validation
 
     """
 
@@ -311,9 +311,10 @@ class WebPushCrypto06HeaderSchema(Schema):
 
     @validates("crypto_key")
     def validate_crypto_key(self, value):
-        if CryptoKey.parse_and_get_label(value, "dh"):
-            raise InvalidRequest("Do not include 'dh' in aes128gcm "
-                                 "Crypto-Key header",
+        """Must contain a dh value"""
+        dh = CryptoKey.parse_and_get_label(value, "dh")
+        if not dh or not VALID_BASE64_URL.match("dh"):
+            raise InvalidRequest("Invalid dh value in Crypto-Key header",
                                  status_code=400,
                                  errno=110)
 
@@ -339,7 +340,7 @@ def conditional_crypto_deserialize(object_dict, parent_object_dict):
         elif encoding == "aesgcm":
             return WebPushCrypto04HeaderSchema()
         elif encoding == "aes128gcm":
-            return WebPushCrypto06HeaderSchema()
+            return WebPushCrypto8188HeaderSchema()
         else:
             return WebPushInvalidContentEncodingSchema()
     else:

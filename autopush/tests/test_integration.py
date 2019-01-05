@@ -1790,6 +1790,8 @@ class TestGCMBridgeIntegration(IntegrationBase):
                 "\xe4\x43\x02\x5a\x72\xe0\x64\x69\xcd\x29\x6f\x65\x44\x53\x78"
                 "\xe1\xd9\xf6\x46\x26\xce\x69")
         content_encoding = "aes128gcm"
+        crypto_key = ("keyid=p256dh;dh=BAFJxCIaaWyb4JSkZopERL9MjXBeh3WdBxew"
+                      "SYP0cZWNMJaT7YNaJUiSqBuGUxfRj-9vpTPz5ANmUYq3-u-HWOI")
         self._set_content()
 
         response, body = yield _agent(
@@ -1798,6 +1800,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
             headers=Headers({
                 "ttl": ["0"],
                 "content-encoding": [content_encoding],
+                "crypto-key": [crypto_key]
             }),
             body=data
         )
@@ -1832,8 +1835,6 @@ class TestGCMBridgeIntegration(IntegrationBase):
         data = ("\xa2\xa5\xbd\xda\x40\xdc\xd1\xa5\xf9\x6a\x60\xa8\x57\x7b\x48"
                 "\xe4\x43\x02\x5a\x72\xe0\x64\x69\xcd\x29\x6f\x65\x44\x53\x78"
                 "\xe1\xd9\xf6\x46\x26\xce\x69")
-        crypto_key = ("keyid=p256dh;dh=BAFJxCIaaWyb4JSkZopERL9MjXBeh3WdBxew"
-                      "SYP0cZWNMJaT7YNaJUiSqBuGUxfRj-9vpTPz5ANmUYq3-u-HWOI")
         salt = "keyid=p256dh;salt=S82AseB7pAVBJ2143qtM3A"
         content_encoding = "aes128gcm"
         self._set_content()
@@ -1844,13 +1845,13 @@ class TestGCMBridgeIntegration(IntegrationBase):
             headers=Headers({
                 "ttl": ["0"],
                 "content-encoding": [content_encoding],
-                "crypto-key": [crypto_key]
+                "crypto-key": ["banana"]
             }),
             body=data
         )
 
         assert response.code == 400
-        assert "do not include 'dh' in " in body.lower()
+        assert "invalid dh value in crypto-key header" in body.lower()
         response, body = yield _agent(
             'POST',
             str(jbody['endpoint']),
