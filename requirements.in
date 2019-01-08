@@ -9,9 +9,11 @@ cryptography
 cyclone
 datadog
 gcm-client
+firebase-admin
 hyper
 marshmallow
 marshmallow-polyfield
+oauth2client
 objgraph
 pyasn1
 pyfcm

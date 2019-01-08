@@ -1,6 +1,5 @@
 -r requirements.txt
 coverage
-ecdsa==0.13
 factory_boy==2.8.1
 flake8==3.3.0
 funcsigs==1.0.2
@@ -10,6 +9,6 @@ nose
 pbr==1.10.0
 psutil
 pympler==0.5
-pytest
+pytest>=3.6
 pytest-cov
 websocket-client

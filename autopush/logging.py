@@ -148,7 +148,7 @@ class PushLogger(object):
             # include the current stack for at least some
             # context. sentry's expecting that "Frames should be
             # sorted from oldest to newest."
-            stack = reversed(list(iter_stack_frames())[5:])  # approx.
+            stack = list(iter_stack_frames())[:-5]  # approx.
             extra = dict(no_failure_tb=True)
         extra.update(
             log_format=event.get('log_format'),
