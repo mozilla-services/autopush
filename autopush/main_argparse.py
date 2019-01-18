@@ -161,6 +161,9 @@ def _add_external_router_args(parser):
                         env_var="GCM_COLLAPSEKEY")
     parser.add_argument('--senderid_list', help='GCM SenderIDs/auth keys',
                         type=str, default="{}", env_var="SENDERID_LIST")
+    parser.add_argument('--gcm_endpoint', help="%s endpoint to use" % label,
+                        type=str, default="gcm-http.googleapis.com/gcm/send",
+                        env_var="GCM_ENDPOINT")
     # FCM
     parser.add_argument('--fcm_enabled', help="Enable FCM Bridge",
                         action="store_true", default=False,

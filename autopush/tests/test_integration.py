@@ -1666,6 +1666,7 @@ class TestGCMBridgeIntegration(IntegrationBase):
                 "dryrun": True,
                 "max_data": 4096,
                 "collapsekey": "test",
+                "endpoint": "gcm-http.googleapis.com/gcm/send",
                 "senderIDs": {self.senderID:
                               {"auth": "AIzaSyCx9PRtH8ByaJR3Cf"
                                        "Jamz0D2N0uaCgRGiI"}}

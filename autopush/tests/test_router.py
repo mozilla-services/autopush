@@ -1,31 +1,27 @@
 # -*- coding: utf-8 -*-
-from unittest import TestCase
-import uuid
-import time
-import json
 import decimal
+import json
 import socket
 import ssl
-
-import pytest
-import treq
-from botocore.exceptions import ClientError
-from mock import Mock, PropertyMock, patch
-from oauth2client.service_account import ServiceAccountCredentials
-from twisted.trial import unittest
-from twisted.internet.error import (
-    ConnectionRefusedError,
-    ConnectError,
-    TimeoutError,
-)
-from twisted.internet.defer import inlineCallbacks, Deferred
-from twisted.python.failure import Failure
-from twisted.web.client import Agent
-from twisted.web.http_headers import Headers
+import time
+import uuid
+from unittest import TestCase
 
 import hyper.tls
 import pyfcm
+import pytest
+import treq
+from botocore.exceptions import ClientError
 from hyper.http20.exceptions import HTTP20Error
+from mock import Mock, PropertyMock, patch
+from oauth2client.service_account import ServiceAccountCredentials
+from twisted.internet.defer import Deferred, inlineCallbacks
+from twisted.internet.error import (ConnectError, ConnectionRefusedError,
+                                    TimeoutError)
+from twisted.python.failure import Failure
+from twisted.trial import unittest
+from twisted.web.client import Agent
+from twisted.web.http_headers import Headers
 
 from autopush.config import AutopushConfig
 from autopush.db import (
@@ -33,14 +29,9 @@ from autopush.db import (
 )
 from autopush.exceptions import ItemNotFound, RouterException
 from autopush.metrics import SinkMetrics
-from autopush.router import (
-    APNSRouter,
-    GCMRouter,
-    WebPushRouter,
-    FCMRouter,
-    gcmclient,
-    FCMv1Router, fcmv1client)
-from autopush.router.interface import RouterResponse, IRouter
+from autopush.router import (APNSRouter, FCMRouter, FCMv1Router, GCMRouter,
+                             WebPushRouter, fcmv1client, gcmclient)
+from autopush.router.interface import IRouter, RouterResponse
 from autopush.tests import MockAssist
 from autopush.tests.support import test_db
 from autopush.utils import WebPushNotification
@@ -363,7 +354,8 @@ class GCMRouterTestCase(unittest.TestCase):
         self.gcm_config = {'max_data': 32,
                            'ttl': 60,
                            'senderIDs': {'test123':
-                                         {"auth": "12345678abcdefg"}}}
+                                         {"auth": "12345678abcdefg"}},
+                           'endpoint': 'gcm-http.googleapis.com/gcm/send'}
         self._m_request = Deferred()
         self.response = Mock(spec=treq.response._Response)
         self.response.code = 200
@@ -426,7 +418,9 @@ class GCMRouterTestCase(unittest.TestCase):
             statsd_host=None,
         )
         with pytest.raises(IOError):
-            GCMRouter(conf, {"senderIDs": {}}, SinkMetrics())
+            GCMRouter(conf, {"senderIDs": {},
+                             "endpoint": "gcm-http.googleapis.com/gcm/send"},
+                      SinkMetrics())
 
     def test_register(self):
         router_data = {"token": "test123"}

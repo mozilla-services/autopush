@@ -7,23 +7,18 @@ from mock import Mock, patch
 from twisted.internet.defer import inlineCallbacks
 from twisted.trial import unittest
 
-
 import autopush.utils as utils
 from autopush.config import AutopushConfig
-from autopush.db import (
-    Message,
-    ItemNotFound,
-    has_connected_this_month,
-    Router
-)
+from autopush.db import (ItemNotFound, Message, Router,
+                         has_connected_this_month)
 from autopush.exceptions import RouterException
 from autopush.http import EndpointHTTPFactory
 from autopush.metrics import SinkMetrics
 from autopush.router import routers_from_config
 from autopush.router.interface import IRouter
 from autopush.tests.client import Client
-from autopush.tests.test_db import make_webpush_notification
 from autopush.tests.support import test_db
+from autopush.tests.test_db import make_webpush_notification
 from autopush.utils import (
     generate_hash,
 )
@@ -286,7 +281,8 @@ class RegistrationTestCase(unittest.TestCase):
         sids = {"182931248179192": {"auth": "aailsjfilajdflijdsilfjsliaj"}}
         gcm = GCMRouter(
             self.conf,
-            {"dryrun": True, "senderIDs": sids},
+            {"dryrun": True, "senderIDs": sids,
+             "endpoint": "gcm-http.googleapis.com/gcm/send"},
             SinkMetrics()
         )
         self.routers["gcm"] = gcm
