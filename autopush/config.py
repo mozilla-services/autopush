@@ -257,7 +257,8 @@ class AutopushConfig(object):
                                   "dryrun": ns.gcm_dryrun,
                                   "max_data": ns.max_data,
                                   "collapsekey": ns.gcm_collapsekey,
-                                  "senderIDs": sender_ids}
+                                  "senderIDs": sender_ids,
+                                  "endpoint": ns.gcm_endpoint}
         client_certs = None
         # endpoint only
         if getattr(ns, 'client_certs', None):

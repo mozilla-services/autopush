@@ -262,6 +262,7 @@ class EndpointMainTestCase(unittest.TestCase):
         apns_creds = json.dumps({"firefox": {"cert": "cert.file",
                                              "key": "key.file"}})
         gcm_enabled = True
+        gcm_endpoint = "gcm-http.googleapis.com/gcm/send"
         # less important stuff
         gcm_ttl = 999
         gcm_dryrun = False
@@ -353,6 +354,7 @@ class EndpointMainTestCase(unittest.TestCase):
     def test_bad_senderidlist(self):
         returncode = endpoint_main([
             "--gcm_enabled",
+            "--gcm_endpoint='gcm-http.googleapis.com/gcm/send'"
             "--senderid_list='[Invalid'"
         ], False)
         assert returncode not in (None, 0)
@@ -456,6 +458,7 @@ class EndpointMainTestCase(unittest.TestCase):
     def test_gcm_start(self):
         endpoint_main([
             "--gcm_enabled",
+            "--gcm_endpoint='gcm-http.googleapis.com/gcm/send'",
             """--senderid_list={"123":{"auth":"abcd"}}""",
         ], False, resource=autopush.tests.boto_resource)
 

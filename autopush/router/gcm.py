@@ -30,6 +30,7 @@ class GCMRouter(object):
         timeout = router_conf.get("timeout", DEFAULT_ROUTER_TIMEOUT)
         self.gcmclients = {}
         self.senderIDs = {}
+        self.gcm_endpoint = router_conf["endpoint"]
         # Flatten the SenderID list from human readable and init gcmclient
         if not router_conf.get("senderIDs"):
             raise IOError("SenderIDs not configured.")
@@ -37,7 +38,8 @@ class GCMRouter(object):
             auth = router_conf.get("senderIDs").get(sid).get("auth")
             self.senderIDs[sid] = auth
             self.gcmclients[sid] = gcmclient.GCM(auth, timeout=timeout,
-                                                 logger=self.log)
+                                                 logger=self.log,
+                                                 endpoint=self.gcm_endpoint)
         self._base_tags = ["platform:gcm"]
         self.log.debug("Starting GCM router...")
 
