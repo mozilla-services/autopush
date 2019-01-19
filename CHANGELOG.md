@@ -1,3 +1,20 @@
+<a name="1.53.0"></a>
+## 1.53.0 (2019-01-19)
+
+
+#### Chore
+
+*   update pytest req per latest pytest_cov ([bb651f01](https://github.com/mozilla-services/autopush/commit/bb651f0113ace60c8efa80f9da11123c96ae8873))
+*   upgrade dependencies ([e978dc68](https://github.com/mozilla-services/autopush/commit/e978dc68bcab33b2803a90a484b369506d5792b7), closes [#1311](https://github.com/mozilla-services/autopush/issues/1311))
+
+#### Features
+
+*   add gcm endpoint configuration argument ([5fd37e24](https://github.com/mozilla-services/autopush/commit/5fd37e24091bf7ee9c1ae7ea881b641bdb613cb9), closes [#1315](https://github.com/mozilla-services/autopush/issues/1315))
+*   Use FCM HTTPv1 protocol with twisted async ([e111ec10](https://github.com/mozilla-services/autopush/commit/e111ec10238a487a7de2d157e16e6eb238b32a69), closes [#1291](https://github.com/mozilla-services/autopush/issues/1291))
+*   Remove unused secondary global index ([1833f5aa](https://github.com/mozilla-services/autopush/commit/1833f5aa5430fa80965b51bdfb3de9b1ebc5c119))
+
+
+
 <a name="1.52.1"></a>
 ## 1.52.1 (2018-11-12)
 
