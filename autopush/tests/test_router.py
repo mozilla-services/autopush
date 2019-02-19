@@ -63,12 +63,12 @@ dummy_uaid = str(uuid.uuid4())
 class APNSRouterTestCase(unittest.TestCase):
 
     def _waitfor(self, func):
-            times = 0
-            while not func():  # pragma: nocover
-                time.sleep(1)
-                times += 1
-                if times > 9:
-                    break
+        times = 0
+        while not func():  # pragma: nocover
+            time.sleep(1)
+            times += 1
+            if times > 9:
+                break
 
     @patch('autopush.router.apns2.HTTP20Connection',
            spec=hyper.HTTP20Connection)
