@@ -141,6 +141,7 @@ class NotFoundHandler(BaseHandler):
         )
         self.write(json.dumps(error_data))
         self.set_header("Content-Type", "application/json")
+        self.set_header("Strict-Transport-Security", "max-age=31536000")
         self.finish()
     put = post = delete = get
 
