@@ -1,3 +1,16 @@
+<a name="1.53.2"></a>
+## 1.53.2 (2019-03-19)
+
+#### Chore
+
+*   flake8 fixes ([6a42be58](https://github.com/mozilla-services/autopush/commit/6a42be5877ba13272ddc7cb56c36d85120400549))
+
+#### Features
+
+*   added Strict-Transport-Security header to 404s ([94b41911](https://github.com/mozilla-services/autopush/pull/1321/commits/94b4191125210ffdeef8a77b90a86f016eef4756))
+
+
+
 <a name="1.53.1"></a>
 ## 1.53.1 (2019-02-19)
 
