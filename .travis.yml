@@ -11,7 +11,8 @@ matrix:
       env: TOXENV=py27 DDB=true CODECOV=true
     - python: pypy2.7-6.0
       env: TOXENV=pypy DDB=true CODECOV=true
-    - env: TOXENV=flake8
+    - python: 2.7
+      env: TOXENV=flake8
     - python: 3.6
       env: TOXENV=py36-mypy
   allow_failures:
