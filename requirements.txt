@@ -73,6 +73,6 @@ twisted[tls]==18.9.0
 txaio==18.8.1             # via autobahn
 typing==3.6.6
 ua-parser==0.8.0
-urllib3==1.24.1           # via botocore, requests
+urllib3==1.24.2           # via botocore, requests
 wsaccel==0.6.2 ; platform_python_implementation == "CPython"
 zope.interface==4.6.0
