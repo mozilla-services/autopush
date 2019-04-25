@@ -557,7 +557,7 @@ class Message(object):
         # update that list as well using register_channel()
         result = self.table.get_item(
             Key={
-                'uaid': hasher(uaid),
+                'uaid': hasher(uuid.UUID(uaid).hex),
                 'chidmessageid': ' ',
             },
             ConsistentRead=True

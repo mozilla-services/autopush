@@ -249,7 +249,7 @@ class MessageTestCase(unittest.TestCase):
             prefix="message_int_test",
             boto_resource=self.resource)
         self.real_table = table
-        self.uaid = str(uuid.uuid4())
+        self.uaid = uuid.uuid4().hex
 
     def test_non_rotating_tables(self):
         message_tablename = "message_int_test"
