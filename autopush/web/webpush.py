@@ -416,7 +416,7 @@ class WebPushRequestSchema(Schema):
 
         try:
             jwt_expires = int(jwt['exp'])
-        except ValueError:
+        except (TypeError, ValueError):
             raise InvalidRequest("Invalid bearer token: Invalid expiration",
                                  status_code=401, errno=109,
                                  headers={"www-authenticate": PREF_SCHEME})

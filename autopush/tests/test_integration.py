@@ -772,7 +772,15 @@ class TestWebPush(IntegrationBase):
             payload={"aud": "https://pusher_origin.example.com",
                      "exp": '@',
                      "sub": "mailto:admin@example.com"})
-        vapid_info['crypto-key'] = "invalid"
+        yield client.send_notification(
+            data=data,
+            vapid=vapid_info,
+            status=401)
+
+        vapid_info = _get_vapid(
+            payload={"aud": "https://pusher_origin.example.com",
+                     "exp": ['@'],
+                     "sub": "mailto:admin@example.com"})
         yield client.send_notification(
             data=data,
             vapid=vapid_info,
