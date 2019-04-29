@@ -1,3 +1,19 @@
+<a name="1.53.3"></a>
+## 1.53.3 (2019-04-26)
+
+
+#### Bug Fixes
+
+*   handle TypeErrors too ([79420a9e](https://github.com/mozilla-services/autopush/commit/79420a9e7f056aedb7e18a6a0b6c2ec50a4b7a12), closes [#1326](https://github.com/mozilla-services/autopush/issues/1326))
+*   Fix all_channels to match registration UAID format ([bd21f063](https://github.com/mozilla-services/autopush/commit/bd21f063bd92f3056f7955d1e299236fc43f0935), closes [#1330](https://github.com/mozilla-services/autopush/issues/1330))
+
+#### Chore
+
+*   update urllib ([9811c1fa](https://github.com/mozilla-services/autopush/commit/9811c1fa20e667f95b682de05402449b31b9dbbb))
+*   bump to latest pypy ([4726e9b1](https://github.com/mozilla-services/autopush/commit/4726e9b1b0dc3f68e88c6193608beaf444248fa3), closes [#1327](https://github.com/mozilla-services/autopush/issues/1327))
+
+
+
 <a name="1.53.2"></a>
 ## 1.53.2 (2019-03-19)
 
