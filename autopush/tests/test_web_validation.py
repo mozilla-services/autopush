@@ -1,12 +1,13 @@
 import time
 import uuid
+import base64
 
 from hashlib import sha256
 
 import ecdsa
 from cryptography.fernet import InvalidToken
 from cryptography.exceptions import InvalidSignature
-from jose import jws
+from jose import jws, jwk
 from marshmallow import Schema, fields
 from mock import Mock, patch
 import pytest
@@ -1162,6 +1163,43 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
                 "encryption": "salt=stuff",
                 "crypto-key": ckey,
                 "authorization": "bogus crap"
+            }
+        )
+
+        with pytest.raises(InvalidRequest) as cm:
+            schema.load(info)
+
+        assert cm.value.status_code == 401
+        assert cm.value.errno == 109
+
+    def test_null_vapid_header(self):
+        schema = self._make_fut()
+        schema.context["conf"].use_cryptography = True
+
+        def b64s(content):
+            return base64.urlsafe_b64encode(content).strip(b'=')
+
+        payload = b'.'.join([b64s("null"), b64s("null")])
+
+        # force sign the header, since jws will "fix" the invalid one.
+        sk256p = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
+        vk = sk256p.get_verifying_key()
+        key = jwk.construct(sk256p, "ES256")
+        signature = b64s(key.sign(payload))
+        token = b'.'.join([payload, signature])
+        crypto_key = b64s(vk.to_string())
+
+        self.fernet_mock.decrypt.return_value = (
+            'a' * 32) + sha256(utils.base64url_decode(crypto_key)).digest()
+        info = self._make_test_data(
+            body="asdfasdfasdfasdf",
+            path_kwargs=dict(
+                api_ver="v2",
+                token="asdfasdf",
+            ),
+            headers={
+                "content-encoding": "aes128gcm",
+                "authorization": "vapid k={},t={}".format(crypto_key, token)
             }
         )
 

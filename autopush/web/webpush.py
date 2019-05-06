@@ -405,6 +405,10 @@ class WebPushRequestSchema(Schema):
                 is_trusted=self.context['conf'].enable_tls_auth,
                 use_crypto=self.context['conf'].use_cryptography
             )
+            if not isinstance(jwt, Dict):
+                raise InvalidRequest("Invalid Authorization Header",
+                                     status_code=401, errno=109,
+                                     headers={"www-authenticate": PREF_SCHEME})
         except tuple(crypto_exceptions):
             raise InvalidRequest("Invalid Authorization Header",
                                  status_code=401, errno=109,
