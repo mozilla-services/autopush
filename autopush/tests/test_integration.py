@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import random
+import socket
 import sys
 import time
 import urlparse
@@ -2438,16 +2439,24 @@ class TestProxyProtocol(IntegrationBase):
     def test_proxy_protocol(self):
         port = self.ep.conf.proxy_protocol_port
         ip = '198.51.100.22'
-        proto_line = 'PROXY TCP4 {} 203.0.113.7 35646 80\r\n'.format(ip)
-        # the proxy proto. line comes before the request: we can sneak
-        # it in before the verb
-        response, body = yield _agent(
-            '{}GET'.format(proto_line),
-            "http://localhost:{}/v1/err".format(port),
-        )
-        assert response.code == 418
-        payload = json.loads(body)
-        assert payload['error'] == "Test Error"
+        req = """\
+PROXY TCP4 {} 203.0.113.7 35646 80\r
+GET /v1/err HTTP/1.1\r
+Host: 127.0.0.1\r
+\r\n""".format(ip)
+
+        def proxy_request():
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect(("localhost", port))
+            try:
+                sock.sendall(req)
+                return sock.recv(4096)
+            finally:
+                sock.close()
+
+        response = yield deferToThread(proxy_request)
+        assert response.startswith("HTTP/1.1 418 ")
+        assert "Test Error" in response
         assert self.logs.logged_ci(lambda ci: ci.get('remote_ip') == ip)
 
     @inlineCallbacks

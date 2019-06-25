@@ -193,9 +193,9 @@ class GCMClientTestCase(unittest.TestCase):
     def test_fail_500(self):
         self._m_response.code = 500
         content = "OMG"
-        self._m_response.headers.addRawHeader('Retry-After', 123)
+        self._m_response.headers.addRawHeader('Retry-After', "123")
         self._m_resp_text.callback(content)
         self._m_request.callback(self._m_response)
         result = yield self.gcm.send(self.m_payload)
         assert 'some_reg_id' in result.retry_message.registration_ids
-        assert result.retry_after == 123
+        assert result.retry_after == "123"
