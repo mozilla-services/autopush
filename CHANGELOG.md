@@ -1,3 +1,17 @@
+<a name="1.53.4"></a>
+## 1.53.4 (2019-06-25)
+
+
+#### Chore
+
+*   bump to the latest twisted per CVE-2019-12387 ([2a8c6433](https://github.com/mozilla-services/autopush/commit/2a8c6433595d5f4e0d8eba57cce61bf39fddddfd), closes [#1336](https://github.com/mozilla-services/autopush/issues/1336))
+
+#### Bug Fixes
+
+*   Check if the JWT contains a valid claim set. ([1bb70328](https://github.com/mozilla-services/autopush/commit/1bb70328f0a346d21aff10039f315be7924fa96d), closes [#1334](https://github.com/mozilla-services/autopush/issues/1334))
+
+
+
 <a name="1.53.3"></a>
 ## 1.53.3 (2019-04-26)
 
