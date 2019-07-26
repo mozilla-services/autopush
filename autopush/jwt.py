@@ -4,7 +4,6 @@ import json
 import os
 
 from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives.asymmetric import ec, utils
 from cryptography.hazmat.primitives import hashes
 from pyasn1.error import PyAsn1Error
@@ -115,10 +114,10 @@ class VerifyJWT(object):
         # convert the signature if needed.
         try:
             sig_material, signature = VerifyJWT.extract_signature(token)
-            pkey = ec.EllipticCurvePublicNumbers.from_encoded_point(
+            pkey = ec.EllipticCurvePublicKey.from_encoded_point(
                 ec.SECP256R1(),
                 key
-            ).public_key(default_backend())
+            )
 
             # cffi issue #320: public_key & verify allocate approx.
             if _JWT_MEMORY_PRESSURE:  # pragma: nocover

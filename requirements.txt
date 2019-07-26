@@ -1,79 +1,81 @@
 -e git+https://github.com/habnabit/txstatsd.git@157ef85fbdeafe23865c7c4e176237ffcb3c3f1f#egg=txStatsD-master
 apns==2.0.1
 asn1crypto==0.24.0        # via cryptography
-attrs==18.2.0
-autobahn[twisted]==18.12.1
+attrs==19.1.0
+autobahn[twisted]==19.7.2
 automat==0.7.0            # via twisted
-boto3==1.9.74
-botocore==1.12.74         # via boto3, s3transfer
+boto3==1.9.197
+botocore==1.12.197        # via boto3, s3transfer
 cachecontrol==0.12.5      # via firebase-admin
-cachetools==3.0.0         # via google-auth
-certifi==2018.11.29       # via requests
-cffi==1.11.5
+cachetools==3.1.1         # via google-auth
+certifi==2019.6.16        # via requests
+cffi==1.12.3
 chardet==3.0.4            # via requests
 click==7.0
-configargparse==0.13.0
+configargparse==0.14.0
 constantly==15.1.0        # via twisted
 contextlib2==0.5.5        # via raven
-cryptography==2.4.2
+cryptography==2.7
 cyclone==1.2
-datadog==0.26.0
-decorator==4.3.0          # via datadog
+datadog==0.29.3
+decorator==4.4.0          # via datadog
 docutils==0.14            # via botocore
-ecdsa==0.13               # via python-jose
-enum34==1.1.6             # via cryptography, firebase-admin, grpcio, h2
-firebase-admin==2.14.0
+ecdsa==0.13.2             # via python-jose
+enum34==1.1.6             # via cryptography, grpcio, h2
+firebase-admin==2.17.0
 future==0.17.1            # via python-jose
-futures==3.2.0            # via google-api-core, grpcio, s3transfer
+futures==3.3.0            # via google-api-core, grpcio, s3transfer
 gcm-client==0.1.4
-google-api-core[grpc]==1.7.0  # via google-cloud-core, google-cloud-firestore, google-cloud-storage
-google-auth==1.6.2        # via firebase-admin, google-api-core
-google-cloud-core==0.29.1  # via google-cloud-firestore, google-cloud-storage
-google-cloud-firestore==0.31.0  # via firebase-admin
-google-cloud-storage==1.13.2  # via firebase-admin
+google-api-core[grpc]==1.14.0  # via firebase-admin, google-cloud-core, google-cloud-firestore
+google-api-python-client==1.7.10  # via firebase-admin
+google-auth-httplib2==0.0.3  # via google-api-python-client
+google-auth==1.6.3        # via google-api-core, google-api-python-client, google-auth-httplib2, google-cloud-storage
+google-cloud-core==1.0.2  # via google-cloud-firestore, google-cloud-storage
+google-cloud-firestore==1.3.0  # via firebase-admin
+google-cloud-storage==1.17.0  # via firebase-admin
 google-resumable-media==0.3.2  # via google-cloud-storage
-googleapis-common-protos==1.5.5  # via google-api-core
-graphviz==0.10.1          # via objgraph
-grpcio==1.17.1            # via google-api-core
+googleapis-common-protos==1.6.0  # via google-api-core
+graphviz==0.11.1          # via objgraph
+grpcio==1.22.0            # via google-api-core
 h2==2.6.2                 # via hyper
 hpack==3.0.0              # via h2
-httplib2==0.12.0          # via oauth2client
+httplib2==0.13.0          # via google-api-python-client, google-auth-httplib2, oauth2client
 hyper==0.7.0
 hyperframe==3.2.0         # via h2, hyper
-hyperlink==18.0.0         # via twisted
-idna==2.8                 # via cryptography, hyperlink, requests, twisted
+hyperlink==19.0.0         # via twisted
+idna==2.8                 # via hyperlink, requests, twisted
 incremental==17.5.0       # via treq, twisted
 ipaddress==1.0.22         # via cryptography, service-identity
-jmespath==0.9.3           # via boto3, botocore
-marshmallow-polyfield==3.2
-marshmallow==2.16.3
-msgpack==0.6.0            # via cachecontrol
+jmespath==0.9.4           # via boto3, botocore
+marshmallow-polyfield==4.2
+marshmallow==2.19.5
+msgpack==0.6.1            # via cachecontrol
 oauth2client==4.1.3
-objgraph==3.4.0
-protobuf==3.6.1           # via google-api-core, googleapis-common-protos
-pyasn1-modules==0.2.3     # via google-auth, oauth2client, service-identity
+objgraph==3.4.1
+protobuf==3.9.0           # via google-api-core, googleapis-common-protos
+pyasn1-modules==0.2.5     # via google-auth, oauth2client, service-identity
 pyasn1==0.4.5
 pycparser==2.19           # via cffi
-pyfcm==1.4.5
+pyfcm==1.4.7
 pyhamcrest==1.9.0         # via twisted
-pyopenssl==18.0.0
-python-dateutil==2.7.5    # via botocore
+pyopenssl==19.0.0
+python-dateutil==2.8.0    # via botocore
 python-jose==3.0.1
-pytz==2018.7              # via google-api-core, google-cloud-firestore
+pytz==2019.1              # via google-api-core, google-cloud-firestore
 raven==6.10.0
-requests-toolbelt==0.8.0  # via pyfcm
-requests==2.21.0
+requests==2.22.0
 rsa==4.0                  # via google-auth, oauth2client, python-jose
-s3transfer==0.1.13        # via boto3
+s3transfer==0.2.1         # via boto3
 service-identity==18.1.0
 simplejson==3.16.0
-six==1.12.0               # via autobahn, automat, cryptography, firebase-admin, google-api-core, google-auth, google-resumable-media, grpcio, oauth2client, protobuf, pyhamcrest, pyopenssl, python-dateutil, python-jose, treq, txaio
+six==1.12.0               # via autobahn, automat, cryptography, firebase-admin, google-api-core, google-api-python-client, google-auth, google-resumable-media, grpcio, marshmallow-polyfield, oauth2client, protobuf, pyhamcrest, pyopenssl, python-dateutil, python-jose, treq, txaio
 treq==18.6.0
 twisted[tls]==19.2.1
 txaio==18.8.1             # via autobahn
-typing==3.6.6
+typing==3.7.4
 ua-parser==0.8.0
-urllib3==1.24.2           # via botocore, requests
+uritemplate==3.0.0        # via google-api-python-client
+urllib3==1.25.3           # via botocore, requests
 wsaccel==0.6.2 ; platform_python_implementation == "CPython"
 zope.interface==4.6.0
 
