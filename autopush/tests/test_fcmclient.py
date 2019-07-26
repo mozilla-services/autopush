@@ -81,7 +81,7 @@ class FCMv1TestCase(unittest.TestCase):
         with pytest.raises(RouterException) as ex:
             yield self.fcm.send("token", self.m_payload)
         assert ex.value.status_code == 500
-        assert "Server error: INVALID_ARGUMENT:" in ex.value.message
+        assert "Server error: INVALID_ARGUMENT:" in str(ex.value)
 
     @inlineCallbacks
     def test_fail_401(self):

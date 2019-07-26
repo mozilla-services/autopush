@@ -167,7 +167,7 @@ class GCMClientTestCase(unittest.TestCase):
         with pytest.raises(RouterException) as ex:
             yield self.gcm.send(self.m_payload)
         assert ex.value.status_code == 500
-        assert ex.value.message == "Server error: {}".format(msg)
+        assert str(ex.value) == "Server error: {}".format(msg)
 
     @inlineCallbacks
     def test_fail_404(self):
@@ -178,7 +178,7 @@ class GCMClientTestCase(unittest.TestCase):
         with pytest.raises(RouterException) as ex:
             yield self.gcm.send(self.m_payload)
         assert ex.value.status_code == 500
-        assert ex.value.message == "Server error: {}".format(msg)
+        assert str(ex.value) == "Server error: {}".format(msg)
 
     @inlineCallbacks
     def test_fail_401(self):
