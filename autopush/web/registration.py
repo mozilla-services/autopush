@@ -208,7 +208,7 @@ class RouterDataSchema(Schema):
             router.register(uaid="", router_data=data["router_data"],
                             app_id=data["path_kwargs"]["app_id"])
         except RouterException as exc:
-            raise InvalidRequest(exc.message, status_code=exc.status_code,
+            raise InvalidRequest(str(exc), status_code=exc.status_code,
                                  errno=exc.errno, headers=exc.headers)
 
 

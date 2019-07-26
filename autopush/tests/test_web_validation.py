@@ -191,7 +191,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         assert cm.value.status_code == 400
         assert cm.value.errno == 110
-        assert cm.value.message == "Unknown Content-Encoding"
+        assert str(cm.value) == "Unknown Content-Encoding"
 
     def test_invalid_token(self):
         schema = self._make_fut()
@@ -301,7 +301,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
         with pytest.raises(InvalidRequest) as cm:
             schema.load(info)
 
-        assert cm.value.message == (
+        assert str(cm.value) == (
             "Encryption-Key header not valid for 02 "
             "or later webpush-encryption")
         assert cm.value.errno == 110
@@ -503,7 +503,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
             schema.load(info)
 
         assert cm.value.status_code == 400
-        assert cm.value.message == (
+        assert str(cm.value) == (
             "dh value in Crypto-Key header not valid "
             "for 01 or earlier webpush-encryption")
 
@@ -559,8 +559,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         assert cm.value.status_code == 400
         assert cm.value.errno == 113
-        assert cm.value.message == "Topic must be no greater than " \
-                                   "32 characters"
+        assert str(cm.value) == "Topic must be no greater than 32 characters"
 
         info = self._make_test_data(
             headers={
@@ -573,8 +572,8 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         assert cm.value.status_code == 400
         assert cm.value.errno == 113
-        assert cm.value.message == ("Topic must be URL and Filename "
-                                    "safe Base64 alphabet")
+        assert str(cm.value) == ("Topic must be URL and Filename "
+                                 "safe Base64 alphabet")
 
     def test_no_current_month(self):
         schema = self._make_fut()
@@ -595,7 +594,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         assert cm.value.status_code == 410
         assert cm.value.errno == 106
-        assert cm.value.message == "No such subscription"
+        assert str(cm.value) == "No such subscription"
 
     def test_old_current_month(self):
         schema = self._make_fut()
@@ -618,7 +617,7 @@ class TestWebPushRequestSchema(unittest.TestCase):
 
         assert cm.value.status_code == 410
         assert cm.value.errno == 106
-        assert cm.value.message == "No such subscription"
+        assert str(cm.value) == "No such subscription"
 
 
 class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):

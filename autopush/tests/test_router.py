@@ -257,7 +257,7 @@ class APNSRouterTestCase(unittest.TestCase):
             yield self.router.route_notification(self.notif, self.router_data)
         assert isinstance(ex.value, RouterException)
         assert ex.value.status_code == 502
-        assert ex.value.message == 'APNS Transmit Error 400:boo'
+        assert str(ex.value) == 'APNS Transmit Error 400:boo'
         assert ex.value.response_body == (
             'APNS could not process your message boo')
 
@@ -271,7 +271,7 @@ class APNSRouterTestCase(unittest.TestCase):
             yield self.router.route_notification(self.notif, self.router_data)
         assert isinstance(ex.value, RouterException)
         assert ex.value.status_code == 502
-        assert ex.value.message == "Server error"
+        assert str(ex.value) == "Server error"
         assert ex.value.response_body == 'APNS returned an error ' \
                                          'processing request'
         assert self.metrics.increment.called
@@ -292,7 +292,7 @@ class APNSRouterTestCase(unittest.TestCase):
             yield self.router.route_notification(self.notif, self.router_data)
         assert isinstance(ex.value, RouterException)
         assert ex.value.status_code == 502
-        assert ex.value.message == "Server error"
+        assert str(ex.value) == "Server error"
         assert ex.value.response_body == 'APNS returned an error ' \
                                          'processing request'
         assert self.metrics.increment.called
@@ -308,8 +308,7 @@ class APNSRouterTestCase(unittest.TestCase):
 
         assert isinstance(ex.value, RouterException)
         assert ex.value.status_code == 503
-        assert ex.value.message == "Too many APNS requests, " \
-                                   "increase pool from 2"
+        assert str(ex.value) == "Too many APNS requests, increase pool from 2"
         assert ex.value.response_body == "APNS busy, please retry"
 
     def test_amend(self):
@@ -663,7 +662,7 @@ class GCMRouterTestCase(unittest.TestCase):
             self.router.metrics.increment.call_args[1]['tags'].sort()
             assert self.router.metrics.increment.call_args[1]['tags'] == [
                 'platform:gcm', 'reason:failure']
-            assert fail.value.message == 'GCM unable to deliver'
+            assert str(fail.value) == 'GCM unable to deliver'
             self._check_error_call(fail.value, 410)
         d.addBoth(check_results)
         return d
@@ -683,7 +682,7 @@ class GCMRouterTestCase(unittest.TestCase):
             self.router.metrics.increment.call_args[1]['tags'].sort()
             assert self.router.metrics.increment.call_args[1]['tags'] == [
                 'platform:gcm', 'reason:retry']
-            assert fail.value.message == 'GCM failure to deliver, retry'
+            assert str(fail.value) == 'GCM failure to deliver, retry'
             self._check_error_call(fail.value, 503)
         d.addBoth(check_results)
         return d
@@ -695,7 +694,7 @@ class GCMRouterTestCase(unittest.TestCase):
                                            {"router_data": {"token": "abc"}})
 
         assert isinstance(ex.value, RouterException)
-        assert ex.value.message == "Server error"
+        assert str(ex.value) == "Server error"
         assert ex.value.status_code == 500
         assert ex.value.errno == 900
 
@@ -1019,7 +1018,7 @@ class FCMv1RouterTestCase(unittest.TestCase):
             self.router.metrics.increment.call_args[1]['tags'].sort()
             assert self.router.metrics.increment.call_args[1]['tags'] == [
                 'platform:fcmv1', 'reason:server_error']
-            assert "INVALID_ARGUMENT" in fail.value.message
+            assert "INVALID_ARGUMENT" in str(fail.value)
             self._check_error_call(fail.value, 500)
         d.addBoth(check_results)
         return d

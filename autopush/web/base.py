@@ -244,7 +244,7 @@ class BaseWebHandler(BaseHandler):
 
         self._write_response(exc.status_code, exc.errno,
                              message="Request did not validate %s" %
-                                     (exc.message or ""),
+                                     (str(exc) or ""),
                              headers=exc.headers)
 
     def _response_err(self, fail):
@@ -255,7 +255,7 @@ class BaseWebHandler(BaseHandler):
 
         """
         from twisted.internet.error import ConnectionDone
-        fmt = fail.value.message or 'Exception'
+        fmt = str(fail.value) or 'Exception'
         if isinstance(fail.value, ConnectionDone):
             return
         self.log.failure(format=fmt, failure=fail,
@@ -316,7 +316,7 @@ class BaseWebHandler(BaseHandler):
         exc = fail.value
         if exc.log_exception:
             if exc.status_code >= 500:
-                fmt = fail.value.message or 'Exception'
+                fmt = str(fail.value) or 'Exception'
                 self.log.failure(
                     format=fmt,
                     failure=fail, status_code=exc.status_code,

@@ -55,12 +55,12 @@ class HealthHandler(BaseWebHandler):
     def _check_error(self, failure, name):
         """Returns an error, and why"""
         self._healthy = False
-        fmt = failure.value.message or "Heath Exception"
+        fmt = str(failure.value) or "Heath Exception"
         self.log.failure(format=fmt, failure=failure, name=name)
 
         cause = self._health_checks[name] = {"status": "NOT OK"}
         if failure.check(MissingTableException):
-            cause["error"] = failure.value.message
+            cause["error"] = str(failure.value)
         elif (failure.check(ClientError) and
               failure.value.response["Error"]["Code"] ==
               "InternalServerError"):  # pragma nocover

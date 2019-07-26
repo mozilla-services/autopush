@@ -35,7 +35,7 @@ class CryptoKeyTestCase(unittest.TestCase):
     def test_parse_invalid(self):
         with pytest.raises(CryptoKeyException) as ex:
             CryptoKey("invalid key")
-        assert ex.value.message == "Invalid Crypto Key value"
+        assert str(ex.value) == "Invalid Crypto Key value"
 
     def test_parse_different_order(self):
         ckey = CryptoKey(self.valid_key)

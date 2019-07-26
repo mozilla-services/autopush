@@ -71,7 +71,7 @@ class DbUtilsTest(unittest.TestCase):
         with pytest.raises(AutopushException) as ex:
             _make_table(fake_func, fake_table, 5, 10,
                         boto_resource=None)
-        assert ex.value.message == "No boto3 resource provided for _make_table"
+        assert str(ex.value) == "No boto3 resource provided for _make_table"
 
 
 class DatabaseManagerTest(unittest.TestCase):

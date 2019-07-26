@@ -61,7 +61,7 @@ def _nested(cls, **kwargs):
     """
     def converter(arg):
         return arg if isinstance(arg, cls) else cls(**arg)
-    return attrib(convert=converter, **kwargs)
+    return attrib(converter=converter, **kwargs)
 
 
 @attrs
@@ -102,7 +102,7 @@ class AutopushConfig(object):
 
     fernet = attrib(init=False)  # type: MultiFernet
     _crypto_key = attrib(
-        convert=_init_crypto_key, default=None)  # type: List[str]
+        converter=_init_crypto_key, default=None)  # type: List[str]
 
     bear_hash_key = attrib(default=Factory(list))  # type: List[str]
     human_logs = attrib(default=True)  # type: bool
