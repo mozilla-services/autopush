@@ -2539,7 +2539,7 @@ class TestMemUsage(IntegrationBase):
             assert 'RSS' in body or 'Rss' in body  # pmap -x or -XX/X output
         if hasattr(sys, 'pypy_version_info'):  # pragma: nocover
             assert 'size: ' in body
-            assert 'rpy_unicode' in body
+            assert 'rpy_string' in body, body
             assert 'get_stats_asmmemmgr: (' in body
             if sys.pypy_version_info.major >= 6:
                 assert 'Total memory allocated:' in body
@@ -2558,7 +2558,7 @@ class TestMemUsage(IntegrationBase):
             assert 'RSS' in body or 'Rss' in body  # pmap -x or -XX/X output
         if hasattr(sys, 'pypy_version_info'):  # pragma: nocover
             assert 'size: ' not in body
-            assert 'rpy_unicode' not in body
+            assert 'rpy_string' not in body
 
 
 @inlineCallbacks
