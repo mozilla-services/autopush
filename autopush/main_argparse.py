@@ -141,6 +141,11 @@ def _obsolete_args(parser):
     parser.add_argument('--storage_read_throughput', help="OBSOLETE")
     parser.add_argument('--storage_write_throughput', help="OBSOLETE")
 
+    parser.add_argument('--fcm_enabled', help="OBSOLETE")
+    parser.add_argument('--fcm_project_id', help="OBSOLETE")
+    parser.add_argument('--fcm_service_cred_path', help="OBSOLETE")
+    parser.add_argument('--fcm_senderid_list', help="OBSOLETE")
+
 
 def _add_external_router_args(parser):
     """Parses out external router arguments"""
@@ -165,10 +170,10 @@ def _add_external_router_args(parser):
                         type=str, default="gcm-http.googleapis.com/gcm/send",
                         env_var="GCM_ENDPOINT")
     # FCM
-    parser.add_argument('--fcm_enabled', help="Enable FCM Bridge",
-                        action="store_true", default=False,
-                        env_var="FCM_ENABLED")
-    label = "FCM Router:"
+    label = "FCM Router"
+    parser.add_argument('--fcm_creds',
+                        help="JSON dictionary of {} settings".format(label),
+                        type=str, default="", env_var="FCM_CREDS")
     parser.add_argument('--fcm_ttl', help="%s Time to Live" % label,
                         type=int, default=60, env_var="FCM_TTL")
     parser.add_argument('--fcm_dryrun',
@@ -179,17 +184,10 @@ def _add_external_router_args(parser):
                         help="%s string to collapse messages" % label,
                         type=str, default="simplepush",
                         env_var="FCM_COLLAPSEKEY")
-    parser.add_argument('--fcm_auth', help='Auth Key for FCM',
-                        type=str, default="", env_var="FCM_AUTH")
-    parser.add_argument('--fcm_senderid', help='SenderID for FCM',
-                        type=str, default="", env_var="FCM_SENDERID")
-    # FCM v1 HTTP API
-    parser.add_argument('--fcm_project_id', help="FCM Project identifier",
-                        type=str, default="", env_var="FCM_PROJECT_ID")
-    parser.add_argument('--fcm_service_cred_path',
-                        help="Path to FCM Service Credentials",
-                        type=str, default="",
-                        env_var="FCM_SERVICE_CRED_PATH")
+    # Specify which FCM version you're using here.
+    parser.add_argument('--fcm_version',
+                        help="{} version (0=legacy, 1=v1)".format(label),
+                        type=int, default=1, env_var="FCM_VERSION")
 
     # Apple Push Notification system (APNs) for iOS
     # credentials consist of JSON struct containing a channel type

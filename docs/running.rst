@@ -176,25 +176,34 @@ images, that you ***always*** supply a `CRYPTO_KEY` as part of the run command.
 Notes on GCM/FCM support
 ------------------------
 
-Autopush is capable of routing messages over Google Cloud Messaging/Firebase
-Cloud Messaging for android devices. You will need to set up a valid `GCM`_ /
+*Note*: GCM is no longer supported by Google. Some legacy users can still use GCM,
+but it is strongly recommended that applications use FCM.
+
+Autopush is capable of routing messages over Firebase
+Cloud Messaging for android devices. You will need to set up a valid
 `FCM`_ account. Once you have an account open the Google Developer Console:
 
 * create a new project. Record the Project Number as "SENDER_ID". You will need
   this value for your android application.
 
-* create a new Auth Credential Key for your project. This is available under
-  **APIs & Auth** >> **Credentials** of the Google Developer Console. Store
-  this value as ``gcm_apikey`` or ``fcm_apikey`` (as appropriate) in
-  ``.autopush_endpoint`` server configuration file.
+* in the ``.autopush_endpoint`` server config file:
 
-* add ``gcm_enabled`` to the ``.autopush_shared`` server configuration file to
-  enable GCM routing.
+   * add ``fcm_enabled`` to enable FCM routing.
 
-* add ``fcm_enabled`` to the ``.autopush_shared`` server configuration file to
-  enable FCM routing.
+   * add ``fcm_creds``. This is a json block with the following format:
 
-Additional notes on using the GCM/FCM bridge are available `on the wiki`_.
+     {"**app id**": {"projectid": "**project id name**", "auth": "**path to Private Key File**"}, ...}
+
+where:
+
+**profile_name**: the URL identifier to be used when registering endpoints. (e.g. if "reference_test" is
+chosen here, registration requests should go to `https://updates.push.services.mozilla.com/v1/fcm/reference_test/registration`
+
+**project id name**: the name of the *Project ID* as specified on the https://console.firebase.google.com/ Project Settings > General page.
+
+**path to Private Key File**: path to the Private Key file provided by the Settings > Service accounts > Firebase Admin SDK page. *NOTE*: This is ***NOT*** the "google-services.json" config file.
+
+Additional notes on using the FCM bridge are available `on the wiki`_.
 
 .. _`docker`: https://www.docker.com/
 .. _`docker-compose`: https://docs.docker.com/compose/

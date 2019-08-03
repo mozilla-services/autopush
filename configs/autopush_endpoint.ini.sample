@@ -46,16 +46,20 @@ port = 8082
 #adm_creds={"profileId":{"client_id":"...","client_secret":"..."}}
 
 ; Google Firebase Cloud Messaging (FCM)
-;  There are two APIs available for FCM, the older Legacy and the newer HTTP v1. Both are functionally equivalent,
-;  but use different methods to authenticate.
+;  There are two APIs available for FCM, the older Legacy and the newer HTTP v1. Both are
+;  functionally equivalent, but use different methods to authenticate.
 ; Common:
 # fcm_enabled
 # fcm_ttl = 60
 # fcm_dryrun
 # fcm_collapsekey=simplepush
-; Legacy API
-# fcm_auth =
-# fcm_senderid =
-; v1 HTTP API (this will override the Legacy API)
-# fcm_project_id =
-# fcm_service_cred_path =
+; There are two forms for FCM Legacy (0) and v1 (1). Only one form is allowed at a time.
+; Legacy uses "senderid" as the auth token, v1 uses a credential file. You are encouraged to use
+; `v1`.
+# fcm_version = 1
+; The following are credential definitions for `v1`.
+; They're specified as
+; `"profile_name": {"projectid": "project-id-nane", "auth": "path/to/auth.json"`
+; See https://autopush.readthedocs.io/en/latest/http.html#push-service-bridge-http-interface for
+; details.
+# fcm_creds={"dev": {"projectid": "fir-bridgetest", "auth": "keys/fir-bridgetest-123abc.json"}}
