@@ -240,7 +240,7 @@ class AutopushConfig(object):
             except (ValueError, TypeError):
                 raise InvalidConfig(
                     "Invalid JSON specified for APNS config options")
-        if ns.gcm_enabled:
+        if ns.senderid_list:
             # Create a common gcmclient
             try:
                 sender_ids = json.loads(ns.senderid_list)
@@ -283,7 +283,7 @@ class AutopushConfig(object):
                                 "Invalid client_certs argument")
                         client_certs[sig] = name
 
-        if ns.fcm_enabled and ns.fcm_creds:
+        if ns.fcm_creds:
             try:
                 router_conf["fcm"] = {
                     "version": ns.fcm_version,

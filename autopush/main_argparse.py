@@ -126,7 +126,7 @@ def _obsolete_args(parser):
     parser.add_argument('--senderid_expry', help='OBSOLETE')
     parser.add_argument('--proxy_protocol', help="OBSOLETE")
     # old APNs args
-    parser.add_argument('--apns_enabled', help="OBSOLETE")
+    parser.add_argument('--apns_enabled', help="OBSOLETE use 'apns_creds'")
     parser.add_argument('--apns_sandbox', help="OBSOLETE")
     parser.add_argument('--apns_cert_file', help="OBSOLETE")
     parser.add_argument('--apns_key_file', help="OBSOLETE")
@@ -141,18 +141,17 @@ def _obsolete_args(parser):
     parser.add_argument('--storage_read_throughput', help="OBSOLETE")
     parser.add_argument('--storage_write_throughput', help="OBSOLETE")
 
-    parser.add_argument('--fcm_enabled', help="OBSOLETE")
+    parser.add_argument('--gcm_enabled', help="OBSOLETE use 'senderid_list'")
+    parser.add_argument('--fcm_enabled', help="OBSOLETE use 'fcm_creds' ")
+    parser.add_argument('--fcm_auth', help="OBSOLETE")
+    parser.add_argument('--fcm_senderid', help="OBSOLETE")
     parser.add_argument('--fcm_project_id', help="OBSOLETE")
     parser.add_argument('--fcm_service_cred_path', help="OBSOLETE")
-    parser.add_argument('--fcm_senderid_list', help="OBSOLETE")
 
 
 def _add_external_router_args(parser):
     """Parses out external router arguments"""
     # GCM
-    parser.add_argument('--gcm_enabled', help="Enable GCM Bridge",
-                        action="store_true", default=False,
-                        env_var="GCM_ENABLED")
     label = "GCM Router:"
     parser.add_argument('--gcm_ttl', help="%s Time to Live" % label,
                         type=int, default=60, env_var="GCM_TTL")
@@ -165,7 +164,7 @@ def _add_external_router_args(parser):
                         type=str, default="simplepush",
                         env_var="GCM_COLLAPSEKEY")
     parser.add_argument('--senderid_list', help='GCM SenderIDs/auth keys',
-                        type=str, default="{}", env_var="SENDERID_LIST")
+                        type=str, default="", env_var="SENDERID_LIST")
     parser.add_argument('--gcm_endpoint', help="%s endpoint to use" % label,
                         type=str, default="gcm-http.googleapis.com/gcm/send",
                         env_var="GCM_ENDPOINT")
