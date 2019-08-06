@@ -261,7 +261,6 @@ class EndpointMainTestCase(unittest.TestCase):
         # important stuff
         apns_creds = json.dumps({"firefox": {"cert": "cert.file",
                                              "key": "key.file"}})
-        gcm_enabled = True
         gcm_endpoint = "gcm-http.googleapis.com/gcm/send"
         # less important stuff
         gcm_ttl = 999
@@ -290,9 +289,8 @@ class EndpointMainTestCase(unittest.TestCase):
         fcm_ttl = 999
         fcm_dryrun = False
         fcm_collapsekey = "collapse"
-        fcm_senderid = '12345'
-        fcm_auth = 'abcde'
-        fcm_service_cred_path = ''
+        fcm_creds = json.dumps({"12345": {"auth": "abcd"}})
+        fcm_version = 0
         ssl_key = "keys/server.crt"
         ssl_cert = "keys/server.key"
         ssl_dh_param = None
@@ -353,8 +351,7 @@ class EndpointMainTestCase(unittest.TestCase):
 
     def test_bad_senderidlist(self):
         returncode = endpoint_main([
-            "--gcm_enabled",
-            "--gcm_endpoint='gcm-http.googleapis.com/gcm/send'"
+            "--gcm_endpoint='gcm-http.googleapis.com/gcm/send'",
             "--senderid_list='[Invalid'"
         ], False)
         assert returncode not in (None, 0)
@@ -428,8 +425,6 @@ class EndpointMainTestCase(unittest.TestCase):
         assert app.routers["adm"].router_conf['dev']['client_secret'] == \
             "deadbeef0000decafbad1111"
 
-        self.TestArg.fcm_service_cred_path = ""
-        self.TestArg.fcm_project_id = ""
         conf = AutopushConfig.from_argparse(self.TestArg)
         assert conf.router_conf['fcm']['version'] == 0
         app = EndpointApplication(conf,
@@ -444,20 +439,17 @@ class EndpointMainTestCase(unittest.TestCase):
         self.TestArg.senderid_list = old_list
 
     def test_bad_fcm_senders(self):
-        old_auth = self.TestArg.fcm_auth
-        old_senderid = self.TestArg.fcm_senderid
-        self.TestArg.fcm_auth = ""
+        old_list = self.TestArg.fcm_creds
+        self.TestArg.fcm_creds = json.dumps({"12345": {"foo": "abcd"}})
         with pytest.raises(InvalidConfig):
             AutopushConfig.from_argparse(self.TestArg)
-        self.TestArg.fcm_auth = old_auth
-        self.TestArg.fcm_senderid = ""
+        self.TestArg.fcm_creds = "{}"
         with pytest.raises(InvalidConfig):
             AutopushConfig.from_argparse(self.TestArg)
-        self.TestArg.fcm_senderid = old_senderid
+        self.TestArg.fcm_creds = old_list
 
     def test_gcm_start(self):
         endpoint_main([
-            "--gcm_enabled",
             "--gcm_endpoint='gcm-http.googleapis.com/gcm/send'",
             """--senderid_list={"123":{"auth":"abcd"}}""",
         ], False, resource=autopush.tests.boto_resource)
