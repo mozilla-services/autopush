@@ -101,14 +101,6 @@ class FCMRouter(object):
         }
     }
 
-    def _setter(self, c):
-        (sid, creds) = c
-        try:
-            self.clients[sid] = pyfcm.FCMNotification(api_key=creds["auth"])
-        except Exception as e:
-            self.log.error("Could not instantiate FCM {ex}", ex=e)
-            raise IOError("FCM Bridge not initiated in main")
-
     def __init__(self, conf, router_conf, metrics):
         """Create a new FCM router and connect to FCM"""
         self.conf = conf
@@ -119,9 +111,11 @@ class FCMRouter(object):
         self.collapseKey = router_conf.get("collapseKey", "webpush")
         self.clients = {}
         try:
-            map(self._setter, router_conf["creds"].items())
-        except KeyError:
-            self.log.error("Could not instantiate FCM: missing credentials")
+            for (sid, creds) in router_conf["creds"].items():
+                self.clients[sid] = pyfcm.FCMNotification(
+                    api_key=creds["auth"])
+        except Exception as e:
+            self.log.error("Could not instantiate FCM {ex}", ex=e)
             raise IOError("FCM Bridge not initiated in main")
         self._base_tags = ["platform:fcm"]
         self.log.debug("Starting FCM router...")

@@ -196,7 +196,7 @@ Cloud Messaging for android devices. You will need to set up a valid
 
 where:
 
-**profile_name**: the URL identifier to be used when registering endpoints. (e.g. if "reference_test" is
+**app_id**: the URL identifier to be used when registering endpoints. (e.g. if "reference_test" is
 chosen here, registration requests should go to `https://updates.push.services.mozilla.com/v1/fcm/reference_test/registration`
 
 **project id name**: the name of the *Project ID* as specified on the https://console.firebase.google.com/ Project Settings > General page.

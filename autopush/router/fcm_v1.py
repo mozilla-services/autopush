@@ -18,18 +18,6 @@ class FCMv1Router(FCMRouter):
     Note: FCM v1 is a newer version of the FCM HTTP API.
     """
 
-    def _setter(self, c):
-        (sid, creds) = c
-        try:
-            self.clients[sid] = FCMv1(
-                project_id=creds["projectid"],
-                service_cred_path=creds["auth"],
-                logger=self.log,
-                metrics=self.metrics)
-        except Exception as e:
-            self.log.error("Could not instantiate FCMv1 {ex}", ex=e)
-            raise IOError("FCMv1 Bridge not initiated in main")
-
     def __init__(self, conf, router_conf, metrics):
         """Create a new FCM router and connect to FCM"""
         self.conf = conf
@@ -42,9 +30,15 @@ class FCMv1Router(FCMRouter):
         self.log = Logger()
         self.clients = {}
         try:
-            map(self._setter, router_conf["creds"].items())
-        except KeyError:
-            self.log.error("Could not instantiate FCMv1: missing credentials")
+            for (sid, creds) in router_conf["creds"].items():
+                self.clients[sid] = FCMv1(
+                    project_id=creds["projectid"],
+                    service_cred_path=creds["auth"],
+                    logger=self.log,
+                    metrics=self.metrics)
+        except Exception as e:
+            self.log.error("Could not instantiate FCMv1: missing credentials,",
+                           ex=e)
             raise IOError("FCMv1 Bridge not initiated in main")
         self._base_tags = ["platform:fcmv1"]
         self.log.debug("Starting FCMv1 router...")
