@@ -202,8 +202,8 @@ class ADMRouter(object):
                                        self._base_tags,
                                        reason="auth failure"
                                    ))
-            raise RouterException("Server error", status_code=500,
-                                  errno=902,
+            raise RouterException("Server error", status_code=502,
+                                  errno=901,
                                   log_exception=False)
         except Exception as e:
             self.log.error("Unhandled exception in ADM Routing: %s" % e)

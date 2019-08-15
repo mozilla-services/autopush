@@ -2156,7 +2156,7 @@ class TestADMBrideIntegration(IntegrationBase):
             }),
             body=data
         )
-        assert response.code == 500
+        assert response.code == 502
         self.flushLoggedErrors()
 
     @inlineCallbacks
@@ -2194,9 +2194,9 @@ class TestADMBrideIntegration(IntegrationBase):
             }),
             body="BunchOfStuff"
         )
-        assert response.code == 500
+        assert response.code == 502
         rbody = json.loads(body)
-        assert rbody["errno"] == 902
+        assert rbody["errno"] == 901
         self.flushLoggedErrors()
 
         # fake a valid ADM key
