@@ -1,3 +1,29 @@
+<a name="1.54.0"></a>
+## 1.54.0 (2019-08-16)
+
+
+#### Features
+
+*   allow multi app-ids and auths for fcm ([54b33510](https://github.com/mozilla-services/autopush/commit/54b33510ade39761419763644023cdca0ac8617f), closes [#1340](https://github.com/mozilla-services/autopush/issues/1340), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+
+#### Chore
+
+*   upgrade dependencies ([c01b8afd](https://github.com/mozilla-services/autopush/commit/c01b8afdcef9f65bd934cb1652bd24ef741437bc), closes [#1339](https://github.com/mozilla-services/autopush/issues/1339))
+
+#### Refactor
+
+*   clear up deprecation warnings ([c1a30799](https://github.com/mozilla-services/autopush/commit/c1a307992ac01ae6b3f1c89d0aa4c33404722345), closes [#1341](https://github.com/mozilla-services/autopush/issues/1341))
+
+#### Bug Fixes
+
+*   Return correct status code/errno for ADM auth failures ([e023ad61](https://github.com/mozilla-services/autopush/commit/e023ad612b1c544b94cfba5246cb29905577fb4e))
+
+#### Breaking Changes
+
+*   allow multi app-ids and auths for fcm ([54b33510](https://github.com/mozilla-services/autopush/commit/54b33510ade39761419763644023cdca0ac8617f), closes [#1340](https://github.com/mozilla-services/autopush/issues/1340), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+
+
+
 <a name="1.53.4"></a>
 ## 1.53.4 (2019-06-25)
 
