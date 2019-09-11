@@ -70,7 +70,7 @@ service-identity==18.1.0
 simplejson==3.16.0
 six==1.12.0               # via autobahn, automat, cryptography, firebase-admin, google-api-core, google-api-python-client, google-auth, google-resumable-media, grpcio, marshmallow-polyfield, oauth2client, protobuf, pyhamcrest, pyopenssl, python-dateutil, python-jose, treq, txaio
 treq==18.6.0
-twisted[tls]==19.2.1
+twisted[tls]==19.7.0
 txaio==18.8.1             # via autobahn
 typing==3.7.4
 ua-parser==0.8.0

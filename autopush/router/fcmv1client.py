@@ -12,6 +12,8 @@ from autopush.exceptions import RouterException
 class FCMAuthenticationError(Exception):
     pass
 
+class FCMNotFoundError(Exception):
+    pass
 
 class Result(object):
 
@@ -52,11 +54,13 @@ class Result(object):
             return self
         try:
             data = json.loads(content)
-            if self.code in (400, 403, 404) or data.get('error'):
+            if self.code in (400, 403, 404, 410) or data.get('error'):
                 # Having a hard time finding information about how some
                 # things are handled in FCM, e.g. retransmit requests.
                 # For now, catalog them as errors and provide back-pressure.
                 err = data.get("error")
+                if err.get("status") == "NOT_FOUND":
+                    raise FCMNotFoundError("FCM recipient no longer available")
                 raise RouterException("{}: {}".format(err.get("status"),
                                                       err.get("message")))
             if "name" in data:
@@ -116,7 +120,8 @@ class FCMv1(object):
 
     def error(self, failure):
         if isinstance(failure.value,
-                      (FCMAuthenticationError, TimeoutError, ConnectError)):
+                      (FCMAuthenticationError, FCMNotFoundError,
+                       TimeoutError, ConnectError)):
             raise failure.value
         self.logger.error("FCMv1Client failure: {}".format(failure.value))
         raise RouterException("Server error: {}".format(failure.value))

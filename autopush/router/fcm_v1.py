@@ -8,7 +8,11 @@ from autopush.exceptions import RouterException
 from autopush.metrics import make_tags
 from autopush.router.interface import RouterResponse
 from autopush.router.fcm import FCMRouter
-from autopush.router.fcmv1client import (FCMv1, FCMAuthenticationError)
+from autopush.router.fcmv1client import (
+    FCMv1,
+    FCMAuthenticationError,
+    FCMNotFoundError
+)
 from autopush.types import JSONDict  # noqa
 
 
@@ -133,6 +137,17 @@ class FCMv1Router(FCMRouter):
                                        reason="connection_unavailable"))
             raise RouterException("Server error", status_code=502,
                                   errno=902,
+                                  log_exception=False)
+        if isinstance(err, FCMNotFoundError):
+            self.log.debug("FCM Recipient not found: %s" % err)
+            self.metrics.increment("notification.bridge.error",
+                                   tags=make_tags(
+                                       self._base_tags,
+                                       reason="recpient_gone"
+                                   ))
+            raise RouterException("FCM Recipient no longer available",
+                                  status_code=410,
+                                  errno=106,
                                   log_exception=False)
         if isinstance(err, RouterException):
             self.log.warn("FCM Error: {}".format(err))
