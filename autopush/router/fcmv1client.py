@@ -12,8 +12,10 @@ from autopush.exceptions import RouterException
 class FCMAuthenticationError(Exception):
     pass
 
+
 class FCMNotFoundError(Exception):
     pass
+
 
 class Result(object):
 
