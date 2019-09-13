@@ -968,10 +968,10 @@ class FCMv1RouterTestCase(unittest.TestCase):
         return d
 
     def test_router_notification_fcm_not_found_error(self):
-        self.response.code = 410
+        self.response.code = 404
         self._set_content(json.dumps(
             {"error":
-                {"code": 410,
+                {"code": 404,
                  "status": "NOT_FOUND",
                  "message": "Requested entity was not found."
                  }
@@ -979,7 +979,7 @@ class FCMv1RouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
-            self._check_error_call(fail.value, 410,
+            self._check_error_call(fail.value, 404,
                                    "FCM Recipient no longer available", 106)
         d.addBoth(check_results)
         return d

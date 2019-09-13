@@ -146,7 +146,7 @@ class FCMv1Router(FCMRouter):
                                        reason="recpient_gone"
                                    ))
             raise RouterException("FCM Recipient no longer available",
-                                  status_code=410,
+                                  status_code=404,
                                   errno=106,
                                   log_exception=False)
         if isinstance(err, RouterException):
