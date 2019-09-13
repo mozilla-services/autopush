@@ -45,17 +45,47 @@ port = 8082
 ; Amazon Device Messaging credentials
 #adm_creds={"profileId":{"client_id":"...","client_secret":"..."}}
 
+; Apple Push Notification System uses a set of certificates tied to the
+; application. Since we support multiple iOS "applications" we need to support
+; multiple certificates.
+; apns_cert is a JSON formatted dict specifying the paths to the cert files,
+; as well as any other bits of information that may be necessary. The format
+; is {"platform":
+;       {"cert": "path_to_cert_file",
+;        "key": "path_to_key_file",
+;        "topic": "com.mozilla.org.Firefox",  // Bundle ID for associated app
+;        "max_connections": 100, // Max number of connection pool entries.
+;        "sandbox": False,  // Use the APNs sandbox feature
+;        "max_retry": 2, // Max number of retries in event of an HTTP2 error
+;        },
+;       ...
+; }
+; e.g {"firefox":{"cert":"certs/main.cert","key":"certs/main.key","topic":"com.mozilla.org.Firefox","max_retry":2},"beta":{"cert":"certs/beta.cert","key":"certs/beta.key","topic":"com.mozilla.org.FirefoxBeta"}}
+#apns_creds =
+
+; Google Cloud Messaging (GCM) bridge support.
+; *NOTE*: GCM is deprecated by Google.
+; Default hash of senderids and associated authorization keys.
+; The list is specified as a JSON object formatted as:
+; {<senderid> :{"auth": <auth_value>}}
+; e.g.
+; {"12345": {"auth": "abcd_efg"}, "01357": {"auth": "ZYX=abc"}}
+#senderid_list =
+
 ; Google Firebase Cloud Messaging (FCM)
-;  There are two APIs available for FCM, the older Legacy and the newer HTTP v1. Both are functionally equivalent,
-;  but use different methods to authenticate.
-; Common:
-# fcm_enabled
+;  There are two APIs available for FCM, the older Legacy(0) and the newer HTTP v1 (1). Both are
+;  functionally equivalent, but use different methods to authenticate. Only one form is allowed
+;  at a time.
+;  Legacy uses "senderid" as the auth token, v1 uses a credential file. You are encouraged to use
+;  `v1`.
+# fcm_version = 1
+;  Common FCM flags:
 # fcm_ttl = 60
 # fcm_dryrun
 # fcm_collapsekey=simplepush
-; Legacy API
-# fcm_auth =
-# fcm_senderid =
-; v1 HTTP API (this will override the Legacy API)
-# fcm_project_id =
-# fcm_service_cred_path =
+;  The following are credential definitions for `v1`.
+;  They're specified as
+;  `"profile_name": {"projectid": "project-id-nane", "auth": "path/to/auth.json"`
+;  See https://autopush.readthedocs.io/en/latest/http.html#push-service-bridge-http-interface for
+;  details.
+# fcm_creds={"dev": {"projectid": "fir-bridgetest", "auth": "keys/fir-bridgetest-123abc.json"}}

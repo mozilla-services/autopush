@@ -1907,12 +1907,13 @@ class TestFCMBridgeIntegration(IntegrationBase):
                 "dryrun": True,
                 "max_data": 4096,
                 "collapsekey": "test",
-                "senderID": self.senderID,
-                "auth": "AIzaSyCx9PRtH8ByaJR3CfJamz0D2N0uaCgRGiI",
+                "creds": {
+                    self.senderID: {
+                        "auth": "AIzaSyCx9PRtH8ByaJR3CfJamz0D2N0uaCgRGiI"}
+                },
             },
             self.ep.db.metrics
         )
-        self.ep.routers["fcm"] = fcm
         # Set up the mock call to avoid calling the live system.
         # The problem with calling the live system (even sandboxed) is that
         # you need a valid credential set from a mobile device, which can be
@@ -1923,8 +1924,9 @@ class TestFCMBridgeIntegration(IntegrationBase):
             results=[{}],
         )
         self._mock_send = Mock()
-        fcm.fcm.send_request = self._mock_send
-        fcm.fcm.parse_responses = Mock(return_value=reply)
+        fcm.clients[self.senderID].send_request = self._mock_send
+        fcm.clients[self.senderID].parse_responses = Mock(return_value=reply)
+        self.ep.routers["fcm"] = fcm
 
     @inlineCallbacks
     def test_registration(self):
@@ -2154,7 +2156,7 @@ class TestADMBrideIntegration(IntegrationBase):
             }),
             body=data
         )
-        assert response.code == 500
+        assert response.code == 502
         self.flushLoggedErrors()
 
     @inlineCallbacks
@@ -2192,9 +2194,9 @@ class TestADMBrideIntegration(IntegrationBase):
             }),
             body="BunchOfStuff"
         )
-        assert response.code == 500
+        assert response.code == 502
         rbody = json.loads(body)
-        assert rbody["errno"] == 902
+        assert rbody["errno"] == 901
         self.flushLoggedErrors()
 
         # fake a valid ADM key

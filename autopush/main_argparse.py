@@ -126,7 +126,7 @@ def _obsolete_args(parser):
     parser.add_argument('--senderid_expry', help='OBSOLETE')
     parser.add_argument('--proxy_protocol', help="OBSOLETE")
     # old APNs args
-    parser.add_argument('--apns_enabled', help="OBSOLETE")
+    parser.add_argument('--apns_enabled', help="OBSOLETE use 'apns_creds'")
     parser.add_argument('--apns_sandbox', help="OBSOLETE")
     parser.add_argument('--apns_cert_file', help="OBSOLETE")
     parser.add_argument('--apns_key_file', help="OBSOLETE")
@@ -141,13 +141,17 @@ def _obsolete_args(parser):
     parser.add_argument('--storage_read_throughput', help="OBSOLETE")
     parser.add_argument('--storage_write_throughput', help="OBSOLETE")
 
+    parser.add_argument('--gcm_enabled', help="OBSOLETE use 'senderid_list'")
+    parser.add_argument('--fcm_enabled', help="OBSOLETE use 'fcm_creds' ")
+    parser.add_argument('--fcm_auth', help="OBSOLETE")
+    parser.add_argument('--fcm_senderid', help="OBSOLETE")
+    parser.add_argument('--fcm_project_id', help="OBSOLETE")
+    parser.add_argument('--fcm_service_cred_path', help="OBSOLETE")
+
 
 def _add_external_router_args(parser):
     """Parses out external router arguments"""
     # GCM
-    parser.add_argument('--gcm_enabled', help="Enable GCM Bridge",
-                        action="store_true", default=False,
-                        env_var="GCM_ENABLED")
     label = "GCM Router:"
     parser.add_argument('--gcm_ttl', help="%s Time to Live" % label,
                         type=int, default=60, env_var="GCM_TTL")
@@ -160,15 +164,15 @@ def _add_external_router_args(parser):
                         type=str, default="simplepush",
                         env_var="GCM_COLLAPSEKEY")
     parser.add_argument('--senderid_list', help='GCM SenderIDs/auth keys',
-                        type=str, default="{}", env_var="SENDERID_LIST")
+                        type=str, default="", env_var="SENDERID_LIST")
     parser.add_argument('--gcm_endpoint', help="%s endpoint to use" % label,
                         type=str, default="gcm-http.googleapis.com/gcm/send",
                         env_var="GCM_ENDPOINT")
     # FCM
-    parser.add_argument('--fcm_enabled', help="Enable FCM Bridge",
-                        action="store_true", default=False,
-                        env_var="FCM_ENABLED")
-    label = "FCM Router:"
+    label = "FCM Router"
+    parser.add_argument('--fcm_creds',
+                        help="JSON dictionary of {} settings".format(label),
+                        type=str, default="", env_var="FCM_CREDS")
     parser.add_argument('--fcm_ttl', help="%s Time to Live" % label,
                         type=int, default=60, env_var="FCM_TTL")
     parser.add_argument('--fcm_dryrun',
@@ -179,17 +183,10 @@ def _add_external_router_args(parser):
                         help="%s string to collapse messages" % label,
                         type=str, default="simplepush",
                         env_var="FCM_COLLAPSEKEY")
-    parser.add_argument('--fcm_auth', help='Auth Key for FCM',
-                        type=str, default="", env_var="FCM_AUTH")
-    parser.add_argument('--fcm_senderid', help='SenderID for FCM',
-                        type=str, default="", env_var="FCM_SENDERID")
-    # FCM v1 HTTP API
-    parser.add_argument('--fcm_project_id', help="FCM Project identifier",
-                        type=str, default="", env_var="FCM_PROJECT_ID")
-    parser.add_argument('--fcm_service_cred_path',
-                        help="Path to FCM Service Credentials",
-                        type=str, default="",
-                        env_var="FCM_SERVICE_CRED_PATH")
+    # Specify which FCM version you're using here.
+    parser.add_argument('--fcm_version',
+                        help="{} version (0=legacy, 1=v1)".format(label),
+                        type=int, default=1, env_var="FCM_VERSION")
 
     # Apple Push Notification system (APNs) for iOS
     # credentials consist of JSON struct containing a channel type

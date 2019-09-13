@@ -100,9 +100,16 @@ class WebPushSubscriptionSchema(Schema):
             raise InvalidRequest("No such subscription", status_code=410,
                                  errno=106)
 
-        if (router_type in ["gcm", "fcm"]
+        if (router_type == "gcm"
             and 'senderID' not in result.get('router_data',
                                              {}).get("creds", {})):
+            # Make sure we note that this record is bad.
+            result['critical_failure'] = \
+                result.get('critical_failure', "Missing SenderID")
+            db.router.register_user(result)
+
+        if (router_type == "fcm"
+                and 'app_id' not in result.get('router_data', {})):
             # Make sure we note that this record is bad.
             result['critical_failure'] = \
                 result.get('critical_failure', "Missing SenderID")

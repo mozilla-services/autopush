@@ -92,48 +92,11 @@ endpoint_port = 8082
 ; proprietary UDP systems. These optional arguments allow you to configure
 ; those bridges.
 ;
-; Uncomment to enable the Google Cloud Messaging bridge support.
-#gcm_enabled
-
-; Default hash of senderids and associated authorization keys.
-; The list is specified as a JSON object formatted as:
-; {<senderid> :{"auth": <auth_value>}}
-; e.g.
-; {"12345": {"auth": "abcd_efg"}, "01357": {"auth": "ZYX=abc"}}
-#senderid_list =
-
-; FCM is the later version of GCM
-#fcm_enabled
-; The FCM router only allows one senderid/auth key due to restrictions on
-; the client
-#fcm_collapsekey = simplepush
-#fcm_senderid =
-#fcm_auth =
-#fcm_dryrun
-
 ; Perform AWS specific information (like fetch the AMI ID from the meta-data
 ; server
 ;
 ; Uncomment to disable AWS meta checks.
 #no_aws
-
-; Apple Push Notification System uses a set of certificates tied to the
-; application. Since we support multiple iOS "applications" we need to support
-; multiple certificates.
-; apns_cert is a JSON formatted dict specifying the paths to the cert files,
-; as well as any other bits of information that may be necessary. The format
-; is {"platform":
-;       {"cert": "path_to_cert_file",
-;        "key": "path_to_key_file",
-;        "topic": "com.mozilla.org.Firefox",  // Bundle ID for associated app
-;        "max_connections": 100, // Max number of connection pool entries.
-;        "sandbox": False,  // Use the APNs sandbox feature
-;        "max_retry": 2, // Max number of retries in event of an HTTP2 error
-;        },
-;       ...
-; }
-; e.g {"firefox":{"cert":"certs/main.cert","key":"certs/main.key","topic":"com.mozilla.org.Firefox","max_retry":2},"beta":{"cert":"certs/beta.cert","key":"certs/beta.key","topic":"com.mozilla.org.FirefoxBeta"}}
-#apns_creds =
 
 ; With TTL implemented, message table rotation is no longer required.
 ; This flag determines if table rotation should be allowed to continue:

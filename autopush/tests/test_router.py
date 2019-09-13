@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import copy
 import decimal
 import json
 import socket
@@ -311,7 +312,7 @@ class APNSRouterTestCase(unittest.TestCase):
         assert str(ex.value) == "Too many APNS requests, increase pool from 2"
         assert ex.value.response_body == "APNS busy, please retry"
 
-    def test_amend(self):
+    def test_apns_amend(self):
         resp = {"key": "value"}
         expected = resp.copy()
         self.router.amend_endpoint_response(resp, {})
@@ -735,7 +736,7 @@ class GCMRouterTestCase(unittest.TestCase):
         d.addBoth(check_results)
         return d
 
-    def test_amend(self):
+    def test_gcm_amend(self):
         router_data = {"token": "test123"}
         self.router.register("uaid", router_data=router_data,
                              app_id="test123")
@@ -761,12 +762,18 @@ class FCMv1RouterTestCase(unittest.TestCase):
         self.fcm_config = {'max_data': 32,
                            'ttl': 60,
                            'version': 1,
-                           # We specify 'None' here because we're going to
-                           # mock out the actual service credential service.
-                           # This should be a path to a valid service
-                           # credential JSON file.
-                           'service_cred_path': None,
-                           'senderID': 'fir-bridgetest'}
+                           'dryrun': False,
+                           'collapsekey': 'simplepush',
+                           'creds': {
+                               'fir-bridgetest': {
+                                   'projectid': 'fir-bridgetest',
+                                   # We specify 'None' here because we're
+                                   # going to mock out the actual service
+                                   # credential service.
+                                   # This should be a path to a valid service
+                                   # credential JSON file.
+                                   'auth': None
+                               }}}
         self._m_request = Deferred()
         self.response = Mock(spec=treq.response._Response)
         self.response.code = 200
@@ -776,12 +783,12 @@ class FCMv1RouterTestCase(unittest.TestCase):
         self.response.content = json.dumps(
             {u'name': (u'projects/fir-bridgetest/messages/'
                        u'0:1510011451922224%7a0e7efbaab8b7cc')})
-        self.client = fcmv1client.FCMv1(project_id="SomeKey")
+        self.client = fcmv1client.FCMv1(project_id="fir-bridgetest")
         self.client._sender = Mock()
         self.client.svc_cred = Mock(spec=ServiceAccountCredentials)
         self.client._sender.return_value = self._m_request
         self.router = FCMv1Router(conf, self.fcm_config, SinkMetrics())
-        self.router.fcm = self.client
+        self.router.clients = {"fir-bridgetest": self.client}
         self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
@@ -798,7 +805,8 @@ class FCMv1RouterTestCase(unittest.TestCase):
         self.router_data = dict(
             router_data=dict(
                 token="connect_data",
-                creds=dict(senderID="fir-bridgetest")))
+                app_id="fir-bridgetest")
+        )
 
     def _set_content(self, content=None):
         if content is None:
@@ -817,27 +825,26 @@ class FCMv1RouterTestCase(unittest.TestCase):
         self.flushLoggedErrors()
 
     @patch("autopush.router.fcmv1client.ServiceAccountCredentials")
-    def test_init(self, m_sac):
+    def test_bad_init(self, m_sac):
         conf = AutopushConfig(
             hostname="localhost",
             statsd_host=None,
         )
         m_sac.from_json_keyfile_name.side_effect = IOError
         with pytest.raises(IOError):
+            bad_router_conf = copy.deepcopy(self.fcm_config)
+            bad_router_conf["creds"]["fir-bridgetest"]["auth"] = "invalid_path"
             FCMv1Router(conf,
-                        {"service_cred_path": "invalid_path",
-                         "senderID": "fir-bridgetest",
-                         "version": 1},
+                        bad_router_conf,
                         SinkMetrics())
 
     def test_register(self):
-        router_data = {"token": "fir-bridgetest"}
+        router_data = {"token": "registration_data"}
         self.router.register(
             "uaid", router_data=router_data, app_id="fir-bridgetest")
         # Check the information that will be recorded for this user
-        assert router_data == {
-            "token": "fir-bridgetest",
-            "creds": {"senderID": "fir-bridgetest"}}
+        assert "fir-bridgetest" in self.router.clients
+        assert router_data["app_id"] == "fir-bridgetest"
 
     def test_register_bad(self):
         with pytest.raises(RouterException):
@@ -1086,8 +1093,8 @@ class FCMv1RouterTestCase(unittest.TestCase):
         d.addBoth(check_results)
         return d
 
-    def test_amend(self):
-        router_data = {"token": "fir-bridgetest"}
+    def test_fcmv1_amend(self):
+        router_data = {"token": "connection_data"}
         self.router.register("uaid", router_data=router_data,
                              app_id="fir-bridgetest")
         resp = {"key": "value"}
@@ -1102,6 +1109,23 @@ class FCMv1RouterTestCase(unittest.TestCase):
                 router_data={"token": "invalid"},
                 app_id="invalid")
 
+    def test_bad_credentials(self):
+        del(self.fcm_config['creds'])
+        with pytest.raises(IOError):
+            FCMv1Router(
+                AutopushConfig(
+                    hostname="localhost",
+                    statsd_host=None,
+                ),
+                self.fcm_config,
+                SinkMetrics()
+            )
+
+    def test_unknown_appid(self):
+        self.router_data["router_data"]["app_id"] = "invalid"
+        with pytest.raises(RouterException):
+            self.router.route_notification(self.notif, self.router_data)
+
 
 class FCMRouterTestCase(unittest.TestCase):
 
@@ -1113,10 +1137,31 @@ class FCMRouterTestCase(unittest.TestCase):
         )
         self.fcm_config = {'max_data': 32,
                            'ttl': 60,
-                           'senderID': 'test123',
-                           "auth": "12345678abcdefg"}
-        self.fcm = ffcm
+                           'version': 1,
+                           'dryrun': False,
+                           'collapsekey': 'simplepush',
+                           'creds': {
+                               'test123': {
+                                   'app_id': 'test123',
+                                   'auth': "12345678abcdefg"
+                               }}}
+        self.router_data = dict(
+            router_data=dict(
+                token="connect_data",
+                app_id="test123"))
+        mock_result = dict(
+            multicast_id="",
+            success=0,
+            failure=0,
+            canonical_ids=0,
+            results=[dict()],
+        )
+        self.mock_result = mock_result
         self.router = FCMRouter(conf, self.fcm_config, SinkMetrics())
+        self.fcm = self.router.clients[
+            self.router_data['router_data']['app_id']
+        ]
+        self.fcm.notify_single_device.return_value = mock_result
         self.headers = {"content-encoding": "aesgcm",
                         "encryption": "test",
                         "encryption-key": "test"}
@@ -1129,37 +1174,23 @@ class FCMRouterTestCase(unittest.TestCase):
             ttl=200
         )
         self.notif.cleanup_headers()
-        self.router_data = dict(
-            router_data=dict(
-                token="connect_data",
-                creds=dict(senderID="test123", auth="12345678abcdefg")))
-        mock_result = dict(
-            multicast_id="",
-            success=0,
-            failure=0,
-            canonical_ids=0,
-            results=[dict()],
-        )
-        self.mock_result = mock_result
-        ffcm.notify_single_device.return_value = mock_result
 
     def _check_error_call(self, exc, code):
         assert isinstance(exc, RouterException)
         assert exc.status_code == code
-        assert self.router.fcm.notify_single_device.called
+        assert self.fcm.notify_single_device.called
         self.flushLoggedErrors()
 
     @patch("pyfcm.FCMNotification", spec=pyfcm.FCMNotification)
     def test_init(self, ffcm):
-        conf = AutopushConfig(
-            hostname="localhost",
-            statsd_host=None,
-        )
-
         def throw_auth(*args, **kwargs):
             raise Exception("oopsy")
 
         ffcm.side_effect = throw_auth
+        conf = AutopushConfig(
+            hostname="localhost",
+            statsd_host=None,
+        )
         with pytest.raises(IOError):
             FCMRouter(conf, {}, SinkMetrics())
 
@@ -1168,17 +1199,13 @@ class FCMRouterTestCase(unittest.TestCase):
         self.router.register("uaid", router_data=router_data,
                              app_id="test123")
         # Check the information that will be recorded for this user
-        assert router_data == {
-            "token": "test123",
-            "creds": {"senderID": "test123",
-                      "auth": "12345678abcdefg"}}
+        assert router_data == {"token": "test123", "app_id": "test123"}
 
     def test_register_bad(self):
         with pytest.raises(RouterException):
             self.router.register("uaid", router_data={}, app_id="invalid123")
 
     def test_route_notification(self):
-        self.router.fcm = self.fcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
@@ -1186,9 +1213,9 @@ class FCMRouterTestCase(unittest.TestCase):
             assert result.status_code == 201
             assert result.logged_status == 200
             assert "TTL" in result.headers
-            assert self.router.fcm.notify_single_device.called
+            assert self.fcm.notify_single_device.called
             # Make sure the data was encoded as base64
-            args = self.router.fcm.notify_single_device.call_args[1]
+            args = self.fcm.notify_single_device.call_args[1]
             data = args['data_message']
             assert data['body'] == 'q60d6g'
             assert data['chid'] == dummy_chid
@@ -1199,7 +1226,6 @@ class FCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_ttl_none(self):
-        self.router.fcm = self.fcm
         self.notif = WebPushNotification(
             uaid=uuid.UUID(dummy_uaid),
             channel_id=uuid.UUID(dummy_chid),
@@ -1212,9 +1238,9 @@ class FCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             assert isinstance(result, RouterResponse)
-            assert self.router.fcm.notify_single_device.called
+            assert self.fcm.notify_single_device.called
             # Make sure the data was encoded as base64
-            args = self.router.fcm.notify_single_device.call_args[1]
+            args = self.fcm.notify_single_device.call_args[1]
             data = args['data_message']
             assert data['body'] == 'q60d6g'
             assert data['chid'] == dummy_chid
@@ -1227,7 +1253,6 @@ class FCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_ttl_high(self):
-        self.router.fcm = self.fcm
         self.notif = WebPushNotification(
             uaid=uuid.UUID(dummy_uaid),
             channel_id=uuid.UUID(dummy_chid),
@@ -1240,9 +1265,9 @@ class FCMRouterTestCase(unittest.TestCase):
 
         def check_results(result):
             assert isinstance(result, RouterResponse)
-            assert self.router.fcm.notify_single_device.called
+            assert self.fcm.notify_single_device.called
             # Make sure the data was encoded as base64
-            args = self.router.fcm.notify_single_device.call_args[1]
+            args = self.fcm.notify_single_device.call_args[1]
             data = args['data_message']
             assert data['body'] == 'q60d6g'
             assert data['chid'] == dummy_chid
@@ -1255,7 +1280,6 @@ class FCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_long_data(self):
-        self.router.fcm = self.fcm
         bad_notif = WebPushNotification(
             uaid=uuid.UUID(dummy_uaid),
             channel_id=uuid.UUID(dummy_chid),
@@ -1276,14 +1300,13 @@ class FCMRouterTestCase(unittest.TestCase):
         return d
 
     def test_route_crypto_notification(self):
-        self.router.fcm = self.fcm
         del(self.notif.headers['encryption_key'])
         self.notif.headers['crypto_key'] = 'crypto'
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             assert isinstance(result, RouterResponse)
-            assert self.router.fcm.notify_single_device.called
+            assert self.router.clients['test123'].notify_single_device.called
         d.addCallback(check_results)
         return d
 
@@ -1291,7 +1314,6 @@ class FCMRouterTestCase(unittest.TestCase):
         def throw_auth(*args, **kwargs):
             raise pyfcm.errors.AuthenticationError()
         self.fcm.notify_single_device.side_effect = throw_auth
-        self.router.fcm = self.fcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -1303,7 +1325,6 @@ class FCMRouterTestCase(unittest.TestCase):
         def throw_other(*args, **kwargs):
             raise Exception("oh my!")
         self.fcm.notify_single_device.side_effect = throw_other
-        self.router.fcm = self.fcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -1318,7 +1339,6 @@ class FCMRouterTestCase(unittest.TestCase):
             raise ConnectionError("oh my!")
 
         self.fcm.notify_single_device.side_effect = throw_other
-        self.router.fcm = self.fcm
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -1329,26 +1349,26 @@ class FCMRouterTestCase(unittest.TestCase):
     def test_router_notification_fcm_id_change(self):
         self.mock_result['canonical_ids'] = 1
         self.mock_result['results'][0] = {'registration_id': "new"}
-        self.router.fcm = self.fcm
+        self.fcm.notify_single_device.return_value = self.mock_result
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             assert isinstance(result, RouterResponse)
             assert result.router_data == dict(token="new")
-            assert self.router.fcm.notify_single_device.called
+            assert self.fcm.notify_single_device.called
         d.addCallback(check_results)
         return d
 
     def test_router_notification_fcm_not_regged(self):
         self.mock_result['failure'] = 1
         self.mock_result['results'][0] = {'error': 'NotRegistered'}
-        self.router.fcm = self.fcm
+        self.fcm.notify_single_device.return_value = self.mock_result
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(result):
             assert isinstance(result, RouterResponse)
             assert result.router_data == dict()
-            assert self.router.fcm.notify_single_device.called
+            assert self.fcm.notify_single_device.called
         d.addCallback(check_results)
         return d
 
@@ -1356,7 +1376,7 @@ class FCMRouterTestCase(unittest.TestCase):
         self.mock_result['failure'] = 1
         self.mock_result['results'][0] = {'error':
                                           'TopicsMessageRateExceeded'}
-        self.router.fcm = self.fcm
+        self.fcm.notify_single_device.return_value = self.mock_result
         d = self.router.route_notification(self.notif, self.router_data)
 
         def check_results(fail):
@@ -1373,7 +1393,7 @@ class FCMRouterTestCase(unittest.TestCase):
         d.addBoth(check_results)
         return d
 
-    def test_amend(self):
+    def test_fcm_amend(self):
         self.router.register(uaid="uaid",
                              router_data={"token": "test123"},
                              app_id="test123")

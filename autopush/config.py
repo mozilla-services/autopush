@@ -240,7 +240,7 @@ class AutopushConfig(object):
             except (ValueError, TypeError):
                 raise InvalidConfig(
                     "Invalid JSON specified for APNS config options")
-        if ns.gcm_enabled:
+        if ns.senderid_list:
             # Create a common gcmclient
             try:
                 sender_ids = json.loads(ns.senderid_list)
@@ -283,28 +283,29 @@ class AutopushConfig(object):
                                 "Invalid client_certs argument")
                         client_certs[sig] = name
 
-        if ns.fcm_enabled:
-            fcm_core = {
-                "ttl": ns.fcm_ttl,
-                "dryrun": ns.fcm_dryrun,
-                "max_data": ns.max_data,
-                "collapsekey": ns.fcm_collapsekey}
-            if len(ns.fcm_auth) > 0:
-                if not ns.fcm_senderid:
-                    raise InvalidConfig("No SenderID found for FCM")
-                fcm_core.update({
-                    "version": 0,
-                    "auth": ns.fcm_auth,
-                    "senderID": ns.fcm_senderid})
-            if len(ns.fcm_service_cred_path) > 0:
-                fcm_core.update({
+        if ns.fcm_creds:
+            try:
+                router_conf["fcm"] = {
+                    "version": ns.fcm_version,
                     "ttl": ns.fcm_ttl,
-                    "version": 1,
-                    "service_cred_path": ns.fcm_service_cred_path,
-                    "senderID": ns.fcm_project_id})
-            if "version" not in fcm_core:
-                raise InvalidConfig("No credential info found for FCM")
-            router_conf["fcm"] = fcm_core
+                    "dryrun": ns.fcm_dryrun,
+                    "max_data": ns.max_data,
+                    "collapsekey": ns.fcm_collapsekey,
+                    "creds": json.loads(ns.fcm_creds)
+                }
+                if not router_conf["fcm"]["creds"]:
+                    raise InvalidConfig(
+                        "Empty credentials for FCM config options"
+                    )
+                for creds in router_conf["fcm"]["creds"].values():
+                    if "auth" not in creds:
+                        raise InvalidConfig(
+                            "Missing auth for FCM config options"
+                        )
+            except (ValueError, TypeError):
+                raise InvalidConfig(
+                    "Invalid JSON specified for FCM config options"
+                )
 
         if ns.adm_creds:
             # Create a common admclient
