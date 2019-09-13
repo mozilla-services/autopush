@@ -964,7 +964,7 @@ class FCMv1RouterTestCase(unittest.TestCase):
         d.addCallback(check_results)
         return d
 
-    def test_router_notification_gcm_auth_error(self):
+    def test_router_notification_fcm_auth_error(self):
         self.response.code = 401
         self._set_content()
         d = self.router.route_notification(self.notif, self.router_data)
@@ -974,7 +974,24 @@ class FCMv1RouterTestCase(unittest.TestCase):
         d.addBoth(check_results)
         return d
 
-    def test_router_notification_gcm_other_error(self):
+    def test_router_notification_fcm_not_found_error(self):
+        self.response.code = 404
+        self._set_content(json.dumps(
+            {"error":
+                {"code": 404,
+                 "status": "NOT_FOUND",
+                 "message": "Requested entity was not found."
+                 }
+             }))
+        d = self.router.route_notification(self.notif, self.router_data)
+
+        def check_results(fail):
+            self._check_error_call(fail.value, 404,
+                                   "FCM Recipient no longer available", 106)
+        d.addBoth(check_results)
+        return d
+
+    def test_router_notification_fcm_other_error(self):
         self._m_request.errback(Failure(Exception))
         d = self.router.route_notification(self.notif, self.router_data)
 
