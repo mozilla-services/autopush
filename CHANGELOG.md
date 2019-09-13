@@ -1,3 +1,13 @@
+<a name="1.54.1"></a>
+## 1.54.1 (2019-09-13)
+
+
+#### Bug Fixes
+
+*   Handle FCM client not available ([7c63c14e](https://github.com/mozilla-services/autopush/commit/7c63c14e72438fb0ffe811b7a3768c33459a63f6), closes [#1348](https://github.com/mozilla-services/autopush/issues/1348))
+
+
+
 <a name="1.54.0"></a>
 ## 1.54.0 (2019-08-16)
 
