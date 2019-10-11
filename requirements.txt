@@ -20,7 +20,7 @@ cyclone==1.2
 datadog==0.29.3
 decorator==4.4.0          # via datadog
 docutils==0.14            # via botocore
-ecdsa==0.13.2             # via python-jose
+ecdsa==0.13.3             # via python-jose
 enum34==1.1.6             # via cryptography, grpcio, h2
 firebase-admin==2.17.0
 future==0.17.1            # via python-jose
@@ -81,3 +81,5 @@ zope.interface==4.6.0
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools==41.0.1        # via google-api-core, protobuf, pyhamcrest, zope.interface
+
+# use pipdeptree for list of dependant packages
