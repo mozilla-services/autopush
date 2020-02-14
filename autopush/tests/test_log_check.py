@@ -9,7 +9,7 @@ from autopush.config import AutopushConfig
 from autopush.http import EndpointHTTPFactory
 from autopush.logging import begin_or_register
 from autopush.tests.client import Client
-from autopush.tests.support import TestingLogObserver
+from autopush.tests.support import _TestingLogObserver
 from autopush.web.log_check import LogCheckHandler
 
 
@@ -23,7 +23,7 @@ class LogCheckTestCase(unittest.TestCase):
             statsd_host=None,
         )
 
-        self.logs = TestingLogObserver()
+        self.logs = _TestingLogObserver()
         begin_or_register(self.logs, discardBuffer=True)
         self.addCleanup(globalLogPublisher.removeObserver, self.logs)
 

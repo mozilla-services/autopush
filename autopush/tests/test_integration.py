@@ -50,7 +50,7 @@ from autopush.main import ConnectionApplication, EndpointApplication
 from autopush.utils import base64url_encode, normalize_id
 from autopush.metrics import SinkMetrics, DatadogMetrics
 import autopush.tests
-from autopush.tests.support import TestingLogObserver
+from autopush.tests.support import _TestingLogObserver
 from autopush.websocket import PushServerFactory
 
 log = logging.getLogger(__name__)
@@ -351,7 +351,7 @@ class IntegrationBase(unittest.TestCase):
     )
 
     def setUp(self):
-        self.logs = TestingLogObserver()
+        self.logs = _TestingLogObserver()
         begin_or_register(self.logs)
         self.addCleanup(globalLogPublisher.removeObserver, self.logs)
 
