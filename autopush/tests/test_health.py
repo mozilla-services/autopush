@@ -14,7 +14,7 @@ from autopush.exceptions import MissingTableException
 from autopush.http import EndpointHTTPFactory
 from autopush.logging import begin_or_register
 from autopush.tests.client import Client
-from autopush.tests.support import TestingLogObserver
+from autopush.tests.support import _TestingLogObserver
 from autopush.web.health import HealthHandler, StatusHandler
 from autopush.web.dockerflow import LBHeartbeatHandler, VersionHandler
 import autopush.tests
@@ -38,7 +38,7 @@ class HealthTestCase(unittest.TestCase):
         db.setup_tables()
 
         # ignore logging
-        logs = TestingLogObserver()
+        logs = _TestingLogObserver()
         begin_or_register(logs)
         self.addCleanup(globalLogPublisher.removeObserver, logs)
 
@@ -114,7 +114,7 @@ class DockerflowTestCase(unittest.TestCase):
         )
 
         # ignore logging
-        logs = TestingLogObserver()
+        logs = _TestingLogObserver()
         begin_or_register(logs)
         self.addCleanup(globalLogPublisher.removeObserver, logs)
 

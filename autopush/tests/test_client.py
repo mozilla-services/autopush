@@ -21,7 +21,7 @@ from twisted.internet.defer import inlineCallbacks
 from autopush.tests.client import Client
 
 
-class TestHandler(RequestHandler):
+class _TestHandler(RequestHandler):
     def get(self):
         self.write("Something")
 
@@ -61,7 +61,7 @@ class CookieTestHandler(RequestHandler):
 
 def mock_app_builder():
     return Application([
-        (r'/testing/', TestHandler),
+        (r'/testing/', _TestHandler),
         (r'/deferred_testing/', DeferredTestHandler),
         (r'/cookie_testing/', CookieTestHandler),
     ], cookie_secret="insecure")

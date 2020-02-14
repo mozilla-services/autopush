@@ -12,7 +12,7 @@ import autopush.tests
 
 
 @implementer(ILogObserver)
-class TestingLogObserver(object):
+class _TestingLogObserver(object):
     def __init__(self):
         self._events = []
 
