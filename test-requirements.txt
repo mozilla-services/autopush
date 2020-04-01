@@ -7,7 +7,7 @@ mock>=1.0.1
 -e git+https://github.com/bbangert/moto.git@3bdb75a961148ea5aa526f0e88d9e7835a30df3a#egg=moto
 nose
 pbr==1.10.0
-# version lock (>5.6.7 require python3)
+# locked for python2 eol
 psutil==5.6.7
 pympler==0.5
 pytest>=3.6
