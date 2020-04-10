@@ -1,3 +1,16 @@
+<a name="1.55.0"></a>
+## 1.55.0 (2020-04-10)
+
+
+#### Chore
+
+*   Add pull request template ([f2aa3bcd](https://github.com/mozilla-services/autopush/commit/f2aa3bcd462ff1caa81a406c970316d655195ddc))
+*   Library update ([1cdfcb66](https://github.com/mozilla-services/autopush/commit/1cdfcb667c59bc8354dec51f62a7043baf165b25))
+*   update twisted per CVE-2019-12855 ([97dcdf1d](https://github.com/mozilla-services/autopush/commit/97dcdf1d1b963cc15922213d247ad01ec1dca209))
+*   upgrade dependencies ([6bc3eaef](https://github.com/mozilla-services/autopush/commit/6bc3eaef2bc00d8b0320d20beb327966e12d5730), closes [#1358](https://github.com/mozilla-services/autopush/issues/1358))
+
+
+
 <a name="1.54.1"></a>
 ## 1.54.1 (2019-09-13)
 
