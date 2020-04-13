@@ -1,3 +1,13 @@
+<a name="1.55.1"></a>
+## 1.55.1 (2020-04-13)
+
+
+#### Chore
+
+*   include CIRCLE_TAG in the cache key ([309e6b9d](https://github.com/mozilla-services/autopush/commit/309e6b9d8ab082a37adb07334be4dfb781bf8cfa))
+
+
+
 <a name="1.55.0"></a>
 ## 1.55.0 (2020-04-10)
 
