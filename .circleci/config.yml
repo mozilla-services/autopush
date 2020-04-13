@@ -45,7 +45,7 @@ jobs:
           name: docker save app:buildcpy
           command: docker save -o /cache/dockercpy.tar "app:buildcpy"
       - save_cache:
-          key: v1-{{ .Branch }}-{{epoch}}
+          key: v1-{{ .Branch }}-{{ .Environment.CIRCLE_TAG }}-{{ epoch }}
           paths:
             - /cache/dockerpypy.tar
             - /cache/dockercpy.tar
@@ -56,7 +56,7 @@ jobs:
     steps:
       - setup_remote_docker
       - restore_cache:
-          key: v1-{{.Branch}}
+          key: v1-{{ .Branch }}-{{ .Environment.CIRCLE_TAG }}
       - run:
           name: Restore PyPy Docker image cache
           command: docker load -i /cache/dockerpypy.tar
