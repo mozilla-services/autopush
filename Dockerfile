@@ -9,7 +9,7 @@ ENV PATH=$PATH:/root/.cargo/bin
 
 RUN \
     apt-get update && \
-    apt-get install -y -qq libexpat1-dev gcc libssl-dev libffi-dev libjemalloc1 && \
+    apt-get install -y -qq libexpat1-dev gcc libssl-dev libffi-dev libjemalloc2 && \
     make clean && \
     pip install -r requirements.txt && \
     pypy setup.py develop
