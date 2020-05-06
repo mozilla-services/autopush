@@ -129,9 +129,17 @@ class APNSRouter(object):
         }
         if notification.data:
             payload["body"] = notification.data
-            payload["con"] = notification.headers["encoding"]
-            payload["enc"] = notification.headers["encryption"]
-
+            try:
+                payload["con"] = notification.headers["encoding"]
+                if payload["con"] != "aes128gcm":
+                    payload["enc"] = notification.headers["encryption"]
+            except KeyError as ex:
+                raise RouterException(
+                    "Payload error",
+                    status_code=400,
+                    response_body="APNS missing required fields. {}".format(ex),
+                    log_exception=False
+            )
             if "crypto_key" in notification.headers:
                 payload["cryptokey"] = notification.headers["crypto_key"]
             elif "encryption_key" in notification.headers:

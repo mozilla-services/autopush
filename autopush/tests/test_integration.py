@@ -2364,6 +2364,84 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         assert ca_data['body'] == base64url_encode(data)
 
     @inlineCallbacks
+    def test_apns_aesgcm_registration_bad(self):
+        self._add_router()
+        # get the senderid
+        url = "{}/v1/{}/{}/registration".format(
+            self.ep.conf.endpoint_url,
+            "apns",
+            "firefox",
+        )
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {"token": uuid.uuid4().hex}
+        ))
+        assert response.code == 200
+        jbody = json.loads(body)
+
+        # Send a fake message
+        data = ("\xa2\xa5\xbd\xda\x40\xdc\xd1\xa5\xf9\x6a\x60\xa8\x57\x7b\x48"
+                "\xe4\x43\x02\x5a\x72\xe0\x64\x69\xcd\x29\x6f\x65\x44\x53\x78"
+                "\xe1\xd9\xf6\x46\x26\xce\x69")
+        crypto_key = ("keyid=p256dh;dh=BAFJxCIaaWyb4JSkZopERL9MjXBeh3WdBxew"
+                      "SYP0cZWNMJaT7YNaJUiSqBuGUxfRj-9vpTPz5ANmUYq3-u-HWOI")
+        salt = "keyid=p256dh;salt=S82AseB7pAVBJ2143qtM3A"
+        content_encoding = "aesgcm"
+
+        response, body = yield _agent(
+            'POST',
+            str(jbody['endpoint']),
+            headers=Headers({
+                "crypto-key": [crypto_key],
+                "ttl": ["0"],
+                "content-encoding": [content_encoding],
+            }),
+            body=data
+        )
+        assert response.code == 400
+
+    @inlineCallbacks
+    def test_apns_registration_aes128gcm(self):
+        self._add_router()
+        # get the senderid
+        url = "{}/v1/{}/{}/registration".format(
+            self.ep.conf.endpoint_url,
+            "apns",
+            "firefox",
+        )
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {"token": uuid.uuid4().hex}
+        ))
+        assert response.code == 200
+        jbody = json.loads(body)
+
+        # Send a fake message
+
+        data = ("\xa2\xa5\xbd\xda\x40\xdc\xd1\xa5\xf9\x6a\x60\xa8\x57\x7b\x48"
+                "\xe4\x43\x02\x5a\x72\xe0\x64\x69\xcd\x29\x6f\x65\x44\x53\x78"
+                "\xe1\xd9\xf6\x46\x26\xce\x69")
+        content_encoding = "aes128gcm"
+
+        response, body = yield _agent(
+            'POST',
+            str(jbody['endpoint']),
+            headers=Headers({
+                "ttl": ["0"],
+                "content-encoding": [content_encoding],
+            }),
+            body=data
+        )
+        ca_data = json.loads(
+            self._mock_connection.request.call_args[1]['body'])
+        assert response.code == 201
+        # ChannelID here MUST match what we got from the registration call.
+        # Currently, this is a lowercase, hex UUID without dashes.
+        assert ca_data['chid'] == jbody['channelID']
+        assert ca_data['con'] == content_encoding
+        assert ca_data['body'] == base64url_encode(data)
+        assert 'enc' not in ca_data
+
+
+    @inlineCallbacks
     def test_registration_no_token(self):
         self._add_router()
         # get the senderid
