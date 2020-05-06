@@ -2384,7 +2384,6 @@ class TestAPNSBridgeIntegration(IntegrationBase):
                 "\xe1\xd9\xf6\x46\x26\xce\x69")
         crypto_key = ("keyid=p256dh;dh=BAFJxCIaaWyb4JSkZopERL9MjXBeh3WdBxew"
                       "SYP0cZWNMJaT7YNaJUiSqBuGUxfRj-9vpTPz5ANmUYq3-u-HWOI")
-        salt = "keyid=p256dh;salt=S82AseB7pAVBJ2143qtM3A"
         content_encoding = "aesgcm"
 
         response, body = yield _agent(
@@ -2439,7 +2438,6 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         assert ca_data['con'] == content_encoding
         assert ca_data['body'] == base64url_encode(data)
         assert 'enc' not in ca_data
-
 
     @inlineCallbacks
     def test_registration_no_token(self):

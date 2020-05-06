@@ -137,9 +137,10 @@ class APNSRouter(object):
                 raise RouterException(
                     "Payload error",
                     status_code=400,
-                    response_body="APNS missing required fields. {}".format(ex),
+                    response_body="APNS missing required fields. {}".format(
+                        ex),
                     log_exception=False
-            )
+                )
             if "crypto_key" in notification.headers:
                 payload["cryptokey"] = notification.headers["crypto_key"]
             elif "encryption_key" in notification.headers:
