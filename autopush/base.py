@@ -70,8 +70,8 @@ class BaseHandler(cyclone.web.RequestHandler):
             self.finish()
         except Exception as ex:
             self.log.failure(
-                "error in write_error: {} while printing {}".format(
-                    ex, kwargs))
+                "error in write_error: {}:{} while printing {};{}".format(
+                    code, ex, kwargs, self._client_info))
 
     def authenticate_peer_cert(self):
         """Authenticate the client per the configured client_certs.
