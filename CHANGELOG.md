@@ -1,3 +1,67 @@
+<a name="1.55.2"></a>
+## 1.55.2 (2020-05-07)
+
+
+#### Breaking Changes
+
+*   allow multi app-ids and auths for fcm ([54b33510](https://github.com/mozilla-services/autopush/commit/54b33510ade39761419763644023cdca0ac8617f), closes [#1340](https://github.com/mozilla-services/autopush/issues/1340), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+
+#### Refactor
+
+*   clear up deprecation warnings ([c1a30799](https://github.com/mozilla-services/autopush/commit/c1a307992ac01ae6b3f1c89d0aa4c33404722345), closes [#1341](https://github.com/mozilla-services/autopush/issues/1341))
+
+#### Chore
+
+*   include CIRCLE_TAG in the cache key ([309e6b9d](https://github.com/mozilla-services/autopush/commit/309e6b9d8ab082a37adb07334be4dfb781bf8cfa))
+*   add a matrix badge ([cfff18a6](https://github.com/mozilla-services/autopush/commit/cfff18a6978afa7c1e847961541b372476512382))
+*   Add pull request template ([f2aa3bcd](https://github.com/mozilla-services/autopush/commit/f2aa3bcd462ff1caa81a406c970316d655195ddc))
+*   Library update ([1cdfcb66](https://github.com/mozilla-services/autopush/commit/1cdfcb667c59bc8354dec51f62a7043baf165b25))
+*   update twisted per CVE-2019-12855 ([97dcdf1d](https://github.com/mozilla-services/autopush/commit/97dcdf1d1b963cc15922213d247ad01ec1dca209))
+*   upgrade dependencies ([6bc3eaef](https://github.com/mozilla-services/autopush/commit/6bc3eaef2bc00d8b0320d20beb327966e12d5730), closes [#1358](https://github.com/mozilla-services/autopush/issues/1358))
+*   tag 1.54.2 ([e77cf5f8](https://github.com/mozilla-services/autopush/commit/e77cf5f8e122da256465a730341de0a0ddac9133))
+*   update dependencies ([f8bc32dd](https://github.com/mozilla-services/autopush/commit/f8bc32dda3c3e716618d384891f252dc4fe512fd), closes [#1351](https://github.com/mozilla-services/autopush/issues/1351))
+*   tag 1.54.1 ([fb357c97](https://github.com/mozilla-services/autopush/commit/fb357c978500f5991a2427c7b20083a3436fc6dd))
+*   tag 1.54.0 ([53ad616c](https://github.com/mozilla-services/autopush/commit/53ad616c7f0fbe03723b81556531ea8ad43252c8))
+*   upgrade dependencies ([c01b8afd](https://github.com/mozilla-services/autopush/commit/c01b8afdcef9f65bd934cb1652bd24ef741437bc), closes [#1339](https://github.com/mozilla-services/autopush/issues/1339))
+*   tag 1.53.4 ([fc9213a3](https://github.com/mozilla-services/autopush/commit/fc9213a3ab07e739d80741cfd1f012e4dd55d54f))
+*   bump to the latest twisted per CVE-2019-12387 ([2a8c6433](https://github.com/mozilla-services/autopush/commit/2a8c6433595d5f4e0d8eba57cce61bf39fddddfd), closes [#1336](https://github.com/mozilla-services/autopush/issues/1336))
+*   tag 1.53.3 ([83463086](https://github.com/mozilla-services/autopush/commit/83463086927c81e57f08e02e4f1e329276a3364f))
+*   update urllib ([9811c1fa](https://github.com/mozilla-services/autopush/commit/9811c1fa20e667f95b682de05402449b31b9dbbb))
+*   bump to latest pypy ([4726e9b1](https://github.com/mozilla-services/autopush/commit/4726e9b1b0dc3f68e88c6193608beaf444248fa3), closes [#1327](https://github.com/mozilla-services/autopush/issues/1327))
+*   tag 1.53.2 ([d43cead1](https://github.com/mozilla-services/autopush/commit/d43cead12ed1546e001803d86eef0a61ee612be4))
+*   flake8 ([6a42be58](https://github.com/mozilla-services/autopush/commit/6a42be5877ba13272ddc7cb56c36d85120400549))
+*   tag 1.53.1 ([210ac7c6](https://github.com/mozilla-services/autopush/commit/210ac7c6f7d06767b106cdeaed488506bd234f74))
+*   tag 1.53.0 ([6b0f2e56](https://github.com/mozilla-services/autopush/commit/6b0f2e565fb557810c5a328231d364b7e66f8249))
+*   update pytest req per latest pytest_cov ([bb651f01](https://github.com/mozilla-services/autopush/commit/bb651f0113ace60c8efa80f9da11123c96ae8873))
+*   upgrade dependencies ([e978dc68](https://github.com/mozilla-services/autopush/commit/e978dc68bcab33b2803a90a484b369506d5792b7), closes [#1311](https://github.com/mozilla-services/autopush/issues/1311))
+*   tag 1.52.1 ([53038cc5](https://github.com/mozilla-services/autopush/commit/53038cc501d91351efd3b9d35198122b63c06e60))
+*   upgrade requests per CVE-2018-18074 ([c71558e1](https://github.com/mozilla-services/autopush/commit/c71558e1f1e44aad8150d6005b3c2f0c8e912a7d), closes [#1300](https://github.com/mozilla-services/autopush/issues/1300))
+*   tag 1.52.0 ([ea19fc36](https://github.com/mozilla-services/autopush/commit/ea19fc363e6e4a0dae672dfd307ec3c4a6c47587))
+*   upgrade dependencies ([8a0d2178](https://github.com/mozilla-services/autopush/commit/8a0d217881cac387713295e81dc8e66a084da944), closes [#1297](https://github.com/mozilla-services/autopush/issues/1297))
+*   tag 1.51.0 ([50cf633c](https://github.com/mozilla-services/autopush/commit/50cf633c8bcb3153cae4b2cbbd6f97498d81d66e))
+
+#### Bug Fixes
+
+*   do not require `encryption` header for APNs `aes128gcm` encoded messages (#1385) ([148781c2](https://github.com/mozilla-services/autopush/commit/148781c2fda8d45cdd8b72310716025ec7fd4b07), closes [#1384](https://github.com/mozilla-services/autopush/issues/1384))
+*   Handle FCM client not available ([7c63c14e](https://github.com/mozilla-services/autopush/commit/7c63c14e72438fb0ffe811b7a3768c33459a63f6), closes [#1348](https://github.com/mozilla-services/autopush/issues/1348))
+*   Return correct status code/errno for ADM auth failures ([e023ad61](https://github.com/mozilla-services/autopush/commit/e023ad612b1c544b94cfba5246cb29905577fb4e))
+*   Check if the JWT contains a valid claim set. ([1bb70328](https://github.com/mozilla-services/autopush/commit/1bb70328f0a346d21aff10039f315be7924fa96d), closes [#1334](https://github.com/mozilla-services/autopush/issues/1334))
+*   handle TypeErrors too ([79420a9e](https://github.com/mozilla-services/autopush/commit/79420a9e7f056aedb7e18a6a0b6c2ec50a4b7a12), closes [#1326](https://github.com/mozilla-services/autopush/issues/1326))
+*   Fix all_channels to match registration UAID format ([bd21f063](https://github.com/mozilla-services/autopush/commit/bd21f063bd92f3056f7955d1e299236fc43f0935), closes [#1330](https://github.com/mozilla-services/autopush/issues/1330))
+
+#### Features
+
+*   allow multi app-ids and auths for fcm ([54b33510](https://github.com/mozilla-services/autopush/commit/54b33510ade39761419763644023cdca0ac8617f), closes [#1340](https://github.com/mozilla-services/autopush/issues/1340), breaks [#](https://github.com/mozilla-services/autopush/issues/))
+*   add gcm endpoint configuration argument ([5fd37e24](https://github.com/mozilla-services/autopush/commit/5fd37e24091bf7ee9c1ae7ea881b641bdb613cb9), closes [#1315](https://github.com/mozilla-services/autopush/issues/1315))
+*   Use FCM HTTPv1 protocol with twisted async ([e111ec10](https://github.com/mozilla-services/autopush/commit/e111ec10238a487a7de2d157e16e6eb238b32a69), closes [#1291](https://github.com/mozilla-services/autopush/issues/1291))
+*   Remove unused secondary global index ([1833f5aa](https://github.com/mozilla-services/autopush/commit/1833f5aa5430fa80965b51bdfb3de9b1ebc5c119))
+*   make gcm calls use async callbacks ([d67dcb45](https://github.com/mozilla-services/autopush/commit/d67dcb45f85e90af94cd5ca9318979dd4e00ff89), closes [#1291](https://github.com/mozilla-services/autopush/issues/1291))
+*   add dockerflow callbacks for endpoint ([2a5e7765](https://github.com/mozilla-services/autopush/commit/2a5e7765f02a6f22ddc8582158fbe68001b29dcb), closes [#1293](https://github.com/mozilla-services/autopush/issues/1293))
+*   add ADM support ([0d84de62](https://github.com/mozilla-services/autopush/commit/0d84de622e6ee0773d5354780df3f5ef0963bd59), closes [#1275](https://github.com/mozilla-services/autopush/issues/1275))
+*   upgrade to pypy6 for debug symbols ([b4d5e73e](https://github.com/mozilla-services/autopush/commit/b4d5e73e82ce945a89d04e7d0875ffa52a89d355), closes [#1288](https://github.com/mozilla-services/autopush/issues/1288))
+
+
+
 <a name="1.54.2"></a>
 ## 1.54.2 (2019-10-11)
 
