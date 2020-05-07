@@ -1,3 +1,13 @@
+<a name="1.54.2"></a>
+## 1.54.2 (2019-10-11)
+
+
+#### Chore
+
+*   update dependencies ([f8bc32dd](https://github.com/mozilla-services/autopush/commit/f8bc32dda3c3e716618d384891f252dc4fe512fd), closes [#1351](https://github.com/mozilla-services/autopush/issues/1351))
+
+
+
 <a name="1.54.1"></a>
 ## 1.54.1 (2019-09-13)
 
