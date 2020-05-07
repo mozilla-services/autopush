@@ -147,10 +147,13 @@ class TestBase(unittest.TestCase):
         with an invalid method (e.g. "put" instead of "PUT").
         This is not code that is triggered within normal flow, but
         by the cyclone wrapper.
+
+        NOTE: calling `failure` without an exception triggers an
+        exception. write_error should call `error`. 
         """
         self.base.write_error(999)
         self.status_mock.assert_called_with(999)
-        assert self.base.log.failure.called is True
+        assert self.base.log.error.called is True
 
     @patch('uuid.uuid4', return_value=uuid.UUID(dummy_request_id))
     def test_init_info(self, t):

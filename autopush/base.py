@@ -65,7 +65,7 @@ class BaseHandler(cyclone.web.RequestHandler):
                     failure=failure.Failure(*kwargs['exc_info']),
                     client_info=self._client_info)
             else:
-                self.log.failure("Error in handler: %s" % code,
+                self.log.error("Error in handler: %s" % code,
                                  client_info=self._client_info)
             self.finish()
         except Exception as ex:
