@@ -149,7 +149,7 @@ class TestBase(unittest.TestCase):
         by the cyclone wrapper.
 
         NOTE: calling `failure` without an exception triggers an
-        exception. write_error should call `error`. 
+        exception. write_error should call `error`.
         """
         self.base.write_error(999)
         self.status_mock.assert_called_with(999)
