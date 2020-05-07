@@ -130,8 +130,9 @@ class APNSRouter(object):
         if notification.data:
             payload["body"] = notification.data
             payload["con"] = notification.headers["encoding"]
-            payload["enc"] = notification.headers["encryption"]
 
+            if "encryption" in notification.headers:
+                payload["enc"] = notification.headers["encryption"]
             if "crypto_key" in notification.headers:
                 payload["cryptokey"] = notification.headers["crypto_key"]
             elif "encryption_key" in notification.headers:
