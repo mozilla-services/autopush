@@ -1,3 +1,13 @@
+<a name="1.55.4"></a>
+## 1.55.4 (2020-05-07)
+
+
+#### Bug Fixes
+
+*   only use `failure()` on exceptions in write_error (#1389) ([d11f5ac9](https://github.com/mozilla-services/autopush/commit/d11f5ac9170fd907b2a71b699cf8b714d36c6d66), closes [#1388](https://github.com/mozilla-services/autopush/issues/1388))
+
+
+
 <a name="1.55.3"></a>
 ## 1.55.3 (2020-05-07)
 
