@@ -152,13 +152,16 @@ class APNSRouter(object):
             apns_client.send(router_token=router_token, payload=payload,
                              apns_id=apns_id)
             success = True
+        except RouterException:
+            # Not sure if this is happening, but
+            raise
         except ConnectionError:
             self.metrics.increment("notification.bridge.connection.error",
                                    tags=make_tags(
                                        self._base_tags,
                                        application=rel_channel,
                                        reason="connection_error"))
-        except (HTTP20Error, socket.error):
+        except (HTTP20Error, IOError, socket.error):
             self.metrics.increment("notification.bridge.connection.error",
                                    tags=make_tags(self._base_tags,
                                                   application=rel_channel,

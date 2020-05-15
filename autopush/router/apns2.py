@@ -1,6 +1,9 @@
 import json
 from collections import deque
 from decimal import Decimal
+import time
+
+import threading
 
 import hyper.tls
 from hyper import HTTP20Connection
@@ -36,13 +39,21 @@ class APNSException(Exception):
     pass
 
 
+class APNSConnection:
+    def __init__(self, conn):
+        self._conn = conn
+        self._last_used = time.time()
+
+
 class APNSClient(object):
     def __init__(self, cert_file, key_file, topic,
                  alt=False, use_sandbox=False,
                  max_connections=APNS_MAX_CONNECTIONS,
                  logger=None, metrics=None,
                  load_connections=True,
-                 max_retry=2):
+                 max_retry=2,
+                 conn_ttl=30,
+                 reap_sleep=60):
         """Create the APNS client connector.
 
         The cert_file and key_file can be derived from the exported `.p12`
@@ -86,19 +97,21 @@ class APNSClient(object):
         self.log = logger
         self.metrics = metrics
         self.topic = topic
+        self._in_use_connections = 0
         self._max_connections = max_connections
         self._max_retry = max_retry
+        self._max_conn_ttl = conn_ttl
         self.connections = deque(maxlen=max_connections)
         if load_connections:
             self.ssl_context = hyper.tls.init_context(cert=(cert_file,
                                                             key_file))
-            self.connections.extendleft((HTTP20Connection(
-                self.server,
-                self.port,
-                ssl_context=self.ssl_context,
-                force_proto='h2') for x in range(0, max_connections)))
         if self.log:
             self.log.debug("Starting APNS connection")
+        self._reap_sleep = reap_sleep
+        # this is probably wrong.
+        self._reaper = threading.Thread(target=self._reap, args=())
+        self._reaper.daemon = True
+        self._reaper.start()
 
     def send(self, router_token, payload, apns_id,
              priority=True, topic=None, exp=None):
@@ -154,7 +167,6 @@ class APNSClient(object):
                         status_code=502,
                         response_body="APNS could not process "
                                       "your message {}".format(reason),
-                        log_exception=False
                     )
                 break
             except (HTTP20Error, IOError):
@@ -166,19 +178,52 @@ class APNSClient(object):
             finally:
                 # Returning a closed connection to the pool is ok.
                 # hyper will reconnect on .request()
-                self._return_connection(connection)
+                if connection:
+                    self._return_connection(connection)
 
     def _get_connection(self):
-        try:
-            connection = self.connections.pop()
-            return connection
-        except IndexError:
+        self._in_use_connections += 1
+        if self.log:
+            self.log.debug("Got New APNS connection")
+        if self._in_use_connections > self._max_connections:
             raise RouterException(
                 "Too many APNS requests, increase pool from {}".format(
                     self._max_connections
                 ),
                 status_code=503,
                 response_body="APNS busy, please retry")
+        try:
+            connection = self.connections.pop()
+            if self.log:
+                self.log.debug("Got existing APNS connection")
+            return connection._conn
+        except IndexError:
+            return HTTP20Connection(
+                self.server,
+                self.port,
+                ssl_context=self.ssl_context,
+                force_proto='h2')
 
     def _return_connection(self, connection):
-        self.connections.appendleft(connection)
+        self._in_use_connections -= 1
+        if self.log:
+            self.log.debug("Done with APNS connection")
+        conn = APNSConnection(connection)
+        self.connections.appendleft(conn)
+
+    def _reap(self):
+        if self.log:
+            self.log.debug("Reaping APNS connections")
+        geezers = []
+        for connection in self.connections:
+            if connection._last_used < (time.time() - self._max_conn_ttl):
+                if self.log:
+                    self.log.debug("Found old connection")
+                geezers.append(connection)
+        try:
+            for geezer in geezers:
+                connection._conn.close()
+                self.connections.remove(geezer)
+        except ValueError:
+            pass
+        time.sleep(self._reap_sleep)

@@ -32,6 +32,7 @@ from autopush.exceptions import ItemNotFound, RouterException
 from autopush.metrics import SinkMetrics
 from autopush.router import (APNSRouter, FCMRouter, FCMv1Router, GCMRouter,
                              WebPushRouter, fcmv1client, gcmclient)
+from autopush.router.apns2 import APNSConnection
 from autopush.router.interface import IRouter, RouterResponse
 from autopush.tests import MockAssist
 from autopush.tests.support import test_db
@@ -101,7 +102,7 @@ class APNSRouterTestCase(unittest.TestCase):
         except IndexError:  # pragma nocover
             pass
         self.router.apns['firefox'].connections.append(
-            self.mock_connection
+            APNSConnection(self.mock_connection)
         )
         self.router.apns['firefox'].log = Mock(spec=Logger)
         self.headers = {"content-encoding": "aesgcm",
@@ -154,8 +155,9 @@ class APNSRouterTestCase(unittest.TestCase):
         def raiser(*args, **kwargs):
             raise ConnectionError("oops")
 
-        self.router.apns['firefox'].connections[1].request = Mock(
-            side_effect=raiser)
+        self.mock_connection.request = Mock(side_effect=raiser)
+        self.router.apns['firefox'].connections.append(
+            APNSConnection(self.mock_connection))
 
         with pytest.raises(RouterException) as ex:
             yield self.router.route_notification(self.notif, self.router_data)
@@ -173,8 +175,9 @@ class APNSRouterTestCase(unittest.TestCase):
             error.errno = socket.errno.EPIPE
             raise error
 
-        self.router.apns['firefox'].connections[1].request = Mock(
-            side_effect=raiser)
+        self.mock_connection.request = Mock(side_effect=raiser)
+        self.router.apns['firefox'].connections.append(
+            APNSConnection(self.mock_connection))
 
         with pytest.raises(RouterException) as ex:
             yield self.router.route_notification(self.notif, self.router_data)
@@ -267,7 +270,10 @@ class APNSRouterTestCase(unittest.TestCase):
         def throw(*args, **kwargs):
             raise HTTP20Error("oops")
 
-        self.router.apns['firefox'].connections[0].request.side_effect = throw
+        self.mock_connection.request = Mock(side_effect=throw)
+        self.router.apns['firefox'].connections.append(
+            APNSConnection(self.mock_connection))
+
         with pytest.raises(RouterException) as ex:
             yield self.router.route_notification(self.notif, self.router_data)
         assert isinstance(ex.value, RouterException)
@@ -288,7 +294,10 @@ class APNSRouterTestCase(unittest.TestCase):
                 "[SSL: BAD_WRITE_RETRY] bad write retry"
             )
 
-        self.router.apns['firefox'].connections[0].request.side_effect = throw
+        self.mock_connection.request = Mock(side_effect=throw)
+        self.router.apns['firefox'].connections.append(
+                APNSConnection(self.mock_connection))
+
         with pytest.raises(RouterException) as ex:
             yield self.router.route_notification(self.notif, self.router_data)
         assert isinstance(ex.value, RouterException)
@@ -338,10 +347,19 @@ class APNSRouterTestCase(unittest.TestCase):
             assert result.status_code == 201
             assert result.logged_status == 200
             assert "TTL" in result.headers
-            assert self.mock_connection.called
+            assert self.mock_connection.request.called
 
         d.addCallback(check_results)
         return d
+
+    def test_reaper(self):
+        self.router.apns['firefox']._max_conn_ttl = 1
+        self.router.apns['firefox']._reap_sleep = 0
+        c = self.router.apns['firefox']._get_connection()
+        self.router.apns['firefox']._return_connection(c)
+        time.sleep(1)
+        self.router.apns['firefox']._reap()
+        assert len(self.router.apns['firefox'].connections) == 0
 
 
 class GCMRouterTestCase(unittest.TestCase):
