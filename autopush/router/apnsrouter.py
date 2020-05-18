@@ -23,6 +23,15 @@ class APNSRouter(object):
     log = Logger()
     apns = None
 
+    def _config(self, rel_channel, key, default=None):
+        try:
+            return self.router_conf[rel_channel][key]
+        except KeyError:
+            try:
+                return self.router_conf["_global"][key]
+            except KeyError:
+                return default
+
     def _connect(self, rel_channel, load_connections=True):
         """Connect to APNS
 
@@ -38,16 +47,19 @@ class APNSRouter(object):
         default_topic = "com.mozilla.org." + rel_channel
         cert_info = self.router_conf[rel_channel]
         return APNSClient(
-            cert_file=cert_info.get("cert"),
-            key_file=cert_info.get("key"),
-            use_sandbox=cert_info.get("sandbox", False),
-            max_connections=cert_info.get("max_connections",
-                                          APNS_MAX_CONNECTIONS),
-            topic=cert_info.get("topic", default_topic),
+            cert_file=self._config(rel_channel, "cert"),
+            key_file=self._config(rel_channel, "key"),
+            use_sandbox=self._config(rel_channel, "sandbox", False),
+            max_connections=self._config(
+                rel_channel, "max_connections", APNS_MAX_CONNECTIONS),
+            topic=self._config(rel_channel, "topic", default_topic),
             logger=self.log,
             metrics=self.metrics,
             load_connections=load_connections,
-            max_retry=cert_info.get('max_retry', 2)
+            max_retry=self._config(rel_channel, 'max_retry', 2),
+            conn_ttl=self._config(rel_channel, 'connection_ttl', 30),
+            reap_sleep=self._config(
+                rel_channel, 'connection_reap_cycle', 60),
         )
 
     def __init__(self, conf, router_conf, metrics, load_connections=True):

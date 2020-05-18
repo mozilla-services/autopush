@@ -50,17 +50,23 @@ port = 8082
 ; multiple certificates.
 ; apns_cert is a JSON formatted dict specifying the paths to the cert files,
 ; as well as any other bits of information that may be necessary. The format
-; is {"platform":
+; is
+; ```
+; {"platform":
 ;       {"cert": "path_to_cert_file",
 ;        "key": "path_to_key_file",
 ;        "topic": "com.mozilla.org.Firefox",  // Bundle ID for associated app
 ;        "max_connections": 100, // Max number of connection pool entries.
 ;        "sandbox": False,  // Use the APNs sandbox feature
 ;        "max_retry": 2, // Max number of retries in event of an HTTP2 error
+;        "connection_ttl": 30,  // Seconds of inactivity before a connection is closed
+         "connection_reap_cycle": 60, // Seconds between idle connection check and closure
 ;        },
 ;       ...
 ; }
-; e.g {"firefox":{"cert":"certs/main.cert","key":"certs/main.key","topic":"com.mozilla.org.Firefox","max_retry":2},"beta":{"cert":"certs/beta.cert","key":"certs/beta.key","topic":"com.mozilla.org.FirefoxBeta"}}
+; ```
+; the `_global` platform indicates base values to be used across all platforms
+; e.g {"_global":{"connection_ttl":30,},"firefox":{"cert":"certs/main.cert","key":"certs/main.key","topic":"com.mozilla.org.Firefox","max_retry":2},"beta":{"cert":"certs/beta.cert","key":"certs/beta.key","topic":"com.mozilla.org.FirefoxBeta"}}
 #apns_creds =
 
 ; Google Cloud Messaging (GCM) bridge support.
