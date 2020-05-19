@@ -45,7 +45,6 @@ class APNSRouter(object):
 
         """
         default_topic = "com.mozilla.org." + rel_channel
-        cert_info = self.router_conf[rel_channel]
         return APNSClient(
             cert_file=self._config(rel_channel, "cert"),
             key_file=self._config(rel_channel, "key"),
