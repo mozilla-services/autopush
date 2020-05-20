@@ -1,29 +1,26 @@
 -e git+https://github.com/habnabit/txstatsd.git@157ef85fbdeafe23865c7c4e176237ffcb3c3f1f#egg=txStatsD-master
-apns==2.0.1
-attrs==19.3.0
-autobahn[twisted]==19.11.2
+apns==2.0.1               # via -r requirements.in
+attrs==19.3.0             # via -r requirements.in, automat, service-identity, treq, twisted
+autobahn[twisted]==19.11.2  # via -r requirements.in
 automat==0.8.0            # via twisted
-boto3==1.11.11
+boto3==1.11.11            # via -r requirements.in
 botocore==1.14.11         # via boto3, s3transfer
 cachecontrol==0.12.6      # via firebase-admin
 cachetools==3.1.1         # via google-auth
 certifi==2019.11.28       # via requests
-cffi==1.13.2
+cffi==1.13.2              # via -r requirements.in, cryptography
 chardet==3.0.4            # via requests
-click==7.0
-configargparse==1.0
+click==7.0                # via -r requirements.in
+configargparse==1.0       # via -r requirements.in
 constantly==15.1.0        # via twisted
-contextlib2==0.6.0.post1  # via raven
-cryptography==2.8
-cyclone==1.2
-datadog==0.34.0
+cryptography==2.8         # via -r requirements.in, autobahn, pyopenssl, service-identity
+cyclone==1.2              # via -r requirements.in
+datadog==0.34.0           # via -r requirements.in
 decorator==4.4.1          # via datadog
 docutils==0.15.2          # via botocore
 ecdsa==0.15               # via python-jose
-enum34==1.1.6             # via cryptography, grpcio, h2
-firebase-admin==3.2.1
-futures==3.3.0            # via google-api-core, grpcio, s3transfer
-gcm-client==0.1.4
+firebase-admin==3.2.1     # via -r requirements.in
+gcm-client==0.1.4         # via -r requirements.in
 google-api-core[grpc]==1.16.0  # via firebase-admin, google-cloud-core, google-cloud-firestore
 google-api-python-client==1.7.11  # via firebase-admin
 google-auth-httplib2==0.0.3  # via google-api-python-client
@@ -37,45 +34,44 @@ graphviz==0.13.2          # via objgraph
 grpcio==1.27.2            # via google-api-core
 h2==2.6.2                 # via hyper
 hpack==3.0.0              # via h2
-httplib2==0.17.0          # via google-api-python-client, google-auth-httplib2, oauth2client
-hyper==0.7.0
+httplib2==0.18.0          # via google-api-python-client, google-auth-httplib2, oauth2client
+hyper==0.7.0              # via -r requirements.in
 hyperframe==3.2.0         # via h2, hyper
 hyperlink==19.0.0         # via twisted
 idna==2.8                 # via hyperlink, requests, twisted
 incremental==17.5.0       # via treq, twisted
-ipaddress==1.0.23         # via cryptography, service-identity
 jmespath==0.9.4           # via boto3, botocore
-marshmallow-polyfield==4.2
-marshmallow==2.19.5
+marshmallow-polyfield==4.2  # via -r requirements.in
+marshmallow==2.19.5       # via -r requirements.in, marshmallow-polyfield
 msgpack==0.6.2            # via cachecontrol
-oauth2client==4.1.3
-objgraph==3.4.1
+oauth2client==4.1.3       # via -r requirements.in
+objgraph==3.4.1           # via -r requirements.in
 protobuf==3.11.3          # via google-api-core, googleapis-common-protos
 pyasn1-modules==0.2.8     # via google-auth, oauth2client, service-identity
-pyasn1==0.4.8
+pyasn1==0.4.8             # via -r requirements.in, oauth2client, pyasn1-modules, python-jose, rsa, service-identity
 pycparser==2.19           # via cffi
-pyfcm==1.4.7
+pyfcm==1.4.7              # via -r requirements.in
 pyhamcrest==1.10.1        # via twisted
-pyopenssl==19.0.0
+pyopenssl==19.0.0         # via -r requirements.in, cyclone, twisted
 python-dateutil==2.8.1    # via botocore
-python-jose==3.1.0
+python-jose==3.1.0        # via -r requirements.in
 pytz==2019.3              # via google-api-core, google-cloud-firestore
-raven==6.10.0
-requests==2.22.0
+raven==6.10.0             # via -r requirements.in
+requests==2.22.0          # via -r requirements.in, cachecontrol, datadog, gcm-client, google-api-core, pyfcm, treq
 rsa==4.0                  # via google-auth, oauth2client, python-jose
 s3transfer==0.3.2         # via boto3
-service-identity==18.1.0
-simplejson==3.17.0
+service-identity==18.1.0  # via -r requirements.in, twisted
+simplejson==3.17.0        # via -r requirements.in
 six==1.14.0               # via autobahn, automat, cryptography, ecdsa, firebase-admin, google-api-core, google-api-python-client, google-auth, google-resumable-media, grpcio, marshmallow-polyfield, oauth2client, protobuf, pyhamcrest, pyopenssl, python-dateutil, python-jose, treq, txaio
-treq==18.6.0
-twisted[tls]==20.3.0
+treq==18.6.0              # via -r requirements.in
+twisted[tls]==19.2.1      # via -r requirements.in, autobahn, cyclone, treq
 txaio==18.8.1             # via autobahn
-typing==3.7.4.1
-ua-parser==0.9.0
+typing==3.7.4.1           # via -r requirements.in
+ua-parser==0.9.0          # via -r requirements.in
 uritemplate==3.0.1        # via google-api-python-client
 urllib3==1.25.8           # via botocore, requests
-wsaccel==0.6.2 ; platform_python_implementation == "CPython"
-zope.interface==4.7.1
+wsaccel==0.6.2 ; platform_python_implementation == "CPython"  # via -r requirements.in
+zope.interface==4.7.1     # via -r requirements.in, autobahn, twisted
 
 # The following packages are considered to be unsafe in a requirements file:
 # setuptools
