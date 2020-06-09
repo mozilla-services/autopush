@@ -69,7 +69,7 @@ http://tools.ietf.org/html/draft-ietf-httpbis-encryption-encoding-00#section-4
         Crypto-Key: keyid="apple";foo="fruit",keyid="gorp";bar="snake"
 
         get_label("foo")
-        would return a value of "apple"
+        would return a value of "fruit"
 
         ..note:: This presumes that "label" is unique. Otherwise it will
         only return the FIRST instance of "label". Use get_keyid() if
