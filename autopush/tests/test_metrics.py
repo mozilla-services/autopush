@@ -8,6 +8,7 @@ from mock import Mock, patch, call
 from autopush.metrics import (
     IMetrics,
     TaggedMetrics,
+    TwistedMetrics,
     SinkMetrics,
     periodic_reporter,
 )
@@ -34,16 +35,16 @@ class SinkMetricsTestCase(unittest.TestCase):
         assert sm.timing("test", 10) is None
 
 
-class TaggedMetricsTestCase(unittest.TestCase):
+class TwistedMetricsTestCase(unittest.TestCase):
     @patch("autopush.metrics.reactor")
     def test_basic(self, mock_reactor):
         twisted.internet.base.DelayedCall.debug = True
-        m = TaggedMetrics('127.0.0.1')
+        m = TwistedMetrics('127.0.0.1')
         m.start()
         assert len(mock_reactor.mock_calls) > 0
         m._metric = Mock()
         m.increment("test", 5)
-        m._metric.incr.assert_called_with("test", 5)
+        m._metric.increment.assert_called_with("test", 5)
         m.gauge("connection_count", 200)
         m._metric.gauge.assert_called_with("connection_count", 200)
         m.timing("lifespan", 113)
@@ -62,7 +63,7 @@ class TaggedMetricsTestCase(unittest.TestCase):
         m.increment("test", 5)
         # Namespace is now auto-prefixed by the underlying markus lib
         m._client.incr.assert_called_with("test", 5,
-                                               host=hostname)
+                                          host=hostname)
         m.gauge("connection_count", 200)
         m._client.gauge.assert_called_with("connection_count", 200,
                                            host=hostname)

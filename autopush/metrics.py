@@ -70,6 +70,9 @@ class TwistedMetrics(object):
         self.client = TwistedStatsDClient(statsd_host, statsd_port)
         self._metric = Metrics(connection=self.client, namespace="autopush")
 
+    def make_tags(self, base=None, **kwargs):
+        return kwargs
+
     def start(self):
         protocol = StatsDClientProtocol(self.client)
         reactor.listenUDP(0, protocol)
@@ -84,19 +87,17 @@ class TwistedMetrics(object):
         self._metric.timing(name, duration)
 
 
-
 class TaggedMetrics(object):
     """DataDog like tagged Metric backend"""
     def __init__(self, hostname, namespace="autopush"):
 
         markus.configure(
             backends=[{
-            'class': 'markus.backends.datadog.DatadogMetrics',
-            'options': {
-                'statsd_host': hostname,
-                'statsd_namespace': namespace,
-            }
-        }])
+                'class': 'markus.backends.datadog.DatadogMetrics',
+                'options': {
+                    'statsd_host': hostname,
+                    'statsd_namespace': namespace,
+                }}])
         self._client = markus.get_metrics(namespace)
         self._host = hostname
         self._namespace = namespace
@@ -110,7 +111,7 @@ class TaggedMetrics(object):
 
     def increment(self, name, count=1, **kwargs):
         self._client.incr(self._prefix_name(name), count, host=self._host,
-                               **kwargs)
+                          **kwargs)
 
     def gauge(self, name, count, **kwargs):
         self._client.gauge(self._prefix_name(name), count, host=self._host,
@@ -120,7 +121,6 @@ class TaggedMetrics(object):
         self._client.timing(self._prefix_name(name), value=duration,
                             host=self._host,
                             **kwargs)
-
 
 
 def from_config(conf):
