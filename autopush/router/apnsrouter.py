@@ -8,7 +8,6 @@ from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
 from autopush.exceptions import RouterException
-from autopush.metrics import make_tags
 from autopush.router.apns2 import (
     APNSClient,
     APNS_MAX_CONNECTIONS,
@@ -154,15 +153,16 @@ class APNSRouter(object):
             success = True
         except ConnectionError:
             self.metrics.increment("notification.bridge.connection.error",
-                                   tags=make_tags(
+                                   tags=self.metrics.make_tags(
                                        self._base_tags,
                                        application=rel_channel,
                                        reason="connection_error"))
         except (HTTP20Error, socket.error):
             self.metrics.increment("notification.bridge.connection.error",
-                                   tags=make_tags(self._base_tags,
-                                                  application=rel_channel,
-                                                  reason="http2_error"))
+                                   tags=self.metrics.make_tags(
+                                       self._base_tags,
+                                       application=rel_channel,
+                                       reason="http2_error"))
         if not success:
             raise RouterException(
                 "Server error",
@@ -172,8 +172,9 @@ class APNSRouter(object):
             )
         location = "%s/m/%s" % (self.conf.endpoint_url, notification.version)
         self.metrics.increment("notification.bridge.sent",
-                               tags=make_tags(self._base_tags,
-                                              application=rel_channel))
+                               tags=self.metrics.make_tags(
+                                   self._base_tags,
+                                   application=rel_channel))
 
         self.metrics.increment(
             "updates.client.bridge.apns.{}.sent".format(
@@ -183,8 +184,9 @@ class APNSRouter(object):
         )
         self.metrics.increment("notification.message_data",
                                notification.data_length,
-                               tags=make_tags(self._base_tags,
-                                              destination='Direct'))
+                               tags=self.metrics.make_tags(
+                                   self._base_tags,
+                                   destination='Direct'))
         return RouterResponse(status_code=201, response_body="",
                               headers={"TTL": notification.ttl,
                                        "Location": location},

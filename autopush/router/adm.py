@@ -10,7 +10,6 @@ from twisted.logger import Logger
 
 from autopush.constants import DEFAULT_ROUTER_TIMEOUT
 from autopush.exceptions import RouterException
-from autopush.metrics import make_tags
 from autopush.router.interface import RouterResponse
 from autopush.types import JSONDict  # noqa
 
@@ -180,7 +179,7 @@ class ADMRouter(object):
         except Timeout as e:
             self.log.warn("ADM Timeout: %s" % e)
             self.metrics.increment("notification.bridge.error",
-                                   tags=make_tags(
+                                   tags=self.metrics.make_tags(
                                        self._base_tags,
                                        reason="timeout"))
             raise RouterException("Server error", status_code=502,
@@ -189,7 +188,7 @@ class ADMRouter(object):
         except ConnectionError as e:
             self.log.warn("ADM Unavailable: %s" % e)
             self.metrics.increment("notification.bridge.error",
-                                   tags=make_tags(
+                                   tags=self.metrics.make_tags(
                                        self._base_tags,
                                        reason="connection_unavailable"))
             raise RouterException("Server error", status_code=502,
@@ -198,7 +197,7 @@ class ADMRouter(object):
         except ADMAuthError as e:
             self.log.error("ADM unable to authorize: %s" % e)
             self.metrics.increment("notification.bridge.error",
-                                   tags=make_tags(
+                                   tags=self.metrics.make_tags(
                                        self._base_tags,
                                        reason="auth failure"
                                    ))

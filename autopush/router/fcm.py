@@ -7,7 +7,6 @@ from twisted.internet.threads import deferToThread
 from twisted.logger import Logger
 
 from autopush.exceptions import RouterException
-from autopush.metrics import make_tags
 from autopush.router.interface import RouterResponse
 from autopush.types import JSONDict  # noqa
 
@@ -204,7 +203,7 @@ class FCMRouter(object):
             raise RouterException("Server error", status_code=500)
         except ConnectionError as e:
             self.metrics.increment("notification.bridge.error",
-                                   tags=make_tags(
+                                   tags=self.metrics.make_tags(
                                        self._base_tags,
                                        reason="connection_unavailable"))
             self.log.warn("Could not connect to FCM server: %s" % e)
@@ -234,15 +233,17 @@ class FCMRouter(object):
             self.log.debug("FCM id changed : {old} => {new}",
                            old=old_id, new=new_id)
             self.metrics.increment("notification.bridge.error",
-                                   tags=make_tags(self._base_tags,
-                                                  reason="reregister"))
+                                   tags=self.metrics.make_tags(
+                                       self._base_tags,
+                                       reason="reregister"))
             return RouterResponse(status_code=503,
                                   response_body="Please try request again.",
                                   router_data=dict(token=new_id))
         if reply.get('failure'):
             self.metrics.increment("notification.bridge.error",
-                                   tags=make_tags(self._base_tags,
-                                                  reason="failure"))
+                                   tags=self.metrics.make_tags(
+                                       self._base_tags,
+                                       reason="failure"))
             reason = result.get('error', "Unreported")
             err = self.reasonTable.get(reason)
             if err.get("crit", False):
@@ -272,8 +273,9 @@ class FCMRouter(object):
                                tags=self._base_tags)
         self.metrics.increment("notification.message_data",
                                notification.data_length,
-                               tags=make_tags(self._base_tags,
-                                              destination="Direct"))
+                               tags=self.metrics.make_tags(
+                                   self._base_tags,
+                                   destination="Direct"))
         location = "%s/m/%s" % (self.conf.endpoint_url, notification.version)
         return RouterResponse(status_code=201, response_body="",
                               headers={"TTL": ttl,

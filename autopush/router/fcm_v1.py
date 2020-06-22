@@ -5,7 +5,6 @@ from twisted.internet.error import ConnectError, TimeoutError
 from twisted.logger import Logger
 
 from autopush.exceptions import RouterException
-from autopush.metrics import make_tags
 from autopush.router.interface import RouterResponse
 from autopush.router.fcm import FCMRouter
 from autopush.router.fcmv1client import (
@@ -132,7 +131,7 @@ class FCMv1Router(FCMRouter):
         if isinstance(err, TimeoutError):
             self.log.warn("FCM Timeout: %s" % err)
             self.metrics.increment("notification.bridge.error",
-                                   tags=make_tags(
+                                   tags=self.metrics.make_tags(
                                        self._base_tags,
                                        reason="timeout"))
             raise RouterException("Server error", status_code=502,
@@ -141,7 +140,7 @@ class FCMv1Router(FCMRouter):
         if isinstance(err, ConnectError):
             self.log.warn("FCM Unavailable: %s" % err)
             self.metrics.increment("notification.bridge.error",
-                                   tags=make_tags(
+                                   tags=self.metrics.make_tags(
                                        self._base_tags,
                                        reason="connection_unavailable"))
             raise RouterException("Server error", status_code=502,
@@ -150,7 +149,7 @@ class FCMv1Router(FCMRouter):
         if isinstance(err, FCMNotFoundError):
             self.log.debug("FCM Recipient not found: %s" % err)
             self.metrics.increment("notification.bridge.error",
-                                   tags=make_tags(
+                                   tags=self.metrics.make_tags(
                                        self._base_tags,
                                        reason="recpient_gone"
                                    ))
@@ -161,7 +160,7 @@ class FCMv1Router(FCMRouter):
         if isinstance(err, RouterException):
             self.log.warn("FCM Error: {}".format(err))
             self.metrics.increment("notification.bridge.error",
-                                   tags=make_tags(
+                                   tags=self.metrics.make_tags(
                                        self._base_tags,
                                        reason="server_error"))
         return failure
@@ -179,8 +178,9 @@ class FCMv1Router(FCMRouter):
                                tags=self._base_tags)
         self.metrics.increment("notification.message_data",
                                notification.data_length,
-                               tags=make_tags(self._base_tags,
-                                              destination="Direct"))
+                               tags=self.metrics.make_tags(
+                                   self._base_tags,
+                                   destination="Direct"))
         location = "%s/m/%s" % (self.conf.endpoint_url, notification.version)
         return RouterResponse(status_code=201, response_body="",
                               headers={"TTL": ttl,

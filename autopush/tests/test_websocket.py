@@ -1582,8 +1582,8 @@ class WebsocketTestCase(unittest.TestCase):
         d = Deferred()
 
         def check(*args, **kwargs):
-            assert self.metrics.increment.call_args[1]['tags'] == [
-                "source:Direct"]
+            assert self.metrics.increment.call_args[1] == {
+                "source": "Direct"}
             assert self.proto.force_retry.called
             assert self.send_mock.called
             d.callback(True)

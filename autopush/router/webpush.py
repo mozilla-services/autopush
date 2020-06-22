@@ -28,7 +28,6 @@ from twisted.web._newclient import ResponseFailed
 from twisted.web.http import PotentialDataLoss
 
 from autopush.exceptions import ItemNotFound, RouterException
-from autopush.metrics import make_tags
 from autopush.protocol import IgnoreBody
 from autopush.router.interface import RouterResponse
 from autopush.types import JSONDict  # noqa
@@ -155,7 +154,7 @@ class WebPushRouter(object):
     def delivered_response(self, notification):
         self.metrics.increment("notification.message_data",
                                notification.data_length,
-                               tags=make_tags(destination='Stored'))
+                               tags=self.metrics.make_tags(destination='Stored'))
         location = "%s/m/%s" % (self.conf.endpoint_url, notification.location)
         return RouterResponse(status_code=201, response_body="",
                               headers={"Location": location,
@@ -165,7 +164,7 @@ class WebPushRouter(object):
     def stored_response(self, notification):
         self.metrics.increment("notification.message_data",
                                notification.data_length,
-                               tags=make_tags(destination='Direct'))
+                               tags=self.metrics.make_tags(destination='Direct'))
         location = "%s/m/%s" % (self.conf.endpoint_url, notification.location)
         return RouterResponse(status_code=201, response_body="",
                               headers={"Location": location,
