@@ -45,6 +45,7 @@ idna==2.8                 # via hyperlink, requests, twisted
 incremental==17.5.0       # via treq, twisted
 ipaddress==1.0.23         # via cryptography, service-identity
 jmespath==0.9.4           # via boto3, botocore
+markus==2.2.0
 marshmallow-polyfield==4.2
 marshmallow==2.19.5
 msgpack==0.6.2            # via cachecontrol
