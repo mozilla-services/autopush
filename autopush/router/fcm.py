@@ -116,7 +116,7 @@ class FCMRouter(object):
         except Exception as e:
             self.log.error("Could not instantiate FCM {ex}", ex=e)
             raise IOError("FCM Bridge not initiated in main")
-        self._base_tags = ["platform:fcm"]
+        self._base_tags = {"platform": "fcm"}
         self.log.debug("Starting FCM router...")
 
     def amend_endpoint_response(self, response, router_data):

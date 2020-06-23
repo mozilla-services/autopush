@@ -251,10 +251,10 @@ class WebsocketTestCase(unittest.TestCase):
                           "CLR 3.5.30729)"}
         req.host = "example.com:8080"
         ps = PushState.from_request(request=req, db=self.proto.db)
-        assert sorted(ps._base_tags) == sorted(
-            ['ua_os_family:Windows',
-             'ua_browser_family:Firefox',
-             'host:example.com:8080'])
+        assert ps._base_tags == {
+             'ua_os_family': 'Windows',
+             'ua_browser_family': 'Firefox',
+             'host': 'example.com:8080'}
 
     def test_handshake_sub(self):
         self.factory.externalPort = 80
@@ -674,7 +674,7 @@ class WebsocketTestCase(unittest.TestCase):
         self._connect()
         self._send_message(dict(messageType="hello", use_webpush=True,
                                 channelIDs=[]))
-        assert self.proto.base_tags == ['use_webpush:True']
+        assert self.proto.base_tags == {'use_webpush': 'True'}
         msg = yield self.get_response()
         assert msg["status"] == 200
         assert "use_webpush" in msg

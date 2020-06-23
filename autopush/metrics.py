@@ -83,18 +83,26 @@ class TaggedMetrics(IMetrics):
     def start(self):
         pass
 
-    def increment(self, name, count=1, **kwargs):
-        self._client.incr(self._prefix_name(name), count, host=self._host,
-                          **kwargs)
+    def make_tags(self, base=None, **kwargs):
+        if "host" not in kwargs:
+            kwargs["host"] = self._host
+        if base is None:
+            base = {}
+        base.update(kwargs)
+        return base
 
-    def gauge(self, name, count, **kwargs):
-        self._client.gauge(self._prefix_name(name), count, host=self._host,
-                           **kwargs)
+    def increment(self, name, count=1, tags=None, **kwargs):
+        tags = self.make_tags(tags, **kwargs)
+        self._client.incr(self._prefix_name(name), count, **tags)
 
-    def timing(self, name, duration, **kwargs):
+    def gauge(self, name, count, tags=None, **kwargs):
+        tags = self.make_tags(tags, **kwargs)
+        self._client.gauge(self._prefix_name(name), count, **tags)
+
+    def timing(self, name, duration, tags=None, **kwargs):
+        tags = self.make_tags(tags, **kwargs)
         self._client.timing(self._prefix_name(name), value=duration,
-                            host=self._host,
-                            **kwargs)
+                            **tags)
 
 
 def from_config(conf):

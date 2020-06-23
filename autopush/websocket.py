@@ -178,7 +178,7 @@ class PushState(object):
         default=Factory(SessionStatistics))  # type: SessionStatistics
 
     _user_agent = attrib(default=None)  # type: Optional[str]
-    _base_tags = attrib(default=Factory(list))  # type: List[str]
+    _base_tags = attrib(default=Factory(dict))  # type: Dict[str, str]
     raw_agent = attrib(default=Factory(dict))  # type: Optional[Dict[str, str]]
 
     _should_stop = attrib(default=False)  # type: bool
@@ -233,13 +233,13 @@ class PushState(object):
         """Initialize PushState"""
         if self._user_agent:
             dd_tags, self.raw_agent = parse_user_agent(self._user_agent)
+            self._base_tags = dd_tags
             for tag_name, tag_value in dd_tags.items():
                 setattr(self.stats, tag_name, tag_value)
-                self._base_tags.append("%s:%s" % (tag_name, tag_value))
             self.stats.ua_os_ver = self.raw_agent["ua_os_ver"]
             self.stats.ua_browser_ver = self.raw_agent["ua_browser_ver"]
         if self.stats.host:
-            self._base_tags.append("host:%s" % self.stats.host)
+            self._base_tags["host"] = self.stats.host
 
         # Message table rotation initial settings
         self.message_month = self.db.current_msg_month
@@ -287,7 +287,7 @@ class PushState(object):
 
     def init_connection(self):
         """Set the connection type for the client"""
-        self._base_tags.append("use_webpush:True")
+        self._base_tags["use_webpush"] = "True"
         self.router_type = self.stats.connection_type = "webpush"
 
         # Update our message tracking for webpush

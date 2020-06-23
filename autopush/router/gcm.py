@@ -39,7 +39,7 @@ class GCMRouter(object):
             self.gcmclients[sid] = gcmclient.GCM(auth, timeout=timeout,
                                                  logger=self.log,
                                                  endpoint=self.gcm_endpoint)
-        self._base_tags = ["platform:gcm"]
+        self._base_tags = {"platform": "gcm"}
         self.log.debug("Starting GCM router...")
 
     def amend_endpoint_response(self, response, router_data):

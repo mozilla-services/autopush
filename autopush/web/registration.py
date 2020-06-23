@@ -287,10 +287,9 @@ class UnregisterChidSchema(AuthorizationCheckSchema):
 class BaseRegistrationHandler(BaseWebHandler):
     """Common registration handler methods"""
     def base_tags(self):
-        tags = list(self._base_tags)
-        tags.append("user_agent:%s" %
-                    self.request.headers.get("user-agent"))
-        tags.append("host:%s" % self.request.host)
+        tags = self._base_tags
+        tags["user_agent"] = self.request.headers.get("user-agent")
+        tags["host"] = self.request.host
         return tags
 
     def _register_channel(self, uaid, chid, app_server_key):

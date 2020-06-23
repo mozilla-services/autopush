@@ -63,7 +63,7 @@ class APNSRouter(object):
         self.conf = conf
         self.router_conf = router_conf
         self.metrics = metrics
-        self._base_tags = ["platform:apns"]
+        self._base_tags = {"platform": "apns"}
         self.apns = dict()
         for rel_channel in router_conf:
             self.apns[rel_channel] = self._connect(rel_channel,

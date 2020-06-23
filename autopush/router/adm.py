@@ -117,7 +117,7 @@ class ADMRouter(object):
                 logger=self.log,
                 metrics=self.metrics,
                 timeout=timeout)
-        self._base_tags = ["platform:adm"]
+        self._base_tags = {"platform": "adm"}
         self.log.debug("Starting ADM router...")
 
     def amend_endpoint_response(self, response, router_data):

@@ -43,7 +43,7 @@ class FCMv1Router(FCMRouter):
             self.log.error("Could not instantiate FCMv1: missing credentials,",
                            ex=e)
             raise IOError("FCMv1 Bridge not initiated in main")
-        self._base_tags = ["platform:fcmv1"]
+        self._base_tags = {"platform": "fcmv1"}
         self.log.debug("Starting FCMv1 router...")
 
     def amend_endpoint_response(self, response, router_data):

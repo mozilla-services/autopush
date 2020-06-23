@@ -172,14 +172,14 @@ class RegistrationTestCase(unittest.TestCase):
         self.addCleanup(patch_obj.__exit__)
 
     def test_base_tags(self):
-        self.reg._base_tags = []
+        self.reg._base_tags = {}
         self.reg.request = Mock(headers={'user-agent': 'test'},
                                 host='example.com:8080')
         tags = self.reg.base_tags()
-        assert tags == ['user_agent:test', 'host:example.com:8080']
+        assert tags == {'user_agent': 'test', 'host': 'example.com:8080'}
         # previously failed
         tags = self.reg.base_tags()
-        assert tags == ['user_agent:test', 'host:example.com:8080']
+        assert tags == {'user_agent': 'test', 'host': 'example.com:8080'}
 
     def _check_error(self, resp, code, errno, error, message=None):
         d = json.loads(resp.content)
