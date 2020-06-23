@@ -605,9 +605,6 @@ class GCMRouterTestCase(unittest.TestCase):
             assert result.router_data == dict(token="new")
             assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
-            # make_tags() is a function of the now Mocked object.
-            # assert self.router.metrics.increment.call_args[1][1] == {
-            #   'platform':'gcm', 'reason':'reregister'}
             assert self.gcmclient._sender.called
         d.addCallback(check_results)
         return d
@@ -633,8 +630,6 @@ class GCMRouterTestCase(unittest.TestCase):
             assert result.router_data == dict()
             assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
-            # assert self.router.metrics.increment.call_args[1][1] == {
-            #    'platform': 'gcm', 'reason': 'unregistered'}
             assert self.gcmclient._sender.called
         d.addCallback(check_results)
         return d
@@ -659,8 +654,6 @@ class GCMRouterTestCase(unittest.TestCase):
             assert self.router.metrics.increment.called
             assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
-            # assert self.router.metrics.increment.call_args[1][1] == {
-            #    'platform': 'gcm', 'reason': 'failure'}
             assert str(fail.value) == 'GCM unable to deliver'
             self._check_error_call(fail.value, 410)
         d.addBoth(check_results)
@@ -678,8 +671,6 @@ class GCMRouterTestCase(unittest.TestCase):
             assert self.router.metrics.increment.called
             assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
-            # assert self.router.metrics.increment.call_args[1][1] == {
-            #   'platform': 'gcm', 'reason': 'retry'}
             assert str(fail.value) == 'GCM failure to deliver, retry'
             self._check_error_call(fail.value, 503)
         d.addBoth(check_results)
@@ -710,8 +701,6 @@ class GCMRouterTestCase(unittest.TestCase):
             assert self.router.metrics.increment.called
             assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
-            # assert self.router.metrics.increment.call_args[1][1] == {
-            #   'platform': 'gcm', 'reason': 'timeout'}
 
         d.addBoth(check_results)
         return d
@@ -1036,8 +1025,6 @@ class FCMv1RouterTestCase(unittest.TestCase):
             assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
             # make_tags() is a function of the now Mocked object.
-            # assert self.router.metrics.increment.call_args[1][1] == {
-            #    'platform': 'fcmv1', 'reason': 'server_error'}
             assert "INVALID_ARGUMENT" in str(fail.value)
             self._check_error_call(fail.value, 500)
         d.addBoth(check_results)
@@ -1066,8 +1053,6 @@ class FCMv1RouterTestCase(unittest.TestCase):
             assert self.router.metrics.increment.called
             assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
-            # assert self.router.metrics.increment.call_args[1][1] == {
-            #    'platform':'fcmv1', 'reason':'timeout'}
 
         d.addBoth(check_results)
         return d
