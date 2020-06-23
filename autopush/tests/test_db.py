@@ -468,7 +468,7 @@ class RouterTestCase(unittest.TestCase):
     def _create_minimal_record(self):
         data = {
             "uaid": str(uuid.uuid4()),
-            "router_type": "webupsh",
+            "router_type": "webpush",
             "last_connect": generate_last_connect(),
             "connected_at": ms_time(),
             "current_month": datetime.today().month,
