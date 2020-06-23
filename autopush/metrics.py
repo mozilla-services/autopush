@@ -7,8 +7,6 @@ from typing import (  # noqa
 )
 
 from twisted.internet import reactor
-from txstatsd.client import StatsDClientProtocol, TwistedStatsDClient
-from txstatsd.metrics.metrics import Metrics
 
 import markus
 
@@ -64,30 +62,7 @@ class SinkMetrics(IMetrics):
         pass
 
 
-class TwistedMetrics(object):
-    """Twisted implementation of statsd output"""
-    def __init__(self, statsd_host="localhost", statsd_port=8125):
-        self.client = TwistedStatsDClient(statsd_host, statsd_port)
-        self._metric = Metrics(connection=self.client, namespace="autopush")
-
-    def make_tags(self, base=None, **kwargs):
-        return kwargs
-
-    def start(self):
-        protocol = StatsDClientProtocol(self.client)
-        reactor.listenUDP(0, protocol)
-
-    def increment(self, name, count=1, **kwargs):
-        self._metric.increment(name, count)
-
-    def gauge(self, name, count, **kwargs):
-        self._metric.gauge(name, count)
-
-    def timing(self, name, duration, **kwargs):
-        self._metric.timing(name, duration)
-
-
-class TaggedMetrics(object):
+class TaggedMetrics(IMetrics):
     """DataDog like tagged Metric backend"""
     def __init__(self, hostname, namespace="autopush"):
 
@@ -104,7 +79,6 @@ class TaggedMetrics(object):
 
     def _prefix_name(self, name):
         return name
-        # return "%s.%s" % (self._namespace, name)
 
     def start(self):
         pass

@@ -1548,6 +1548,9 @@ class TestClientCerts(SSLEndpointMixin, IntegrationBase):
     @inlineCallbacks
     def test_client_cert_webpush(self):
         raise SkipTest("test cert no longer valid")
+        # The test certificate will need to be regenerated
+        # with a sha256 or greater signature.
+        """
         client = yield self.quick_register(
             sslcontext=self._create_context(self.auth_client))
         yield client.disconnect()
@@ -1560,11 +1563,16 @@ class TestClientCerts(SSLEndpointMixin, IntegrationBase):
         assert result is None
 
         yield self.shut_down(client)
+        """
 
     @inlineCallbacks
     def test_client_cert_unauth(self):
         raise SkipTest("test cert no longer valid")
-        # yield self._test_unauth(self.unauth_client)
+        # The test certificate will need to be regenerated
+        # with a sha256 or greater signature.
+        """
+        yield self._test_unauth(self.unauth_client)
+        """
 
     @inlineCallbacks
     def test_no_client_cert(self):

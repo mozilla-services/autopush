@@ -21,7 +21,7 @@ Implementations
     :special-members: __init__
     :member-order: bysource
 
-.. autoclass:: TwistedMetrics
+.. autoclass:: TaggedMetrics
     :members:
     :special-members: __init__
     :member-order: bysource

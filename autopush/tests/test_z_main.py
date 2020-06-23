@@ -221,7 +221,7 @@ class ConnectionMainTestCase(unittest.TestCase):
         patchers = [
             "autopush.main.TimerService.startService",
             "autopush.main.reactor",
-            "autopush.metrics.TwistedMetrics",
+            "autopush.metrics.TaggedMetrics",
         ]
         self.mocks = {}
         for name in patchers:
@@ -323,7 +323,7 @@ class EndpointMainTestCase(unittest.TestCase):
             "autopush.db.preflight_check",
             "autopush.main.TimerService.startService",
             "autopush.main.reactor",
-            "autopush.metrics.TwistedMetrics",
+            "autopush.metrics.TaggedMetrics",
         ]
         self.mocks = {}
         for name in patchers:
