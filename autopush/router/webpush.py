@@ -155,7 +155,7 @@ class WebPushRouter(object):
         self.metrics.increment("notification.message_data",
                                notification.data_length,
                                tags=self.metrics.make_tags(
-                                   destination='Stored'))
+                                   destination='Direct'))
         location = "%s/m/%s" % (self.conf.endpoint_url, notification.location)
         return RouterResponse(status_code=201, response_body="",
                               headers={"Location": location,
@@ -166,7 +166,7 @@ class WebPushRouter(object):
         self.metrics.increment("notification.message_data",
                                notification.data_length,
                                tags=self.metrics.make_tags(
-                                   destination='Direct'))
+                                   destination='Stored'))
         location = "%s/m/%s" % (self.conf.endpoint_url, notification.location)
         return RouterResponse(status_code=201, response_body="",
                               headers={"Location": location,
