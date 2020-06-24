@@ -1990,6 +1990,10 @@ class TestFCMBridgeIntegration(IntegrationBase):
 
     @inlineCallbacks
     def test_registration_update(self):
+        """Ensure that a client bridge token update does not alter other
+        required elements of the registration data.
+
+        """
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
@@ -2173,6 +2177,10 @@ class TestADMBrideIntegration(IntegrationBase):
 
     @inlineCallbacks
     def test_registration_update(self):
+        """Ensure that a client bridge token update does not alter other
+        required elements of the registration data.
+
+        """
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
@@ -2528,6 +2536,10 @@ class TestAPNSBridgeIntegration(IntegrationBase):
 
     @inlineCallbacks
     def test_apns_registration_update(self):
+        """Ensure that a client bridge token update does not alter other
+        required elements of the registration data.
+
+        """
         self._add_router()
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
