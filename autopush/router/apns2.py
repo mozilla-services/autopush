@@ -40,6 +40,16 @@ class APNSException(Exception):
 
 
 class APNSConnection:
+    """Wrapper for idle APNS connections.
+
+    These may be forced closed by `_reap` if the `_last_used` time is past the
+    expiration time. `_last_used` reflects the time the connection was returned
+    to the `APNSClient.connections` pool.
+
+    This exists because I believe the connection close may not be permiated
+    correctly by Apple, which may be either allowing connections to remain
+    open, or not sending a proactive close on idle.
+    """
     def __init__(self, conn):
         self._conn = conn
         self._last_used = time.time()
@@ -97,18 +107,24 @@ class APNSClient(object):
         self.log = logger
         self.metrics = metrics
         self.topic = topic
+        # `_in_use_connections` are a count of the number of connections
+        # actively in use.
         self._in_use_connections = 0
         self._max_connections = max_connections
         self._max_retry = max_retry
         self._max_conn_ttl = conn_ttl
-        self.connections = deque(maxlen=max_connections)
+        # `idle_connections` is a pool of potentially active connections.
+        # These may be forced closed by `_reap`. This ensures that no
+        # active connections would be forced closed by accident.
+        self.idle_connections = deque(maxlen=max_connections)
         if load_connections:
             self.ssl_context = hyper.tls.init_context(cert=(cert_file,
                                                             key_file))
         if self.log:
             self.log.debug("Starting APNS connection")
         self._reap_sleep = reap_sleep
-        # this is probably wrong.
+        # This is a simple timed loop to force close "idle" connections.
+        # There's probably a better mechanism for this.
         self._reaper = threading.Thread(target=self._reap, args=())
         self._reaper.daemon = True
         self._reaper.start()
@@ -182,7 +198,6 @@ class APNSClient(object):
                     self._return_connection(connection)
 
     def _get_connection(self):
-        self._in_use_connections += 1
         if self.log:
             self.log.debug("Got New APNS connection")
         if self._in_use_connections > self._max_connections:
@@ -192,8 +207,9 @@ class APNSClient(object):
                 ),
                 status_code=503,
                 response_body="APNS busy, please retry")
+        self._in_use_connections += 1
         try:
-            connection = self.connections.pop()
+            connection = self.idle_connections.pop()
             if self.log:
                 self.log.debug("Got existing APNS connection")
             return connection._conn
@@ -205,25 +221,28 @@ class APNSClient(object):
                 force_proto='h2')
 
     def _return_connection(self, connection):
-        self._in_use_connections -= 1
+        self._in_use_connections = max(0, self._in_use_connections - 1)
         if self.log:
             self.log.debug("Done with APNS connection")
         conn = APNSConnection(connection)
-        self.connections.appendleft(conn)
+        self.idle_connections.appendleft(conn)
 
-    def _reap(self):
-        if self.log:
-            self.log.debug("Reaping APNS connections")
-        geezers = []
-        for connection in self.connections:
-            if connection._last_used < (time.time() - self._max_conn_ttl):
-                if self.log:
-                    self.log.debug("Found old connection")
-                geezers.append(connection)
-        try:
-            for geezer in geezers:
-                connection._conn.close()
-                self.connections.remove(geezer)
-        except ValueError:
-            pass
-        time.sleep(self._reap_sleep)
+    def _reap(self, test=False):
+        while True:
+            if self.log:
+                self.log.debug("Reaping APNS connections")
+            runners = []
+            for connection in self.idle_connections:
+                if connection._last_used < (time.time() - self._max_conn_ttl):
+                    if self.log:
+                        self.log.debug("Found old connection")
+                    runners.append(connection)
+            try:
+                for runner in runners:
+                    connection._conn.close()
+                    self.idle_connections.remove(runner)
+            except ValueError:
+                pass
+            time.sleep(self._reap_sleep)
+            if test:
+                return

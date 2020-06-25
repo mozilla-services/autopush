@@ -98,10 +98,10 @@ class APNSRouterTestCase(unittest.TestCase):
         mc.get_response.return_value = self.mock_response
         # toss the existing connection
         try:
-            self.router.apns['firefox'].connections.pop()
+            self.router.apns['firefox'].idle_connections.pop()
         except IndexError:  # pragma nocover
             pass
-        self.router.apns['firefox'].connections.append(
+        self.router.apns['firefox'].idle_connections.append(
             APNSConnection(self.mock_connection)
         )
         self.router.apns['firefox'].log = Mock(spec=Logger)
@@ -156,7 +156,7 @@ class APNSRouterTestCase(unittest.TestCase):
             raise ConnectionError("oops")
 
         self.mock_connection.request = Mock(side_effect=raiser)
-        self.router.apns['firefox'].connections.append(
+        self.router.apns['firefox'].idle_connections.append(
             APNSConnection(self.mock_connection))
 
         with pytest.raises(RouterException) as ex:
@@ -176,7 +176,7 @@ class APNSRouterTestCase(unittest.TestCase):
             raise error
 
         self.mock_connection.request = Mock(side_effect=raiser)
-        self.router.apns['firefox'].connections.append(
+        self.router.apns['firefox'].idle_connections.append(
             APNSConnection(self.mock_connection))
 
         with pytest.raises(RouterException) as ex:
@@ -271,7 +271,7 @@ class APNSRouterTestCase(unittest.TestCase):
             raise HTTP20Error("oops")
 
         self.mock_connection.request = Mock(side_effect=throw)
-        self.router.apns['firefox'].connections.append(
+        self.router.apns['firefox'].idle_connections.append(
             APNSConnection(self.mock_connection))
 
         with pytest.raises(RouterException) as ex:
@@ -295,7 +295,7 @@ class APNSRouterTestCase(unittest.TestCase):
             )
 
         self.mock_connection.request = Mock(side_effect=throw)
-        self.router.apns['firefox'].connections.append(
+        self.router.apns['firefox'].idle_connections.append(
                 APNSConnection(self.mock_connection))
 
         with pytest.raises(RouterException) as ex:
@@ -353,13 +353,14 @@ class APNSRouterTestCase(unittest.TestCase):
         return d
 
     def test_reaper(self):
+
         self.router.apns['firefox']._max_conn_ttl = 1
         self.router.apns['firefox']._reap_sleep = 0
         c = self.router.apns['firefox']._get_connection()
         self.router.apns['firefox']._return_connection(c)
         time.sleep(1)
-        self.router.apns['firefox']._reap()
-        assert len(self.router.apns['firefox'].connections) == 0
+        self.router.apns['firefox']._reap(test=True)
+        assert len(self.router.apns['firefox'].idle_connections) == 0
 
 
 class GCMRouterTestCase(unittest.TestCase):

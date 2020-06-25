@@ -36,7 +36,7 @@ def make_cert(filename, cacert=None, cakey=None):
         cacert = cert
         cakey = key
     cert.set_issuer(cacert.get_subject())
-    cert.sign(cakey, 'sha1')
+    cert.sign(cakey, 'sha256')
 
     with open(filename, 'wb') as fp:
         fp.write(dump_privatekey(FILETYPE_PEM, key))
