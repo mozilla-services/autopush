@@ -454,7 +454,7 @@ class UaidRegistrationHandler(BaseRegistrationHandler):
 
 
 class SubRegistrationHandler(BaseRegistrationHandler):
-    """Handle a new channel for a bridge user"""
+    """Handle a new bridge channel id registration for a bridge user"""
     cors_methods = "POST"
 
     @threaded_validate(NewChidSchema)

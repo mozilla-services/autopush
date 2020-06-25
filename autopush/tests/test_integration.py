@@ -21,6 +21,7 @@ from unittest.case import SkipTest
 from zope.interface import implementer
 
 import ecdsa
+import ssl
 import twisted.internet.base
 import websocket
 from cryptography.fernet import Fernet
@@ -1547,8 +1548,13 @@ class TestClientCerts(SSLEndpointMixin, IntegrationBase):
 
     @inlineCallbacks
     def test_client_cert_webpush(self):
-        client = yield self.quick_register(
-            sslcontext=self._create_context(self.auth_client))
+        try:
+            client = yield self.quick_register(
+                sslcontext=self._create_context(self.auth_client))
+        except ssl.SSLError as ex:
+            if ex.reason == "CA_MD_TOO_WEAK":
+                raise SkipTest("Old test cert used")
+            raise
         yield client.disconnect()
         assert client.channels
         chan = client.channels.keys()[0]
@@ -1570,8 +1576,13 @@ class TestClientCerts(SSLEndpointMixin, IntegrationBase):
 
     @inlineCallbacks
     def _test_unauth(self, certfile):
-        client = yield self.quick_register(
-            sslcontext=self._create_context(certfile))
+        try:
+            client = yield self.quick_register(
+                sslcontext=self._create_context(certfile))
+        except ssl.SSLError as ex:
+            if ex.reason == 'CA_MD_TOO_WEAK':
+                raise SkipTest("Old test cert in use")
+            raise
         yield client.disconnect()
         yield client.send_notification(status=401)
         assert self.logs.logged(
@@ -1977,6 +1988,46 @@ class TestFCMBridgeIntegration(IntegrationBase):
         assert ca_data['enc'] == salt
         assert ca_data['body'] == base64url_encode(data)
 
+    @inlineCallbacks
+    def test_registration_update(self):
+        """Ensure that a client bridge token update does not alter other
+        required elements of the registration data.
+
+        """
+        self._add_router()
+        # get the senderid
+        url = "{}/v1/{}/{}/registration".format(
+            self.ep.conf.endpoint_url,
+            "fcm",
+            self.senderID,
+        )
+        old = uuid.uuid4().hex
+        new = uuid.uuid4().hex
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {
+                "chid": str(uuid.uuid4()),
+                "token": old
+            }
+        ))
+        assert response.code == 200
+        jbody = json.loads(body)
+        rec_old = self.ep.db.router.get_uaid(jbody['uaid'])
+        response, body = yield _agent(
+            'PUT',
+            "{}/{}".format(url, jbody['uaid']),
+            headers=Headers(
+                {"authorization": ["Bearer {}".format(jbody['secret'])]}
+            ),
+            body=json.dumps(
+                {"token": new}
+            )
+        )
+        assert response.code == 200
+        rec_new = self.ep.db.router.get_uaid(jbody['uaid'])
+        assert rec_new['router_data']['token'] == new
+        assert rec_new['router_data']['app_id'] == \
+            rec_old['router_data']['app_id']
+
 
 class TestADMBrideIntegration(IntegrationBase):
 
@@ -2066,7 +2117,10 @@ class TestADMBrideIntegration(IntegrationBase):
             "expires_in": 3000
         }
         response, body = yield _agent("POST", url, body=json.dumps(
-            {"token": self.token}
+            {
+                "chid": str(uuid.uuid4()),
+                "token": self.token
+            }
         ))
         assert response.code == 200
         jbody = json.loads(body)
@@ -2120,6 +2174,47 @@ class TestADMBrideIntegration(IntegrationBase):
             {"token": self.token[:-100]}
         ))
         assert response.code == 400
+
+    @inlineCallbacks
+    def test_registration_update(self):
+        """Ensure that a client bridge token update does not alter other
+        required elements of the registration data.
+
+        """
+        self._add_router()
+        # get the senderid
+        url = "{}/v1/{}/{}/registration".format(
+            self.ep.conf.endpoint_url,
+            "adm",
+            "dev",
+        )
+        old = self.token
+        new = self.token.replace('aa', 'bb')
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {
+                "chid": str(uuid.uuid4()),
+                "token": old
+            }
+        ))
+        assert response.code == 200
+        jbody = json.loads(body)
+        rec_old = self.ep.db.router.get_uaid(jbody['uaid'])
+
+        response, body = yield _agent(
+            'PUT',
+            "{}/{}".format(url, jbody['uaid']),
+            headers=Headers(
+                {"authorization": ["Bearer {}".format(jbody['secret'])]}
+            ),
+            body=json.dumps(
+                {"token": new}
+            )
+        )
+        assert response.code == 200
+        rec_new = self.ep.db.router.get_uaid(jbody['uaid'])
+        assert rec_new['router_data']['token'] == new
+        assert rec_new['router_data']['creds'] == \
+            rec_old['router_data']['creds']
 
     @inlineCallbacks
     def test_bad_token_refresh(self):
@@ -2440,6 +2535,47 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         assert 'enc' not in ca_data
 
     @inlineCallbacks
+    def test_apns_registration_update(self):
+        """Ensure that a client bridge token update does not alter other
+        required elements of the registration data.
+
+        """
+        self._add_router()
+        # get the senderid
+        url = "{}/v1/{}/{}/registration".format(
+            self.ep.conf.endpoint_url,
+            "apns",
+            "firefox",
+        )
+        old = uuid.uuid4().hex
+        new = uuid.uuid4().hex
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {
+                "chid": str(uuid.uuid4()),
+                "token": old
+            }
+        ))
+        assert response.code == 200
+        jbody = json.loads(body)
+        rec_old = self.ep.db.router.get_uaid(jbody['uaid'])
+
+        response, body = yield _agent(
+            'PUT',
+            "{}/{}".format(url, jbody['uaid']),
+            headers=Headers(
+                {"authorization": ["Bearer {}".format(jbody['secret'])]}
+            ),
+            body=json.dumps(
+                {"token": new}
+            )
+        )
+        assert response.code == 200
+        rec_new = self.ep.db.router.get_uaid(jbody['uaid'])
+        assert rec_new['router_data']['token'] == new
+        assert rec_new['router_data']['rel_channel'] == \
+            rec_old['router_data']['rel_channel']
+
+    @inlineCallbacks
     def test_registration_no_token(self):
         self._add_router()
         # get the senderid
@@ -2576,10 +2712,15 @@ class TestProxyProtocolSSL(SSLEndpointMixin, IntegrationBase):
                     sock.send(proto_line)
                     # now do the handshake/encrypt sock
                     return self.context.wrap_socket(sock, *args, **kwargs)
+            try:
+                http = httplib.HTTPSConnection(
+                    "localhost:{}".format(self.ep.conf.proxy_protocol_port),
+                    context=SSLContextWrapper(self._create_context(None)))
+            except ssl.SSLError as ex:
+                if ex.reason == 'CA_MD_TOO_WEAK':
+                    raise SkipTest("Old test cert in use")
+                raise
 
-            http = httplib.HTTPSConnection(
-                "localhost:{}".format(self.ep.conf.proxy_protocol_port),
-                context=SSLContextWrapper(self._create_context(None)))
             try:
                 http.request('GET', '/v1/err')
                 response = http.getresponse()
