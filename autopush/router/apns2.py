@@ -113,6 +113,7 @@ class APNSClient(object):
         self._max_connections = max_connections
         self._max_retry = max_retry
         self._max_conn_ttl = conn_ttl
+        self.lock = threading.Lock()
         # `idle_connections` is a pool of potentially active connections.
         # These may be forced closed by `_reap`. This ensures that no
         # active connections would be forced closed by accident.
@@ -209,6 +210,7 @@ class APNSClient(object):
                 response_body="APNS busy, please retry")
         self._in_use_connections += 1
         try:
+            self.lock.acquire()
             connection = self.idle_connections.pop()
             if self.log:
                 self.log.debug("Got existing APNS connection")
@@ -219,19 +221,24 @@ class APNSClient(object):
                 self.port,
                 ssl_context=self.ssl_context,
                 force_proto='h2')
+        finally:
+            self.lock.release()
 
     def _return_connection(self, connection):
         self._in_use_connections = max(0, self._in_use_connections - 1)
         if self.log:
             self.log.debug("Done with APNS connection")
         conn = APNSConnection(connection)
+        self.lock.acquire()
         self.idle_connections.appendleft(conn)
+        self.lock.release()
 
     def _reap(self, test=False):
         while True:
             if self.log:
                 self.log.debug("Reaping APNS connections")
             runners = []
+            self.lock.acquire()
             for connection in self.idle_connections:
                 if connection._last_used < (time.time() - self._max_conn_ttl):
                     if self.log:
@@ -243,6 +250,8 @@ class APNSClient(object):
                     self.idle_connections.remove(runner)
             except ValueError:
                 pass
+            finally:
+                self.lock.release()
             time.sleep(self._reap_sleep)
             if test:
                 return
