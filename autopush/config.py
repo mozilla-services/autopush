@@ -130,7 +130,7 @@ class AutopushConfig(object):
 
     datadog_api_key = attrib(default=None)  # type: Optional[str]
     datadog_app_key = attrib(default=None)  # type: Optional[str]
-    datadog_flush_interval = attrib(default=None)  # type: Optional[int]
+    datadog_flush_interval = attrib(default=10)  # type: Optional[int]
 
     router_table = _nested(
         DDBTableConfig,

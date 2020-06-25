@@ -91,6 +91,7 @@ class DatabaseManagerTest(unittest.TestCase):
         fake_conf.message_table.tablename = "message_int_test"
         fake_conf.message_table.read_throughput = 5
         fake_conf.message_table.write_throughput = 5
+        fake_conf.statsd_port = 8125
         dm = DatabaseManager.from_config(
             fake_conf,
             resource=autopush.tests.boto_resource)
@@ -107,6 +108,7 @@ class DatabaseManagerTest(unittest.TestCase):
         fake_conf.message_table.tablename = "message_bogus"
         fake_conf.message_table.read_throughput = 5
         fake_conf.message_table.write_throughput = 5
+        fake_conf.statsd_port = 8125
         dm = DatabaseManager.from_config(
             fake_conf,
             resource=autopush.tests.boto_resource)

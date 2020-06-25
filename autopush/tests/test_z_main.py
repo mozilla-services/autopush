@@ -274,7 +274,7 @@ class EndpointMainTestCase(unittest.TestCase):
         datadog_flush_interval = "datadog_flush_interval"
         hostname = "hostname"
         statsd_host = "statsd_host"
-        statsd_port = "statsd_port"
+        statsd_port = 8125
         router_tablename = "none"
         router_read_throughput = 0
         router_write_throughput = 0
