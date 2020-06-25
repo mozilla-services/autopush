@@ -260,10 +260,10 @@ class APNSRouterTestCase(unittest.TestCase):
         assert ex.value.status_code == 502
         assert str(ex.value) == 'APNS Transmit Error 400:boo'
         assert ex.value.response_body == (
-            'APNS could not process your message boo')
+            'APNS returned an error processing request')
 
     @inlineCallbacks
-    def test_fail_send(self):
+    def test_aaaa_fail_send(self):
         def throw(*args, **kwargs):
             raise HTTP20Error("oops")
 
@@ -272,7 +272,7 @@ class APNSRouterTestCase(unittest.TestCase):
             yield self.router.route_notification(self.notif, self.router_data)
         assert isinstance(ex.value, RouterException)
         assert ex.value.status_code == 502
-        assert str(ex.value) == "Server error"
+        assert str(ex.value) == "oops"
         assert ex.value.response_body == 'APNS returned an error ' \
                                          'processing request'
         assert self.metrics.increment.called
@@ -293,7 +293,7 @@ class APNSRouterTestCase(unittest.TestCase):
             yield self.router.route_notification(self.notif, self.router_data)
         assert isinstance(ex.value, RouterException)
         assert ex.value.status_code == 502
-        assert str(ex.value) == "Server error"
+        assert str(ex.value) == "[SSL: BAD_WRITE_RETRY] bad write retry"
         assert ex.value.response_body == 'APNS returned an error ' \
                                          'processing request'
         assert self.metrics.increment.called
