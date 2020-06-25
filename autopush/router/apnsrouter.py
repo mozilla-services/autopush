@@ -147,29 +147,26 @@ class APNSRouter(object):
         apns_id = str(uuid.uuid4()).lower()
         # APNs may force close a connection on us without warning.
         # if that happens, retry the message.
-        success = False
         try:
             apns_client.send(router_token=router_token, payload=payload,
                              apns_id=apns_id)
-            success = True
-        except ConnectionError:
-            self.metrics.increment("notification.bridge.connection.error",
-                                   tags=make_tags(
-                                       self._base_tags,
-                                       application=rel_channel,
-                                       reason="connection_error"))
-        except (HTTP20Error, socket.error):
+        except Exception as e:
+            if isinstance(e, ConnectionError):
+                reason = "connection_error"
+            elif isinstance(e, (HTTP20Error, socket.error)):
+                reason = "http2_error"
+            else:
+                reason = "unknown"
             self.metrics.increment("notification.bridge.connection.error",
                                    tags=make_tags(self._base_tags,
                                                   application=rel_channel,
-                                                  reason="http2_error"))
-        if not success:
+                                                  reason=reason))
             raise RouterException(
-                "Server error",
+                str(e),
                 status_code=502,
                 response_body="APNS returned an error processing request",
-                log_exception=False,
             )
+
         location = "%s/m/%s" % (self.conf.endpoint_url, notification.version)
         self.metrics.increment("notification.bridge.sent",
                                tags=make_tags(self._base_tags,
