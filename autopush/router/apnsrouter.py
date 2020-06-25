@@ -168,7 +168,7 @@ class APNSRouter(object):
                                                   application=rel_channel,
                                                   reason=reason))
             raise RouterException(
-                "APNS Router Error: {}".format(str(e)),
+                str(e),
                 status_code=502,
                 response_body="APNS returned an error processing request",
             )
