@@ -37,7 +37,7 @@ graphviz==0.13.2          # via objgraph
 grpcio==1.27.2            # via google-api-core
 h2==2.6.2                 # via hyper
 hpack==3.0.0              # via h2
-httplib2==0.17.0          # via google-api-python-client, google-auth-httplib2, oauth2client
+httplib2==0.18.0          # via google-api-python-client, google-auth-httplib2, oauth2client
 hyper==0.7.0
 hyperframe==3.2.0         # via h2, hyper
 hyperlink==19.0.0         # via twisted

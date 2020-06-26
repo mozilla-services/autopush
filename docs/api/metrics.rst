@@ -21,11 +21,6 @@ Implementations
     :special-members: __init__
     :member-order: bysource
 
-.. autoclass:: TwistedMetrics
-    :members:
-    :special-members: __init__
-    :member-order: bysource
-
 .. autoclass:: DatadogMetrics
     :members:
     :special-members: __init__

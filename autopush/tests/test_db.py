@@ -75,6 +75,17 @@ class DbUtilsTest(unittest.TestCase):
 
 
 class DatabaseManagerTest(unittest.TestCase):
+    def fake_conf(self, table_name=""):
+        fake_conf = Mock()
+        fake_conf.statsd_host = "localhost"
+        fake_conf.statsd_port = 8125
+        fake_conf.allow_table_rotation = False
+        fake_conf.message_table = Mock()
+        fake_conf.message_table.tablename = table_name
+        fake_conf.message_table.read_throughput = 5
+        fake_conf.message_table.write_throughput = 5
+        return fake_conf
+
     def test_init_with_resources(self):
         from autopush.db import DynamoDBResource
         dm = DatabaseManager(router_conf=Mock(),
@@ -85,12 +96,7 @@ class DatabaseManagerTest(unittest.TestCase):
         assert isinstance(dm.resource, DynamoDBResource)
 
     def test_init_with_no_rotate(self):
-        fake_conf = Mock()
-        fake_conf.allow_table_rotation = False
-        fake_conf.message_table = Mock()
-        fake_conf.message_table.tablename = "message_int_test"
-        fake_conf.message_table.read_throughput = 5
-        fake_conf.message_table.write_throughput = 5
+        fake_conf = self.fake_conf("message_int_test")
         dm = DatabaseManager.from_config(
             fake_conf,
             resource=autopush.tests.boto_resource)
@@ -101,12 +107,7 @@ class DatabaseManagerTest(unittest.TestCase):
             )
 
     def test_init_with_no_rotate_create_table(self):
-        fake_conf = Mock()
-        fake_conf.allow_table_rotation = False
-        fake_conf.message_table = Mock()
-        fake_conf.message_table.tablename = "message_bogus"
-        fake_conf.message_table.read_throughput = 5
-        fake_conf.message_table.write_throughput = 5
+        fake_conf = self.fake_conf("message_bogus")
         dm = DatabaseManager.from_config(
             fake_conf,
             resource=autopush.tests.boto_resource)
