@@ -26,7 +26,7 @@ from jose import JOSEError, JWTError
 
 from autopush.crypto_key import CryptoKey
 from autopush.db import DatabaseManager  # noqa
-from autopush.metrics import Metrics, make_tags  # noqa
+from autopush.metrics import IMetrics, make_tags  # noqa
 from autopush.db import hasher
 from autopush.exceptions import (
     InvalidRequest,
@@ -135,7 +135,7 @@ class WebPushSubscriptionSchema(Schema):
     def _validate_webpush(self, d, result):
         db = self.context["db"]  # type: DatabaseManager
         log = self.context["log"]  # type: Logger
-        metrics = self.context["metrics"]  # type: Metrics
+        metrics = self.context["metrics"]  # type: IMetrics
         channel_id = normalize_id(d["chid"])
         uaid = result["uaid"]
         if 'current_month' not in result:
