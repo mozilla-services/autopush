@@ -1,3 +1,27 @@
+<a name="1.56.0"></a>
+## 1.56.0 (2020-06-26)
+
+
+#### Chore
+
+*   Upgrade pytest to 4.6 to fix pytest-cov dependency (#1399) ([2d4c81b6](https://github.com/mozilla-services/autopush/commit/2d4c81b6c65fb62f2352e23de226cb5717a2db90))
+*   tag 1.55.4 (#1390) ([00aaab44](https://github.com/mozilla-services/autopush/commit/00aaab4447dfdda5d40f5c083415d1aa44e72ed1))
+
+#### Doc
+
+*   Fix CryptoKey.get_label example ([f3967b63](https://github.com/mozilla-services/autopush/commit/f3967b637afba5b1c37641a93771106102cc7f38))
+
+#### Bug Fixes
+
+*   Add additional logging around APNS HTTP2 connectivity ([1c2ee3ea](https://github.com/mozilla-services/autopush/commit/1c2ee3ea3860f6c9b6545606f2a4e6933489fa3b))
+*   Add integration tests to verify that updates do not alter reg info ([6e77bd90](https://github.com/mozilla-services/autopush/commit/6e77bd90866d5fe53f7c8cc248f2f43822a806cd), closes [#1397](https://github.com/mozilla-services/autopush/issues/1397))
+
+#### Features
+
+*   Add tags back to metrics. (#1406) ([7ac68d6d](https://github.com/mozilla-services/autopush/commit/7ac68d6d196019d18c942847bd857d2f572dd24c), closes [#1400](https://github.com/mozilla-services/autopush/issues/1400))
+
+
+
 <a name="1.55.4"></a>
 ## 1.55.4 (2020-05-07)
 
