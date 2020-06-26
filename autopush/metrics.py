@@ -7,7 +7,7 @@ from typing import (  # noqa
 )
 
 from twisted.internet import reactor
-from txstatsd.metrics.metrics import Metrics
+from txstatsd.metrics.metrics import Metrics  # noqa
 
 import mock
 import datadog
