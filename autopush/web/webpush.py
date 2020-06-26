@@ -26,7 +26,7 @@ from jose import JOSEError, JWTError
 
 from autopush.crypto_key import CryptoKey
 from autopush.db import DatabaseManager  # noqa
-from autopush.metrics import Metrics, make_tags  # noqa
+from autopush.metrics import IMetrics, make_tags  # noqa
 from autopush.db import hasher
 from autopush.exceptions import (
     InvalidRequest,
