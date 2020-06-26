@@ -1,7 +1,5 @@
 import unittest
 
-import twisted.internet.base
-
 import pytest
 from mock import Mock, patch, call
 

@@ -7,8 +7,6 @@ from typing import (  # noqa
 )
 
 from twisted.internet import reactor
-from txstatsd.client import StatsDClientProtocol, TwistedStatsDClient
-from txstatsd.metrics.metrics import Metrics
 
 import datadog
 from datadog import ThreadStats

@@ -1,4 +1,3 @@
--e git+https://github.com/habnabit/txstatsd.git@157ef85fbdeafe23865c7c4e176237ffcb3c3f1f#egg=txStatsD-master
 apns==2.0.1
 attrs==19.3.0
 autobahn[twisted]==19.11.2
@@ -8,7 +7,7 @@ botocore==1.14.11         # via boto3, s3transfer
 cachecontrol==0.12.6      # via firebase-admin
 cachetools==3.1.1         # via google-auth
 certifi==2019.11.28       # via requests
-cffi==1.13.2
+cffi==1.13.2 ; platform_python_implementation == "CPython"
 chardet==3.0.4            # via requests
 click==7.0
 configargparse==1.0
@@ -37,7 +36,7 @@ graphviz==0.13.2          # via objgraph
 grpcio==1.27.2            # via google-api-core
 h2==2.6.2                 # via hyper
 hpack==3.0.0              # via h2
-httplib2==0.17.0          # via google-api-python-client, google-auth-httplib2, oauth2client
+httplib2==0.18.0          # via google-api-python-client, google-auth-httplib2, oauth2client
 hyper==0.7.0
 hyperframe==3.2.0         # via h2, hyper
 hyperlink==19.0.0         # via twisted
