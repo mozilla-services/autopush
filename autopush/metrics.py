@@ -9,7 +9,6 @@ from typing import (  # noqa
 from twisted.internet import reactor
 from txstatsd.metrics.metrics import Metrics  # noqa
 
-import mock
 import datadog
 from datadog import ThreadStats
 
@@ -108,7 +107,7 @@ class DatadogMetrics(object):
 def from_config(conf):
     # type: (AutopushConfig) -> IMetrics
     """Create an IMetrics from the given config"""
-    if conf.statsd_host and not isinstance(conf.statsd_host, mock.Mock):
+    if conf.statsd_host:
         return DatadogMetrics(
             hostname=logging.instance_id_or_hostname if conf.ami_id else
             conf.hostname,
