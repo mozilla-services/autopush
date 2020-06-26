@@ -8,7 +8,6 @@ from mock import Mock, patch, call
 from autopush.metrics import (
     IMetrics,
     DatadogMetrics,
-    TwistedMetrics,
     SinkMetrics,
     periodic_reporter,
 )
@@ -33,22 +32,6 @@ class SinkMetricsTestCase(unittest.TestCase):
         assert sm.increment("test") is None
         assert sm.gauge("test", 10) is None
         assert sm.timing("test", 10) is None
-
-
-class TwistedMetricsTestCase(unittest.TestCase):
-    @patch("autopush.metrics.reactor")
-    def test_basic(self, mock_reactor):
-        twisted.internet.base.DelayedCall.debug = True
-        m = TwistedMetrics('127.0.0.1')
-        m.start()
-        assert len(mock_reactor.mock_calls) > 0
-        m._metric = Mock()
-        m.increment("test", 5)
-        m._metric.increment.assert_called_with("test", 5)
-        m.gauge("connection_count", 200)
-        m._metric.gauge.assert_called_with("connection_count", 200)
-        m.timing("lifespan", 113)
-        m._metric.timing.assert_called_with("lifespan", 113)
 
 
 class DatadogMetricsTestCase(unittest.TestCase):

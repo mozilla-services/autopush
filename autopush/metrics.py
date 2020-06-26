@@ -59,26 +59,6 @@ class SinkMetrics(IMetrics):
         pass
 
 
-class TwistedMetrics(object):
-    """Twisted implementation of statsd output"""
-    def __init__(self, statsd_host="localhost", statsd_port=8125):
-        self.client = TwistedStatsDClient.create(statsd_host, statsd_port)
-        self._metric = Metrics(connection=self.client, namespace="autopush")
-
-    def start(self):
-        protocol = StatsDClientProtocol(self.client)
-        reactor.listenUDP(0, protocol)
-
-    def increment(self, name, count=1, **kwargs):
-        self._metric.increment(name, count)
-
-    def gauge(self, name, count, **kwargs):
-        self._metric.gauge(name, count)
-
-    def timing(self, name, duration, **kwargs):
-        self._metric.timing(name, duration)
-
-
 def make_tags(base=None, **kwargs):
     # type: (Sequence[str], **Any) -> Sequence[str]
     """Generate a list of tag values"""
