@@ -5,7 +5,7 @@ from mock import Mock, patch, call
 
 from autopush.metrics import (
     IMetrics,
-    DatadogMetrics,
+    TaggedMetrics,
     SinkMetrics,
     periodic_reporter,
 )
@@ -32,27 +32,23 @@ class SinkMetricsTestCase(unittest.TestCase):
         assert sm.timing("test", 10) is None
 
 
-class DatadogMetricsTestCase(unittest.TestCase):
-    @patch("autopush.metrics.datadog")
-    def test_basic(self, mock_dog):
-        hostname = "localhost"
-
-        m = DatadogMetrics("someapikey", "someappkey", namespace="testpush",
-                           hostname="localhost")
-        assert len(mock_dog.mock_calls) > 0
+class TaggedMetricsTestCase(unittest.TestCase):
+    @patch("autopush.metrics.markus")
+    def test_basic(self, mock_tag):
+        m = TaggedMetrics(namespace="testpush", hostname="localhost")
+        assert len(mock_tag.mock_calls) > 0
         m._client = Mock()
         m.start()
-        m._client.start.assert_called_with(flush_interval=10,
-                                           roll_up_interval=10)
         m.increment("test", 5)
-        m._client.increment.assert_called_with("testpush.test", 5,
-                                               host=hostname)
+        # Namespace is now auto-prefixed by the underlying markus lib
+        m._client.incr.assert_called_with("test", 5,
+                                          tags=['host:localhost'])
         m.gauge("connection_count", 200)
-        m._client.gauge.assert_called_with("testpush.connection_count", 200,
-                                           host=hostname)
+        m._client.gauge.assert_called_with("connection_count", 200,
+                                           tags=['host:localhost'])
         m.timing("lifespan", 113)
-        m._client.timing.assert_called_with("testpush.lifespan", value=113,
-                                            host=hostname)
+        m._client.timing.assert_called_with("lifespan", value=113,
+                                            tags=['host:localhost'])
 
 
 class PeriodicReporterTestCase(unittest.TestCase):
