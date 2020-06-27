@@ -8,8 +8,7 @@ from typing import (  # noqa
 
 from twisted.internet import reactor
 
-import datadog
-from datadog import ThreadStats
+import markus
 
 from autopush import logging
 
@@ -65,56 +64,55 @@ def make_tags(base=None, **kwargs):
     return tags
 
 
-class DatadogMetrics(object):
-    """DataDog Metric backend"""
-    def __init__(self, api_key=None, app_key=None,
-                 hostname=None, statsd_host=None, statsd_port=None,
-                 flush_interval=10, namespace="autopush"):
-
-        datadog.initialize(
-            api_key=api_key,
-            app_key=app_key,
-            host_name=hostname,
-            statsd_host=statsd_host,
-            statsd_port=statsd_port,
-        )
-        self._client = ThreadStats()
-        self._flush_interval = flush_interval
+class TaggedMetrics(IMetrics):
+    """DataDog like tagged Metric backend"""
+    def __init__(self, hostname, statsd_host=None, statsd_port=None,
+                 namespace="autopush"):
+        markus.configure(
+            backends=[{
+                'class': 'markus.backends.datadog.DatadogMetrics',
+                'options': {
+                    'statsd_host': statsd_host,
+                    'statsd_port': statsd_port,
+                }}])
+        self._client = markus.get_metrics(namespace)
         self._host = hostname
         self._namespace = namespace
 
     def _prefix_name(self, name):
-        return "%s.%s" % (self._namespace, name)
+        return name
 
     def start(self):
-        self._client.start(flush_interval=self._flush_interval,
-                           roll_up_interval=self._flush_interval)
+        pass
 
-    def increment(self, name, count=1, **kwargs):
-        self._client.increment(self._prefix_name(name), count, host=self._host,
-                               **kwargs)
+    def _make_tags(self, tags):
+        if tags is None:
+            tags = []
+        tags.append('host:%s' % self._host)
+        return tags
 
-    def gauge(self, name, count, **kwargs):
-        self._client.gauge(self._prefix_name(name), count, host=self._host,
-                           **kwargs)
+    def increment(self, name, count=1, tags=None, **kwargs):
+        self._client.incr(self._prefix_name(name), count,
+                          tags=self._make_tags(tags))
 
-    def timing(self, name, duration, **kwargs):
+    def gauge(self, name, count, tags=None, **kwargs):
+        self._client.gauge(self._prefix_name(name), count,
+                           tags=self._make_tags(tags))
+
+    def timing(self, name, duration, tags=None, **kwargs):
         self._client.timing(self._prefix_name(name), value=duration,
-                            host=self._host, **kwargs)
+                            tags=self._make_tags(tags))
 
 
 def from_config(conf):
     # type: (AutopushConfig) -> IMetrics
     """Create an IMetrics from the given config"""
     if conf.statsd_host:
-        return DatadogMetrics(
+        return TaggedMetrics(
             hostname=logging.instance_id_or_hostname if conf.ami_id else
             conf.hostname,
-            api_key=conf.datadog_api_key,
-            app_key=conf.datadog_app_key,
             statsd_host=conf.statsd_host,
             statsd_port=conf.statsd_port,
-            flush_interval=conf.datadog_flush_interval,
         )
     else:
         return SinkMetrics()

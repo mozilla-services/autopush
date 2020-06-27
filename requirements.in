@@ -2,7 +2,7 @@ apns
 attrs
 autobahn[twisted]
 boto3
-cffi
+cffi ; platform_python_implementation == "CPython"
 click
 configargparse
 cryptography
@@ -13,6 +13,7 @@ firebase-admin
 hyper
 marshmallow
 marshmallow-polyfield
+markus
 oauth2client
 objgraph
 pyasn1
@@ -25,7 +26,6 @@ service-identity
 simplejson
 treq
 twisted
--e git+https://github.com/habnabit/txstatsd.git@157ef85fbdeafe23865c7c4e176237ffcb3c3f1f#egg=txStatsD-master
 typing
 ua-parser
 wsaccel ; platform_python_implementation == "CPython"
