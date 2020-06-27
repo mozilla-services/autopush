@@ -1,3 +1,13 @@
+<a name="1.56.1"></a>
+## 1.56.1 (2020-06-27)
+
+
+#### Features
+
+*   fixup metrics + tags ([2eb67919](https://github.com/mozilla-services/autopush/commit/2eb67919cfb18135f34cbf2d77f28f171ec0bf31), closes [#1400](https://github.com/mozilla-services/autopush/issues/1400))
+
+
+
 <a name="1.56.0"></a>
 ## 1.56.0 (2020-06-26)
 
