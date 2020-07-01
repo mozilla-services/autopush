@@ -6,7 +6,7 @@ from typing import (  # noqa
     Sequence
 )
 
-from twisted.internet import reactor
+from twisted.internet import (reactor, threads)
 
 import markus
 
@@ -92,16 +92,22 @@ class TaggedMetrics(IMetrics):
         return tags
 
     def increment(self, name, count=1, tags=None, **kwargs):
-        self._client.incr(self._prefix_name(name), count,
-                          tags=self._make_tags(tags))
+        threads.deferToThread(
+            self._client.incr(self._prefix_name(name), count,
+                              tags=self._make_tags(tags))
+        )
 
     def gauge(self, name, count, tags=None, **kwargs):
-        self._client.gauge(self._prefix_name(name), count,
-                           tags=self._make_tags(tags))
+        threads.deferToThread(
+            self._client.gauge(self._prefix_name(name), count,
+                               tags=self._make_tags(tags))
+        )
 
     def timing(self, name, duration, tags=None, **kwargs):
-        self._client.timing(self._prefix_name(name), value=duration,
-                            tags=self._make_tags(tags))
+        threads.deferToThread(
+            self._client.timing(self._prefix_name(name), value=duration,
+                                tags=self._make_tags(tags))
+        )
 
 
 def from_config(conf):
