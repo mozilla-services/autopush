@@ -41,8 +41,8 @@ class TaggedMetricsTestCase(unittest.TestCase):
         m.start()
         yield m.increment("test", 5)
         # Namespace is now auto-prefixed by the underlying markus lib
-        m._client.increment.assert_called_with("test", 5,
-                                          tags=['host:localhost'])
+        m._client.increment.assert_called_with(
+            "test", 5, tags=['host:localhost'])
         m.gauge("connection_count", 200)
         m._client.gauge.assert_called_with("connection_count", 200,
                                            tags=['host:localhost'])
