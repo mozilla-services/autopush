@@ -555,7 +555,8 @@ class Test_Data(IntegrationBase):
         # Piggy back a check for stored source metrics
         self.conn.db.metrics = TaggedMetrics(
             namespace="testpush",
-            hostname="localhost")
+            hostname="localhost",
+            flush_interval=1)
         self.conn.db.metrics._client = Mock()
 
         client = Client("ws://localhost:{}/".format(self.connection_port))
@@ -584,6 +585,7 @@ class Test_Data(IntegrationBase):
             yield client.ack(chan, result["version"])
 
         assert self.logs.logged_ci(lambda ci: 'message_size' in ci)
+        time.sleep(1.5)
         inc_call = self.conn.db.metrics._client.incr.call_args_list[5]
         assert inc_call[1]['tags'] == ['source:Stored', 'host:localhost']
         yield self.shut_down(client)
