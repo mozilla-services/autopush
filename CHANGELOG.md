@@ -1,3 +1,15 @@
+<a name="1.56.2"></a>
+## 1.56.2 (2020-07-07)
+
+
+#### Bug Fixes
+
+*   followup for 1408 (#1411) ([022070de](https://github.com/mozilla-services/autopush/commit/022070de085a79dc0a44982c82919b8037d85bc5), closes [#1408](https://github.com/mozilla-services/autopush/issues/1408))
+*   regression: wrap metric calls in thread handler ([31ae364d](https://github.com/mozilla-services/autopush/commit/31ae364d4d5cb3b041b11d2165d2a631c5d167f4))
+*   put markus metric handling on a deferred thread ([6436453a](https://github.com/mozilla-services/autopush/commit/6436453a89ccc8ad9931480793fc497e9d6c3aaa), closes [#1408](https://github.com/mozilla-services/autopush/issues/1408))
+
+
+
 <a name="1.56.1"></a>
 ## 1.56.1 (2020-06-27)
 
