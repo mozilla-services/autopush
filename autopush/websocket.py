@@ -1319,7 +1319,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
                        user_agent=self.ps.user_agent, message_id=str(version),
                        code=code, **self.ps.raw_agent)
         mcode = code if code in NACK_CODES else 0
-        self.metrics.increment('ua.command.nack', tags=make_tags(code=mcode))
+        self.metrics.increment(
+            'ua.command.nack',
+            tags=make_tags(code=mcode))
         self.ps.stats.nacks += 1
 
     def check_missed_notifications(self, results, resume=False):
@@ -1373,8 +1375,9 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
     def emit_send_metrics(self, notif):
         if notif.topic:
             self.metrics.increment("ua.notification.topic")
-        self.metrics.increment('ua.message_data', notif.data_length,
-                               tags=make_tags(source=notif.source))
+        self.metrics.increment(
+            'ua.message_data', notif.data_length,
+            tags=make_tags(source=notif.source))
 
 
 class PushServerFactory(WebSocketServerFactory):

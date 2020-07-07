@@ -94,8 +94,9 @@ class WebPushSubscriptionSchema(Schema):
             self.context["log"].debug(format="Dropping User", code=102,
                                       uaid_hash=hasher(result["uaid"]),
                                       uaid_record=repr(result))
-            self.context["metrics"].increment("updates.drop_user",
-                                              tags=make_tags(errno=102))
+            self.context["metrics"].increment(
+                "updates.drop_user",
+                tags=make_tags(errno=102))
             self.context["db"].router.drop_user(result["uaid"])
             raise InvalidRequest("No such subscription", status_code=410,
                                  errno=106)
@@ -142,7 +143,9 @@ class WebPushSubscriptionSchema(Schema):
             log.debug(format="Dropping User", code=102,
                       uaid_hash=hasher(uaid),
                       uaid_record=repr(result))
-            metrics.increment("updates.drop_user", tags=make_tags(errno=102))
+            metrics.increment(
+                "updates.drop_user",
+                tags=make_tags(errno=102))
             db.router.drop_user(uaid)
             raise InvalidRequest("No such subscription", status_code=410,
                                  errno=106)
@@ -152,7 +155,9 @@ class WebPushSubscriptionSchema(Schema):
             log.debug(format="Dropping User", code=103,
                       uaid_hash=hasher(uaid),
                       uaid_record=repr(result))
-            metrics.increment("updates.drop_user", tags=make_tags(errno=103))
+            metrics.increment(
+                "updates.drop_user",
+                tags=make_tags(errno=103))
             db.router.drop_user(uaid)
             raise InvalidRequest("No such subscription", status_code=410,
                                  errno=106)
