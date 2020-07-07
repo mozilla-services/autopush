@@ -91,7 +91,7 @@ from autopush.db import DatabaseManager, Message  # noqa
 from autopush.exceptions import MessageOverloadException, ItemNotFound
 from autopush.noseplugin import track_object
 from autopush.protocol import IgnoreBody
-from autopush.metrics import IMetrics  # noqa
+from autopush.metrics import IMetrics, make_tags  # noqa
 from autopush.ssl import AutopushSSLContextFactory  # noqa
 from autopush.utils import (
     parse_user_agent,
@@ -895,7 +895,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         self.ps._check_notifications = False
         self.ps._more_notifications = True
 
-        d = self.deferToThread(self.webpush_fetch)
+        d = self.deferToThread(self.webpush_fetch())
         d.addCallback(self.finish_notifications)
         d.addErrback(self.error_notification_overload)
         d.addErrback(self.trap_cancel)
@@ -1321,7 +1321,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
         mcode = code if code in NACK_CODES else 0
         self.metrics.increment(
             'ua.command.nack',
-            tags=self.metrics.make_tags(code=mcode))
+            tags=make_tags(code=mcode))
         self.ps.stats.nacks += 1
 
     def check_missed_notifications(self, results, resume=False):
@@ -1377,7 +1377,7 @@ class PushServerProtocol(WebSocketServerProtocol, policies.TimeoutMixin):
             self.metrics.increment("ua.notification.topic")
         self.metrics.increment(
             'ua.message_data', notif.data_length,
-            tags=self.metrics.make_tags(source=notif.source))
+            tags=make_tags(source=notif.source))
 
 
 class PushServerFactory(WebSocketServerFactory):

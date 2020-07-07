@@ -39,9 +39,9 @@ class TaggedMetricsTestCase(unittest.TestCase):
         assert len(mock_tag.mock_calls) > 0
         m._client = Mock()
         m.start()
-        m.increment("test", 5)
+        yield m.increment("test", 5)
         # Namespace is now auto-prefixed by the underlying markus lib
-        m._client.incr.assert_called_with("test", 5,
+        m._client.increment.assert_called_with("test", 5,
                                           tags=['host:localhost'])
         m.gauge("connection_count", 200)
         m._client.gauge.assert_called_with("connection_count", 200,
