@@ -535,7 +535,8 @@ class WebPushHandler(BaseWebHandler):
                       vapid=jwt)
         d.addErrback(self._router_fail_err,
                      router_type=router_type,
-                     vapid=jwt is not None)
+                     vapid=jwt is not None,
+                     uaid=user_data.get("uaid"))
         d.addErrback(self._response_err)
         return d
 

@@ -2378,9 +2378,6 @@ class TestADMBrideIntegration(IntegrationBase):
 
 class TestAPNSBridgeIntegration(IntegrationBase):
 
-    class m_response:
-        status = 200
-
     def _add_router(self):
         from autopush.router.apnsrouter import APNSRouter
         apns = APNSRouter(
@@ -2400,6 +2397,10 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         # The problem with calling the live system (even sandboxed) is that
         # you need a valid credential set from a mobile device, which can be
         # subject to change.
+        self.m_response = Mock()
+        self.m_response.status = 200
+        self.m_response.read = Mock()
+        self.m_response.read.return_value = "{}"
         self._mock_connection = Mock()
         self._mock_connection.request = Mock()
         self._mock_connection.get_response = Mock()
@@ -2457,6 +2458,50 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         assert ca_data["aps"]["alert"]["title-loc-key"] == \
             "SentTab.NoTabArrivingNotification.title"
         assert ca_data['body'] == base64url_encode(data)
+
+    @inlineCallbacks
+    def test_aaa_send_410(self):
+        self._add_router()
+        # get the senderid
+        url = "{}/v1/{}/{}/registration".format(
+            self.ep.conf.endpoint_url,
+            "apns",
+            "firefox",
+        )
+        response, body = yield _agent('POST', url, body=json.dumps(
+            {"token": uuid.uuid4().hex}
+        ))
+        assert response.code == 200
+        jbody = json.loads(body)
+
+        self.m_response.status = 410
+        self.m_response.read.return_value = b"""{"reason":"Unregistered"}"""
+
+        # Send a fake message
+        data = ("\xa2\xa5\xbd\xda\x40\xdc\xd1\xa5\xf9\x6a\x60\xa8\x57\x7b\x48"
+                "\xe4\x43\x02\x5a\x72\xe0\x64\x69\xcd\x29\x6f\x65\x44\x53\x78"
+                "\xe1\xd9\xf6\x46\x26\xce\x69")
+        crypto_key = ("keyid=p256dh;dh=BAFJxCIaaWyb4JSkZopERL9MjXBeh3WdBxew"
+                      "SYP0cZWNMJaT7YNaJUiSqBuGUxfRj-9vpTPz5ANmUYq3-u-HWOI")
+        salt = "keyid=p256dh;salt=S82AseB7pAVBJ2143qtM3A"
+        content_encoding = "aesgcm"
+
+        response, body = yield _agent(
+            'POST',
+            str(jbody['endpoint']),
+            headers=Headers({
+                "crypto-key": [crypto_key],
+                "encryption": [salt],
+                "ttl": ["0"],
+                "content-encoding": [content_encoding],
+            }),
+            body=data
+        )
+        assert response.code == 410
+        self.assertRaises(
+            ItemNotFound,
+            self.ep.db.router.get_uaid,
+            jbody['uaid'])
 
     @inlineCallbacks
     def test_apns_aesgcm_registration_bad(self):

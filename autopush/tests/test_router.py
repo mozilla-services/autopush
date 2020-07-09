@@ -252,15 +252,17 @@ class APNSRouterTestCase(unittest.TestCase):
 
     @inlineCallbacks
     def test_bad_send(self):
-        self.mock_response.status = 400
-        self.mock_response.read.return_value = json.dumps({'reason': 'boo'})
+        self.mock_response.status = 410
+        self.mock_response.read.return_value = json.dumps(
+            {'reason': 'Unregistered'})
         with pytest.raises(RouterException) as ex:
-            yield self.router.route_notification(self.notif, self.router_data)
+            yield self.router.route_notification(
+                self.notif, self.router_data)
         assert isinstance(ex.value, RouterException)
-        assert ex.value.status_code == 502
-        assert str(ex.value) == 'APNS Transmit Error 400:boo'
+        assert ex.value.status_code == 410
+        assert str(ex.value) == 'APNS Transmit Error 410:Unregistered'
         assert ex.value.response_body == (
-            'APNS returned an error processing request')
+            'User is no longer registered')
 
     @inlineCallbacks
     def test_aaaa_fail_send(self):
