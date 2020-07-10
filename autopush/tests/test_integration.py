@@ -49,7 +49,7 @@ from autopush.exceptions import ItemNotFound
 from autopush.logging import begin_or_register
 from autopush.main import ConnectionApplication, EndpointApplication
 from autopush.utils import base64url_encode, normalize_id
-from autopush.metrics import SinkMetrics, TaggedMetrics
+from autopush.metrics import SinkMetrics, TwistedMetrics
 import autopush.tests
 from autopush.tests.support import _TestingLogObserver
 from autopush.websocket import PushServerFactory
@@ -538,7 +538,7 @@ class Test_Data(IntegrationBase):
         db.Message.all_channels = safe
         yield self.shut_down(client)
 
-    @patch("autopush.metrics.markus")
+    @patch("autopush.metrics.Metrics")
     @inlineCallbacks
     def test_webpush_data_delivery_to_disconnected_client(self, m_ddog):
         tests = {
@@ -553,10 +553,7 @@ class Test_Data(IntegrationBase):
                 data=b"\xc3\x28\xa0\xa1\xe2\x28\xa1", result="wyigoeIooQ"),
         }
         # Piggy back a check for stored source metrics
-        self.conn.db.metrics = TaggedMetrics(
-            namespace="testpush",
-            hostname="localhost",
-            flush_interval=1)
+        self.conn.db.metrics = TwistedMetrics()
         self.conn.db.metrics._client = Mock()
 
         client = Client("ws://localhost:{}/".format(self.connection_port))
@@ -585,9 +582,8 @@ class Test_Data(IntegrationBase):
             yield client.ack(chan, result["version"])
 
         assert self.logs.logged_ci(lambda ci: 'message_size' in ci)
-        time.sleep(1.5)
-        inc_call = self.conn.db.metrics._client.incr.call_args_list[5]
-        assert inc_call[1]['tags'] == ['source:Stored', 'host:localhost']
+        inc_call = self.conn.db.metrics._metric.increment.call_args_list[5]
+        assert inc_call[1]['tags'] == ['source:Stored']
         yield self.shut_down(client)
 
     @inlineCallbacks
