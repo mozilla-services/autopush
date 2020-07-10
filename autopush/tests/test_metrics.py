@@ -49,6 +49,19 @@ class TwistedMetricsTestCase(unittest.TestCase):
         m.timing("lifespan", 113)
         m._metric.timing.assert_called_with("lifespan", 113)
 
+    @patch("autopush.metrics.reactor")
+    def test_tags(self, mock_reactor):
+        twisted.internet.base.DelayedCall.debug = True
+        m = TwistedMetrics('127.0.0.1')
+        m.start()
+        assert len(mock_reactor.mock_calls) > 0
+        m._metric = Mock()
+        m.increment("test", 5, tags=["foo:bar"])
+        m._metric.increment.assert_called_with("test", 5, tags=["foo:bar"])
+        m.gauge("connection_count", 200, tags=["foo:bar", "baz:quux"])
+        m._metric.gauge.assert_called_with("connection_count", 200,
+                                           tags=["foo:bar", "baz:quux"])
+
 
 class DatadogMetricsTestCase(unittest.TestCase):
     @patch("autopush.metrics.datadog")

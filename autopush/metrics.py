@@ -70,13 +70,13 @@ class TwistedMetrics(object):
         reactor.listenUDP(0, protocol)
 
     def increment(self, name, count=1, **kwargs):
-        self._metric.increment(name, count)
+        self._metric.increment(name, count, **kwargs)
 
     def gauge(self, name, count, **kwargs):
-        self._metric.gauge(name, count)
+        self._metric.gauge(name, count, **kwargs)
 
     def timing(self, name, duration, **kwargs):
-        self._metric.timing(name, duration)
+        self._metric.timing(name, duration, **kwargs)
 
 
 def make_tags(base=None, **kwargs):
