@@ -1,3 +1,4 @@
+-e git+https://github.com/mozilla-services/txstatsd.git@b744ccc6d5e299c5dd2de2568b0e61ed6e3e89aa#egg=txStatsD-master
 apns==2.0.1
 attrs==19.3.0
 autobahn[twisted]==19.11.2
@@ -45,7 +46,6 @@ idna==2.8                 # via hyperlink, requests, twisted
 incremental==17.5.0       # via treq, twisted
 ipaddress==1.0.23         # via cryptography, service-identity
 jmespath==0.9.4           # via boto3, botocore
-markus==2.2.0
 marshmallow-polyfield==4.2
 marshmallow==2.19.5
 msgpack==0.6.2            # via cachecontrol

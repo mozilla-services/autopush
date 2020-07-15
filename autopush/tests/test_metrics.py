@@ -1,11 +1,13 @@
 import unittest
 
+import twisted.internet.base
 import pytest
 from mock import Mock, patch, call
 
 from autopush.metrics import (
     IMetrics,
-    TaggedMetrics,
+    DatadogMetrics,
+    TwistedMetrics,
     SinkMetrics,
     periodic_reporter,
 )
@@ -32,23 +34,56 @@ class SinkMetricsTestCase(unittest.TestCase):
         assert sm.timing("test", 10) is None
 
 
-class TaggedMetricsTestCase(unittest.TestCase):
-    @patch("autopush.metrics.markus")
-    def test_basic(self, mock_tag):
-        m = TaggedMetrics(namespace="testpush", hostname="localhost")
-        assert len(mock_tag.mock_calls) > 0
+class TwistedMetricsTestCase(unittest.TestCase):
+    @patch("autopush.metrics.reactor")
+    def test_basic(self, mock_reactor):
+        twisted.internet.base.DelayedCall.debug = True
+        m = TwistedMetrics('127.0.0.1')
+        m.start()
+        assert len(mock_reactor.mock_calls) > 0
+        m._metric = Mock()
+        m.increment("test", 5)
+        m._metric.increment.assert_called_with("test", 5)
+        m.gauge("connection_count", 200)
+        m._metric.gauge.assert_called_with("connection_count", 200)
+        m.timing("lifespan", 113)
+        m._metric.timing.assert_called_with("lifespan", 113)
+
+    @patch("autopush.metrics.reactor")
+    def test_tags(self, mock_reactor):
+        twisted.internet.base.DelayedCall.debug = True
+        m = TwistedMetrics('127.0.0.1')
+        m.start()
+        assert len(mock_reactor.mock_calls) > 0
+        m._metric = Mock()
+        m.increment("test", 5, tags=["foo:bar"])
+        m._metric.increment.assert_called_with("test", 5, tags=["foo:bar"])
+        m.gauge("connection_count", 200, tags=["foo:bar", "baz:quux"])
+        m._metric.gauge.assert_called_with("connection_count", 200,
+                                           tags=["foo:bar", "baz:quux"])
+
+
+class DatadogMetricsTestCase(unittest.TestCase):
+    @patch("autopush.metrics.datadog")
+    def test_basic(self, mock_dog):
+        hostname = "localhost"
+
+        m = DatadogMetrics("someapikey", "someappkey", namespace="testpush",
+                           hostname="localhost")
+        assert len(mock_dog.mock_calls) > 0
         m._client = Mock()
         m.start()
-        yield m.increment("test", 5)
-        # Namespace is now auto-prefixed by the underlying markus lib
-        m._client.increment.assert_called_with(
-            "test", 5, tags=['host:localhost'])
+        m._client.start.assert_called_with(flush_interval=10,
+                                           roll_up_interval=10)
+        m.increment("test", 5)
+        m._client.increment.assert_called_with("testpush.test", 5,
+                                               host=hostname)
         m.gauge("connection_count", 200)
-        m._client.gauge.assert_called_with("connection_count", 200,
-                                           tags=['host:localhost'])
+        m._client.gauge.assert_called_with("testpush.connection_count", 200,
+                                           host=hostname)
         m.timing("lifespan", 113)
-        m._client.timing.assert_called_with("lifespan", value=113,
-                                            tags=['host:localhost'])
+        m._client.timing.assert_called_with("testpush.lifespan", value=113,
+                                            host=hostname)
 
 
 class PeriodicReporterTestCase(unittest.TestCase):
