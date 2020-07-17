@@ -283,7 +283,6 @@ class BaseWebHandler(BaseHandler):
         for name, val in response.headers.items():
             if val is not None:
                 self.set_header(name, val)
-
         if 200 <= response.status_code < 300:
             self.set_status(response.status_code, reason=None)
             self.write(response.response_body)
@@ -310,7 +309,7 @@ class BaseWebHandler(BaseHandler):
                 vapid=vapid
             )
 
-    def _router_fail_err(self, fail, router_type=None, vapid=False):
+    def _router_fail_err(self, fail, router_type=None, vapid=False, uaid=None):
         """errBack for router failures"""
         fail.trap(RouterException)
         exc = fail.value
@@ -327,11 +326,16 @@ class BaseWebHandler(BaseHandler):
                                logged_status=exc.logged_status or 0,
                                client_info=self._client_info)
             elif 400 <= exc.status_code < 500:
-                self.log.debug(format="Client error",
+                self.log.debug(format="Client error: {}".format(str(exc)),
                                status_code=exc.status_code,
                                logged_status=exc.logged_status or 0,
                                errno=exc.errno or 0,
                                client_info=self._client_info)
+        # probably an overabundance of caution, but only drop users if
+        # reporting a not found and they're mobile.
+        if exc.status_code in [404, 410] and router_type in [
+                'apns', 'fcm', 'adm']:
+            self.db.router.drop_user(uaid)
         self._router_response(exc, router_type, vapid)
 
     def _write_validation_err(self, errors):

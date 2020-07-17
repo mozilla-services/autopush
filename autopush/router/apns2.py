@@ -151,7 +151,7 @@ class APNSClient(object):
                     raise RouterException(
                         "APNS Transmit Error {}:{}".format(response.status,
                                                            reason),
-                        status_code=502,
+                        status_code=response.status,
                         response_body="APNS could not process "
                                       "your message {}".format(reason),
                         log_exception=False

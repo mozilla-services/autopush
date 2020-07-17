@@ -163,6 +163,21 @@ class APNSRouter(object):
                 reason = "http2_error"
             else:
                 reason = "unknown"
+            if isinstance(e, RouterException) and e.status_code in [404, 410]:
+                self.metrics.increment(
+                    "notification.bridge.connection.error",
+                    tags=make_tags(
+                        self._base_tags,
+                        application=rel_channel,
+                        reason="unregistered"
+                        ))
+                raise RouterException(
+                    str(e),
+                    status_code=e.status_code,
+                    errno=106,
+                    response_body="User is no longer registered",
+                    log_exception=False
+                )
             self.metrics.increment("notification.bridge.connection.error",
                                    tags=make_tags(self._base_tags,
                                                   application=rel_channel,
