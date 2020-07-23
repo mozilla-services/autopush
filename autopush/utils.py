@@ -375,9 +375,11 @@ class WebPushNotification(object):
         headers = self.headers
         # Strip crypto/encryption headers down
         for hdr in ["crypto-key", "encryption"]:
-            if STRIP_PADDING.search(headers.get(hdr, "")):
+            if hdr in headers:
                 head = headers[hdr].replace('"', '')
-                headers[hdr] = STRIP_PADDING.sub("", head)
+                head = STRIP_PADDING.sub("", head)
+                head.decode('ascii')
+                headers[hdr] = head
 
         # content-encoding header may already be stored as "encoding",
         # this is a failover to ensure that the proper value is pulled in.

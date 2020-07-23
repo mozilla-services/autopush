@@ -91,7 +91,7 @@ class Client(object):
         self.messages = {}
         self.notif_response = None  # type: Optional[HTTPResponse]
         self._crypto_key = """\
-keyid="http://example.org/bob/keys/123;salt="XZwpw6o37R-6qoZjw6KwAw"\
+keyid="http://example.org/bob/keys/123";salt="XZwpw6o37R-6qoZjw6KwAw=="\
 """
         self.sslcontext = sslcontext
         self.headers = {
@@ -679,7 +679,10 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
         result = yield client.send_notification(data=data)
-        assert result["headers"]["encryption"] == client._crypto_key
+        # the following presumes that only `salt` is padded.
+        clean_header = client._crypto_key.replace(
+            '"', '').rstrip('=')
+        assert result["headers"]["encryption"] == clean_header
         assert result["data"] == base64url_encode(data)
         assert result["messageType"] == "notification"
         yield self.shut_down(client)
@@ -694,7 +697,9 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
         result = yield client.send_notification(data=data, topic="Inbox")
-        assert result["headers"]["encryption"] == client._crypto_key
+        clean_header = client._crypto_key.replace(
+            '"', '').rstrip('=')
+        assert result["headers"]["encryption"] == clean_header
         assert result["data"] == base64url_encode(data)
         assert result["messageType"] == "notification"
         yield self.shut_down(client)
@@ -710,7 +715,9 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()
-        assert result["headers"]["encryption"] == client._crypto_key
+        clean_header = client._crypto_key.replace(
+            '"', '').rstrip('=')
+        assert result["headers"]["encryption"] == clean_header
         assert result["data"] == base64url_encode(data2)
         assert result["messageType"] == "notification"
         result = yield client.get_notification()
@@ -726,7 +733,9 @@ class TestWebPush(IntegrationBase):
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification(timeout=10)
-        assert result["headers"]["encryption"] == client._crypto_key
+        clean_header = client._crypto_key.replace(
+            '"', '').rstrip('=')
+        assert result["headers"]["encryption"] == clean_header
         assert result["data"] == base64url_encode(data)
         assert result["messageType"] == "notification"
         yield client.ack(result["channelID"], result["version"])
@@ -746,7 +755,9 @@ class TestWebPush(IntegrationBase):
         client = yield self.quick_register()
         vapid_info = _get_vapid()
         result = yield client.send_notification(data=data, vapid=vapid_info)
-        assert result["headers"]["encryption"] == client._crypto_key
+        clean_header = client._crypto_key.replace(
+            '"', '').rstrip('=')
+        assert result["headers"]["encryption"] == clean_header
         assert result["data"] == base64url_encode(data)
         assert result["messageType"] == "notification"
         assert self.logs.logged_ci(lambda ci: 'router_key' in ci)
@@ -1013,7 +1024,9 @@ class TestWebPush(IntegrationBase):
         client = yield self.quick_register()
         result = yield client.send_notification(data=data, ttl=None)
         assert result is not None
-        assert result["headers"]["encryption"] == client._crypto_key
+        clean_header = client._crypto_key.replace(
+            '"', '').rstrip('=')
+        assert result["headers"]["encryption"] == clean_header
         assert result["data"] == base64url_encode(data)
         assert result["messageType"] == "notification"
         yield self.shut_down(client)
@@ -1024,7 +1037,9 @@ class TestWebPush(IntegrationBase):
         client = yield self.quick_register()
         result = yield client.send_notification(data=data, ttl=None)
         assert result is not None
-        assert result["headers"]["encryption"] == client._crypto_key
+        clean_header = client._crypto_key.replace(
+            '"', '').rstrip('=')
+        assert result["headers"]["encryption"] == clean_header
         assert result["data"] == base64url_encode(data)
         assert result["messageType"] == "notification"
         yield client.disconnect()
@@ -1040,7 +1055,9 @@ class TestWebPush(IntegrationBase):
         client = yield self.quick_register()
         result = yield client.send_notification(data=data, ttl=0)
         assert result is not None
-        assert result["headers"]["encryption"] == client._crypto_key
+        clean_header = client._crypto_key.replace(
+            '"', '').rstrip('=')
+        assert result["headers"]["encryption"] == clean_header
         assert result["data"] == base64url_encode(data)
         assert result["messageType"] == "notification"
         yield self.shut_down(client)
@@ -1091,7 +1108,9 @@ class TestWebPush(IntegrationBase):
         yield client.hello()
         result = yield client.get_notification(timeout=4)
         assert result is not None
-        assert result["headers"]["encryption"] == client._crypto_key
+        clean_header = client._crypto_key.replace(
+            '"', '').rstrip('=')
+        assert result["headers"]["encryption"] == clean_header
         assert result["data"] == base64url_encode(data2)
         assert result["messageType"] == "notification"
         result = yield client.get_notification()
@@ -2267,9 +2286,9 @@ class TestADMBrideIntegration(IntegrationBase):
         ))
         assert response.code == 200
         jbody = json.loads(body)
-        crypto_key = ("keyid=p256dh;dh=BAFJxCIaaWyb4JSkZopERL9MjXBeh3WdBxew"
-                      "SYP0cZWNMJaT7YNaJUiSqBuGUxfRj-9vpTPz5ANmUYq3-u-HWOI")
-        salt = "keyid=p256dh;salt=S82AseB7pAVBJ2143qtM3A"
+        crypto_key = ("keyid=p256dh;dh=\"BAFJxCIaaWyb4JSkZopERL9MjXBeh3WdBxew"
+                      "SYP0cZWNMJaT7YNaJUiSqBuGUxfRj-9vpTPz5ANmUYq3-u-HWOI\"")
+        salt = "keyid=p256dh;salt=\"S82AseB7pAVBJ2143qtM3A==\""
         content_encoding = "aesgcm"
 
         # Test ADMAuth Error
