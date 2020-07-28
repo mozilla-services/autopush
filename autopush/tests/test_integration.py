@@ -2480,7 +2480,7 @@ class TestAPNSBridgeIntegration(IntegrationBase):
     def test_send_410(self):
         self._add_router()
         mock_metrics = Mock()
-        self.ep.db.metrics=mock_metrics
+        self.ep.db.metrics = mock_metrics
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
             self.ep.conf.endpoint_url,
