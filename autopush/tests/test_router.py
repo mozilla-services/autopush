@@ -265,7 +265,7 @@ class APNSRouterTestCase(unittest.TestCase):
             'User is no longer registered')
 
     @inlineCallbacks
-    def test_aaaa_fail_send(self):
+    def test_fail_send(self):
         def throw(*args, **kwargs):
             raise HTTP20Error("oops")
 
@@ -279,7 +279,7 @@ class APNSRouterTestCase(unittest.TestCase):
                                          'processing request'
         assert self.metrics.increment.called
         assert self.metrics.increment.call_args[0][0] == \
-            'notification.bridge.connection.error'
+            'notification.bridge.error'
         self.flushLoggedErrors()
 
     @inlineCallbacks
@@ -300,7 +300,7 @@ class APNSRouterTestCase(unittest.TestCase):
                                          'processing request'
         assert self.metrics.increment.called
         assert self.metrics.increment.call_args[0][0] == \
-            'notification.bridge.connection.error'
+            'notification.bridge.error'
         self.flushLoggedErrors()
 
     def test_too_many_connections(self):
