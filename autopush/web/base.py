@@ -335,13 +335,13 @@ class BaseWebHandler(BaseHandler):
         # reporting a not found and they're mobile.
         if exc.status_code in [404, 410] and router_type in [
                 'apns', 'fcm', 'adm']:
-            tags = self._base_tags.update({
+            self._base_tags.update({
                 "platform": router_type,
                 "reason": "unregistered",
             })
             self.metrics.increment(
                     "notification.bridge.error",
-                    tags=tags)
+                    tags=self._base_tags)
 
             self.db.router.drop_user(uaid)
         self._router_response(exc, router_type, vapid)
