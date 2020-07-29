@@ -191,7 +191,7 @@ class ADMRouter(object):
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(
                                        self._base_tags,
-                                       reason="connection_unavailable"))
+                                       reason="connection unavailable"))
             raise RouterException("Server error", status_code=502,
                                   errno=902,
                                   log_exception=False)

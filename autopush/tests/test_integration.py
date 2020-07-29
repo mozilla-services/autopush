@@ -2477,8 +2477,10 @@ class TestAPNSBridgeIntegration(IntegrationBase):
         assert ca_data['body'] == base64url_encode(data)
 
     @inlineCallbacks
-    def test_aaa_send_410(self):
+    def test_send_410(self):
         self._add_router()
+        mock_metrics = Mock()
+        self.ep.db.metrics = mock_metrics
         # get the senderid
         url = "{}/v1/{}/{}/registration".format(
             self.ep.conf.endpoint_url,
@@ -2515,6 +2517,8 @@ class TestAPNSBridgeIntegration(IntegrationBase):
             body=data
         )
         assert response.code == 410
+        assert mock_metrics.increment.call_args[1]['tags'] == \
+            ['code:410', 'router:apns', 'vapid:True']
         self.assertRaises(
             ItemNotFound,
             self.ep.db.router.get_uaid,
