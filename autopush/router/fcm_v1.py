@@ -152,7 +152,7 @@ class FCMv1Router(FCMRouter):
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(
                                        self._base_tags,
-                                       reason="recpient_gone"
+                                       reason="recipient_gone"
                                    ))
             raise RouterException("FCM Recipient no longer available",
                                   status_code=404,
