@@ -1,3 +1,17 @@
+<a name="1.57.0"></a>
+## 1.57.0 (2020-07-29)
+
+
+#### Bug Fixes
+
+*   fix header_cleanup for aesgcm ([ab14372a](https://github.com/mozilla-services/autopush/commit/ab14372a6cfcdf45602383824b04972aa11a74ef), closes [#1419](https://github.com/mozilla-services/autopush/issues/1419))
+
+#### Features
+
+*   add metric for all mobile bridge "unregistered" user drops ([37516a50](https://github.com/mozilla-services/autopush/commit/37516a50d175edafeafed5c225e3235c2793f66a), closes [#1421](https://github.com/mozilla-services/autopush/issues/1421))
+
+
+
 <a name="1.56.2"></a>
 ## 1.56.2 (2020-07-07)
 
