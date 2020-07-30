@@ -229,14 +229,14 @@ keyid="http://example.org/bob/keys/123";salt="XZwpw6o37R-6qoZjw6KwAw=="\
             headers["Topic"] = topic
         body = data or ""
         method = "POST"
-        status = status or 201
+        status = status or (201 if self.ws and self.ws.connected else 202)
 
         log.debug("%s body: %s", method, body)
         http.request(method, url.path.encode("utf-8"), body, headers)
         resp = http.getresponse()
         log.debug("%s Response (%s): %s", method, resp.status, resp.read())
         http.close()
-        assert resp.status == status
+        assert resp.status == status, "Expected %d, got %d" % (status, resp.status)
         self.notif_response = resp
         location = resp.getheader("Location", None)
         log.debug("Response Headers: %s", resp.getheaders())
@@ -245,7 +245,7 @@ keyid="http://example.org/bob/keys/123";salt="XZwpw6o37R-6qoZjw6KwAw=="\
         if status == 201 and ttl is not None:
             ttl_header = resp.getheader("TTL")
             assert ttl_header == str(ttl)
-        if ttl != 0 and status == 201:
+        if ttl != 0 and status == 202:
             assert location is not None
             if channel in self.messages:
                 self.messages[channel].append(location)
@@ -534,7 +534,7 @@ class Test_Data(IntegrationBase):
                           'current_month': self.ep.db.current_msg_month})
         safe = db.Message.all_channels
         db.Message.all_channels = Mock(return_value=(True, client.channels))
-        yield client.send_notification()
+        yield client.send_notification(status=202)
         db.Message.all_channels = safe
         yield self.shut_down(client)
 
@@ -600,7 +600,7 @@ class Test_Data(IntegrationBase):
             return_value=False)
         yield client.send_notification(channel=chan,
                                        data=test["data"],
-                                       status=201)
+                                       status=202)
         db.Message.store_message = safe
         yield self.shut_down(client)
 
@@ -1067,7 +1067,7 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
         yield client.disconnect()
-        yield client.send_notification(data=data, ttl=0)
+        yield client.send_notification(data=data, ttl=0, status=201)
         yield client.connect()
         yield client.hello()
         result = yield client.get_notification()

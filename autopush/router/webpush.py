@@ -167,7 +167,7 @@ class WebPushRouter(object):
                                notification.data_length,
                                tags=make_tags(destination='Stored'))
         location = "%s/m/%s" % (self.conf.endpoint_url, notification.location)
-        return RouterResponse(status_code=201, response_body="",
+        return RouterResponse(status_code=202, response_body="",
                               headers={"Location": location,
                                        "TTL": notification.ttl},
                               logged_status=202)
