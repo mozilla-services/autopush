@@ -191,7 +191,7 @@ class ADMRouter(object):
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(
                                        self._base_tags,
-                                       reason="connection unavailable"))
+                                       reason="connection_unavailable"))
             raise RouterException("Server error", status_code=502,
                                   errno=902,
                                   log_exception=False)
@@ -200,7 +200,7 @@ class ADMRouter(object):
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(
                                        self._base_tags,
-                                       reason="auth failure"
+                                       reason="auth_failure"
                                    ))
             raise RouterException("Server error", status_code=502,
                                   errno=901,
