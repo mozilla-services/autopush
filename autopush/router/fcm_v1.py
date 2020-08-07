@@ -1,4 +1,7 @@
 """FCM v1 HTTP Router"""
+import json
+from math import ceil
+
 from typing import Any  # noqa
 
 from twisted.internet.error import ConnectError, TimeoutError
@@ -14,6 +17,13 @@ from autopush.router.fcmv1client import (
     FCMNotFoundError
 )
 from autopush.types import JSONDict  # noqa
+
+# the universal default for this is 4096, which is far too
+# large for FCM. The final payload size of the encoded data, plus
+# encryption headers must fit in the 4096 byte FCM payload.
+# Since the body is re-encoded base64, we reduce the message
+# size accordingly
+MAX_FCM_DATA = 3015
 
 
 class FCMv1Router(FCMRouter):
@@ -81,25 +91,42 @@ class FCMv1Router(FCMRouter):
         # Payload data is optional. The endpoint handler validates that the
         # correct encryption headers are included with the data.
         if notification.data:
-            mdata = self.router_conf.get('max_data', 4096)
-            if notification.data_length > mdata:
-                raise self._error("This message is intended for a " +
-                                  "constrained device and is limited " +
-                                  "to 3070 bytes. Converted buffer too " +
-                                  "long by %d bytes" %
-                                  (notification.data_length - mdata),
-                                  413, errno=104, log_exception=False)
-
+            data['con'] = notification.headers.get('encoding')
+            mdata = self.router_conf.get('max_data', MAX_FCM_DATA)
+            if data['con'] != "aes128gcm":
+                # aes128gcm does not include headers, so they get more data.
+                if 'encryption' in notification.headers:
+                    data['enc'] = notification.headers['encryption']
+                if 'crypto_key' in notification.headers:
+                    data['cryptokey'] = notification.headers['crypto_key']
+                elif 'encryption_key' in notification.headers:
+                    data['enckey'] = notification.headers['encryption_key']
+                data["body"] = ""
+                mdata = mdata - len(json.dumps(data))
             data['body'] = notification.data
-            data['con'] = notification.headers['encoding']
-
-            if 'encryption' in notification.headers:
-                data['enc'] = notification.headers['encryption']
-            if 'crypto_key' in notification.headers:
-                data['cryptokey'] = notification.headers['crypto_key']
-            elif 'encryption_key' in notification.headers:
-                data['enckey'] = notification.headers['encryption_key']
-
+            if notification.data_length > mdata:
+                # take a guess at about how long the decoded message buffer
+                # needs to be.
+                suggest_length = int(
+                    ceil((notification.data_length - mdata) / 1.3))
+                raise self._error("This message is intended for a "
+                                  "constrained device and is limited "
+                                  "to {} bytes. Message too "
+                                  "long by about {} bytes".format(
+                                      mdata, suggest_length),
+                                  413, errno=104, log_exception=False)
+            # check the size of the outbound message data, again.
+            payload_size = len(json.dumps(data))
+            # 4096 is the hard limit for FCM payloads. Trap just in case
+            # our math was wrong.
+            if payload_size > 4096:
+                raise self._error(
+                    "Final composed message payload too long for recipient: "
+                    "{} bytes. Please try a shorter message.".format(
+                        payload_size,
+                        4096
+                    ),
+                    413, errno=104, log_exception=False)
         # registration_ids are the FCM instance tokens (specified during
         # registration.
         router_ttl = min(self.MAX_TTL,
