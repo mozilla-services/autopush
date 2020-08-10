@@ -128,15 +128,16 @@ class APNSRouter(object):
             "ver": notification.version,
         }
         if notification.data:
+            payload["con"] = notification.headers.get(
+                "content-encoding", notification.headers.get("encoding"))
+            if payload["con"] != "aes128gcm":
+                if "encryption" in notification.headers:
+                    payload["enc"] = notification.headers["encryption"]
+                if "crypto_key" in notification.headers:
+                    payload["cryptokey"] = notification.headers["crypto_key"]
+                elif "encryption_key" in notification.headers:
+                    payload["enckey"] = notification.headers["encryption_key"]
             payload["body"] = notification.data
-            payload["con"] = notification.headers["encoding"]
-
-            if "encryption" in notification.headers:
-                payload["enc"] = notification.headers["encryption"]
-            if "crypto_key" in notification.headers:
-                payload["cryptokey"] = notification.headers["crypto_key"]
-            elif "encryption_key" in notification.headers:
-                payload["enckey"] = notification.headers["encryption_key"]
             payload['aps'] = router_data.get('aps', {
                 "mutable-content": 1,
                 "alert": {

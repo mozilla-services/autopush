@@ -63,8 +63,11 @@ class Result(object):
                 err = data.get("error")
                 if err.get("status") == "NOT_FOUND":
                     raise FCMNotFoundError("FCM recipient no longer available")
-                raise RouterException("{}: {}".format(err.get("status"),
-                                                      err.get("message")))
+                raise RouterException(
+                    "{}: {} {}".format(
+                        err.get("status"),
+                        err.get("message"),
+                        err.get("details", "No Details")))
             if "name" in data:
                 self.success = 1
         except (TypeError, ValueError, KeyError, AttributeError):

@@ -761,7 +761,7 @@ class FCMv1RouterTestCase(unittest.TestCase):
             hostname="localhost",
             statsd_host=None,
         )
-        self.fcm_config = {'max_data': 32,
+        self.fcm_config = {'max_data': 120,
                            'ttl': 60,
                            'version': 1,
                            'dryrun': False,
@@ -940,10 +940,12 @@ class FCMv1RouterTestCase(unittest.TestCase):
         bad_notif = WebPushNotification(
             uaid=uuid.UUID(dummy_uaid),
             channel_id=uuid.UUID(dummy_chid),
-            data="\x01abcdefghijklmnopqrstuvwxyz0123456789",
+            data="\x01" + "a" * 120,
             headers=self.headers,
             ttl=200
         )
+        # fix up headers since we're calling route directly.
+        bad_notif.cleanup_headers()
         self._set_content()
 
         with pytest.raises(RouterException) as ex:
