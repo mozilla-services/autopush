@@ -1,4 +1,4 @@
--e git+https://github.com/mozilla-services/txstatsd.git@b744ccc6d5e299c5dd2de2568b0e61ed6e3e89aa#egg=txStatsD-master
+git+https://github.com/mozilla-services/txstatsd.git@b744ccc6d5e299c5dd2de2568b0e61ed6e3e89aa#egg=txstatsd
 apns==2.0.1
 attrs==19.3.0
 autobahn[twisted]==19.11.2

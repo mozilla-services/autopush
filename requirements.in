@@ -25,7 +25,7 @@ service-identity
 simplejson
 treq
 twisted
--e git+https://github.com/mozilla-services/txstatsd.git@b744ccc6d5e299c5dd2de2568b0e61ed6e3e89aa#egg=txStatsD-master
+git+https://github.com/mozilla-services/txstatsd.git@b744ccc6d5e299c5dd2de2568b0e61ed6e3e89aa#egg=txstatsd
 typing
 ua-parser
 wsaccel ; platform_python_implementation == "CPython"
