@@ -822,7 +822,6 @@ class TestWebPush(IntegrationBase):
             status=401)
         yield self.shut_down(client)
 
-
     @inlineCallbacks
     def test_basic_delivery_with_invalid_vapid_auth(self):
         data = str(uuid.uuid4())
