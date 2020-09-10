@@ -67,7 +67,7 @@ def setup_module():
 
 def _get_vapid(key=None, payload=None):
     if not payload:
-        payload = {"aud": "https://pusher_origin.example.com",
+        payload = {"aud": "http://localhost",
                    "exp": int(time.time()) + 86400,
                    "sub": "mailto:admin@example.com"}
     if not key:
@@ -781,7 +781,7 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
         vapid_info = _get_vapid(
-            payload={"aud": "https://pusher_origin.example.com",
+            payload={"aud": "http://localhost",
                      "exp": '@',
                      "sub": "mailto:admin@example.com"})
         yield client.send_notification(
@@ -790,7 +790,7 @@ class TestWebPush(IntegrationBase):
             status=401)
 
         vapid_info = _get_vapid(
-            payload={"aud": "https://pusher_origin.example.com",
+            payload={"aud": "http://localhost",
                      "exp": ['@'],
                      "sub": "mailto:admin@example.com"})
         yield client.send_notification(
@@ -798,6 +798,30 @@ class TestWebPush(IntegrationBase):
             vapid=vapid_info,
             status=401)
         yield self.shut_down(client)
+
+    @inlineCallbacks
+    def test_basic_delivery_with_invalid_vapid_aud(self):
+        data = str(uuid.uuid4())
+        client = yield self.quick_register()
+        # try a different domain.
+        vapid_info = _get_vapid(
+            payload={"aud": "http://127.0.0.1",
+                     "sub": "mailto:admin@example.com"})
+        yield client.send_notification(
+            data=data,
+            vapid=vapid_info,
+            status=401)
+
+        # try a different scheme
+        vapid_info = _get_vapid(
+            payload={"aud": "https://localhost",
+                     "sub": "mailto:admin@example.com"})
+        yield client.send_notification(
+            data=data,
+            vapid=vapid_info,
+            status=401)
+        yield self.shut_down(client)
+
 
     @inlineCallbacks
     def test_basic_delivery_with_invalid_vapid_auth(self):
@@ -1522,7 +1546,7 @@ class TestWebPush(IntegrationBase):
     @inlineCallbacks
     def test_with_key(self):
         private_key = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
-        claims = {"aud": "http://example.com",
+        claims = {"aud": "http://localhost",
                   "exp": int(time.time()) + 86400,
                   "sub": "a@example.com"}
         vapid = _get_vapid(private_key, claims)
@@ -2065,6 +2089,8 @@ class TestADMBrideIntegration(IntegrationBase):
                     "app_id": "amzn1.application.StringOfStuff",
                     "client_id": "amzn1.application-oa2-client.ev4nM0reStuff",
                     "client_secret": "deadbeef0000decafbad1111",
+                    "hostname": "localhost",
+                    "endpoint_scheme": "http",
                 }
             },
             self.ep.db.metrics,

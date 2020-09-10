@@ -626,6 +626,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         from autopush.web.webpush import WebPushRequestSchema
         conf = AutopushConfig(
             hostname="localhost",
+            endpoint_scheme="http",
             statsd_host=None,
         )
         db = test_db()
@@ -666,7 +667,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         schema = self._make_fut()
 
         header = {"typ": "JWT", "alg": "ES256"}
-        payload = {"aud": "https://pusher_origin.example.com",
+        payload = {"aud": "http://localhost",
                    "exp": int(time.time()) + 86400,
                    "sub": "mailto:admin@example.com"}
 
@@ -698,7 +699,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         schema.context["conf"].use_cryptography = use_crypto
 
         header = {"typ": "JWT", "alg": "ES256"}
-        payload = {"aud": "https://pusher_origin.example.com",
+        payload = {"aud": "http://localhost",
                    "exp": int(time.time()) + 86400,
                    "sub": "mailto:admin@example.com"}
 
@@ -732,7 +733,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         schema = self._make_fut()
 
         header = {"typ": "JWT", "alg": "ES256"}
-        payload = {"aud": "https://pusher_origin.example.com",
+        payload = {"aud": "http://localhost",
                    "exp": int(time.time()) + 86400,
                    "sub": "mailto:admin@example.com"}
 
@@ -763,7 +764,7 @@ class TestWebPushRequestSchemaUsingVapid(unittest.TestCase):
         schema = self._make_fut()
 
         header = {"typ": "JWT", "alg": "ES256"}
-        payload = {"aud": "https://pusher_origin.example.com",
+        payload = {"aud": "http://localhost",
                    "exp": int(time.time()) + 86400,
                    "sub": "mailto:admin@example.com"}
 
