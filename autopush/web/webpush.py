@@ -425,6 +425,17 @@ class WebPushRequestSchema(Schema):
             raise InvalidRequest("Invalid Authorization Header",
                                  status_code=401, errno=109,
                                  headers={"www-authenticate": PREF_SCHEME})
+        if "aud" not in jwt:
+            raise InvalidRequest("Invalid bearer token: No Audience specified",
+                                 status_code=401, errno=109,
+                                 headers={"www-authenticate": PREF_SCHEME})
+        if jwt['aud'] != "{}://{}".format(
+                self.context["conf"].endpoint_scheme or "http",
+                self.context["conf"].hostname):
+            raise InvalidRequest(
+                "Invalid bearer token: Invalid Audience Specified",
+                status_code=401, errno=109,
+                headers={"www-authenticate": PREF_SCHEME})
         if "exp" not in jwt:
             raise InvalidRequest("Invalid bearer token: No expiration",
                                  status_code=401, errno=109,
