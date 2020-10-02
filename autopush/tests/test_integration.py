@@ -236,7 +236,7 @@ keyid="http://example.org/bob/keys/123";salt="XZwpw6o37R-6qoZjw6KwAw=="\
         resp = http.getresponse()
         log.debug("%s Response (%s): %s", method, resp.status, resp.read())
         http.close()
-        assert resp.status == status, \
+        assert resp.status == stattagus, \
             "Expected %d, got %d" % (status, resp.status)
         self.notif_response = resp
         location = resp.getheader("Location", None)

@@ -1,3 +1,16 @@
+<a name="1.58.0"></a>
+## 1.58.0 (2020-10-02)
+
+
+#### Bug Fixes
+
+*   enforce VAPID "aud" compliance. ([23bfeb8b](https://github.com/mozilla-services/autopush/commit/23bfeb8bf3835725e3b9a5cd0ad3382bfb95471f))
+*   report details of an FCM "INVALID_ARGUMENT" error ([377d0cbe](https://github.com/mozilla-services/autopush/commit/377d0cbe52dd977fd8d3ff2c83998f2db6818555))
+*   Return HTTP 202 if the WebPush message is stored instead of delivered (#1428) ([80fba108](https://github.com/mozilla-services/autopush/commit/80fba108123c1e2bfd7a0d71a54ee45cc35e182d))
+*   normalize `reason` tag to snake_case ([c4fc9e18](https://github.com/mozilla-services/autopush/commit/c4fc9e18346103496f6a753635ffe2d673be57bc), closes [#1426](https://github.com/mozilla-services/autopush/issues/1426))
+
+
+
 <a name="1.57.0"></a>
 ## 1.57.0 (2020-07-29)
 
