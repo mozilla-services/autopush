@@ -72,8 +72,8 @@ class WebPushSubscriptionSchema(Schema):
                 ckey_header=d["ckey_header"],
                 auth_header=d["auth_header"],
             )
-        except (VapidAuthException):
-            raise InvalidRequest("missing authorization header",
+        except (VapidAuthException) as ex:
+            raise InvalidRequest("missing authorization header: {}".format(ex),
                                  status_code=401, errno=109)
         except (InvalidTokenException, InvalidToken):
             raise InvalidRequest("invalid token", status_code=404, errno=102)
@@ -429,9 +429,7 @@ class WebPushRequestSchema(Schema):
             raise InvalidRequest("Invalid bearer token: No Audience specified",
                                  status_code=401, errno=109,
                                  headers={"www-authenticate": PREF_SCHEME})
-        if jwt['aud'] != "{}://{}".format(
-                self.context["conf"].endpoint_scheme or "http",
-                self.context["conf"].hostname):
+        if jwt['aud'] != self.context["conf"].endpoint_url:
             raise InvalidRequest(
                 "Invalid bearer token: Invalid Audience Specified",
                 status_code=401, errno=109,

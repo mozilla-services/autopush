@@ -65,9 +65,9 @@ def setup_module():
         raise SkipTest("Skipping integration tests")
 
 
-def _get_vapid(key=None, payload=None):
+def _get_vapid(key=None, payload=None, endpoint="http://localhost"):
     if not payload:
-        payload = {"aud": "http://localhost",
+        payload = {"aud": endpoint,
                    "exp": int(time.time()) + 86400,
                    "sub": "mailto:admin@example.com"}
     if not key:
@@ -754,7 +754,7 @@ class TestWebPush(IntegrationBase):
     def test_basic_delivery_with_vapid(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
-        vapid_info = _get_vapid()
+        vapid_info = _get_vapid(endpoint=self.ep.conf.endpoint_url)
         result = yield client.send_notification(data=data, vapid=vapid_info)
         clean_header = client._crypto_key.replace(
             '"', '').rstrip('=')
@@ -768,7 +768,7 @@ class TestWebPush(IntegrationBase):
     def test_basic_delivery_with_invalid_vapid(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
-        vapid_info = _get_vapid()
+        vapid_info = _get_vapid(endpoint=self.ep.conf.endpoint_url)
         vapid_info['crypto-key'] = "invalid"
         yield client.send_notification(
             data=data,
@@ -781,7 +781,7 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
         vapid_info = _get_vapid(
-            payload={"aud": "http://localhost",
+            payload={"aud": self.ep.conf.endpoint_url,
                      "exp": '@',
                      "sub": "mailto:admin@example.com"})
         yield client.send_notification(
@@ -790,7 +790,7 @@ class TestWebPush(IntegrationBase):
             status=401)
 
         vapid_info = _get_vapid(
-            payload={"aud": "http://localhost",
+            payload={"aud": self.ep.conf.endpoint_url,
                      "exp": ['@'],
                      "sub": "mailto:admin@example.com"})
         yield client.send_notification(
@@ -814,7 +814,7 @@ class TestWebPush(IntegrationBase):
 
         # try a different scheme
         vapid_info = _get_vapid(
-            payload={"aud": "https://localhost",
+            payload={"aud": self.ep.conf.endpoint_url,
                      "sub": "mailto:admin@example.com"})
         yield client.send_notification(
             data=data,
@@ -826,7 +826,7 @@ class TestWebPush(IntegrationBase):
     def test_basic_delivery_with_invalid_vapid_auth(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
-        vapid_info = _get_vapid()
+        vapid_info = _get_vapid(endpoint=self.ep.conf.endpoint_url)
         vapid_info['auth'] = ""
         yield client.send_notification(
             data=data,
@@ -839,7 +839,7 @@ class TestWebPush(IntegrationBase):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
         vapid_info = _get_vapid(
-            payload={"aud": "https://pusher_origin.example.com",
+            payload={"aud": self.ep.conf.endpoint_url,
                      "sub": "mailto:admin@example.com"})
         vapid_info['auth'] = vapid_info['auth'][:-3] + "bad"
         yield client.send_notification(
@@ -852,7 +852,7 @@ class TestWebPush(IntegrationBase):
     def test_basic_delivery_with_invalid_vapid_ckey(self):
         data = str(uuid.uuid4())
         client = yield self.quick_register()
-        vapid_info = _get_vapid()
+        vapid_info = _get_vapid(endpoint=self.ep.conf.endpoint_url)
         vapid_info['crypto-key'] = "invalid|"
         yield client.send_notification(
             data=data,
@@ -1545,7 +1545,7 @@ class TestWebPush(IntegrationBase):
     @inlineCallbacks
     def test_with_key(self):
         private_key = ecdsa.SigningKey.generate(curve=ecdsa.NIST256p)
-        claims = {"aud": "http://localhost",
+        claims = {"aud": self.ep.conf.endpoint_url,
                   "exp": int(time.time()) + 86400,
                   "sub": "a@example.com"}
         vapid = _get_vapid(private_key, claims)
