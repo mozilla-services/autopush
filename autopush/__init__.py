@@ -1,1 +1,1 @@
-__version__ = '1.57.0'  # pragma: nocover
+__version__ = '1.58.2'  # pragma: nocover

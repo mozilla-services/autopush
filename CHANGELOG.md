@@ -1,3 +1,16 @@
+<a name="1.58.2"></a>
+## 1.58.2 (2020-10-07)
+
+
+#### Bug Fixes
+
+*   compare VAPID aud to endpoint_url ([6a11078a](https://github.com/mozilla-services/autopush/commit/6a11078ae18f800653c62cc9d7a9d3d06db552a4), closes [#1434](https://github.com/mozilla-services/autopush/issues/1434))
+*   enforce VAPID "aud" compliance. ([23bfeb8b](https://github.com/mozilla-services/autopush/commit/23bfeb8bf3835725e3b9a5cd0ad3382bfb95471f), closes [1663922](https://bugzilla.mozilla.org/show_bug.cgi?id=1663922))
+*   Avoid installing dependencies as editable ([8287b52](https://github.com/mozilla-services/autopush/commit/23bfeb8bf3835725e3b9a5cd0ad3382bfb95471f), closes [#1431](https://github.com/mozilla-services/autopush/issues/1431))
+*   report details of an FCM "INVALID_ARGUMENT" error ([377d0c](https://github.com/mozilla-services/autopush/commit/377d0cbe52dd977fd8d3ff2c83998f2db6818555), closes [1373](https://github.com/mozilla-services/autopush/issues/1373))
+*   Return HTTP 202 if the WebPush message is stored instead of delivered ([80fba108123c1e2bfd7a0d71a54ee45cc35e182d](https://github.com/mozilla-services/autopush/commit/80fba108123c1e2bfd7a0d71a54ee45cc35e182d), closes [1428](https://github.com/mozilla-services/autopush/issues/1428))
+
+
 <a name="1.57.0"></a>
 ## 1.57.0 (2020-07-29)
 
