@@ -19,6 +19,9 @@ jobs:
   build:
     docker:
       - image: docker:18.03.1-ce
+        auth:
+          username: $DOCKER_USER
+          password: $DOCKER_PASS
     working_directory: /dockerflow
     steps:
       - run:
@@ -64,6 +67,9 @@ jobs:
   deploy:
     docker:
       - image: docker:18.03.1-ce
+        auth:
+          username: $DOCKER_USER
+          password: $DOCKER_PASS
     steps:
       - setup_remote_docker
       - *docker_login
