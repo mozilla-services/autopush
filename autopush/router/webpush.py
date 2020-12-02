@@ -167,10 +167,14 @@ class WebPushRouter(object):
                                notification.data_length,
                                tags=make_tags(destination='Stored'))
         location = "%s/m/%s" % (self.conf.endpoint_url, notification.location)
-        return RouterResponse(status_code=202, response_body="",
+        # RFC https://tools.ietf.org/html/rfc8030#section-5
+        # all responses should be 201, unless this is a push reciept request,
+        # which requires a 202 and a URL that can be checked later for UA
+        # acknowledgement. (We don't support that yet. See autopush-rs#244)
+        return RouterResponse(status_code=201, response_body="",
                               headers={"Location": location,
                                        "TTL": notification.ttl},
-                              logged_status=202)
+                              logged_status=201)
 
     #############################################################
     #                    Blocking Helper Functions

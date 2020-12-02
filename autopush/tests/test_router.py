@@ -1490,7 +1490,8 @@ class WebPushRouterTestCase(unittest.TestCase):
 
         def verify_deliver(result):
             assert isinstance(result, RouterResponse)
-            assert result.status_code == 202
+            # https://tools.ietf.org/html/rfc8030#section-5
+            assert result.status_code == 201
             kwargs = self.message_mock.store_message.call_args[1]
             assert len(self.metrics.increment.mock_calls) == 3
             t_h = kwargs["notification"].headers
@@ -1585,7 +1586,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(status):
-            assert status.status_code == 202
+            assert status.status_code == 201
         d.addBoth(verify_deliver)
 
         return d
@@ -1621,7 +1622,7 @@ class WebPushRouterTestCase(unittest.TestCase):
         d = self.router.route_notification(self.notif, router_data)
 
         def verify_deliver(status):
-            assert status.status_code == 202
+            assert status.status_code == 201
         d.addBoth(verify_deliver)
 
         return d
@@ -1648,7 +1649,7 @@ class WebPushRouterTestCase(unittest.TestCase):
 
         def verify_deliver(result):
             assert isinstance(result, RouterResponse)
-            assert result.status_code == 202
+            assert result.status_code == 201
             kwargs = self.message_mock.store_message.call_args[1]
             assert len(self.metrics.increment.mock_calls) == 3
             t_h = kwargs["notification"].headers

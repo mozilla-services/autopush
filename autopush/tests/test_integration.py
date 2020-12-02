@@ -229,7 +229,8 @@ keyid="http://example.org/bob/keys/123";salt="XZwpw6o37R-6qoZjw6KwAw=="\
             headers["Topic"] = topic
         body = data or ""
         method = "POST"
-        status = status or (201 if self.ws and self.ws.connected else 202)
+        # 202 status reserved for yet to be implemented push w/ reciept.
+        status = status or 201
 
         log.debug("%s body: %s", method, body)
         http.request(method, url.path.encode("utf-8"), body, headers)
@@ -246,7 +247,7 @@ keyid="http://example.org/bob/keys/123";salt="XZwpw6o37R-6qoZjw6KwAw=="\
         if status == 201 and ttl is not None:
             ttl_header = resp.getheader("TTL")
             assert ttl_header == str(ttl)
-        if ttl != 0 and status == 202:
+        if ttl != 0 and status == 201:
             assert location is not None
             if channel in self.messages:
                 self.messages[channel].append(location)
@@ -535,7 +536,7 @@ class Test_Data(IntegrationBase):
                           'current_month': self.ep.db.current_msg_month})
         safe = db.Message.all_channels
         db.Message.all_channels = Mock(return_value=(True, client.channels))
-        yield client.send_notification(status=202)
+        yield client.send_notification(status=201)
         db.Message.all_channels = safe
         yield self.shut_down(client)
 
@@ -601,7 +602,7 @@ class Test_Data(IntegrationBase):
             return_value=False)
         yield client.send_notification(channel=chan,
                                        data=test["data"],
-                                       status=202)
+                                       status=201)
         db.Message.store_message = safe
         yield self.shut_down(client)
 
