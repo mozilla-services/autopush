@@ -15,7 +15,7 @@ configargparse==1.0
 configparser==4.0.2       # via datadog
 constantly==15.1.0        # via twisted
 contextlib2==0.6.0.post1  # via raven
-cryptography==2.8
+cryptography==3.2
 cyclone==1.2
 datadog==0.37.1
 decorator==4.4.1          # via datadog
