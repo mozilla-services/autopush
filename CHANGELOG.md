@@ -1,3 +1,18 @@
+<a name="1.58.3"></a>
+## 1.58.3 (2020-12-03)
+
+
+#### Chore
+
+*   update circleci to use new docker auth ([a4f66c0b](https://github.com/mozilla-services/autopush/commit/a4f66c0b8dfe6164d2ac02d2adaf08a5cd285fef))
+
+#### Bug Fixes
+
+*   return 201 for all push subscription requests. (#1446) ([b0279078](https://github.com/mozilla-services/autopush/commit/b027907896798506736d87fe25bfb624fa3e0632), closes [#1443](https://github.com/mozilla-services/autopush/issues/1443))
+*   add docker auth to docker image pulls ([3d90ec8d](https://github.com/mozilla-services/autopush/commit/3d90ec8dcd5f2939378cd8bd61a63cbb1fb8d67e))
+
+
+
 <a name="1.58.2"></a>
 ## 1.58.2 (2020-10-07)
 
