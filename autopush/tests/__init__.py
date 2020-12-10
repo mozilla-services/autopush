@@ -21,11 +21,12 @@ def setUp():
     for name in ('boto3', 'botocore'):
         logging.getLogger(name).setLevel(logging.CRITICAL)
     global ddb_process, boto_resource
-    cmd = " ".join([
-        "java", "-Djava.library.path=%s" % ddb_lib_dir,
-        "-jar", ddb_jar, "-sharedDb", "-inMemory"
-    ])
-    ddb_process = subprocess.Popen(cmd, shell=True, env=os.environ)
+    if os.getenv("LOCAL_DYNAMODB_INSTALLED") is None:
+        cmd = " ".join([
+            "java", "-Djava.library.path=%s" % ddb_lib_dir,
+            "-jar", ddb_jar, "-sharedDb", "-inMemory"
+        ])
+        ddb_process = subprocess.Popen(cmd, shell=True, env=os.environ)
     if os.getenv("AWS_LOCAL_DYNAMODB") is None:
         os.environ["AWS_LOCAL_DYNAMODB"] = "http://127.0.0.1:8000"
     boto_resource = DynamoDBResource()
@@ -42,11 +43,12 @@ def setUp():
 def tearDown():
     global ddb_process
     # This kinda sucks, but its the only way to nuke the child procs
-    proc = psutil.Process(pid=ddb_process.pid)
-    child_procs = proc.children(recursive=True)
-    for p in [proc] + child_procs:
-        os.kill(p.pid, signal.SIGTERM)
-    ddb_process.wait()
+    if ddb_process:
+        proc = psutil.Process(pid=ddb_process.pid)
+        child_procs = proc.children(recursive=True)
+        for p in [proc] + child_procs:
+            os.kill(p.pid, signal.SIGTERM)
+        ddb_process.wait()
 
 
 _multiprocess_shared_ = True

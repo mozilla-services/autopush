@@ -16,6 +16,38 @@ defaults:
                   echo "${DOCKER_PASS}" | docker login -u="${DOCKER_USER}" --password-stdin
               fi
 jobs:
+  test:
+    docker:
+      - image: pypy:2.7
+        auth:
+          username: $DOCKER_USER
+          password: $DOCKER_PASS
+      # Future TODO: use a local dynamodb
+      - image: circleci/dynamodb
+        auth:
+          username: $DOCKER_USER
+          password: $DOCKER_PASS
+        # this extends the default entrypoint for this image.
+        # see https://hub.docker.com/r/circleci/dynamodb/dockerfile
+        # Need to specify "sharedDb" & "inMemory" for tests to work
+        entrypoint: ["java", "-Xmx1G", "-jar", "DynamoDBLocal.jar", "-sharedDb", "-inMemory"]
+    working_directory: /app
+    environment:
+        LOCAL_DYNAMODB_INSTALLED: true
+        AWS_LOCAL_DYNAMODB: http://localhost:8000
+    steps:
+      - checkout
+      - setup_remote_docker
+      - run:
+          name: Install Docker test dependencies
+          command: |
+            apt update
+            apt install -y pypy-dev default-jre
+            pip install tox
+      - run:
+          name: run tests & coverage
+          command: |
+              tox -e ALL
   build:
     docker:
       - image: docker:18.03.1-ce
@@ -106,6 +138,10 @@ workflows:
   version: 2
   build-test-deploy:
     jobs:
+      - test:
+          filters:
+            tags:
+              only: /.*/
       - build:
           filters:
             tags:
