@@ -1,0 +1,59 @@
+# Testing locally.
+# This docker image attempts to build a local version of autopush and
+# autopush endpoint running off a local DynamoDB instance.
+# This means that it is ONLY useful for local testing, and kind of limited at that.
+#
+# You can build this using a command like:
+# `docker build . -f Dockerfile.local -t autopush:test`
+#
+# You can run it using a command like:
+# `docker run -d --net=host autopush:test`
+# NOTE: This will expose ports:
+#   8000 (DynamoDB),
+#   8080 (Autopush),
+#   8081 (Autopush router)
+#   8082 (Autopush endpoint)
+#   8084 (Autopush memory monitor)
+#
+#
+# Services should be accessible by using:
+# dom.push.serverURL   ws://localhost:8080/
+# endpoint URL:        http://localhost:8082/...
+#
+# If you like, you can also shell into the docker image using a command like:
+# `docker run --net=host --workdir=/app --entrypoint /bin/sh -it autopush:test`
+#
+# to stop the autopush:test docker container, first find it in
+# `docker container ls | grep "autopush:test"`
+# use the first value (the CONTAINER_ID) in
+# `docker container stop $CONTAINER_ID`
+#
+
+FROM pypy:2-7.3.0
+
+RUN mkdir -p /app
+ADD . /app
+RUN chmod +x /app/entrypoint.sh
+RUN chmod +x /app/start_local.sh
+
+WORKDIR /app
+ENV PATH=$PATH:/root/.cargo/bin
+
+RUN \
+    apt-get update && \
+    apt-get install -y -qq libexpat1-dev gcc libssl-dev libffi-dev libjemalloc2 default-jre && \
+    make clean && \
+    pip install -r requirements.txt && \
+    pypy setup.py develop
+
+RUN \
+    make ddb
+
+EXPOSE 8000
+EXPOSE 8080
+EXPOSE 8081
+EXPOSE 8082
+EXPOSE 8084
+
+ENTRYPOINT ["/app/start_local.sh"]
+CMD ["autopush"]
