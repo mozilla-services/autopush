@@ -206,6 +206,8 @@ class FCMRouter(object):
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(
                                        self._base_tags,
+                                       error=502,
+                                       errno=0,
                                        reason="connection_unavailable"))
             self.log.warn("Could not connect to FCM server: %s" % e)
             raise RouterException("Server error", status_code=502,
@@ -235,6 +237,8 @@ class FCMRouter(object):
                            old=old_id, new=new_id)
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(self._base_tags,
+                                                  error=502,
+                                                  errno=0,
                                                   reason="reregister"))
             return RouterResponse(status_code=503,
                                   response_body="Please try request again.",
@@ -242,6 +246,8 @@ class FCMRouter(object):
         if reply.get('failure'):
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(self._base_tags,
+                                                  error=502,
+                                                  errno=0,
                                                   reason="failure"))
             reason = result.get('error', "Unreported")
             err = self.reasonTable.get(reason)

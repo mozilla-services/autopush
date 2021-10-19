@@ -1075,8 +1075,8 @@ class FCMv1RouterTestCase(unittest.TestCase):
             assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
             self.router.metrics.increment.call_args[1]['tags'].sort()
-            assert self.router.metrics.increment.call_args[1]['tags'] == [
-                'platform:fcmv1', 'reason:timeout']
+            assert 'reason:timeout' in self.router.metrics.increment.call_args[1]['tags']
+            assert 'platform:fcmv1' in self.router.metrics.increment.call_args[1]['tags']
 
         d.addBoth(check_results)
         return d
