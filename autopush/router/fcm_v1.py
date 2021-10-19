@@ -124,7 +124,6 @@ class FCMv1Router(FCMRouter):
                     "Final composed message payload too long for recipient: "
                     "{} bytes. Please try a shorter message.".format(
                         payload_size,
-                        4096
                     ),
                     413, errno=104, log_exception=False)
         # registration_ids are the FCM instance tokens (specified during

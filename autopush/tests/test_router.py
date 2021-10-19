@@ -1044,8 +1044,10 @@ class FCMv1RouterTestCase(unittest.TestCase):
             assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
             self.router.metrics.increment.call_args[1]['tags'].sort()
-            assert self.router.metrics.increment.call_args[1]['tags'] == [
-                'platform:fcmv1', 'reason:server_error']
+            assert 'platform:fcmv1' in \
+                self.router.metrics.increment.call_args[1]['tags']
+            assert 'reason:server_error' in \
+                self.router.metrics.increment.call_args[1]['tags']
             assert "INVALID_ARGUMENT" in str(fail.value)
             self._check_error_call(fail.value, 500)
         d.addBoth(check_results)
@@ -1075,8 +1077,10 @@ class FCMv1RouterTestCase(unittest.TestCase):
             assert self.router.metrics.increment.call_args[0][0] == (
                 'notification.bridge.error')
             self.router.metrics.increment.call_args[1]['tags'].sort()
-            assert 'reason:timeout' in self.router.metrics.increment.call_args[1]['tags']
-            assert 'platform:fcmv1' in self.router.metrics.increment.call_args[1]['tags']
+            assert 'reason:timeout' in \
+                self.router.metrics.increment.call_args[1]['tags']
+            assert 'platform:fcmv1' in \
+                self.router.metrics.increment.call_args[1]['tags']
 
         d.addBoth(check_results)
         return d
