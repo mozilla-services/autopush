@@ -175,7 +175,10 @@ class APNSRouter(object):
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(self._base_tags,
                                                   application=rel_channel,
-                                                  reason=reason))
+                                                  reason=reason,
+                                                  error=502,
+                                                  errno=0,
+                                                  ))
             raise RouterException(
                 str(e),
                 status_code=502,

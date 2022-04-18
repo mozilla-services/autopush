@@ -124,7 +124,6 @@ class FCMv1Router(FCMRouter):
                     "Final composed message payload too long for recipient: "
                     "{} bytes. Please try a shorter message.".format(
                         payload_size,
-                        4096
                     ),
                     413, errno=104, log_exception=False)
         # registration_ids are the FCM instance tokens (specified during
@@ -161,7 +160,10 @@ class FCMv1Router(FCMRouter):
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(
                                        self._base_tags,
-                                       reason="timeout"))
+                                       reason="timeout",
+                                       error=502,
+                                       errno=903,
+                                       ))
             raise RouterException("Server error", status_code=502,
                                   errno=903,
                                   log_exception=False)
@@ -170,7 +172,10 @@ class FCMv1Router(FCMRouter):
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(
                                        self._base_tags,
-                                       reason="connection_unavailable"))
+                                       reason="connection_unavailable",
+                                       error=502,
+                                       errno=902,
+                                       ))
             raise RouterException("Server error", status_code=502,
                                   errno=902,
                                   log_exception=False)
@@ -179,7 +184,9 @@ class FCMv1Router(FCMRouter):
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(
                                        self._base_tags,
-                                       reason="recipient_gone"
+                                       reason="recipient_gone",
+                                       error=404,
+                                       errno=106,
                                    ))
             raise RouterException("FCM Recipient no longer available",
                                   status_code=404,
@@ -190,7 +197,9 @@ class FCMv1Router(FCMRouter):
             self.metrics.increment("notification.bridge.error",
                                    tags=make_tags(
                                        self._base_tags,
-                                       reason="server_error"))
+                                       reason="server_error",
+                                       error=502,
+                                       errno=0))
         return failure
 
     def _error(self, err, status, **kwargs):
