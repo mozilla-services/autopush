@@ -23,7 +23,7 @@ docutils==0.15.2          # via botocore
 ecdsa==0.15               # via python-jose
 enum34==1.1.6             # via cryptography, grpcio, h2
 firebase-admin==3.2.1
-futures==3.3.0            # via google-api-core, grpcio, s3transfer
+futures==3.1.1            # via google-api-core, grpcio, s3transfer
 gcm-client==0.1.4
 google-api-core[grpc]==1.16.0  # via firebase-admin, google-cloud-core, google-cloud-firestore
 google-api-python-client==1.7.11  # via firebase-admin

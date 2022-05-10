@@ -163,7 +163,7 @@ class APNSRouter(object):
             elif isinstance(e, (HTTP20Error, socket.error)):
                 reason = "http2_error"
             else:
-                reason = "unknown"
+                reason = e.extra.get("reason", "unknown")
             if isinstance(e, RouterException) and e.status_code in [404, 410]:
                 raise RouterException(
                     str(e),
