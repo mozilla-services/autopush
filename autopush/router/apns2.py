@@ -154,7 +154,8 @@ class APNSClient(object):
                         status_code=response.status,
                         response_body="APNS could not process "
                                       "your message {}".format(reason),
-                        log_exception=False
+                        log_exception=False,
+                        reason=reason
                     )
                 break
             except (HTTP20Error, IOError):
