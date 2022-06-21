@@ -1,3 +1,11 @@
+<a name="1.58.4"></a>
+## 1.58.4 (2022-06-12)
+
+#### Bug Fixes
+
+*   Re-enable APNS error logging (#1460 ([f2a6fa5c](https://github.com/mozilla-services/autopush/pull/1460/commits/f2a6fa5c8deb45afad6870b92d0d4ac6f0250932))
+
+
 <a name="1.58.3"></a>
 ## 1.58.3 (2020-12-03)
 
