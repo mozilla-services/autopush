@@ -338,12 +338,13 @@ class BaseWebHandler(BaseHandler):
             self._base_tags.update({
                 "platform": router_type,
                 "reason": "unregistered",
+                "error": exc.status_code,
+                "errno": 0
             })
             self.metrics.increment(
                     "notification.bridge.error",
                     tags=self._base_tags,
-                    error=exc.status_code,
-                    errno=0)
+                    )
 
             self.db.router.drop_user(uaid)
         self._router_response(exc, router_type, vapid)

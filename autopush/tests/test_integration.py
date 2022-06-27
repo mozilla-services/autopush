@@ -2193,7 +2193,7 @@ class TestADMBrideIntegration(IntegrationBase):
             }),
             body=data
         )
-        print ("Response: %s" % response.code)
+        print("Response: %s" % response.code)
         assert response.code == 201
 
         ca_data = self._mock_send.post.mock_calls[1][2]['json']['data']
