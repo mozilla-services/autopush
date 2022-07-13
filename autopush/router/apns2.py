@@ -154,7 +154,7 @@ class APNSClient(object):
                         status_code=response.status,
                         response_body="APNS could not process "
                                       "your message {}".format(reason),
-                        log_exception=False,
+                        log_exception=True,
                         reason=reason
                     )
                 break
