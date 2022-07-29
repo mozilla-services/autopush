@@ -7,6 +7,8 @@
 
 # Autopush
 
+## This repo is retired. Please see [autopush-rs](https://github.com/mozilla-services/autopush-rs/)
+
 Mozilla Push server and Push Endpoint utilizing built with:
 
 - Python
