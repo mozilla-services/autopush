@@ -10,10 +10,14 @@ autopush
 
 Mozilla Push server and Push Endpoint utilizing PyPy, twisted, and DynamoDB.
 
-*Please note*: The python components of this server are being deprecated in favor of
-`a pure rust <https://github.com/mozilla-services/autopush-rs>`_ implementation.
-We are planning on moving the websocket handler first, followed by the endpoint
-handlers. See :ref:`Migrating to Rust <rust>` for details.
+ 🚨 🚨 🚨 🚨 🚨 🚨 🚨
+
+╔═════════════════════════════════════════════════════════════╗
+ **Note**: *This document is obsolete.*
+ Please refer to `Autopush Documentation <https://mozilla-services.github.io/autopush-rs>`_ on GitHub.
+╚═════════════════════════════════════════════════════════════╝
+
+ 🚨 🚨 🚨 🚨 🚨 🚨 🚨
 
 This is the third generation of Push server built in Mozilla Services, first
 to handle Push for FirefoxOS clients, then extended for push notifications for
