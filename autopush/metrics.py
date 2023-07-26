@@ -34,15 +34,15 @@ class IMetrics(object):
     def start(self):
         """Start any connection needed for metric transmission"""
 
-    def increment(self, name, count=1, **kwargs):
+    def increment(self, name, count=1, tags=None):
         """Increment a counter for a metric name"""
         raise NotImplementedError("No increment implemented")
 
-    def gauge(self, name, count, **kwargs):
+    def gauge(self, name, count, tags=None):
         """Record a gauge for a metric name"""
         raise NotImplementedError("No gauge implemented")
 
-    def timing(self, name, duration, **kwargs):
+    def timing(self, name, duration, tags=None):
         """Record a timing in ms for a metric name"""
         raise NotImplementedError("No timing implemented")
 
@@ -69,14 +69,14 @@ class TwistedMetrics(object):
         protocol = StatsDClientProtocol(self.client)
         reactor.listenUDP(0, protocol)
 
-    def increment(self, name, count=1, **kwargs):
-        self._metric.increment(name, count, **kwargs)
+    def increment(self, name, count=1, tags=None):
+        self._metric.increment(name, count, tags=tags)
 
-    def gauge(self, name, count, **kwargs):
-        self._metric.gauge(name, count, **kwargs)
+    def gauge(self, name, count, tags=None):
+        self._metric.gauge(name, count, tags=tags)
 
-    def timing(self, name, duration, **kwargs):
-        self._metric.timing(name, duration, **kwargs)
+    def timing(self, name, duration, tags=None):
+        self._metric.timing(name, duration, tags=tags)
 
 
 def make_tags(base=None, **kwargs):
@@ -106,17 +106,17 @@ class DatadogMetrics(object):
         self._client.start(flush_interval=self._flush_interval,
                            roll_up_interval=self._flush_interval)
 
-    def increment(self, name, count=1, **kwargs):
+    def increment(self, name, count=1, tags=None):
         self._client.increment(self._prefix_name(name), count, host=self._host,
-                               **kwargs)
+                               tags=tags)
 
-    def gauge(self, name, count, **kwargs):
+    def gauge(self, name, count, tags=None):
         self._client.gauge(self._prefix_name(name), count, host=self._host,
-                           **kwargs)
+                           tags=tags)
 
-    def timing(self, name, duration, **kwargs):
+    def timing(self, name, duration, tags=None):
         self._client.timing(self._prefix_name(name), value=duration,
-                            host=self._host, **kwargs)
+                            host=self._host, tags=tags)
 
 
 def from_config(conf):

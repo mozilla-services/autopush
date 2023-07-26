@@ -43,11 +43,11 @@ class TwistedMetricsTestCase(unittest.TestCase):
         assert len(mock_reactor.mock_calls) > 0
         m._metric = Mock()
         m.increment("test", 5)
-        m._metric.increment.assert_called_with("test", 5)
+        m._metric.increment.assert_called_with("test", 5, tags=None)
         m.gauge("connection_count", 200)
-        m._metric.gauge.assert_called_with("connection_count", 200)
+        m._metric.gauge.assert_called_with("connection_count", 200, tags=None)
         m.timing("lifespan", 113)
-        m._metric.timing.assert_called_with("lifespan", 113)
+        m._metric.timing.assert_called_with("lifespan", 113, tags=None)
 
     @patch("autopush.metrics.reactor")
     def test_tags(self, mock_reactor):
@@ -77,13 +77,16 @@ class DatadogMetricsTestCase(unittest.TestCase):
                                            roll_up_interval=10)
         m.increment("test", 5)
         m._client.increment.assert_called_with("testpush.test", 5,
-                                               host=hostname)
+                                               host=hostname,
+                                               tags=None)
         m.gauge("connection_count", 200)
         m._client.gauge.assert_called_with("testpush.connection_count", 200,
-                                           host=hostname)
+                                           host=hostname,
+                                           tags=None)
         m.timing("lifespan", 113)
         m._client.timing.assert_called_with("testpush.lifespan", value=113,
-                                            host=hostname)
+                                            host=hostname,
+                                            tags=None)
 
 
 class PeriodicReporterTestCase(unittest.TestCase):
